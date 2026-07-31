@@ -68,8 +68,8 @@ export class EFacturaService {
     if (!cfg.clientId) {
       throw new BadRequestException('Vă rugăm să introduceți mai întâi Client ID în configurația ANAF.');
     }
-    const redirectUri = cfg.redirectUri || 'https://fleet-cmd.vercel.app/efactura';
-    const authorizeUrl = `https://logincert.anaf.ro/anaf-oauth2/v1/authorize?response_type=code&client_id=${cfg.clientId}&redirect_uri=${redirectUri}&token_content_type=jwt`;
+    const redirectUri = (cfg.redirectUri || 'https://fleet-cmd.vercel.app/efactura').trim();
+    const authorizeUrl = `https://logincert.anaf.ro/anaf-oauth2/v1/authorize?response_type=code&client_id=${cfg.clientId.trim()}&redirect_uri=${encodeURIComponent(redirectUri)}&token_content_type=jwt`;
 
     return { url: authorizeUrl, redirectUri };
   }
