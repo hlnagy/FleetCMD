@@ -125,10 +125,10 @@ export default function Navbar() {
 
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 rounded-full bg-sapphire-500 text-white flex items-center justify-center font-extrabold text-xs shadow-sm">
-            MP
+            BV
           </div>
           <div className="text-xs">
-            <p className="font-extrabold text-sapphire-900 leading-tight">Ing. Mihai Popa</p>
+            <p className="font-extrabold text-sapphire-900 leading-tight">Brașoveanu Virgil</p>
             <p className="text-[10px] text-sage-600 font-semibold">Șef Flotă & Atelier</p>
           </div>
         </div>

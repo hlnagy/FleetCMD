@@ -38,7 +38,7 @@ export default function AnvelopePage() {
   const [pozitieB, setPozitieB] = useState<any>(null);
   const [showPermutareModal, setShowPermutareModal] = useState(false);
   const [permutareData, setPermutareData] = useState(new Date().toISOString().split('T')[0]);
-  const [permutareOperator, setPermutareOperator] = useState('Mihai Popa (Șef Atelier)');
+  const [permutareOperator, setPermutareOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
   const [permutareObservatii, setPermutareObservatii] = useState('');
   const [permutareValoareContor, setPermutareValoareContor] = useState<number>(0);
   const [mecaniciList, setMecaniciList] = useState<any[]>([]);

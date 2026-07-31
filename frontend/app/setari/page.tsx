@@ -122,7 +122,7 @@ export default function SetariPage() {
   const [customCategorie, setCustomCategorie] = useState('LICENTA_FIRMA');
   const [customDataExpirare, setCustomDataExpirare] = useState('');
   const [customZileAvertizare, setCustomZileAvertizare] = useState(30);
-  const [customResponsabil, setCustomResponsabil] = useState('Ing. Mihai Popa');
+  const [customResponsabil, setCustomResponsabil] = useState('Brașoveanu Virgil');
   const [customStare, setCustomStare] = useState('ACTIV');
 
   // FETCH ALL SYSTEM SETTINGS & ENTITIES
@@ -687,7 +687,7 @@ export default function SetariPage() {
     setCustomCategorie('LICENTA_FIRMA');
     setCustomDataExpirare('');
     setCustomZileAvertizare(30);
-    setCustomResponsabil('Ing. Mihai Popa');
+    setCustomResponsabil('Brașoveanu Virgil');
     setCustomStare('ACTIV');
     setShowAddCustomModal(true);
   };
@@ -2010,7 +2010,7 @@ export default function SetariPage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Responsabil:</label>
-                  <input value={customResponsabil} onChange={(e) => setCustomResponsabil(e.target.value)} placeholder="ex: Ing. Mihai Popa" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                  <input value={customResponsabil} onChange={(e) => setCustomResponsabil(e.target.value)} placeholder="ex: Brașoveanu Virgil" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
                 </div>
               </div>
 

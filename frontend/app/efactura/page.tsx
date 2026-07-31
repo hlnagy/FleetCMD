@@ -882,7 +882,7 @@ export default function EFacturaPage() {
                   <h4 className="font-extrabold text-sapphire-900 text-xs">Înregistrare Aplicație pe Portalul ANAF OAuth</h4>
                 </div>
                 <p className="pl-8 text-sage-700">
-                  Accesați portalul oficial ANAF: <a href="https://www.anaf.ro/InregOauth/" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">https://www.anaf.ro/InregOauth/</a> cu token-ul conectat și înregistrați aplicația FleetCMD.<br />
+                  Accesați portalul oficial ANAF: <a href="https://www.anaf.ro/InregOauth/index.xhtml" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">https://www.anaf.ro/InregOauth/index.xhtml</a> cu token-ul conectat și înregistrați aplicația FleetCMD.<br />
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block my-1">
                     💡 Notă: Dacă aveți deja un cont în SPV cu username și parolă, dați click pe link-ul <i>"click aici"</i> din susul paginii ANAF pentru conectare rapidă!
                   </span><br />

@@ -30,7 +30,7 @@ export default function FluidePage() {
   const [iesireCantitate, setIesireCantitate] = useState(15);
   const [iesireContor, setIesireContor] = useState(0);
   const [iesireData, setIesireData] = useState(new Date().toISOString().split('T')[0]);
-  const [iesireMecanic, setIesireMecanic] = useState('Mihai Popa (Șef Atelier)');
+  const [iesireMecanic, setIesireMecanic] = useState('Brașoveanu Virgil (Șef Atelier)');
   const [iesireObservatii, setIesireObservatii] = useState('');
 
   // Stare Formular Configurare Intervale (Reguli mTH, KM, Luni)

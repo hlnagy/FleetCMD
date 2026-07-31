@@ -20,7 +20,7 @@ export class StocuriGarantiiService {
     if (depozite.length === 0) {
       await this.prisma.depozit.createMany({
         data: [
-          { nume: 'Depozit Central Atelier', adresa: 'Sediu Central', responsabil: 'Mihai Popa (Șef Atelier)' },
+          { nume: 'Depozit Central Atelier', adresa: 'Sediu Central', responsabil: 'Brașoveanu Virgil (Șef Atelier)' },
           { nume: 'Depozit Șantier Autostrada A3', adresa: 'Șantier A3', responsabil: 'Mecanic Șantier A3' },
           { nume: 'Depozit Cariera Poiana', adresa: 'Cariera Poiana', responsabil: 'Gestionar Cariera' },
         ],
@@ -268,7 +268,7 @@ export class StocuriGarantiiService {
         depozitSursaId: articolSursa.depozitId || data.depozitDestinatieId,
         depozitDestinatieId: data.depozitDestinatieId,
         cantitateTransferata: cantitate,
-        operator: data.operator || 'Mihai Popa (Șef Atelier)',
+        operator: data.operator || 'Brașoveanu Virgil (Șef Atelier)',
         observatii: data.observatii,
       },
     });

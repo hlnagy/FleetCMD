@@ -16,7 +16,7 @@ export class MentenantaService {
         data: [
           { nume: 'Ion Popescu (Atelier)', functie: 'Mecanic Șef', telefon: '0722111222' },
           { nume: 'Vasile Ionescu (Atelier)', functie: 'Mecanic Utilaje', telefon: '0733222333' },
-          { nume: 'Mihai Popa (Șef Atelier)', functie: 'Șef Atelier', telefon: '0744333444' },
+          { nume: 'Brașoveanu Virgil (Șef Atelier)', functie: 'Șef Atelier', telefon: '0744333444' },
           { nume: 'Gheorghe Radu (Electrician)', functie: 'Electrician Auto', telefon: '0755444555' },
         ],
       });

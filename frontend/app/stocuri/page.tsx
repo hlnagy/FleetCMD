@@ -35,7 +35,7 @@ export default function StocuriGarantiiPage() {
   const [transferArticol, setTransferArticol] = useState<any>(null);
   const [transferDepozitDestinatieId, setTransferDepozitDestinatieId] = useState('');
   const [transferCantitate, setTransferCantitate] = useState(1);
-  const [transferOperator, setTransferOperator] = useState('Mihai Popa (Șef Atelier)');
+  const [transferOperator, setTransferOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
   const [transferObservatii, setTransferObservatii] = useState('');
 
   // Stare Creare Articol Simplu
@@ -1397,7 +1397,7 @@ export default function StocuriGarantiiPage() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit:</label>
-                <input value={responsabilDepozitNou} onChange={(e) => setResponsabilDepozitNou(e.target.value)} placeholder="ex: Mihai Popa (Șef Atelier)" className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold" />
+                <input value={responsabilDepozitNou} onChange={(e) => setResponsabilDepozitNou(e.target.value)} placeholder="ex: Brașoveanu Virgil (Șef Atelier)" className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold" />
               </div>
 
               <div className="flex justify-end space-x-3 pt-3">
