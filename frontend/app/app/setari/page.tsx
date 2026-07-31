@@ -1,0 +1,2027 @@
+"use client";
+
+import { useState, useEffect } from 'react';
+import {
+  Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
+  Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
+  Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
+  ArrowUpDown, ArrowUp, ArrowDown
+} from 'lucide-react';
+
+export default function SetariPage() {
+  const [activeTab, setActiveTab] = useState<
+    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate'
+  >('vehicule');
+  const [loading, setLoading] = useState(false);
+
+  // DATA STATES
+  const [vehicule, setVehicule] = useState<any[]>([]);
+  const [categoriiVehicul, setCategoriiVehicul] = useState<any[]>([]);
+  const [mecanici, setMecanici] = useState<any[]>([]);
+  const [depozite, setDepozite] = useState<any[]>([]);
+  const [categorii, setCategorii] = useState<any[]>([]);
+  const [reguli, setReguli] = useState<any[]>([]);
+  const [documente, setDocumente] = useState<any[]>([]);
+  const [alertePersonalizate, setAlertePersonalizate] = useState<any[]>([]);
+
+  // SEARCH STATES
+  const [searchVehicule, setSearchVehicule] = useState('');
+  const [searchMecanici, setSearchMecanici] = useState('');
+  const [searchDepozite, setSearchDepozite] = useState('');
+
+  // SORTING STATE VEHICULE
+  const [sortField, setSortField] = useState<'numarIntern' | 'numarInmatriculare' | 'categorieEnum' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // ==========================================
+  // 1. STATE VEHICUL NOU & EDITARE & CATEGORIE VEHICUL
+  // ==========================================
+  const [showAddVehiculModal, setShowAddVehiculModal] = useState(false);
+  const [editingVehicul, setEditingVehicul] = useState<any>(null);
+
+  const [numarIntern, setNumarIntern] = useState('');
+  const [numarInmatriculare, setNumarInmatriculare] = useState('');
+  const [categorieEnum, setCategorieEnum] = useState('CAP_TRACTOR');
+  const [marca, setMarca] = useState('');
+  const [model, setModel] = useState('');
+  const [anFabricatie, setAnFabricatie] = useState(new Date().getFullYear());
+  const [serieSasiu, setSerieSasiu] = useState('');
+  const [tipMasurare, setTipMasurare] = useState('KM');
+  const [valoareContorInitial, setValoareContorInitial] = useState(0);
+  const [valoareContorCurent, setValoareContorCurent] = useState(0);
+  const [tarifOrar, setTarifOrar] = useState(0);
+  const [modConfigurareAxe, setModConfigurareAxe] = useState<'AUTOMAT' | 'MANUAL'>('AUTOMAT');
+  const [rotiPerAxList, setRotiPerAxList] = useState<number[]>([2, 4]);
+
+  // Categorie Vehicul Nouă & Editare State
+  const [showAddVehiculCatModal, setShowAddVehiculCatModal] = useState(false);
+  const [editingVehiculCat, setEditingVehiculCat] = useState<any>(null);
+  const [numeCatVehiculNou, setNumeCatVehiculNou] = useState('');
+  const [descriereCatVehiculNou, setDescriereCatVehiculNou] = useState('');
+
+  // ==========================================
+  // 2. STATE MECANIC NOU
+  // ==========================================
+  const [showAddMecanicModal, setShowAddMecanicModal] = useState(false);
+  const [newMecanicNume, setNewMecanicNume] = useState('');
+  const [newMecanicFunctie, setNewMecanicFunctie] = useState('Mecanic Atelier');
+  const [newMecanicTelefon, setNewMecanicTelefon] = useState('');
+
+  // ==========================================
+  // 3. STATE DEPOZIT NOU / EDITARE
+  // ==========================================
+  const [showAddDepozitModal, setShowAddDepozitModal] = useState(false);
+  const [editingDepozit, setEditingDepozit] = useState<any>(null);
+  const [numeDepozitNou, setNumeDepozitNou] = useState('');
+  const [adresaDepozitNou, setAdresaDepozitNou] = useState('');
+  const [responsabilDepozitNou, setResponsabilDepozitNou] = useState('');
+
+  // ==========================================
+  // 4. STATE CATEGORIE / SUBCATEGORIE NOUĂ STOC
+  // ==========================================
+  const [showAddCatModal, setShowAddCatModal] = useState(false);
+  const [numeCategorieNoua, setNumeCategorieNoua] = useState('');
+  const [descriereCatNoua, setDescriereCatNoua] = useState('');
+  const [stocMinimImplicitCat, setStocMinimImplicitCat] = useState(5);
+
+  const [showAddSubcatModal, setShowAddSubcatModal] = useState(false);
+  const [targetCatForSubcat, setTargetCatForSubcat] = useState('');
+  const [numeSubcatNoua, setNumeSubcatNoua] = useState('');
+  const [descriereSubcatNoua, setDescriereSubcatNoua] = useState('');
+
+  // ==========================================
+  // 5. STATE REGULI MENTENANȚĂ
+  // ==========================================
+  const [showAddRegulaModal, setShowAddRegulaModal] = useState(false);
+  const [editingRegula, setEditingRegula] = useState<any>(null);
+  const [regulaOperatiune, setRegulaOperatiune] = useState('');
+  const [regulaCategorieUtilaj, setRegulaCategorieUtilaj] = useState('TOATE');
+  const [regulaTipTrigger, setRegulaTipTrigger] = useState<'KM' | 'MTH' | 'ZILE'>('KM');
+  const [regulaValoareMaxima, setRegulaValoareMaxima] = useState<number>(30000);
+  const [regulaAvertizareInainte, setRegulaAvertizareInainte] = useState<number>(2000);
+  const [regulaStare, setRegulaStare] = useState('ACTIV');
+
+  // ==========================================
+  // 6. STATE DOCUMENTE VEHICULE
+  // ==========================================
+  const [showAddDocModal, setShowAddDocModal] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<any>(null);
+  const [docVehiculId, setDocVehiculId] = useState('');
+  const [docTip, setDocTip] = useState('ITP');
+  const [docDataExpirare, setDocDataExpirare] = useState('');
+  const [docZileAvertizare, setDocZileAvertizare] = useState(30);
+  const [docSerie, setDocSerie] = useState('');
+  const [docEmitent, setDocEmitent] = useState('');
+
+  // ==========================================
+  // 7. STATE ALERTE PERSONALIZATE
+  // ==========================================
+  const [showAddCustomModal, setShowAddCustomModal] = useState(false);
+  const [editingCustom, setEditingCustom] = useState<any>(null);
+  const [customTitlu, setCustomTitlu] = useState('');
+  const [customCategorie, setCustomCategorie] = useState('LICENTA_FIRMA');
+  const [customDataExpirare, setCustomDataExpirare] = useState('');
+  const [customZileAvertizare, setCustomZileAvertizare] = useState(30);
+  const [customResponsabil, setCustomResponsabil] = useState('Ing. Mihai Popa');
+  const [customStare, setCustomStare] = useState('ACTIV');
+
+  // FETCH ALL SYSTEM SETTINGS & ENTITIES
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const resVeh = await fetch('http://localhost:3001/vehicule');
+      if (resVeh.ok) {
+        const vList = await resVeh.json();
+        const arr = Array.isArray(vList) ? vList : (vList?.data || vList?.items || []);
+        setVehicule(arr);
+        if (arr.length > 0 && !docVehiculId) setDocVehiculId(arr[0].id);
+      }
+
+      const resCatVeh = await fetch('http://localhost:3001/vehicule/categorii');
+      if (resCatVeh.ok) {
+        const cData = await resCatVeh.json();
+        const merged = [
+          ...(Array.isArray(cData.categoriiEnum) ? cData.categoriiEnum : []),
+          ...(Array.isArray(cData.categoriiPersonalizate) ? cData.categoriiPersonalizate : []),
+        ];
+        setCategoriiVehicul(merged);
+      }
+
+      const resMec = await fetch('http://localhost:3001/mentenanta/mecanici');
+      if (resMec.ok) {
+        const mList = await resMec.json();
+        setMecanici(Array.isArray(mList) ? mList : []);
+      }
+
+      const resDep = await fetch('http://localhost:3001/stocuri-garantii/depozite');
+      if (resDep.ok) {
+        const dList = await resDep.json();
+        setDepozite(Array.isArray(dList) ? dList : []);
+      }
+
+      const resCat = await fetch('http://localhost:3001/stocuri-garantii/categorii');
+      if (resCat.ok) {
+        const cData = await resCat.json();
+        const cArr = [
+          ...(Array.isArray(cData.categoriiImplicite) ? cData.categoriiImplicite : []),
+          ...(Array.isArray(cData.categoriiCustom) ? cData.categoriiCustom : []),
+        ];
+        setCategorii(cArr);
+      }
+
+      const resReguli = await fetch('http://localhost:3001/anomalii/reguli-mentenanta');
+      if (resReguli.ok) {
+        const rList = await resReguli.json();
+        setReguli(Array.isArray(rList) ? rList : []);
+      }
+
+      const resDocs = await fetch('http://localhost:3001/anomalii/documente-vehicule');
+      if (resDocs.ok) {
+        const docList = await resDocs.json();
+        setDocumente(Array.isArray(docList) ? docList : []);
+      }
+
+      const resCust = await fetch('http://localhost:3001/anomalii/alerte-personalizate');
+      if (resCust.ok) {
+        const custList = await resCust.json();
+        setAlertePersonalizate(Array.isArray(custList) ? custList : []);
+      }
+    } catch (e) {
+      console.log('Eroare la încărcarea datelor din setări', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // SORT TOGGLE FUNCTION FOR VEHICLES
+  const toggleSort = (field: 'numarIntern' | 'numarInmatriculare' | 'categorieEnum') => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // ------------------------------------------
+  // HANDLERS VEHICUL & EDITARE & CATEGORIE VEHICUL (CRUD CATEGORIE)
+  // ------------------------------------------
+  const handleCreateVehicul = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numarIntern || !marca || !model) {
+      alert('Vă rugăm să completați Codul intern, Marca și Modelul!');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3001/vehicule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numarIntern,
+          numarInmatriculare,
+          categorieEnum,
+          marca,
+          model,
+          anFabricatie: Number(anFabricatie),
+          serieSasiu,
+          tipMasurare,
+          valoareContorInitial: Number(valoareContorInitial),
+          valoareContorCurent: Number(valoareContorCurent),
+          tarifOrarManoperaAtelier: Number(tarifOrar),
+          rotiPerAxList: modConfigurareAxe === 'MANUAL' ? rotiPerAxList : undefined,
+        }),
+      });
+
+      if (res.ok) {
+        alert(`🚗 Vehiculul "${numarIntern}" a fost adăugat cu succes!`);
+        setShowAddVehiculModal(false);
+        setNumarIntern('');
+        setNumarInmatriculare('');
+        setMarca('');
+        setModel('');
+        setSerieSasiu('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la salvarea vehiculului.');
+    }
+  };
+
+  const openEditVehicul = (v: any) => {
+    setEditingVehicul({ ...v });
+  };
+
+  const handleUpdateVehicul = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehicul) return;
+    try {
+      const res = await fetch(`http://localhost:3001/vehicule/${editingVehicul.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numarIntern: editingVehicul.numarIntern,
+          numarInmatriculare: editingVehicul.numarInmatriculare,
+          categorieEnum: editingVehicul.categorieEnum,
+          marca: editingVehicul.marca,
+          model: editingVehicul.model,
+          anFabricatie: Number(editingVehicul.anFabricatie),
+          serieSasiu: editingVehicul.serieSasiu || editingVehicul.vin,
+          tipMasurare: editingVehicul.tipMasurare,
+          valoareContorCurent: Number(editingVehicul.valoareContorCurent),
+          tarifOrarManoperaAtelier: Number(editingVehicul.tarifOrarManoperaAtelier || editingVehicul.tarifOrarStandard || 0),
+        }),
+      });
+
+      if (res.ok) {
+        alert(`🚗 Vehiculul "${editingVehicul.numarIntern}" a fost actualizat cu succes!`);
+        setEditingVehicul(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare la actualizare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la actualizarea vehiculului.');
+    }
+  };
+
+  const handleCreateVehiculCategorie = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numeCatVehiculNou) {
+      alert('Vă rugăm să introduceți denumirea categoriei de vehicul/utilaj!');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3001/vehicule/categorii', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nume: numeCatVehiculNou,
+          descriere: descriereCatVehiculNou,
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        alert(`🚛 Categorie vehicul nou/utilaj "${created.nume || numeCatVehiculNou}" creată cu succes!`);
+        setShowAddVehiculCatModal(false);
+        setNumeCatVehiculNou('');
+        setDescriereCatVehiculNou('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la crearea categoriei de vehicul.');
+    }
+  };
+
+  const openEditVehiculCat = (c: any) => {
+    setEditingVehiculCat({ ...c });
+  };
+
+  const handleUpdateVehiculCat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVehiculCat) return;
+    try {
+      const res = await fetch(`http://localhost:3001/vehicule/categorii/${editingVehiculCat.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nume: editingVehiculCat.nume,
+          descriere: editingVehiculCat.descriere,
+        }),
+      });
+
+      if (res.ok) {
+        alert(`🚛 Categoria "${editingVehiculCat.nume}" a fost actualizată!`);
+        setEditingVehiculCat(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la actualizarea categoriei.');
+    }
+  };
+
+  const handleDeleteVehiculCat = async (id: string, nume: string) => {
+    if (!confirm(`Sigur doriți să ștergeți categoria "${nume}"? Vehiculele din această categorie vor deveni "Nealocat".`)) return;
+    try {
+      const res = await fetch(`http://localhost:3001/vehicule/categorii/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        alert(`Categoria "${nume}" a fost ștearsă. Vehiculele asignate au fost marcate ca "Nealocat".`);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea categoriei.');
+    }
+  };
+
+  const handleDeleteVehicul = async (id: string) => {
+    if (!confirm('Sigur doriți să ștergeți acest vehicul din flotă?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/vehicule/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert('Vehicul șters din sistem.');
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea vehiculului.');
+    }
+  };
+
+  // ------------------------------------------
+  // HANDLERS MECANIC
+  // ------------------------------------------
+  const handleCreateMecanic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMecanicNume) return;
+    try {
+      const res = await fetch('http://localhost:3001/mentenanta/mecanici', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nume: newMecanicNume,
+          functie: newMecanicFunctie,
+          telefon: newMecanicTelefon,
+        }),
+      });
+
+      if (res.ok) {
+        alert('👨‍🔧 Mecanic înregistrat cu succes!');
+        setShowAddMecanicModal(false);
+        setNewMecanicNume('');
+        setNewMecanicTelefon('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la înregistrarea mecanicui.');
+    }
+  };
+
+  const handleDeleteMecanic = async (id: string) => {
+    if (!confirm('Sigur doriți să ștergeți acest mecanic din echipa atelierului?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/mentenanta/mecanici/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert('Mecanic eliminat.');
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea mecanicui.');
+    }
+  };
+
+  // ------------------------------------------
+  // HANDLERS DEPOZIT
+  // ------------------------------------------
+  const handleSaveDepozit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numeDepozitNou) return;
+    try {
+      const url = editingDepozit
+        ? `http://localhost:3001/stocuri-garantii/depozite/${editingDepozit.id}`
+        : 'http://localhost:3001/stocuri-garantii/depozite';
+      const method = editingDepozit ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nume: numeDepozitNou,
+          adresa: adresaDepozitNou,
+          responsabil: responsabilDepozitNou,
+        }),
+      });
+
+      if (res.ok) {
+        alert(`🏢 Depozit "${numeDepozitNou}" ${editingDepozit ? 'actualizat' : 'creat'} cu succes!`);
+        setShowAddDepozitModal(false);
+        setEditingDepozit(null);
+        setNumeDepozitNou('');
+        setAdresaDepozitNou('');
+        setResponsabilDepozitNou('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la salvarea depozitului.');
+    }
+  };
+
+  const openEditDepozit = (d: any) => {
+    setEditingDepozit(d);
+    setNumeDepozitNou(d.nume || '');
+    setAdresaDepozitNou(d.adresa || '');
+    setResponsabilDepozitNou(d.responsabil || '');
+    setShowAddDepozitModal(true);
+  };
+
+  const openAddDepozit = () => {
+    setEditingDepozit(null);
+    setNumeDepozitNou('');
+    setAdresaDepozitNou('');
+    setResponsabilDepozitNou('');
+    setShowAddDepozitModal(true);
+  };
+
+  const handleDeleteDepozit = async (id: string) => {
+    if (!confirm('Sigur doriți să ștergeți acest depozit?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert('Depozit șters.');
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea depozitului.');
+    }
+  };
+
+  // ------------------------------------------
+  // HANDLERS CATEGORII & SUBCATEGORII STOC
+  // ------------------------------------------
+  const handleCreateCategorie = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numeCategorieNoua) return;
+    try {
+      const res = await fetch('http://localhost:3001/stocuri-garantii/categorii', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nume: numeCategorieNoua,
+          descriere: descriereCatNoua,
+          stocMinimImplicit: Number(stocMinimImplicitCat),
+        }),
+      });
+
+      if (res.ok) {
+        alert(`📦 Categorie nouă "${numeCategorieNoua}" creată cu succes!`);
+        setShowAddCatModal(false);
+        setNumeCategorieNoua('');
+        setDescriereCatNoua('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la crearea categoriei.');
+    }
+  };
+
+  const handleCreateSubcategorie = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numeSubcatNoua || !targetCatForSubcat) {
+      alert('Vă rugăm selectați Categoria și introduceți numele Subcategoriei!');
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:3001/stocuri-garantii/subcategorii', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categorieNume: targetCatForSubcat,
+          nume: numeSubcatNoua,
+          descriere: descriereSubcatNoua,
+        }),
+      });
+
+      if (res.ok) {
+        alert(`📂 Subcategorie nouă "${numeSubcatNoua}" adăugată în "${targetCatForSubcat}"!`);
+        setShowAddSubcatModal(false);
+        setNumeSubcatNoua('');
+        setDescriereSubcatNoua('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la salvarea subcategoriei.');
+    }
+  };
+
+  // ------------------------------------------
+  // HANDLERS REGULI & DOCUMENTE & ALERTE
+  // ------------------------------------------
+  const openAddRegula = () => {
+    setEditingRegula(null);
+    setRegulaOperatiune('');
+    setRegulaCategorieUtilaj('TOATE');
+    setRegulaTipTrigger('KM');
+    setRegulaValoareMaxima(30000);
+    setRegulaAvertizareInainte(2000);
+    setRegulaStare('ACTIV');
+    setShowAddRegulaModal(true);
+  };
+
+  const openEditRegula = (r: any) => {
+    setEditingRegula(r);
+    setRegulaOperatiune(r.denumireOperatiune);
+    setRegulaCategorieUtilaj(r.categorieUtilaj || 'TOATE');
+    setRegulaTipTrigger(r.tipTrigger || 'KM');
+    setRegulaValoareMaxima(r.valoareMaxima || 0);
+    setRegulaAvertizareInainte(r.avertizareInainte || 0);
+    setRegulaStare(r.stare || 'ACTIV');
+    setShowAddRegulaModal(true);
+  };
+
+  const handleSaveRegula = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regulaOperatiune) return;
+    try {
+      const url = editingRegula
+        ? `http://localhost:3001/anomalii/reguli-mentenanta/${editingRegula.id}`
+        : 'http://localhost:3001/anomalii/reguli-mentenanta';
+      const method = editingRegula ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          denumireOperatiune: regulaOperatiune,
+          categorieUtilaj: regulaCategorieUtilaj,
+          tipTrigger: regulaTipTrigger,
+          valoareMaxima: Number(regulaValoareMaxima),
+          avertizareInainte: Number(regulaAvertizareInainte),
+          stare: regulaStare,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Regulă de mentenanță salvată cu succes!');
+        setShowAddRegulaModal(false);
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la salvarea regulii.');
+    }
+  };
+
+  const handleDeleteRegula = async (id: string) => {
+    if (!confirm('Ștergeți această regulă?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/anomalii/reguli-mentenanta/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch (e) {
+      alert('Eroare la ștergere.');
+    }
+  };
+
+  const openAddDoc = () => {
+    setEditingDoc(null);
+    setDocTip('ITP');
+    setDocDataExpirare('');
+    setDocZileAvertizare(30);
+    setDocSerie('');
+    setDocEmitent('');
+    setShowAddDocModal(true);
+  };
+
+  const handleSaveDoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docVehiculId || !docDataExpirare) return;
+    try {
+      const url = editingDoc
+        ? `http://localhost:3001/anomalii/documente-vehicule/${editingDoc.id}`
+        : 'http://localhost:3001/anomalii/documente-vehicule';
+      const method = editingDoc ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehiculId: docVehiculId,
+          tipDocument: docTip,
+          dataExpirare: docDataExpirare,
+          zileAvertizareInainte: Number(docZileAvertizare),
+          serieDocument: docSerie,
+          emitent: docEmitent,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Document salvat cu succes!');
+        setShowAddDocModal(false);
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la salvarea documentului.');
+    }
+  };
+
+  const handleDeleteDoc = async (id: string) => {
+    if (!confirm('Ștergeți acest document?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/anomalii/documente-vehicule/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch (e) {
+      alert('Eroare la ștergere.');
+    }
+  };
+
+  const openAddCustom = () => {
+    setEditingCustom(null);
+    setCustomTitlu('');
+    setCustomCategorie('LICENTA_FIRMA');
+    setCustomDataExpirare('');
+    setCustomZileAvertizare(30);
+    setCustomResponsabil('Ing. Mihai Popa');
+    setCustomStare('ACTIV');
+    setShowAddCustomModal(true);
+  };
+
+  const handleSaveCustomAlerta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customTitlu || !customDataExpirare) return;
+    try {
+      const url = editingCustom
+        ? `http://localhost:3001/anomalii/alerte-personalizate/${editingCustom.id}`
+        : 'http://localhost:3001/anomalii/alerte-personalizate';
+      const method = editingCustom ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titlu: customTitlu,
+          categorie: customCategorie,
+          dataExpirare: customDataExpirare,
+          zileAvertizareInainte: Number(customZileAvertizare),
+          responsabil: customResponsabil,
+          stare: customStare,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Alertă personalizată salvată!');
+        setShowAddCustomModal(false);
+        fetchData();
+      }
+    } catch (e) {
+      alert('Eroare la salvarea alertei.');
+    }
+  };
+
+  const handleDeleteCustom = async (id: string) => {
+    if (!confirm('Ștergeți această alertă?')) return;
+    try {
+      const res = await fetch(`http://localhost:3001/anomalii/alerte-personalizate/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchData();
+    } catch (e) {
+      alert('Eroare la ștergere.');
+    }
+  };
+
+  // FILTERED AND SORTED VEHICLES LIST
+  const vehiculeFiltrateSiSortate = [...vehicule]
+    .filter((v) =>
+      v.numarIntern?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
+      v.numarInmatriculare?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
+      v.marca?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
+      v.categorieEnum?.toLowerCase().includes(searchVehicule.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (!sortField) return 0;
+      let valA = '';
+      let valB = '';
+
+      if (sortField === 'numarIntern') {
+        valA = (a.numarIntern || '').toLowerCase();
+        valB = (b.numarIntern || '').toLowerCase();
+      } else if (sortField === 'numarInmatriculare') {
+        valA = (a.numarInmatriculare || '').toLowerCase();
+        valB = (b.numarInmatriculare || '').toLowerCase();
+      } else if (sortField === 'categorieEnum') {
+        valA = (a.categorieEnum || '').toLowerCase();
+        valB = (b.categorieEnum || '').toLowerCase();
+      }
+
+      const cmp = valA.localeCompare(valB, 'ro', { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+  const mecaniciFiltrati = mecanici.filter(
+    (m) =>
+      m.nume?.toLowerCase().includes(searchMecanici.toLowerCase()) ||
+      m.functie?.toLowerCase().includes(searchMecanici.toLowerCase())
+  );
+
+  const depoziteFiltrate = depozite.filter(
+    (d) =>
+      d.nume?.toLowerCase().includes(searchDepozite.toLowerCase()) ||
+      d.responsabil?.toLowerCase().includes(searchDepozite.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* ANTET PAGINĂ SETĂRI */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight flex items-center space-x-2">
+            <Settings className="w-6 h-6 text-sapphire-500" />
+            <span>Setări Sistem & Administrare Entități</span>
+          </h1>
+          <p className="text-xs text-sage-700 font-medium">
+            Panou centralizat pentru adăugarea autovehiculelor, editarea/ștergerea categoriilor, mecanicilor, depozitelor și regulilor de alerte.
+          </p>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={fetchData}
+            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition"
+          >
+            <RotateCcw className="w-4 h-4 text-sapphire-500" />
+            <span>Reîmprospătează Datele</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Meniu Tab-uri Administrare */}
+      <div className="flex items-center space-x-2 border-b border-morning-200 overflow-x-auto pb-1">
+        <button
+          onClick={() => setActiveTab('vehicule')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'vehicule'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Truck className="w-4 h-4 text-sapphire-500" />
+          <span>🚛 Flotă & Vehicule ({vehicule.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mecanici')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'mecanici'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Users className="w-4 h-4 text-periwinkle-600" />
+          <span>👨‍🔧 Mecanici Atelier ({mecanici.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('depozite')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'depozite'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Building2 className="w-4 h-4 text-sapphire-500" />
+          <span>🏢 Depozite Flotă ({depozite.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('categorii')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'categorii'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-periwinkle-700" />
+          <span>📦 Categorii Stoc Piese ({categorii.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reguli')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'reguli'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Clock className="w-4 h-4 text-terracotta-600" />
+          <span>⚙️ Reguli Alerte ({reguli.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('documente')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'documente'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-sapphire-500" />
+          <span>📄 Documente Vehicule ({documente.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('personalizate')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'personalizate'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-terracotta-500" />
+          <span>🔔 Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: FLOTĂ & VEHICULE (ADĂUGARE, EDITARE & MANAGEMENT CATEGORII) */}
+      {/* ========================================================================= */}
+      {activeTab === 'vehicule' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Caută vehicul după cod intern, număr înmatriculare sau marcă..."
+                value={searchVehicule}
+                onChange={(e) => setSearchVehicule(e.target.value)}
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+              />
+            </div>
+            <div className="flex items-center space-x-2 flex-wrap">
+              <button
+                onClick={() => setShowAddVehiculCatModal(true)}
+                className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-morning-200 hover:bg-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
+              >
+                <Layers className="w-4 h-4 text-periwinkle-700" />
+                <span>+ Categorie Nouă Vehicul</span>
+              </button>
+
+              <button
+                onClick={() => setShowAddVehiculModal(true)}
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Adaugă Vehicul Nou în Flotă</span>
+              </button>
+            </div>
+          </div>
+
+          {/* LISTĂ CATEGORII VEHICUL DISPONIBILE CU EDITARE & ȘTERGERE (CERUZĂ & ROȘU X) */}
+          {categoriiVehicul.length > 0 && (
+            <div className="bg-morning-50 p-4 rounded-2xl border border-morning-200 space-y-2">
+              <span className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider block">
+                Categorii de Utilaje & Autovehicule Definite (click pe ceruză pentru Editare, X roșu pentru Ștergere):
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {categoriiVehicul.map((c) => (
+                  <div
+                    key={c.id || c.nume}
+                    className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white border border-morning-200 shadow-2xs group hover:border-sapphire-300 transition"
+                  >
+                    <span className="text-xs font-bold text-sapphire-900">
+                      {c.nume} {c.descriere ? `(${c.descriere})` : ''}
+                    </span>
+                    <button
+                      onClick={() => openEditVehiculCat(c)}
+                      title="Szerkesztés (Editare)"
+                      className="p-1 text-sage-500 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-md transition"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteVehiculCat(c.id, c.nume)}
+                      title="Törlés (Ștergere)"
+                      className="p-1 text-terracotta-500 hover:text-terracotta-700 hover:bg-roseash-100 rounded-md transition"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider select-none">
+                  {/* OSZLOP 1: COD INTERN (CLICK SORTS A-Z / Z-A) */}
+                  <th
+                    onClick={() => toggleSort('numarIntern')}
+                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Cod Intern</span>
+                      {sortField === 'numarIntern' ? (
+                        sortDirection === 'asc' ? (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowUp className="w-3 h-3" />
+                            <span>A-Z</span>
+                          </span>
+                        ) : (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowDown className="w-3 h-3" />
+                            <span>Z-A</span>
+                          </span>
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-sage-400 group-hover:text-sapphire-500 transition opacity-60 group-hover:opacity-100" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* OSZLOP 2: ÎNMATRICULARE & ȘASIU (CLICK SORTS A-Z / Z-A) */}
+                  <th
+                    onClick={() => toggleSort('numarInmatriculare')}
+                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Înmatriculare & Șasiu</span>
+                      {sortField === 'numarInmatriculare' ? (
+                        sortDirection === 'asc' ? (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowUp className="w-3 h-3" />
+                            <span>A-Z</span>
+                          </span>
+                        ) : (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowDown className="w-3 h-3" />
+                            <span>Z-A</span>
+                          </span>
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-sage-400 group-hover:text-sapphire-500 transition opacity-60 group-hover:opacity-100" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* OSZLOP 3: CATEGORIE & MODEL (CLICK SORTS A-Z / Z-A) */}
+                  <th
+                    onClick={() => toggleSort('categorieEnum')}
+                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Categorie & Model</span>
+                      {sortField === 'categorieEnum' ? (
+                        sortDirection === 'asc' ? (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowUp className="w-3 h-3" />
+                            <span>A-Z</span>
+                          </span>
+                        ) : (
+                          <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
+                            <ArrowDown className="w-3 h-3" />
+                            <span>Z-A</span>
+                          </span>
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3.5 h-3.5 text-sage-400 group-hover:text-sapphire-500 transition opacity-60 group-hover:opacity-100" />
+                      )}
+                    </div>
+                  </th>
+
+                  <th className="p-3">Contor Curent</th>
+                  <th className="p-3">Tarif Orar Atelier</th>
+                  <th className="p-3 text-right">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                {vehiculeFiltrateSiSortate.map((v) => (
+                  <tr key={v.id} className="hover:bg-morning-50 transition">
+                    <td className="p-3 font-extrabold text-sapphire-900 font-mono">{v.numarIntern}</td>
+                    <td className="p-3">
+                      <span className="font-bold text-slate-800">{v.numarInmatriculare}</span>
+                      <div className="text-[10px] text-sage-500 font-mono">{v.serieSasiu || v.vin || '-'}</div>
+                    </td>
+                    <td className="p-3">
+                      {v.categorieEnum === 'NEALOCAT' || v.categorieEnum === 'Nealocat' ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                          Nealocat
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
+                          {v.categorieEnum}
+                        </span>
+                      )}
+                      <div className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                        {v.marca} {v.model} ({v.anFabricatie})
+                      </div>
+                    </td>
+                    <td className="p-3 font-mono font-bold text-sapphire-900">
+                      {v.valoareContorCurent} {v.tipMasurare}
+                    </td>
+                    <td className="p-3 font-mono text-sage-700">
+                      {v.tarifOrarManoperaAtelier || v.tarifOrarStandard ? `${v.tarifOrarManoperaAtelier || v.tarifOrarStandard} RON/h` : '0 RON/h'}
+                    </td>
+                    <td className="p-3 text-right space-x-2">
+                      <button
+                        onClick={() => openEditVehicul(v)}
+                        className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold transition border border-sapphire-200"
+                      >
+                        Editează
+                      </button>
+                      <button
+                        onClick={() => handleDeleteVehicul(v.id)}
+                        className="px-3 py-1.5 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 font-bold transition"
+                      >
+                        Șterge
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: MECANICI & ECHIPĂ ATELIER */}
+      {/* ========================================================================= */}
+      {activeTab === 'mecanici' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Caută mecanic după nume sau funcție..."
+                value={searchMecanici}
+                onChange={(e) => setSearchMecanici(e.target.value)}
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+              />
+            </div>
+            <button
+              onClick={() => setShowAddMecanicModal(true)}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            >
+              <Users className="w-4 h-4" />
+              <span>+ Înregistrează Mecanic Nou</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {mecaniciFiltrati.map((m) => (
+              <div key={m.id} className="pleasant-card p-4 rounded-2xl border border-morning-200 flex justify-between items-start space-x-3">
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-center text-sapphire-600 font-extrabold text-sm">
+                    {m.nume?.charAt(0) || 'M'}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sapphire-900 text-sm">{m.nume}</h3>
+                    <p className="text-xs text-sage-700 font-bold">{m.functie}</p>
+                    <p className="text-[11px] font-mono text-sage-500 mt-1">{m.telefon || 'Fără telefon'}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleDeleteMecanic(m.id)}
+                  className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
+                >
+                  <Trash2 className="w-4 h-4 text-terracotta-500" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: DEPOZITE FLOTĂ */}
+      {/* ========================================================================= */}
+      {activeTab === 'depozite' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Caută depozit după denumire sau responsabil..."
+                value={searchDepozite}
+                onChange={(e) => setSearchDepozite(e.target.value)}
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+              />
+            </div>
+            <button
+              onClick={openAddDepozit}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            >
+              <Building2 className="w-4 h-4" />
+              <span>+ Depozit Nou</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {depoziteFiltrate.map((d) => (
+              <div key={d.id} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-morning-200 pb-2">
+                  <h3 className="font-extrabold text-sapphire-900 text-base flex items-center space-x-2">
+                    <Building2 className="w-5 h-5 text-sapphire-500" />
+                    <span>{d.nume}</span>
+                  </h3>
+                  <div className="flex space-x-1">
+                    <button onClick={() => openEditDepozit(d)} className="p-1 text-sapphire-600 hover:bg-morning-100 rounded-lg">
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleDeleteDepozit(d.id)} className="p-1 text-terracotta-600 hover:bg-roseash-100 rounded-lg">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs space-y-1 text-slate-700">
+                  <p><span className="font-bold text-sage-700">Adresă / Locație:</span> {d.adresa || 'Nespecificată'}</p>
+                  <p><span className="font-bold text-sage-700">Responsabil Gestiune:</span> {d.responsabil || 'Nedesemnat'}</p>
+                  <p className="text-[11px] text-sage-500 pt-1 font-mono">Articole stocate: {d._count?.articoleStoc ?? d.articoleStoc?.length ?? 0} articole</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CATEGORII & SUBCATEGORII STOC */}
+      {/* ========================================================================= */}
+      {activeTab === 'categorii' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-sapphire-900 text-base">Structură Categorii & Subcategorii Piese</h3>
+              <p className="text-xs text-sage-700 font-medium">Clasificarea articolelor de stoc cu praguri de stoc minim implicite</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowAddCatModal(true)}
+                className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Categorie Nouă</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (categorii.length > 0) setTargetCatForSubcat(categorii[0].nume);
+                  setShowAddSubcatModal(true);
+                }}
+                className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-morning-200 hover:bg-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
+              >
+                <Layers className="w-4 h-4 text-periwinkle-700" />
+                <span>+ Subcategorie Nouă</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {categorii.map((c: any) => (
+              <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-morning-200 pb-2">
+                  <h4 className="font-extrabold text-sapphire-900 text-base flex items-center space-x-2">
+                    <Layers className="w-5 h-5 text-periwinkle-700" />
+                    <span>{c.nume}</span>
+                  </h4>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
+                    Stoc Min. Implicit: {c.stocMinimImplicit || 5} buc
+                  </span>
+                </div>
+
+                <p className="text-xs text-sage-700">{c.descriere || 'Fără descriere adițională.'}</p>
+
+                <div className="pt-2 border-t border-morning-200 space-y-1">
+                  <p className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider">Subcategorii incluse:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {c.subcategorii && c.subcategorii.length > 0 ? (
+                      c.subcategorii.map((sc: any) => (
+                        <span key={sc.id || sc.nume} className="px-2.5 py-1 rounded-lg bg-morning-100 border border-morning-200 text-[11px] font-bold text-sapphire-900">
+                          {sc.nume}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-sage-500 italic">Nicio subcategorie definită</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: REGULI ALERTE MENTENANȚĂ */}
+      {/* ========================================================================= */}
+      {activeTab === 'reguli' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-sapphire-900 text-base">Reguli de Mentenanță Preventivă</h3>
+              <p className="text-xs text-sage-700">Setează pragurile automate pentru schimburi de ulei, filtre, gresare etc.</p>
+            </div>
+            <button
+              onClick={openAddRegula}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Adaugă Regulă Nouă</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                  <th className="p-3">Operatiune</th>
+                  <th className="p-3">Categorie Utilaj</th>
+                  <th className="p-3">Trigger / Prag Maxim</th>
+                  <th className="p-3">Avertizare ÎnPrealabil</th>
+                  <th className="p-3">Stare</th>
+                  <th className="p-3 text-right">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                {reguli.map((r) => (
+                  <tr key={r.id} className="hover:bg-morning-50 transition">
+                    <td className="p-3 font-extrabold text-sapphire-900">{r.denumireOperatiune}</td>
+                    <td className="p-3 font-bold text-slate-800">{r.categorieUtilaj}</td>
+                    <td className="p-3 font-mono font-bold text-sapphire-900">
+                      {r.valoareMaxima} {r.tipTrigger}
+                    </td>
+                    <td className="p-3 font-mono text-terracotta-700 font-bold">
+                      {r.avertizareInainte} {r.tipTrigger}
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${r.stare === 'ACTIV' ? 'bg-emerald-100 text-emerald-800' : 'bg-morning-200 text-slate-600'}`}>
+                        {r.stare}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right space-x-2">
+                      <button onClick={() => openEditRegula(r)} className="p-1.5 text-sapphire-600 hover:bg-morning-100 rounded-lg">
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteRegula(r.id)} className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: DOCUMENTE VEHICULE */}
+      {/* ========================================================================= */}
+      {activeTab === 'documente' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-sapphire-900 text-base">Evidență Documente Vehicule (ITP, RCA, Rovinietă)</h3>
+              <p className="text-xs text-sage-700">Monitorizarea scadențelor pentru actele vehiculelor</p>
+            </div>
+            <button
+              onClick={openAddDoc}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Adaugă Document Vehicul</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                  <th className="p-3">Vehicul</th>
+                  <th className="p-3">Tip Document</th>
+                  <th className="p-3">Data Expirare</th>
+                  <th className="p-3">Notificare (Zile Înainte)</th>
+                  <th className="p-3">Serie / Emitent</th>
+                  <th className="p-3 text-right">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                {documente.map((d) => (
+                  <tr key={d.id} className="hover:bg-morning-50 transition">
+                    <td className="p-3 font-extrabold text-sapphire-900 font-mono">
+                      {d.vehicul?.numarIntern || d.vehiculId} ({d.vehicul?.numarInmatriculare || ''})
+                    </td>
+                    <td className="p-3 font-bold text-slate-800">{d.tipDocument}</td>
+                    <td className="p-3 font-mono font-bold text-terracotta-700">
+                      {new Date(d.dataExpirare).toLocaleDateString('ro-RO')}
+                    </td>
+                    <td className="p-3 font-mono text-sage-700 font-bold">{d.zileAvertizareInainte} zile</td>
+                    <td className="p-3 text-sage-600">{d.serieDocument || d.emitent || '-'}</td>
+                    <td className="p-3 text-right space-x-2">
+                      <button onClick={() => handleDeleteDoc(d.id)} className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 7: ALERTE PERSONALIZATE & LICENȚE FIRMĂ */}
+      {/* ========================================================================= */}
+      {activeTab === 'personalizate' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-sapphire-900 text-base">Licențe Firmă & Atestate Personal</h3>
+              <p className="text-xs text-sage-700">Alerte personalizate pentru transport, mediu, dispecerat</p>
+            </div>
+            <button
+              onClick={openAddCustom}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Adaugă Alertă Personalizată</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                  <th className="p-3">Titlu Alertă</th>
+                  <th className="p-3">Categorie</th>
+                  <th className="p-3">Data Expirare</th>
+                  <th className="p-3">Zile Avertizare</th>
+                  <th className="p-3">Responsabil</th>
+                  <th className="p-3 text-right">Acțiuni</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                {alertePersonalizate.map((a) => (
+                  <tr key={a.id} className="hover:bg-morning-50 transition">
+                    <td className="p-3 font-extrabold text-sapphire-900">{a.titlu}</td>
+                    <td className="p-3 font-bold text-slate-800">{a.categorie}</td>
+                    <td className="p-3 font-mono font-bold text-terracotta-700">
+                      {new Date(a.dataExpirare).toLocaleDateString('ro-RO')}
+                    </td>
+                    <td className="p-3 font-mono text-sage-700 font-bold">{a.zileAvertizareInainte} zile</td>
+                    <td className="p-3 text-sage-600">{a.responsabil || '-'}</td>
+                    <td className="p-3 text-right space-x-2">
+                      <button onClick={() => handleDeleteCustom(a.id)} className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: ADĂUGARE VEHICUL NOU */}
+      {/* ========================================================================= */}
+      {showAddVehiculModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Truck className="w-5 h-5 text-sapphire-500" />
+                <span>Adăugare Vehicul Nou în Flotă</span>
+              </h3>
+              <button onClick={() => setShowAddVehiculModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleCreateVehicul} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cod Intern (ex: UTIL-01): *</label>
+                  <input required value={numarIntern} onChange={(e) => setNumarIntern(e.target.value)} placeholder="UTIL-01" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Nr. Înmatriculare: *</label>
+                  <input required value={numarInmatriculare} onChange={(e) => setNumarInmatriculare(e.target.value)} placeholder="B-101-VLV" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj: *</label>
+                  <select value={categorieEnum} onChange={(e) => setCategorieEnum(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    {categoriiVehicul.length > 0 ? (
+                      categoriiVehicul.map((c) => (
+                        <option key={c.id || c.nume} value={c.nume}>{c.nume} {c.descriere ? `(${c.descriere})` : ''}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="CAP_TRACTOR">CAP TRACTOR</option>
+                        <option value="BASCULANTA">BASCULANTĂ</option>
+                        <option value="EXCAVATOR">EXCAVATOR</option>
+                        <option value="INCARCATOR_FRONTAL">ÎNCĂRCĂTOR FRONTAL</option>
+                        <option value="AUTOUTILITARA">AUTOUTILITARĂ</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input required value={marca} onChange={(e) => setMarca(e.target.value)} placeholder="VOLVO / MAN / CAT" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model: *</label>
+                  <input required value={model} onChange={(e) => setModel(e.target.value)} placeholder="FMX 500 / CAT 330" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">An Fabricație:</label>
+                  <input type="number" value={anFabricatie} onChange={(e) => setAnFabricatie(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Șasiu (VIN):</label>
+                  <input value={serieSasiu} onChange={(e) => setSerieSasiu(e.target.value)} placeholder="WMA123456789" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Măsurare Contor:</label>
+                  <select value={tipMasurare} onChange={(e) => setTipMasurare(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="KM">KM (Kilometri)</option>
+                    <option value="MTH">MTH (Ore Funcționare)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Curent:</label>
+                  <input type="number" value={valoareContorCurent} onChange={(e) => setValoareContorCurent(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddVehiculModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Adaugă Vehicul în Flotă</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1.B: EDITARE VEHICUL */}
+      {/* ========================================================================= */}
+      {editingVehicul && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Edit3 className="w-5 h-5 text-sapphire-500" />
+                <span>Editare Date Vehicul ({editingVehicul.numarIntern})</span>
+              </h3>
+              <button onClick={() => setEditingVehicul(null)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleUpdateVehicul} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cod Intern: *</label>
+                  <input required value={editingVehicul.numarIntern || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, numarIntern: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Nr. Înmatriculare: *</label>
+                  <input required value={editingVehicul.numarInmatriculare || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, numarInmatriculare: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj: *</label>
+                  <select value={editingVehicul.categorieEnum || 'CAP_TRACTOR'} onChange={(e) => setEditingVehicul({ ...editingVehicul, categorieEnum: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    {categoriiVehicul.map((c) => (
+                      <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input required value={editingVehicul.marca || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, marca: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model: *</label>
+                  <input required value={editingVehicul.model || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, model: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">An Fabricație:</label>
+                  <input type="number" value={editingVehicul.anFabricatie || 2024} onChange={(e) => setEditingVehicul({ ...editingVehicul, anFabricatie: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Șasiu (VIN):</label>
+                  <input value={editingVehicul.serieSasiu || editingVehicul.vin || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, serieSasiu: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Măsurare Contor:</label>
+                  <select value={editingVehicul.tipMasurare || 'KM'} onChange={(e) => setEditingVehicul({ ...editingVehicul, tipMasurare: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="KM">KM (Kilometri)</option>
+                    <option value="MTH">MTH (Ore Funcționare)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Curent:</label>
+                  <input type="number" value={editingVehicul.valoareContorCurent || 0} onChange={(e) => setEditingVehicul({ ...editingVehicul, valoareContorCurent: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setEditingVehicul(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1.C: CREARE CATEGORIE VEHICUL NOUĂ */}
+      {/* ========================================================================= */}
+      {showAddVehiculCatModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-periwinkle-700" />
+                <span>Adăugare Categorie Nouă Vehicul / Utilaj</span>
+              </h3>
+              <button onClick={() => setShowAddVehiculCatModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleCreateVehiculCategorie} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Nume / Denumire Categorie Utilaj: *</label>
+                <input required value={numeCatVehiculNou} onChange={(e) => setNumeCatVehiculNou(e.target.value)} placeholder="ex: MACARA, CISTERNA, GREIDER" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie:</label>
+                <input value={descriereCatVehiculNou} onChange={(e) => setDescriereCatVehiculNou(e.target.value)} placeholder="ex: Macara mobilă cu braț telescopic" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddVehiculCatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Categorie Vehicul</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1.D: EDITARE CATEGORIE VEHICUL */}
+      {/* ========================================================================= */}
+      {editingVehiculCat && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Edit3 className="w-5 h-5 text-sapphire-500" />
+                <span>Editare Categorie Vehicul ({editingVehiculCat.nume})</span>
+              </h3>
+              <button onClick={() => setEditingVehiculCat(null)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleUpdateVehiculCat} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Nume / Denumire Categorie: *</label>
+                <input
+                  required
+                  value={editingVehiculCat.nume || ''}
+                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, nume: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie:</label>
+                <input
+                  value={editingVehiculCat.descriere || ''}
+                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, descriere: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setEditingVehiculCat(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: ADĂUGARE MECANIC NOU */}
+      {/* ========================================================================= */}
+      {showAddMecanicModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Users className="w-5 h-5 text-sapphire-500" />
+                <span>Înregistrare Mecanic Nou în Atelier</span>
+              </h3>
+              <button onClick={() => setShowAddMecanicModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleCreateMecanic} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume Mecanic / Tehnician: *</label>
+                <input required value={newMecanicNume} onChange={(e) => setNewMecanicNume(e.target.value)} placeholder="ex: Alexandru Popa" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Funcție / Specialitate: *</label>
+                <select value={newMecanicFunctie} onChange={(e) => setNewMecanicFunctie(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  <option value="Mecanic Șef">Mecanic Șef</option>
+                  <option value="Mecanic Atelier">Mecanic Atelier</option>
+                  <option value="Mecanic Utilaje Grele">Mecanic Utilaje Grele</option>
+                  <option value="Electrician Auto">Electrician Auto</option>
+                  <option value="Vulcanizator">Vulcanizator / Anvelope</option>
+                  <option value="Tinichigiu">Tinichigiu / Carosier</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Număr Telefon Contact:</label>
+                <input value={newMecanicTelefon} onChange={(e) => setNewMecanicTelefon(e.target.value)} placeholder="ex: 0722111222" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddMecanicModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: ADĂUGARE / EDITARE DEPOZIT NOU */}
+      {/* ========================================================================= */}
+      {showAddDepozitModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Building2 className="w-5 h-5 text-sapphire-500" />
+                <span>{editingDepozit ? 'Editare Depozit' : 'Creare Depozit Nou'}</span>
+              </h3>
+              <button onClick={() => setShowAddDepozitModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveDepozit} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Nume Depozit: *</label>
+                <input required value={numeDepozitNou} onChange={(e) => setNumeDepozitNou(e.target.value)} placeholder="ex: Depozit Cluj Central / Depozit Piese 1" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Adresă / Locație Physicală:</label>
+                <input value={adresaDepozitNou} onChange={(e) => setAdresaDepozitNou(e.target.value)} placeholder="ex: Str. Industrială nr. 12, Cluj-Napoca" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit:</label>
+                <input value={responsabilDepozitNou} onChange={(e) => setResponsabilDepozitNou(e.target.value)} placeholder="ex: Ion Popescu - Șef Depozit" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddDepozitModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Depozit</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: CREARE CATEGORIE NOUĂ STOC */}
+      {/* ========================================================================= */}
+      {showAddCatModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-periwinkle-700" />
+                <span>Creează Categorie Nouă Stoc</span>
+              </h3>
+              <button onClick={() => setShowAddCatModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleCreateCategorie} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Categorie: *</label>
+                <input required value={numeCategorieNoua} onChange={(e) => setNumeCategorieNoua(e.target.value)} placeholder="ex: Filtre, Uleiuri, Frâne" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Stoc Minim Implicit (Avertizare automat):</label>
+                <input type="number" value={stocMinimImplicitCat} onChange={(e) => setStocMinimImplicitCat(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie:</label>
+                <input value={descriereCatNoua} onChange={(e) => setDescriereCatNoua(e.target.value)} placeholder="Descriere scurtă opțională" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddCatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Creează Categorie</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: CREARE SUBCATEGORIE NOUĂ STOC */}
+      {/* ========================================================================= */}
+      {showAddSubcatModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-periwinkle-700" />
+                <span>Adaugă Subcategorie Nouă</span>
+              </h3>
+              <button onClick={() => setShowAddSubcatModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleCreateSubcategorie} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Selectează Categoria Părinte: *</label>
+                <select value={targetCatForSubcat} onChange={(e) => setTargetCatForSubcat(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  {categorii.map((c) => (
+                    <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Subcategorie: *</label>
+                <input required value={numeSubcatNoua} onChange={(e) => setNumeSubcatNoua(e.target.value)} placeholder="ex: Filtre Ulei, Filtre Aer, Plăcuțe Frână" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Subcategorie:</label>
+                <input value={descriereSubcatNoua} onChange={(e) => setDescriereSubcatNoua(e.target.value)} placeholder="Descriere scurtă" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddSubcatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Subcategorie</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: REGULĂ MENTENANȚĂ NOUĂ / EDITARE */}
+      {/* ========================================================================= */}
+      {showAddRegulaModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-terracotta-600" />
+                <span>{editingRegula ? 'Editare Regulă Mentenanță' : 'Adăugare Regulă Nouă de Mentenanță'}</span>
+              </h3>
+              <button onClick={() => setShowAddRegulaModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveRegula} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Operațiune: *</label>
+                <input required value={regulaOperatiune} onChange={(e) => setRegulaOperatiune(e.target.value)} placeholder="ex: Schimb Ulei Motor, Suflare Filtru Aer" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj:</label>
+                  <select value={regulaCategorieUtilaj} onChange={(e) => setRegulaCategorieUtilaj(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="TOATE">TOATE CATEGORIILE</option>
+                    {categoriiVehicul.map((c) => (
+                      <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Trigger:</label>
+                  <select value={regulaTipTrigger} onChange={(e) => setRegulaTipTrigger(e.target.value as any)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="KM">KM (Kilometri)</option>
+                    <option value="MTH">MTH (Ore Funcționare)</option>
+                    <option value="ZILE">ZILE (Zile Calendaristice)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Prag Valoare Maximă: *</label>
+                  <input type="number" required value={regulaValoareMaxima} onChange={(e) => setRegulaValoareMaxima(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Avertizare În Prealabil Cu: *</label>
+                  <input type="number" required value={regulaAvertizareInainte} onChange={(e) => setRegulaAvertizareInainte(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddRegulaModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Regulă</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 7: DOCUMENT VEHICUL NOU */}
+      {/* ========================================================================= */}
+      {showAddDocModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-sapphire-500" />
+                <span>Adăugare Document Vehicul (ITP, RCA, Rovinietă)</span>
+              </h3>
+              <button onClick={() => setShowAddDocModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveDoc} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Selectează Vehicul: *</label>
+                <select value={docVehiculId} onChange={(e) => setDocVehiculId(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  {vehicule.map((v) => (
+                    <option key={v.id} value={v.id}>{v.numarIntern} ({v.numarInmatriculare})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Document: *</label>
+                  <select value={docTip} onChange={(e) => setDocTip(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="ITP">ITP (Inspecție Tehnică Periodic)</option>
+                    <option value="RCA">RCA (Asigurare Obligatorie)</option>
+                    <option value="ROVINIETA">Rovinietă (Ttaxă Drum)</option>
+                    <option value="COPIE_CONFORMA">Copie Conformă Transport</option>
+                    <option value="VERIFICARE_TAHOGRAF">Verificare Tahograf</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Data Expirare: *</label>
+                  <input type="date" required value={docDataExpirare} onChange={(e) => setDocDataExpirare(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Notificare În Prealabil Cu (Zile):</label>
+                  <input type="number" value={docZileAvertizare} onChange={(e) => setDocZileAvertizare(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold" />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Document:</label>
+                  <input value={docSerie} onChange={(e) => setDocSerie(e.target.value)} placeholder="ex: RO-981241" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddDocModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Document</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 8: ALERTĂ PERSONALIZATĂ NOUĂ */}
+      {/* ========================================================================= */}
+      {showAddCustomModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <ShieldAlert className="w-5 h-5 text-terracotta-500" />
+                <span>Adăugare Alertă Personalizată / Licență Firmă</span>
+              </h3>
+              <button onClick={() => setShowAddCustomModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveCustomAlerta} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Titlu Alertă / Licență: *</label>
+                <input required value={customTitlu} onChange={(e) => setCustomTitlu(e.target.value)} placeholder="ex: Licență Firmă Transport, Atestat Șofer Popescu" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie:</label>
+                  <select value={customCategorie} onChange={(e) => setCustomCategorie(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                    <option value="LICENTA_FIRMA">Licență Firmă</option>
+                    <option value="ATESTAT_SOFER">Atestat Șofer</option>
+                    <option value="AUTORIZATIE_MEDIU">Autorizație Mediu</option>
+                    <option value="CUSTOM">Altă Alertă</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Data Expirare: *</label>
+                  <input type="date" required value={customDataExpirare} onChange={(e) => setCustomDataExpirare(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Notificare În Prealabil (Zile):</label>
+                  <input type="number" value={customZileAvertizare} onChange={(e) => setCustomZileAvertizare(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold" />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Responsabil:</label>
+                  <input value={customResponsabil} onChange={(e) => setCustomResponsabil(e.target.value)} placeholder="ex: Ing. Mihai Popa" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button type="button" onClick={() => setShowAddVehiculCatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Creează Alertă</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

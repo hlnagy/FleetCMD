@@ -1,0 +1,29 @@
+# Dependencies
+**/node_modules/
+node_modules/
+
+# Next.js build output
+**/frontend/.next/
+**/.next/
+frontend/.next/
+
+# NestJS build output
+**/backend/dist/
+**/dist/
+backend/dist/
+
+# SQLite & Environment files
+*.db
+*.db-journal
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+.env
+.env.local
+.env.production
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

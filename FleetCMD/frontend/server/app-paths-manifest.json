@@ -1,0 +1,7 @@
+{
+  "/page": "app/page.js",
+  "/fisa-tehnica/page": "app/fisa-tehnica/page.js",
+  "/comenzi-lucru/page": "app/comenzi-lucru/page.js",
+  "/stocuri/page": "app/stocuri/page.js",
+  "/mentenanta/page": "app/mentenanta/page.js"
+}

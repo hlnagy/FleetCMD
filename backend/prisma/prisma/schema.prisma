@@ -1,0 +1,400 @@
+// THIS IS A PRISMA SCHEMA FILE
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ==========================================
+// PARC AUTO & UTILAJE GRELE (VEHICULE)
+// ==========================================
+
+model CategorieVehicul {
+  id                   String        @id @default(uuid())
+  nume                 String        @unique // ex: TEHERAUTÓ, EXCAVATOR, ÎNCĂRCĂTOR
+  descriere            String?
+  tipMasurareImplicit  String        @default("KM") // KM vs MTH
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  vehicule             Vehicul[]
+}
+
+model Vehicul {
+  id                     String              @id @default(uuid())
+  numarIntern            String              @unique // ex: UTIL-01, CAM-03
+  numarInmatriculare     String              @unique // ex: B-101-VLV
+  serieSasiu             String?             // VIN / Serie șasiu
+  marca                  String
+  model                  String
+  anFabricatie           Int
+  categorieEnum          String              // FK catre CategorieVehicul.nume
+  categorie              CategorieVehicul    @relation(fields: [categorieEnum], references: [nume])
+
+  tipMasurare            String              @default("KM") // "KM" | "MTH"
+  valoareContorCurent    Float               @default(0)
+  valoareContorInitial   Float               @default(0)
+  dataInregistrareContor DateTime            @default(now())
+  tarifOrarStandard      Float?              @default(0) // Manoperă/Chirie per oră
+
+  stare                  String              @default("ACTIV") // ACTIV, IN_REPARATIE, CASAT
+
+  // Relații modul CMMS
+  sarciniMentenanta      SarcinaMentenanta[]
+  comenziLucru           ComandaLucru[]
+  pozitiiAxe             PozitieAx[]
+  anvelope               Anvelopa[]
+  istoricPermutari       IstoricPermutareAnvelopa[]
+  istoricContor          IstoricContorVehicul[]
+  completariLichid       CompletareLichid[]
+  configurariUlei        ConfigurareUleiVehicul[]
+
+  profileMentenanta      ProfilMentenantaVehicul[]
+
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+}
+
+model IstoricContorVehicul {
+  id               String   @id @default(uuid())
+  vehiculId        String
+  vehicul          Vehicul  @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  valoareContor    Float
+  dataInregistrare DateTime @default(now())
+  sursa            String   @default("MANUAL") // MANUAL | ALIMENTARE | SERVICE | GPS
+  operator         String?
+  observatii       String?
+}
+
+model ConfigurareUleiVehicul {
+  id                   String    @id @default(uuid())
+  vehiculId            String
+  vehicul              Vehicul   @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  tipLichid            String    // ULEI_MOTOR, ULEI_HIDRAULIC, ULEI_TRANSMISIE, etc.
+
+  intervalKm           Float?
+  intervalMth          Float?
+  intervalLuni         Float?
+
+  pragAvertizareKm     Float?    @default(1000)
+  pragAvertizareMth    Float?    @default(50)
+  pragAvertizareLuni   Float?    @default(1)
+
+  ultimulSchimbContor  Float     @default(0)
+  ultimulSchimbData    DateTime  @default(now())
+
+  @@unique([vehiculId, tipLichid])
+}
+
+// ==========================================
+// MENTENANȚĂ PREVENTIVĂ ȘI ESCALADARE
+// ==========================================
+
+model ProfilMentenanta {
+  id             String                   @id @default(uuid())
+  nume           String
+  descriere      String?
+  categorieEnum  String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  sarcini        SarcinaMentenanta[]
+  vehiculeLegate ProfilMentenantaVehicul[]
+}
+
+model ProfilMentenantaVehicul {
+  id                 String           @id @default(uuid())
+  profilMentenantaId String
+  profil             ProfilMentenanta @relation(fields: [profilMentenantaId], references: [id], onDelete: Cascade)
+  vehiculId          String
+  vehicul            Vehicul          @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+
+  @@unique([profilMentenantaId, vehiculId])
+}
+
+model SarcinaMentenanta {
+  id                    String               @id @default(uuid())
+  nume                  String
+  descriere             String?
+  tipSarcina            String               // "INSPECTIE_MANOPERA" | "SCHIMB_PIESA"
+  tipMasurare           String               // "KM" | "MTH"
+  intervalRulaj         Float                
+  ultimulRulajExecutie  Float                @default(0)
+
+  profilId              String?
+  profil                ProfilMentenanta?    @relation(fields: [profilId], references: [id], onDelete: SetNull)
+
+  vehiculId             String?
+  vehicul               Vehicul?             @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+
+  sarcinSuperioaraId    String?
+  sarcinSuperioara      SarcinaMentenanta?   @relation("LogicaIerarhica", fields: [sarcinSuperioaraId], references: [id], onDelete: SetNull)
+  sarciniSubordonate    SarcinaMentenanta[]  @relation("LogicaIerarhica")
+
+  elementeComanda       ElementComandaLucru[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+}
+
+// ==========================================
+// COMENZI DE LUCRU ȘI COSTURI (FIȘĂ TEHNICĂ)
+// ==========================================
+
+model ComandaLucru {
+  id                     String              @id @default(uuid())
+  numarComanda           String              @unique
+  vehiculId              String
+  vehicul                Vehicul             @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  dataDeschidere         DateTime            @default(now())
+  dataFinalizare         DateTime?
+  stare                  String              @default("IN_LUCRU") // "IN_LUCRU" | "FINALIZAT" | "ANULAT"
+  mecanicResponsabil     String
+  observatii             String?
+  valoareContorLaExecutie Float
+
+  elementeComanda        ElementComandaLucru[]
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+}
+
+model ElementComandaLucru {
+  id                   String              @id @default(uuid())
+  comandaLucruId       String
+  comandaLucru         ComandaLucru        @relation(fields: [comandaLucruId], references: [id], onDelete: Cascade)
+  sarcinaMentenantaId  String?
+  sarcinaMentenanta    SarcinaMentenanta?  @relation(fields: [sarcinaMentenantaId], references: [id], onDelete: SetNull)
+  
+  pilonCost            String              // "PIESA_STOC" | "PIESA_DEZMEMBRATA" | "PIESA_DIRECTA" | "MANOPERA_INTERNA" | "PRESTATIE_EXTERNA"
+  descriere            String
+  cantitate            Float               @default(1)
+  pretUnitar           Float               @default(0)
+  costTotal            Float               @default(0)
+  provenienta          String?             // ex: "Dezmembrări Parcul Propriu", "Stoc Intern", "Furnizor X"
+
+  articolStocId        String?
+  articolStoc          ArticolStoc?        @relation(fields: [articolStocId], references: [id], onDelete: SetNull)
+
+  serieUnicaPiesa      String?
+  furnizor             String?
+  numarFactura         String?
+
+  createdAt            DateTime            @default(now())
+}
+
+model Mecanic {
+  id        String   @id @default(uuid())
+  nume      String   @unique
+  functie   String?  @default("Mecanic Atelier")
+  telefon   String?
+  createdAt DateTime @default(now())
+}
+
+model ComponentaSerializata {
+  id                 String       @id @default(uuid())
+  articolStocId      String
+  articolStoc        ArticolStoc  @relation(fields: [articolStocId], references: [id], onDelete: Cascade)
+  serieUnica         String       @unique
+  dataAchizitie      DateTime     @default(now())
+  luniGarantie       Int?
+  kilometriGarantie  Float?
+  oreGarantie        Float?
+  stare              String       @default("IN_STOC") // IN_STOC, MONTAT, DEFECT, CASAT
+  vehiculId          String?
+  pozitieMontaj      String?
+  createdAt          DateTime     @default(now())
+}
+
+model CompletareLichid {
+  id                  String      @id @default(uuid())
+  vehiculId           String
+  vehicul             Vehicul     @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  tipLichid           String      // ULEI_MOTOR, ULEI_HIDRAULIC, etc.
+  tipOperatiune       String      @default("COMPLETARE_ULEI") // COMPLETARE_ULEI vs SCHIMB_ULEI
+  marcaUlei           String?     
+  cantitateLitri      Float
+  pretPerLitru        Float       @default(0)
+  costTotal           Float       @default(0)
+  valoareContor       Float
+  dataCompletare      DateTime    @default(now())
+  mecanic             String
+  observatii          String?
+  alertaScurgereGenerata Boolean   @default(false)
+  stareAlerta         String      @default("NOUA") // NOUA, REZOLVATA
+  solutieRezolvare    String?
+  dataRezolvare       DateTime?
+}
+
+// ==========================================
+// GESTIONARE ANVELOPE ȘI HARTA AXELOR
+// ==========================================
+
+model Anvelopa {
+  id                   String              @id @default(uuid())
+  codDot               String
+  serieAnvelopa        String              @default("SN-UNKNOWN")
+  marca                String
+  model                String
+  dimensiune           String
+  adancimeInitialaMm   Float
+  adancimeCurentaMm    Float
+  pretAchizitie        Float
+  stare                String              @default("IN_STOC") // "IN_STOC" | "MONTATA" | "CASATA" | "RESAPATA"
+
+  vehiculId            String?
+  vehicul              Vehicul?            @relation(fields: [vehiculId], references: [id], onDelete: SetNull)
+
+  pozitieAxId          String?             @unique
+  pozitieAx            PozitieAx?          @relation(fields: [pozitieAxId], references: [id], onDelete: SetNull)
+
+  kilometrajMontare    Float?              @default(0)
+  oreMontare           Float?              @default(0)
+  rulajTotalKm         Float               @default(0)
+  costResapareTotal    Float               @default(0)
+
+  masuratori           MasurareUzuraAnvelopa[]
+  istoricPermutari     IstoricPermutareAnvelopa[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model PozitieAx {
+  id                String            @id @default(uuid())
+  vehiculId         String
+  vehicul           Vehicul           @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  codPozitie        String
+  numarAx           Int
+  descrierePozitie  String
+  
+  anvelopa          Anvelopa?
+
+  @@unique([vehiculId, codPozitie])
+}
+
+model MasurareUzuraAnvelopa {
+  id                 String     @id @default(uuid())
+  anvelopaId         String
+  anvelopa           Anvelopa   @relation(fields: [anvelopaId], references: [id], onDelete: Cascade)
+  dataMasurare       DateTime   @default(now())
+  valoareContor      Float
+  adancimeProfilMm   Float
+  rataUzuraPer10k    Float?
+  kmRamasiEstimati   Float?
+  tehnician          String
+}
+
+model IstoricPermutareAnvelopa {
+  id                String   @id @default(uuid())
+  anvelopaId        String
+  anvelopa          Anvelopa @relation(fields: [anvelopaId], references: [id], onDelete: Cascade)
+  vehiculId         String
+  vehicul           Vehicul  @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  pozitieSursaCod   String   // ex: "1-SS" sau "STOC"
+  pozitieDestCod    String   // ex: "2-DS" sau "CASAT"
+  valoareContor     Float    // Odometru la momentul mutării (KM sau MTH)
+  dataPermutare     DateTime @default(now())
+  operator          String?
+  observatii        String?
+}
+
+// ==========================================
+// DEPOZITE, TRANSFERURI ȘI CATEGORII DE STOC
+// ==========================================
+
+model Depozit {
+  id          String        @id @default(uuid())
+  nume        String        @unique 
+  adresa      String?
+  responsabil String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  articoleStoc ArticolStoc[]
+  intrariStoc  IntrareStoc[]
+  
+  transferuriSursa      TransferStoc[] @relation("TransferSursa")
+  transferuriDestinatie TransferStoc[] @relation("TransferDestinatie")
+}
+
+model CategorieStoc {
+  id                 String             @id @default(uuid())
+  nume               String             @unique
+  descriere          String?
+  stocMinimImplicit  Float              @default(5) 
+  subcategorii       SubcategorieStoc[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model SubcategorieStoc {
+  id              String         @id @default(uuid())
+  nume            String
+  descriere       String?
+  categorieStocId String?
+  categorieStoc   CategorieStoc? @relation(fields: [categorieStocId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model ArticolStoc {
+  id                 String                @id @default(uuid())
+  codArticol         String                
+  denumire           String
+  categorie          String
+  subcategorie       String?
+  marcaUlei          String?
+  stocCurent         Float                 @default(0)
+  stocMinim          Float                 @default(0)
+  pretUnitar         Float                 @default(0)
+  unitateMasura      String                @default("buc")
+  esteSerializat     Boolean               @default(false)
+
+  depozitId          String?
+  depozit            Depozit?              @relation(fields: [depozitId], references: [id], onDelete: SetNull)
+
+  elementeComanda    ElementComandaLucru[]
+  componenteSerializate ComponentaSerializata[]
+  intrariStoc        IntrareStoc[]
+  transferuriStoc    TransferStoc[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([codArticol, depozitId])
+}
+
+model TransferStoc {
+  id                   String      @id @default(uuid())
+  articolStocId        String
+  articolStoc          ArticolStoc @relation(fields: [articolStocId], references: [id], onDelete: Cascade)
+  depozitSursaId       String
+  depozitSursa         Depozit     @relation("TransferSursa", fields: [depozitSursaId], references: [id], onDelete: Cascade)
+  depozitDestinatieId  String
+  depozitDestinatie    Depozit     @relation("TransferDestinatie", fields: [depozitDestinatieId], references: [id], onDelete: Cascade)
+  cantitateTransferata Float
+  operator             String?
+  observatii           String?
+  dataTransfer         DateTime    @default(now())
+}
+
+model IntrareStoc {
+  id                 String       @id @default(uuid())
+  articolStocId      String
+  articolStoc        ArticolStoc  @relation(fields: [articolStocId], references: [id], onDelete: Cascade)
+
+  depozitId          String?
+  depozit            Depozit?     @relation(fields: [depozitId], references: [id], onDelete: SetNull)
+  tipLichid          String?
+  marcaUlei          String?
+  furnizor           String
+  numarFactura       String
+  dataFactura        DateTime     @default(now())
+  cantitateIntrata   Float
+  pretUnitar         Float
+  pretTotal          Float
+  observatii         String?
+  createdAt          DateTime     @default(now())
+}
