@@ -94,8 +94,59 @@ export default function EFacturaPage() {
     }
   };
 
+  // DIAGNOSTIC STATE FOR ANAF URL ERRORS & SUCCESS CODES
+  const [urlDiagnostic, setUrlDiagnostic] = useState<{
+    type: 'error' | 'success';
+    title: string;
+    code?: string;
+    description?: string;
+    details: string;
+    actionHint: string;
+  } | null>(null);
+
   useEffect(() => {
     fetchData();
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      const errDesc = params.get('error_description');
+      const code = params.get('code');
+
+      if (err) {
+        let detailsText = '';
+        let hintText = '';
+
+        if (err === 'access_denied') {
+          detailsText = 'ANAF a respins cererea de autorizare (access_denied). Cauza 1: În timpul direcționării, böngészője nem kérte be az USB stick PIN kódját, vagy elutasította a tanúsítványt. Cauza 2: Callback URL (Redirect URI) necorespunzător în SPV.';
+          hintText = '1) Nyisson meg egy Incognito ablakot a távoli gépen. 2) În SPV -> Profil OAuth, verificați ca Callback URL să fie EXACT https://fleet-cmd.vercel.app/efactura';
+        } else if (err === 'invalid_request') {
+          detailsText = `Parametri necorespunzători: ${errDesc || 'Redirect URI mismatch'}. Adresa Callback URL din szoftver nu este identică cu cea din portalul SPV.`;
+          hintText = 'Ștergeți aplicația veche din SPV și creați una nouă cu Callback URL: https://fleet-cmd.vercel.app/efactura';
+        } else {
+          detailsText = `ANAF a returnat codul de eroare: ${errDesc || err}`;
+          hintText = 'Verificați configurarea aplicației în portalul ANAF SPV.';
+        }
+
+        setUrlDiagnostic({
+          type: 'error',
+          title: `Diagnostic Eroare ANAF: ${err}`,
+          code: err,
+          description: errDesc || undefined,
+          details: detailsText,
+          actionHint: hintText,
+        });
+      } else if (code) {
+        setAuthCodeInput(code);
+        setShowConfigModal(true);
+        setUrlDiagnostic({
+          type: 'success',
+          title: '🎉 Cod de Autorizare Capturat cu Succes!',
+          details: `Codul autorizare (${code.substring(0, 15)}...) a fost extras automat din URL și introdus în formular.`,
+          actionHint: 'Apăsați butonul verde "2. Schimbă pe Token-uri JWT" din fereastra deschisă pentru a finaliza!',
+        });
+      }
+    }
   }, []);
 
   // HANDLER: OPEN AUTHORIZE URL (Pasul 2)
@@ -313,6 +364,50 @@ export default function EFacturaPage() {
           </button>
         </div>
       </div>
+
+      {/* DIAGNOSTIC ERROR / SUCCESS BANNER FOR ANAF URL PARAMS */}
+      {urlDiagnostic && (
+        <div className={`p-5 rounded-2xl border-2 shadow-md space-y-3 transition-all ${
+          urlDiagnostic.type === 'error'
+            ? 'bg-rose-50 border-rose-300 text-rose-950'
+            : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className={`w-6 h-6 ${urlDiagnostic.type === 'error' ? 'text-rose-600' : 'text-emerald-600'}`} />
+              <h3 className="font-extrabold text-sm">{urlDiagnostic.title}</h3>
+            </div>
+            <button
+              onClick={() => setUrlDiagnostic(null)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-black/5 hover:bg-black/10 font-bold"
+            >
+              Închide
+            </button>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-xl border text-xs space-y-1 font-mono">
+            {urlDiagnostic.code && <p><strong>Cod Eroare Brut (raw):</strong> {urlDiagnostic.code}</p>}
+            {urlDiagnostic.description && <p><strong>Descriere ANAF:</strong> {urlDiagnostic.description}</p>}
+            <p className="font-sans font-medium pt-1 text-slate-800"><strong>🔍 Cauză Diagnosticată:</strong> {urlDiagnostic.details}</p>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 text-xs">
+            <p className="font-bold flex items-center space-x-1 text-slate-900">
+              <span>💡 Soluție Recomandată:</span>
+              <span className="font-normal">{urlDiagnostic.actionHint}</span>
+            </p>
+
+            <button
+              onClick={() => setShowConfigModal(true)}
+              className={`px-4 py-2 rounded-xl font-bold text-xs shadow-xs text-white ${
+                urlDiagnostic.type === 'error' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+            >
+              ⚙️ Deschide Configurare Token-uri
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* STATISTICI & BARĂ SINCRONIZARE HIBRIDĂ (FORCE SYNC) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
