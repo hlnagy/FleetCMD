@@ -882,8 +882,8 @@ export default function AnvelopePage() {
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Toate Axele --</option>
-                    {axeDisponibile.map((axNum) => (
-                      <option key={axNum} value={axNum}>Axă {axNum}</option>
+                    {axeDisponibile.map((axNum: any) => (
+                      <option key={String(axNum)} value={String(axNum)}>Axă {String(axNum)}</option>
                     ))}
                   </select>
                 </div>

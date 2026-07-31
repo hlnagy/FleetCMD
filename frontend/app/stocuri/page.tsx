@@ -416,6 +416,29 @@ export default function StocuriGarantiiPage() {
     }
   };
 
+  const handleConfirmDemonteaza = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComp) return;
+    try {
+      const res = await fetch(`http://localhost:3001/stocuri-garantii/demonteaza-componenta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          componentaId: selectedComp.id,
+          motivDemontare,
+        }),
+      });
+      if (res.ok) {
+        setSelectedComp(null);
+        setMotivDemontare('');
+        fetchData();
+        alert('Componenta a fost demontată și garanția verificată!');
+      }
+    } catch (e) {
+      alert('Eroare la demontarea componentei.');
+    }
+  };
+
   const pretUnitarKiszamolva = (bevPretTotal / Math.max(1, bevCantitate)).toFixed(2);
 
   return (
@@ -1603,7 +1626,7 @@ export default function StocuriGarantiiPage() {
               </button>
             </div>
 
-            <form onSubmit={handleDemonteaza} className="space-y-3 text-xs">
+            <form onSubmit={handleConfirmDemonteaza} className="space-y-3 text-xs">
               <div className="p-3 bg-morning-100 rounded-xl border border-morning-200">
                 <p className="font-bold text-sapphire-600">{selectedComp.articolStoc?.denumire}</p>
                 <p className="text-sage-700 font-medium">Furnizor: {selectedComp.furnizor} (Factură: {selectedComp.numarFactura})</p>
