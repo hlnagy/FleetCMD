@@ -13,9 +13,7 @@ frontend/.next/
 backend/dist/
 
 # SQLite & Environment files
-*.db
 *.db-journal
-backend/prisma/dev.db
 backend/prisma/dev.db-journal
 .env
 .env.local
