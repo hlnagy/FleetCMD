@@ -428,6 +428,13 @@ export class EFacturaService {
           // 3. PARSARE UBL 2.1 XML FACTURĂ
           const parsedInvoice = this.parseUBL21Xml(xmlRawContent, msg);
 
+          // DOAR FACTURI PRIMITE (ACHIZIȚII / FURNIZORI) - Ignorăm facturile emise de noi către clienți
+          const cifVanzatorClean = (parsedInvoice.cifVanzator || msg.cif_emitent || '').replace(/[^0-9]/g, '');
+          if (cifVanzatorClean === cif) {
+            this.logger.log(`Factura ${parsedInvoice.numarFactura} este emisă de noi (ieșire către client). Ignorată.`);
+            continue;
+          }
+
           // 4. PERSISTENȚĂ ÎN BAZA DE DATE PRISMA
           await this.prisma.eFacturaFactura.create({
             data: {
