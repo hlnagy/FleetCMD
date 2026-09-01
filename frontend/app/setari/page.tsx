@@ -1,17 +1,29 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
+import { showConfirm } from '@/lib/swal';
 
-export default function SetariPage() {
+function SetariContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab');
+
   const [activeTab, setActiveTab] = useState<
     'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate'
   >('vehicule');
+
+  // Ascultăm schimbarea tab-ului din URL / Sidebar
+  useEffect(() => {
+    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam]);
   const [loading, setLoading] = useState(false);
 
   // DATA STATES
@@ -77,14 +89,16 @@ export default function SetariPage() {
   const [responsabilDepozitNou, setResponsabilDepozitNou] = useState('');
 
   // ==========================================
-  // 4. STATE CATEGORIE / SUBCATEGORIE NOUĂ STOC
+  // 4. STATE CATEGORIE / SUBCATEGORIE STOC (FULL CRUD)
   // ==========================================
   const [showAddCatModal, setShowAddCatModal] = useState(false);
+  const [editingCat, setEditingCat] = useState<any>(null);
   const [numeCategorieNoua, setNumeCategorieNoua] = useState('');
   const [descriereCatNoua, setDescriereCatNoua] = useState('');
   const [stocMinimImplicitCat, setStocMinimImplicitCat] = useState(5);
 
   const [showAddSubcatModal, setShowAddSubcatModal] = useState(false);
+  const [editingSubcat, setEditingSubcat] = useState<any>(null);
   const [targetCatForSubcat, setTargetCatForSubcat] = useState('');
   const [numeSubcatNoua, setNumeSubcatNoua] = useState('');
   const [descriereSubcatNoua, setDescriereSubcatNoua] = useState('');
@@ -355,7 +369,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteVehiculCat = async (id: string, nume: string) => {
-    if (!confirm(`Sigur doriți să ștergeți categoria "${nume}"? Vehiculele din această categorie vor deveni "Nealocat".`)) return;
+    const confirmed = await showConfirm(
+      'Ștergere Categorie Vehicul',
+      `Sigur doriți să ștergeți categoria "${nume}"? Vehiculele din această categorie vor deveni "Nealocat".`,
+      'Da, șterge categoria',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/vehicule/categorii/${id}`, {
         method: 'DELETE',
@@ -373,7 +393,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteVehicul = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest vehicul din flotă?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Vehicul',
+      'Sigur doriți să ștergeți acest vehicul din flotă?',
+      'Da, șterge vehiculul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -418,12 +444,22 @@ export default function SetariPage() {
   };
 
   const handleDeleteMecanic = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest mecanic din echipa atelierului?')) return;
+    const confirmed = await showConfirm(
+      'Eliminare Mecanic Activ',
+      'Sigur doriți să eliminați acest mecanic din lista mecanicilor activi?\n\nNotă: Toate lucrările și devizele efectuate anterior de acesta vor rămâne salvate intact în istoric.',
+      'Da, elimină mecanicul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/mentenanta/mecanici/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        alert('Mecanic eliminat.');
+        const data = await res.json();
+        alert(data.mesaj || 'Mecanic eliminat din lista activă.');
         fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge mecanicul'}`);
       }
     } catch (e) {
       alert('Eroare la ștergerea mecanicui.');
@@ -486,7 +522,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteDepozit = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest depozit?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Depozit',
+      'Sigur doriți să ștergeți acest depozit?',
+      'Da, șterge depozitul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -499,66 +541,157 @@ export default function SetariPage() {
   };
 
   // ------------------------------------------
-  // HANDLERS CATEGORII & SUBCATEGORII STOC
+  // HANDLERS CATEGORII & SUBCATEGORII STOC (FULL CRUD)
   // ------------------------------------------
-  const handleCreateCategorie = async (e: React.FormEvent) => {
+  const openAddCat = () => {
+    setEditingCat(null);
+    setNumeCategorieNoua('');
+    setDescriereCatNoua('');
+    setStocMinimImplicitCat(5);
+    setShowAddCatModal(true);
+  };
+
+  const openEditCat = (c: any) => {
+    setEditingCat(c);
+    setNumeCategorieNoua(c.nume || '');
+    setDescriereCatNoua(c.descriere || '');
+    setStocMinimImplicitCat(c.stocMinimImplicit || 5);
+    setShowAddCatModal(true);
+  };
+
+  const handleSaveCategorie = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!numeCategorieNoua) return;
+    if (!numeCategorieNoua.trim()) {
+      alert('Vă rugăm introduceți numele categoriei!');
+      return;
+    }
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/categorii', {
-        method: 'POST',
+      const url = editingCat
+        ? `http://localhost:3001/stocuri-garantii/categorii/${editingCat.id}`
+        : 'http://localhost:3001/stocuri-garantii/categorii';
+      const method = editingCat ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nume: numeCategorieNoua,
-          descriere: descriereCatNoua,
+          nume: numeCategorieNoua.trim(),
+          descriere: descriereCatNoua.trim() || null,
           stocMinimImplicit: Number(stocMinimImplicitCat),
         }),
       });
 
       if (res.ok) {
-        alert(`📦 Categorie nouă "${numeCategorieNoua}" creată cu succes!`);
+        alert(`📦 Categorie "${numeCategorieNoua.trim()}" ${editingCat ? 'actualizată' : 'creată'} cu succes!`);
         setShowAddCatModal(false);
+        setEditingCat(null);
         setNumeCategorieNoua('');
         setDescriereCatNoua('');
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        alert(`Eroare: ${err.message || 'Verificați datele'}`);
       }
     } catch (e) {
-      alert('Eroare la crearea categoriei.');
+      alert('Eroare la salvarea categoriei.');
     }
   };
 
-  const handleCreateSubcategorie = async (e: React.FormEvent) => {
+  const handleDeleteCategorie = async (id: string, nume: string) => {
+    const confirmed = await showConfirm(
+      'Ștergere Categorie Stoc',
+      `Sigur doriți să ștergeți categoria "${nume}" și toate subcategoriile asociate acesteia?\n\nArticolele din stoc asociate acestei categorii își vor păstra denumirea.`,
+      'Da, șterge categoria',
+      'Anulează'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`http://localhost:3001/stocuri-garantii/categorii/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert(`Categoria "${nume}" a fost ștearsă.`);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge categoria'}`);
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea categoriei.');
+    }
+  };
+
+  const openAddSubcat = (catNume?: string) => {
+    setEditingSubcat(null);
+    setTargetCatForSubcat(catNume || (categorii[0]?.nume || ''));
+    setNumeSubcatNoua('');
+    setDescriereSubcatNoua('');
+    setShowAddSubcatModal(true);
+  };
+
+  const openEditSubcat = (sc: any, catNume: string) => {
+    setEditingSubcat(sc);
+    setTargetCatForSubcat(catNume);
+    setNumeSubcatNoua(sc.nume || '');
+    setDescriereSubcatNoua(sc.descriere || '');
+    setShowAddSubcatModal(true);
+  };
+
+  const handleSaveSubcategorie = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!numeSubcatNoua || !targetCatForSubcat) {
+    if (!numeSubcatNoua.trim() || !targetCatForSubcat) {
       alert('Vă rugăm selectați Categoria și introduceți numele Subcategoriei!');
       return;
     }
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/subcategorii', {
-        method: 'POST',
+      const url = editingSubcat
+        ? `http://localhost:3001/stocuri-garantii/subcategorii/${editingSubcat.id}`
+        : 'http://localhost:3001/stocuri-garantii/subcategorii';
+      const method = editingSubcat ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           categorieNume: targetCatForSubcat,
-          nume: numeSubcatNoua,
-          descriere: descriereSubcatNoua,
+          nume: numeSubcatNoua.trim(),
+          descriere: descriereSubcatNoua.trim() || null,
         }),
       });
 
       if (res.ok) {
-        alert(`📂 Subcategorie nouă "${numeSubcatNoua}" adăugată în "${targetCatForSubcat}"!`);
+        alert(`📂 Subcategorie "${numeSubcatNoua.trim()}" ${editingSubcat ? 'actualizată' : 'adăugată'} cu succes!`);
         setShowAddSubcatModal(false);
+        setEditingSubcat(null);
         setNumeSubcatNoua('');
         setDescriereSubcatNoua('');
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        alert(`Eroare: ${err.message || 'Verificați datele'}`);
       }
     } catch (e) {
       alert('Eroare la salvarea subcategoriei.');
+    }
+  };
+
+  const handleDeleteSubcategorie = async (id: string, nume: string) => {
+    const confirmed = await showConfirm(
+      'Ștergere Subcategorie',
+      `Sigur doriți să ștergeți subcategoria "${nume}"?`,
+      'Da, șterge subcategoria',
+      'Anulează'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`http://localhost:3001/stocuri-garantii/subcategorii/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert(`Subcategoria "${nume}" a fost ștearsă.`);
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge subcategoria'}`);
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea subcategoriei.');
     }
   };
 
@@ -620,7 +753,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteRegula = async (id: string) => {
-    if (!confirm('Ștergeți această regulă?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Regulă',
+      'Sigur doriți să ștergeți această regulă?',
+      'Da, șterge regula',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/anomalii/reguli-mentenanta/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
@@ -672,7 +811,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteDoc = async (id: string) => {
-    if (!confirm('Ștergeți acest document?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Document',
+      'Sigur doriți să ștergeți acest document?',
+      'Da, șterge documentul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/anomalii/documente-vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
@@ -725,7 +870,13 @@ export default function SetariPage() {
   };
 
   const handleDeleteCustom = async (id: string) => {
-    if (!confirm('Ștergeți această alertă?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Alertă Personalizată',
+      'Sigur doriți să ștergeți această alertă?',
+      'Da, șterge alerta',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/anomalii/alerte-personalizate/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
@@ -938,14 +1089,14 @@ export default function SetariPage() {
                     </span>
                     <button
                       onClick={() => openEditVehiculCat(c)}
-                      title="Szerkesztés (Editare)"
+                      title="Editare Categorie"
                       className="p-1 text-sage-500 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-md transition"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDeleteVehiculCat(c.id, c.nume)}
-                      title="Törlés (Ștergere)"
+                      title="Ștergere Categorie"
                       className="p-1 text-terracotta-500 hover:text-terracotta-700 hover:bg-roseash-100 rounded-md transition"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -1203,21 +1354,18 @@ export default function SetariPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div>
               <h3 className="font-extrabold text-sapphire-900 text-base">Structură Categorii & Subcategorii Piese</h3>
-              <p className="text-xs text-sage-700 font-medium">Clasificarea articolelor de stoc cu praguri de stoc minim implicite</p>
+              <p className="text-xs text-sage-700 font-medium">Clasificarea articolelor de stoc cu praguri de stoc minim implicite și administrare completă</p>
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setShowAddCatModal(true)}
+                onClick={openAddCat}
                 className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
               >
                 <Plus className="w-4 h-4" />
                 <span>+ Categorie Nouă</span>
               </button>
               <button
-                onClick={() => {
-                  if (categorii.length > 0) setTargetCatForSubcat(categorii[0].nume);
-                  setShowAddSubcatModal(true);
-                }}
+                onClick={() => openAddSubcat()}
                 className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-morning-200 hover:bg-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
               >
                 <Layers className="w-4 h-4 text-periwinkle-700" />
@@ -1228,27 +1376,73 @@ export default function SetariPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {categorii.map((c: any) => (
-              <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3">
+              <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3 shadow-2xs hover:shadow-xs transition">
                 <div className="flex items-center justify-between border-b border-morning-200 pb-2">
-                  <h4 className="font-extrabold text-sapphire-900 text-base flex items-center space-x-2">
+                  <div className="flex items-center space-x-2">
                     <Layers className="w-5 h-5 text-periwinkle-700" />
-                    <span>{c.nume}</span>
-                  </h4>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
-                    Stoc Min. Implicit: {c.stocMinimImplicit || 5} buc
-                  </span>
+                    <h4 className="font-extrabold text-sapphire-900 text-base">{c.nume}</h4>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
+                      Stoc Min: {c.stocMinimImplicit || 5} buc
+                    </span>
+                    <button
+                      onClick={() => openEditCat(c)}
+                      title="Editare Categorie"
+                      className="p-1.5 text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-lg transition"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategorie(c.id, c.nume)}
+                      title="Ștergere Categorie"
+                      className="p-1.5 text-terracotta-600 hover:text-terracotta-700 hover:bg-roseash-100 rounded-lg transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-xs text-sage-700">{c.descriere || 'Fără descriere adițională.'}</p>
 
-                <div className="pt-2 border-t border-morning-200 space-y-1">
-                  <p className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider">Subcategorii incluse:</p>
+                <div className="pt-2 border-t border-morning-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider">
+                      Subcategorii incluse ({c.subcategorii?.length || 0}):
+                    </p>
+                    <button
+                      onClick={() => openAddSubcat(c.nume)}
+                      className="text-[11px] font-extrabold text-sapphire-600 hover:text-sapphire-800 hover:bg-sapphire-50 px-2 py-0.5 rounded-lg border border-sapphire-200 transition flex items-center space-x-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Adaugă Subcategorie</span>
+                    </button>
+                  </div>
+
                   <div className="flex flex-wrap gap-1.5">
                     {c.subcategorii && c.subcategorii.length > 0 ? (
                       c.subcategorii.map((sc: any) => (
-                        <span key={sc.id || sc.nume} className="px-2.5 py-1 rounded-lg bg-morning-100 border border-morning-200 text-[11px] font-bold text-sapphire-900">
-                          {sc.nume}
-                        </span>
+                        <div
+                          key={sc.id || sc.nume}
+                          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-morning-100 border border-morning-200 text-[11px] font-bold text-sapphire-900 shadow-2xs group hover:border-sapphire-300 transition"
+                          title={sc.descriere || sc.nume}
+                        >
+                          <span>{sc.nume}</span>
+                          <button
+                            onClick={() => openEditSubcat(sc, c.nume)}
+                            title="Editare Subcategorie"
+                            className="p-0.5 text-sage-400 hover:text-sapphire-600 hover:bg-white rounded transition"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSubcategorie(sc.id, sc.nume)}
+                            title="Ștergere Subcategorie"
+                            className="p-0.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded transition"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))
                     ) : (
                       <span className="text-[11px] text-sage-500 italic">Nicio subcategorie definită</span>
@@ -1759,7 +1953,7 @@ export default function SetariPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: CREARE CATEGORIE NOUĂ STOC */}
+      {/* MODAL 4: CREARE / EDITARE CATEGORIE STOC */}
       {/* ========================================================================= */}
       {showAddCatModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1767,12 +1961,12 @@ export default function SetariPage() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <Layers className="w-5 h-5 text-periwinkle-700" />
-                <span>Creează Categorie Nouă Stoc</span>
+                <span>{editingCat ? `Editare Categorie (${editingCat.nume})` : 'Creează Categorie Nouă Stoc'}</span>
               </h3>
-              <button onClick={() => setShowAddCatModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowAddCatModal(false); setEditingCat(null); }} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleCreateCategorie} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveCategorie} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Denumire Categorie: *</label>
                 <input required value={numeCategorieNoua} onChange={(e) => setNumeCategorieNoua(e.target.value)} placeholder="ex: Filtre, Uleiuri, Frâne" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
@@ -1789,8 +1983,10 @@ export default function SetariPage() {
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowAddCatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Creează Categorie</button>
+                <button type="button" onClick={() => { setShowAddCatModal(false); setEditingCat(null); }} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">
+                  {editingCat ? 'Salvează Modificările' : 'Creează Categorie'}
+                </button>
               </div>
             </form>
           </div>
@@ -1798,7 +1994,7 @@ export default function SetariPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 5: CREARE SUBCATEGORIE NOUĂ STOC */}
+      {/* MODAL 5: CREARE / EDITARE SUBCATEGORIE STOC */}
       {/* ========================================================================= */}
       {showAddSubcatModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1806,12 +2002,12 @@ export default function SetariPage() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <Layers className="w-5 h-5 text-periwinkle-700" />
-                <span>Adaugă Subcategorie Nouă</span>
+                <span>{editingSubcat ? `Editare Subcategorie (${editingSubcat.nume})` : 'Adaugă Subcategorie Nouă'}</span>
               </h3>
-              <button onClick={() => setShowAddSubcatModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowAddSubcatModal(false); setEditingSubcat(null); }} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleCreateSubcategorie} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveSubcategorie} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Categoria Părinte: *</label>
                 <select value={targetCatForSubcat} onChange={(e) => setTargetCatForSubcat(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
@@ -1832,8 +2028,10 @@ export default function SetariPage() {
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowAddSubcatModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Subcategorie</button>
+                <button type="button" onClick={() => { setShowAddSubcatModal(false); setEditingSubcat(null); }} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">
+                  {editingSubcat ? 'Salvează Modificările' : 'Salvează Subcategorie'}
+                </button>
               </div>
             </form>
           </div>
@@ -2023,5 +2221,13 @@ export default function SetariPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SetariPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs font-bold text-slate-500">Se încarcă Setări Sistem...</div>}>
+      <SetariContent />
+    </Suspense>
   );
 }

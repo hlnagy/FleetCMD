@@ -5,9 +5,11 @@ import Link from 'next/link';
 import {
   Truck, Plus, Edit3, Clock, DollarSign, Calendar, Layers, Search, CheckCircle2,
   FileText, CircleDot, Droplets, PieChart, Wrench, X, Eye, Settings, ShieldAlert,
-  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer
+  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer, Link2
 } from 'lucide-react';
 import VehicleSelector from '../../components/VehicleSelector';
+import VehicleOdometerModal from '../../components/VehicleOdometerModal';
+import { getLabelPozitie } from '@/lib/tirePositions';
 
 export default function FisaTehnicaPage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -18,6 +20,9 @@ export default function FisaTehnicaPage() {
 
   // MODAL PREVIZUALIZARE FIȘĂ A4 (DEVIZ / COMANDĂ DE LUCRU)
   const [showViewModal, setShowViewModal] = useState<any>(null);
+
+  // MODAL AUDIT REGISTRU CONTOR
+  const [odometerModalVehicul, setOdometerModalVehicul] = useState<any>(null);
 
 
   // MOD VIZUALIZARE: LISTĂ TABEL PE CATEGORII VS FIȘĂ DEDICATĂ
@@ -210,30 +215,16 @@ export default function FisaTehnicaPage() {
     const printContent = document.getElementById('printable-a4-area');
     if (!printContent) return;
 
-    const winPrint = window.open('', '', 'left=0,top=0,width=900,height=900,toolbar=0,scrollbars=0,status=0');
+    const winPrint = window.open('', '', 'left=0,top=0,width=900,height=900');
     if (!winPrint) return;
 
-    winPrint.document.write(`
-      <html>
-        <head>
-          <title>Comanda_de_Lucru_${showViewModal?.numarComanda || 'Print'}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            @media print {
-              body { margin: 0; padding: 20px; -webkit-print-color-adjust: exact; }
-              #printable-a4-area { border: none !important; box-shadow: none !important; }
-            }
-          </style>
-        </head>
-        <body onload="window.print(); window.close();">
-          <div style="max-width: 800px; margin: 0 auto;">
-            ${printContent.innerHTML}
-          </div>
-        </body>
-      </html>
-    `);
+    winPrint.document.open();
+    winPrint.document.write('<!DOCTYPE html><html><head><title>Print</title></head><body></body></html>');
     winPrint.document.close();
+    winPrint.document.body.appendChild(printContent.cloneNode(true));
     winPrint.focus();
+    winPrint.print();
+    winPrint.close();
   };
 
   // SAVE BASELINE PER VEHICLE & ALERT RULE
@@ -548,7 +539,7 @@ export default function FisaTehnicaPage() {
   const kpiCostPer1000Km = Number(((costTotal / Math.max(1, vehicul?.valoareContorCurent || 1)) * 1000).toFixed(2));
   const kpiCostPer10Ore = Number(((costTotal / Math.max(1, vehicul?.valoareContorCurent || 1)) * 10).toFixed(2));
 
-  const vehiculeFiltrate = vehicule.filter((v) => {
+  const vehiculeFiltrate = vehicule.filter((v: any) => {
     const matchCat = selectedCatFilter ? v.categorieEnum === selectedCatFilter : true;
     if (searchQueryFleet) {
       const q = searchQueryFleet.toLowerCase();
@@ -558,7 +549,7 @@ export default function FisaTehnicaPage() {
     return matchCat;
   });
 
-  const categoriiDisponibile = Array.from(new Set(vehicule.map((v) => v.categorieEnum)));
+  const categoriiDisponibile = Array.from(new Set(vehicule.map((v: any) => v.categorieEnum)));
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -576,6 +567,24 @@ export default function FisaTehnicaPage() {
 
         <div className="flex items-center space-x-3">
           <button
+            onClick={() => {
+              setNumarIntern('');
+              setNumarInmatriculare('');
+              setMarca('');
+              setModel('');
+              setAnFabricatie(new Date().getFullYear());
+              setSerieSasiu('');
+              setValoareContorInitial(0);
+              setValoareContorCurent(0);
+              setShowAddModal(true);
+            }}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Adaugă Vehicul</span>
+          </button>
+
+          <button
             onClick={handleOpenContorModal}
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white text-xs font-bold shadow-md shadow-terracotta-500/20 transition"
           >
@@ -587,7 +596,7 @@ export default function FisaTehnicaPage() {
 
       {/* BARĂ COMUTARE MOD VIZUALIZARE: TABEL PE CATEGORII VS FIȘĂ DEDICATĂ */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-morning-100 p-2 rounded-2xl border border-morning-200">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
           <button
             onClick={() => setViewMode('lista_tabel')}
             className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition ${
@@ -607,6 +616,14 @@ export default function FisaTehnicaPage() {
             <Truck className="w-4 h-4" />
             <span>🚗 Fișă Tehnică Dedicată ({vehicul ? vehicul.numarIntern : 'Selectează'})</span>
           </button>
+
+          <Link
+            href="/ansambluri"
+            className="flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition bg-white text-slate-700 hover:bg-sapphire-50 hover:text-sapphire-900 border border-morning-200 shadow-2xs"
+          >
+            <Link2 className="w-4 h-4 text-sapphire-500" />
+            <span>🔗 Cuplare Ansambluri (Tractor 🔗 Remorcă)</span>
+          </Link>
         </div>
 
         {viewMode === 'fisa_dedicata' && (
@@ -691,7 +708,16 @@ export default function FisaTehnicaPage() {
                         <span className="block text-[10px] text-sage-600 font-bold">{v.categorieEnum}</span>
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-700">
-                        {v.valoareContorCurent} {v.tipMasurare}
+                        <div className="flex items-center space-x-1.5">
+                          <span>{v.valoareContorCurent} {v.tipMasurare}</span>
+                          <button
+                            onClick={() => setOdometerModalVehicul(v)}
+                            title="Vezi & editează registrul istoric contor (KM/mTH)"
+                            className="p-1 rounded-lg bg-morning-200 hover:bg-sapphire-500 hover:text-white text-sapphire-700 transition"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                       <td className="p-3">
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-sage-100 text-sage-700">
@@ -770,15 +796,39 @@ export default function FisaTehnicaPage() {
 
               <div>
                 <p className="text-[10px] text-sage-700 font-bold uppercase tracking-wider">Contor Curent</p>
-                <p className="text-base font-extrabold text-sapphire-700 font-mono">
-                  {vehicul.valoareContorCurent} {vehicul.tipMasurare}
-                </p>
+                <div className="flex items-center space-x-1.5">
+                  <p className="text-base font-extrabold text-sapphire-700 font-mono">
+                    {vehicul.valoareContorCurent} {vehicul.tipMasurare}
+                  </p>
+                  <button
+                    onClick={() => setOdometerModalVehicul(vehicul)}
+                    title="Vezi & editează registrul istoric contor (KM/mTH)"
+                    className="p-1 rounded-lg bg-morning-200 hover:bg-sapphire-500 hover:text-white text-sapphire-700 transition"
+                  >
+                    <Clock className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="h-8 w-px bg-morning-200"></div>
 
               <button
-                onClick={() => setShowEditModal(true)}
+                onClick={() => {
+                  if (vehicul) {
+                    setNumarIntern(vehicul.numarIntern || '');
+                    setNumarInmatriculare(vehicul.numarInmatriculare || '');
+                    setCategorieEnum(vehicul.categorieEnum || 'CAP_TRACTOR');
+                    setMarca(vehicul.marca || '');
+                    setModel(vehicul.model || '');
+                    setAnFabricatie(vehicul.anFabricatie || new Date().getFullYear());
+                    setSerieSasiu(vehicul.serieSasiu || vehicul.vin || '');
+                    setTipMasurare(vehicul.tipMasurare || 'KM');
+                    setValoareContorInitial(vehicul.valoareContorInitial || 0);
+                    setValoareContorCurent(vehicul.valoareContorCurent || 0);
+                    setTarifOrar(vehicul.tarifOrarManoperaAtelier || 0);
+                  }
+                  setShowEditModal(true);
+                }}
                 className="px-3.5 py-2 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition flex items-center space-x-1"
               >
                 <Edit3 className="w-4 h-4 text-sapphire-500" />
@@ -826,7 +876,7 @@ export default function FisaTehnicaPage() {
               }`}
             >
               <CircleDot className="w-4 h-4" />
-              <span>Stare Anvelope & Axe ({vehicul.anvelope?.length || 0})</span>
+              <span>Anvelope ({vehicul.anvelope?.length || 0})</span>
             </button>
 
             <button
@@ -847,23 +897,33 @@ export default function FisaTehnicaPage() {
                 <div className="p-4 rounded-xl bg-morning-50 border border-morning-200 flex items-center justify-between">
                   <div>
                     <p className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Cost Total Istoric</p>
-                    <p className="text-xl font-black text-sapphire-900 font-mono mt-1">{costTotal.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} RON</p>
+                    <p className="text-xl font-black text-sapphire-900 font-mono mt-1">{Number(costTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</p>
                   </div>
                   <DollarSign className="w-7 h-7 text-sapphire-500" />
                 </div>
 
                 <div className="p-4 rounded-xl bg-morning-50 border border-morning-200 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">KPI Cost / 1000 KM</p>
-                    <p className="text-xl font-black text-slate-800 font-mono mt-1">{kpiCostPer1000Km} RON</p>
+                    <p className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">
+                      {vehicul.tipMasurare === 'mTH' || vehicul.tipMasurare === 'ORE' ? 'KPI Cost / 100 mTH (Ore)' : 'KPI Cost / 1.000 KM'}
+                    </p>
+                    <p className="text-xl font-black text-slate-800 font-mono mt-1">
+                      {vehicul.tipMasurare === 'mTH' || vehicul.tipMasurare === 'ORE'
+                        ? Number(((costTotal / Math.max(1, vehicul?.valoareContorCurent || 1)) * 100).toFixed(2))
+                        : kpiCostPer1000Km} RON
+                    </p>
                   </div>
                   <Clock className="w-7 h-7 text-sage-500" />
                 </div>
 
                 <div className="p-4 rounded-xl bg-morning-50 border border-morning-200 flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">KPI Cost / 10 Ore Marș</p>
-                    <p className="text-xl font-black text-slate-800 font-mono mt-1">{kpiCostPer10Ore} RON</p>
+                    <p className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">
+                      {vehicul.tipMasurare === 'mTH' || vehicul.tipMasurare === 'ORE' ? 'Contor Total Ore Funcționare' : 'Contor Total Kilometri'}
+                    </p>
+                    <p className="text-xl font-black text-slate-800 font-mono mt-1">
+                      {vehicul.valoareContorCurent} {vehicul.tipMasurare}
+                    </p>
                   </div>
                   <Wrench className="w-7 h-7 text-sage-500" />
                 </div>
@@ -1047,23 +1107,41 @@ export default function FisaTehnicaPage() {
             </div>
           )}
 
-          {/* TAB 4: STARE ANVELOPE */}
+          {/* TAB 4: ANVELOPE */}
           {activeTab === 'anvelope' && (
             <div className="pleasant-card rounded-2xl p-6 space-y-4">
-              <h3 className="text-base font-bold text-sapphire-900">Anvelope Montate pe Șasiu Utilaj</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-sapphire-900">Anvelope Montate pe Șasiu Utilaj</h3>
+                <Link
+                  href="/anvelope"
+                  className="text-xs font-bold text-sapphire-600 hover:text-sapphire-800 flex items-center space-x-1"
+                >
+                  <span>Deschide Harta Axelor</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {vehicul?.anvelope?.map((anv: any) => (
-                  <div key={anv.id} className="p-4 rounded-xl border border-morning-200 bg-white flex justify-between items-center">
-                    <div>
-                      <p className="font-extrabold text-sapphire-900 text-xs">{anv.marca} {anv.model} ({anv.dimensiune})</p>
-                      <p className="text-[10px] text-sage-600 font-mono">Serie: {anv.serieAnvelopa} | Poziție: {anv.pozitieAx?.codPozitie || 'Șasiu'}</p>
+                {vehicul?.anvelope?.map((anv: any) => {
+                  const kmCurenti = (vehicul.valoareContorCurent > (anv.kilometrajMontare || 0))
+                    ? (vehicul.valoareContorCurent - (anv.kilometrajMontare || 0))
+                    : 0;
+                  const rulajTotal = (anv.rulajTotalKm || 0) + kmCurenti;
+
+                  return (
+                    <div key={anv.id} className="p-4 rounded-xl border border-morning-200 bg-white flex justify-between items-center hover:border-sapphire-300 transition">
+                      <div>
+                        <p className="font-extrabold text-sapphire-900 text-xs">{anv.marca} {anv.model} ({anv.dimensiune})</p>
+                        <p className="text-[10px] text-sage-600 font-mono mt-0.5">Serie: {anv.serieAnvelopa} | Poziție: <strong className="text-sapphire-900">{getLabelPozitie(anv.pozitieAx).titlu || 'Șasiu'} ({getLabelPozitie(anv.pozitieAx).descriere})</strong></p>
+                      </div>
+                      <div className="text-right font-mono">
+                        <p className="text-xs font-extrabold text-sapphire-700 bg-sapphire-50 px-2.5 py-1 rounded-lg border border-sapphire-100">
+                          {Math.round(rulajTotal).toLocaleString('ro-RO')} KM
+                        </p>
+                        <p className="text-[10px] text-sage-500 font-semibold mt-0.5">Rulaj acumulat</p>
+                      </div>
                     </div>
-                    <div className="text-right font-mono">
-                      <p className="text-xs font-extrabold text-sapphire-700">{anv.adancimeCurentaMm} mm</p>
-                      <p className="text-[10px] text-sage-500">Profil măsurat</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1248,29 +1326,91 @@ export default function FisaTehnicaPage() {
                   Se va crea o Comanda de Lucru noua. Acolo veti putea adauga piesele si efectua schimbul complet.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-extrabold text-sapphire-900 block mb-1">Contor Curent la Executare: *</label>
-                  <input
-                    type="number"
-                    required
-                    value={cmdContor}
-                    onChange={(e) => setCmdContor(Number(e.target.value))}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
-                  />
-                </div>
-                <div>
-                  <label className="font-extrabold text-sapphire-900 block mb-1">Mecanic Responsabil: *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="ex: Mec. Ion Popescu"
-                    value={cmdMecanic}
-                    onChange={(e) => setCmdMecanic(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-bold text-sapphire-900"
-                  />
-                </div>
-              </div>
+              {(() => {
+                const isTrailer = vehicul?.categorieEnum === 'REMORCA' || vehicul?.categorieEnum === 'SEMIREMORCA' || vehicul?.categorieEnum?.includes('REMORCA');
+                const coupledTractor = vehicul?.cuplariSemiremorca?.[0]?.capTractor;
+
+                return (
+                  <div className="space-y-3">
+                    {isTrailer && (
+                      <div className="p-3 rounded-2xl border bg-amber-50/90 border-amber-300 space-y-2 text-xs">
+                        <div className="flex items-center space-x-2 text-amber-900 font-extrabold">
+                          <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                          <span>🚛 Semiremorcă (Fără contor propriu pe șasiu)</span>
+                        </div>
+
+                        {coupledTractor ? (
+                          <div className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between shadow-xs">
+                            <div>
+                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">🔗 Cuplat Activ la Cap Tractor:</p>
+                              <p className="font-extrabold text-sapphire-900">
+                                {coupledTractor.numarIntern} ({coupledTractor.numarInmatriculare}) - {coupledTractor.marca}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setCmdContor(coupledTractor.valoareContorCurent || 0)}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-xs transition"
+                            >
+                              Preia KM: {coupledTractor.valoareContorCurent} KM
+                            </button>
+                          </div>
+                        ) : null}
+
+                        <div>
+                          <label className="text-[10px] text-sage-700 font-bold block mb-1">
+                            Selectează Cap Tractor care tractează semiremorca:
+                          </label>
+                          <select
+                            onChange={(e) => {
+                              const tr = vehicule.find((v: any) => v.id === e.target.value);
+                              if (tr) setCmdContor(tr.valoareContorCurent || 0);
+                            }}
+                            className="w-full bg-white border border-amber-300 rounded-xl p-2 font-bold text-sapphire-900 text-xs"
+                          >
+                            <option value="">-- Alege Cap Tractor din flotă --</option>
+                            {vehicule
+                              .filter((v: any) => v.categorieEnum === 'CAP_TRACTOR')
+                              .map((tr: any) => (
+                                <option key={tr.id} value={tr.id}>
+                                  🚚 {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-extrabold text-sapphire-900 block mb-1">
+                          {isTrailer ? 'Index KM Cap Tractor: *' : 'Contor Curent la Executare: *'}
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          value={cmdContor}
+                          onChange={(e) => setCmdContor(Number(e.target.value))}
+                          placeholder={isTrailer ? 'KM cap tractor...' : 'ex: 150000'}
+                          className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-extrabold text-sapphire-900 block mb-1">Mecanic Responsabil: *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="ex: Mec. Ion Popescu"
+                          value={cmdMecanic}
+                          onChange={(e) => setCmdMecanic(e.target.value)}
+                          className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-bold text-sapphire-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               <div>
                 <label className="font-extrabold text-sapphire-900 block mb-1">Observatii Initiale:</label>
                 <input
@@ -1418,8 +1558,8 @@ export default function FisaTehnicaPage() {
                   <div className="flex justify-between border-t border-slate-400 pt-1 text-sm font-extrabold text-slate-900">
                     <span>TOTAL GENERAL DEVIZ:</span>
                     <span className="font-mono text-sapphire-900">
-                      {(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
-                        .toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} RON
+                      {Number(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
+                        .toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                     </span>
                   </div>
                 </div>
@@ -1440,6 +1580,570 @@ export default function FisaTehnicaPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL AUDIT & EDITEAZĂ REGISTRU CONTOR (KM/mTH) */}
+      {odometerModalVehicul && (
+        <VehicleOdometerModal
+          isOpen={!!odometerModalVehicul}
+          onClose={() => setOdometerModalVehicul(null)}
+          vehiculId={odometerModalVehicul.id}
+          vehiculInfo={{
+            numarIntern: odometerModalVehicul.numarIntern,
+            numarInmatriculare: odometerModalVehicul.numarInmatriculare,
+            tipMasurare: odometerModalVehicul.tipMasurare,
+            valoareContorCurent: odometerModalVehicul.valoareContorCurent,
+          }}
+          onUpdateSuccess={() => {
+            fetchVehicule();
+            if (selectedId) fetchFisa(selectedId);
+          }}
+        />
+      )}
+
+      {/* MODAL ÎNREGISTRARE RAPIDĂ CONTOARE (BATCH & GPS) */}
+      {showContorModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl border border-morning-200 my-8">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2 text-sapphire-900 font-extrabold text-base">
+                <Clock className="w-5 h-5 text-terracotta-500" />
+                <span>⏱️ Înregistrare Rapidă Contoare Flotă (KM / mTH)</span>
+              </div>
+              <button onClick={() => setShowContorModal(false)} className="text-sage-400 hover:text-sapphire-900 font-bold">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* TAB-URI MODAL CONTOR */}
+            <div className="flex items-center space-x-2 border-b border-morning-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setTabContorModal('batch')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  tabContorModal === 'batch' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
+                }`}
+              >
+                📋 Actualizare în Lot (Tabel Flotă)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTabContorModal('gps')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  tabContorModal === 'gps' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
+                }`}
+              >
+                📡 Import Telematică GPS / CSV
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTabContorModal('istoric')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                  tabContorModal === 'istoric' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
+                }`}
+              >
+                📜 Istoric & Audit Înregistrări ({istoricContoare.length})
+              </button>
+            </div>
+
+            {/* TAB 1: BATCH EDIT */}
+            {tabContorModal === 'batch' && (
+              <div className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-morning-50 rounded-xl border border-morning-200">
+                  <div>
+                    <label className="text-sage-700 block mb-1 font-bold">Data Înregistrării: *</label>
+                    <input
+                      type="date"
+                      value={dataOperareContor}
+                      onChange={(e) => setDataOperareContor(e.target.value)}
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2 font-bold text-sapphire-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sage-700 block mb-1 font-bold">Operator / Șofer: *</label>
+                    <input
+                      type="text"
+                      value={operatorContor}
+                      onChange={(e) => setOperatorContor(e.target.value)}
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2 font-bold text-sapphire-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sage-700 block mb-1 font-bold">Observații Generale:</label>
+                    <input
+                      type="text"
+                      placeholder="ex: Verificare săptămânală flotă"
+                      value={observatiiContor}
+                      onChange={(e) => setObservatiiContor(e.target.value)}
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2 font-medium text-sapphire-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="relative w-72">
+                    <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={searchContorModal}
+                      onChange={(e) => setSearchContorModal(e.target.value)}
+                      placeholder="Filtrează utilaj..."
+                      className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-sapphire-900 font-bold"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveContoareBatch}
+                    className="px-5 py-2.5 bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold rounded-xl shadow-md transition flex items-center space-x-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>🚀 Salvează Toate Contoarele Modificate (Batch)</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-morning-200 rounded-xl max-h-[50vh]">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] font-bold sticky top-0">
+                      <tr>
+                        <th className="p-2.5">Cod Utilaj</th>
+                        <th className="p-2.5">Înmatriculare & Marcă</th>
+                        <th className="p-2.5 font-mono">Contor Înregistrat Curent</th>
+                        <th className="p-2.5 font-mono">Nou Contor (Editabil)</th>
+                        <th className="p-2.5 text-right">Salvare Rapidă</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-morning-200">
+                      {vehicule
+                        .filter(v => !searchContorModal || v.numarIntern.toLowerCase().includes(searchContorModal.toLowerCase()) || v.numarInmatriculare.toLowerCase().includes(searchContorModal.toLowerCase()))
+                        .map((v) => {
+                          const val = contoareEditMap[v.id] !== undefined ? contoareEditMap[v.id] : v.valoareContorCurent;
+                          const hasChanged = val > v.valoareContorCurent;
+                          return (
+                            <tr key={v.id} className={`hover:bg-morning-50 transition ${hasChanged ? 'bg-amber-50/60' : ''}`}>
+                              <td className="p-2.5 font-extrabold text-sapphire-900">{v.numarIntern}</td>
+                              <td className="p-2.5 text-slate-700 font-medium">
+                                {v.numarInmatriculare} <span className="text-sage-500 text-[10px]">({v.marca})</span>
+                              </td>
+                              <td className="p-2.5 font-mono font-bold text-slate-600">
+                                {v.valoareContorCurent} {v.tipMasurare}
+                              </td>
+                              <td className="p-2.5">
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="number"
+                                    min={v.valoareContorCurent}
+                                    value={val}
+                                    onChange={(e) => {
+                                      const num = Number(e.target.value);
+                                      setContoareEditMap(prev => ({ ...prev, [v.id]: num }));
+                                    }}
+                                    className={`w-36 border rounded-lg p-1.5 font-mono font-extrabold text-xs text-sapphire-900 ${
+                                      hasChanged ? 'bg-amber-100 border-amber-400' : 'bg-white border-morning-300'
+                                    }`}
+                                  />
+                                  <span className="font-mono text-sage-600 text-[10px] font-bold">{v.tipMasurare}</span>
+                                </div>
+                              </td>
+                              <td className="p-2.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveContorSingle(v.id)}
+                                  disabled={!hasChanged}
+                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                    hasChanged 
+                                      ? 'bg-sapphire-500 hover:bg-sapphire-600 text-white shadow-xs' 
+                                      : 'bg-morning-200 text-sage-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  Salvează
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: GPS IMPORT */}
+            {tabContorModal === 'gps' && (
+              <div className="space-y-4 text-xs">
+                <div className="p-3 bg-morning-100 rounded-xl border border-morning-200 text-sage-700 space-y-1">
+                  <p className="font-bold text-sapphire-900">Instrucțiuni Import Date Telematică GPS:</p>
+                  <p>Introduceți liniile în formatul: <code>NUMAR_INTERN;VALOARE_CONTOR;DATA</code> (sau separate prin virgulă/tab).</p>
+                  <p className="text-[10px] font-mono text-sage-600">Exemplu:<br/>UTIL-01;3520;2026-08-27<br/>CAM-03;182450;2026-08-27</p>
+                </div>
+
+                <textarea
+                  rows={8}
+                  value={gpsRawText}
+                  onChange={(e) => setGpsRawText(e.target.value)}
+                  placeholder="Lipiți datele GPS sau conținutul CSV aici..."
+                  className="w-full bg-morning-50 border border-morning-300 rounded-xl p-3 font-mono text-xs text-sapphire-900 focus:bg-white transition"
+                />
+
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleImportGpsText}
+                    className="px-5 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold rounded-xl shadow-md transition flex items-center space-x-1.5"
+                  >
+                    <span>📡 Importă & Actualizează Flota</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: ISTORIC AUDIT */}
+            {tabContorModal === 'istoric' && (
+              <div className="space-y-4 text-xs">
+                <div className="overflow-x-auto border border-morning-200 rounded-xl max-h-[55vh]">
+                  <table className="w-full text-left text-xs text-slate-700">
+                    <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] font-bold sticky top-0">
+                      <tr>
+                        <th className="p-2.5">Data Înregistrare</th>
+                        <th className="p-2.5">Cod Utilaj</th>
+                        <th className="p-2.5 font-mono">Valoare Înregistrată</th>
+                        <th className="p-2.5">Sursă</th>
+                        <th className="p-2.5">Operator</th>
+                        <th className="p-2.5">Observații</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-morning-200">
+                      {istoricContoare.map((h: any) => (
+                        <tr key={h.id} className="hover:bg-morning-50 transition">
+                          <td className="p-2.5 font-mono text-sage-700">{new Date(h.dataInregistrare).toLocaleString('ro-RO')}</td>
+                          <td className="p-2.5 font-extrabold text-sapphire-900">{h.vehicul?.numarIntern || '-'}</td>
+                          <td className="p-2.5 font-mono font-extrabold text-sapphire-700">{h.valoareContor} {h.vehicul?.tipMasurare || 'KM'}</td>
+                          <td className="p-2.5">
+                            <span className="px-2 py-0.5 rounded bg-morning-200 font-bold text-[10px] text-slate-700">{h.sursa}</span>
+                          </td>
+                          <td className="p-2.5 font-medium text-slate-800">{h.operator || '-'}</td>
+                          <td className="p-2.5 text-sage-600">{h.observatii || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITARE VEHICUL */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl border border-morning-200 my-8">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2 text-sapphire-900 font-extrabold text-base">
+                <Edit3 className="w-5 h-5 text-sapphire-500" />
+                <span>Editează Date Vehicul ({numarIntern})</span>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-sage-400 hover:text-sapphire-900 font-bold">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateVehicul} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Intern / Cod Flotă: *</label>
+                  <input
+                    type="text"
+                    required
+                    value={numarIntern}
+                    onChange={(e) => setNumarIntern(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Înmatriculare: *</label>
+                  <input
+                    type="text"
+                    required
+                    value={numarInmatriculare}
+                    onChange={(e) => setNumarInmatriculare(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold font-mono text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Vehicul: *</label>
+                  <select
+                    value={categorieEnum}
+                    onChange={(e) => setCategorieEnum(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  >
+                    <option value="CAP_TRACTOR">Cap Tractor</option>
+                    <option value="REMORCA">Remorcă / Semiremorcă</option>
+                    <option value="BASCULANTA">Basculantă</option>
+                    <option value="EXCAVATOR">Excavator</option>
+                    <option value="INCARCATOR_FRONTAL">Încărcător Frontal</option>
+                    <option value="BULLDOZER">Bulldozer</option>
+                    <option value="AUTOVALT">Autovalt / Compactor</option>
+                    <option value="UTILAJ_SPECIAL">Utilaj Special</option>
+                    <option value="AUTOUTILITARA">Autoutilitară</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input
+                    type="text"
+                    required
+                    value={marca}
+                    onChange={(e) => setMarca(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model: *</label>
+                  <input
+                    type="text"
+                    required
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">An Fabricație:</label>
+                  <input
+                    type="number"
+                    value={anFabricatie}
+                    onChange={(e) => setAnFabricatie(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Șasiu / VIN:</label>
+                  <input
+                    type="text"
+                    value={serieSasiu}
+                    onChange={(e) => setSerieSasiu(e.target.value)}
+                    placeholder="VIN..."
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Măsurare Contor: *</label>
+                  <select
+                    value={tipMasurare}
+                    onChange={(e) => setTipMasurare(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  >
+                    <option value="KM">KM (Kilometri)</option>
+                    <option value="mTH">mTH / ORE (Ore Funcționare)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Inițial:</label>
+                  <input
+                    type="number"
+                    value={valoareContorInitial}
+                    onChange={(e) => setValoareContorInitial(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Curent:</label>
+                  <input
+                    type="number"
+                    value={valoareContorCurent}
+                    onChange={(e) => setValoareContorCurent(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 bg-morning-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold rounded-xl shadow-md transition"
+                >
+                  💾 Salvează Modificările
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ADĂUGARE VEHICUL NOU */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto space-y-4 shadow-2xl border border-morning-200 my-8">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2 text-sapphire-900 font-extrabold text-base">
+                <Plus className="w-5 h-5 text-sapphire-500" />
+                <span>Adaugă Vehicul / Utilaj Nou în Flotă</span>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="text-sage-400 hover:text-sapphire-900 font-bold">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddVehicul} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Intern / Cod Flotă: *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ex: CAM-04, UTIL-02"
+                    value={numarIntern}
+                    onChange={(e) => setNumarIntern(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Înmatriculare: *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ex: B-101-VLV"
+                    value={numarInmatriculare}
+                    onChange={(e) => setNumarInmatriculare(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold font-mono text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Vehicul: *</label>
+                  <select
+                    value={categorieEnum}
+                    onChange={(e) => setCategorieEnum(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  >
+                    <option value="CAP_TRACTOR">Cap Tractor</option>
+                    <option value="REMORCA">Remorcă / Semiremorcă</option>
+                    <option value="BASCULANTA">Basculantă</option>
+                    <option value="EXCAVATOR">Excavator</option>
+                    <option value="INCARCATOR_FRONTAL">Încărcător Frontal</option>
+                    <option value="BULLDOZER">Bulldozer</option>
+                    <option value="AUTOVALT">Autovalt / Compactor</option>
+                    <option value="UTILAJ_SPECIAL">Utilaj Special</option>
+                    <option value="AUTOUTILITARA">Autoutilitară</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ex: Volvo, MAN, CAT"
+                    value={marca}
+                    onChange={(e) => setMarca(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model: *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="ex: FH 500, A40G"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">An Fabricație:</label>
+                  <input
+                    type="number"
+                    value={anFabricatie}
+                    onChange={(e) => setAnFabricatie(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Șasiu / VIN:</label>
+                  <input
+                    type="text"
+                    value={serieSasiu}
+                    onChange={(e) => setSerieSasiu(e.target.value)}
+                    placeholder="VIN..."
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Măsurare Contor: *</label>
+                  <select
+                    value={tipMasurare}
+                    onChange={(e) => setTipMasurare(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
+                  >
+                    <option value="KM">KM (Kilometri)</option>
+                    <option value="mTH">mTH / ORE (Ore Funcționare)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Inițial:</label>
+                  <input
+                    type="number"
+                    value={valoareContorInitial}
+                    onChange={(e) => setValoareContorInitial(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Contor Curent:</label>
+                  <input
+                    type="number"
+                    value={valoareContorCurent}
+                    onChange={(e) => setValoareContorCurent(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 bg-morning-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold rounded-xl shadow-md transition"
+                >
+                  + Adaugă Vehicul
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

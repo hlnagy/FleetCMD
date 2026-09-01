@@ -2,43 +2,66 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bell, ShieldAlert, User, Search, Wrench, Truck } from 'lucide-react';
+import {
+  Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
+  Droplets, FileText, CheckCircle2, ChevronRight, X
+} from 'lucide-react';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [numAlerte, setNumAlerte] = useState(0);
+  const [alerteList, setAlerteList] = useState<any[]>([]);
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<'TOATE' | 'STOC' | 'MENTENANTA' | 'DOCUMENTE'>('TOATE');
+
+  const fetchAlerte = async () => {
+    try {
+      const resAlerte = await fetch('http://localhost:3001/anomalii/alerte-centralizate');
+      if (resAlerte.ok) {
+        const alerte = await resAlerte.json();
+        const list = Array.isArray(alerte) ? alerte : [];
+        setAlerteList(list);
+        setNumAlerte(list.length);
+      }
+
+      const resVeh = await fetch('http://localhost:3001/vehicule');
+      if (resVeh.ok) {
+        const vData = await resVeh.json();
+        setVehicule(Array.isArray(vData) ? vData : (vData?.data || []));
+      }
+    } catch (e) {
+      console.log('Error fetching navbar data', e);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const resAlerte = await fetch('http://localhost:3001/anomalii/alerte');
-        if (resAlerte.ok) {
-          const alerte = await resAlerte.json();
-          setNumAlerte(alerte.length);
-        }
-
-        const resVeh = await fetch('http://localhost:3001/vehicule');
-        if (resVeh.ok) {
-          setVehicule(await resVeh.json());
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    };
-    fetchData();
+    fetchAlerte();
+    const interval = setInterval(fetchAlerte, 30000); // Reîmprospătare la 30 secunde
+    return () => clearInterval(interval);
   }, []);
 
   const searchResults = searchQuery.trim()
     ? vehicule.filter(
         (v) =>
-          v.numarIntern.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.numarInmatriculare.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.marca.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          v.model.toLowerCase().includes(searchQuery.toLowerCase())
+          v.numarIntern?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.numarInmatriculare?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.marca?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.model?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : [];
+
+  const filteredNotifications = alerteList.filter((a) => {
+    if (activeCategoryFilter === 'STOC') return a.categorieAlert === 'STOC_CRITIC';
+    if (activeCategoryFilter === 'MENTENANTA') return a.categorieAlert === 'MENTENANTA_CONSUMABIL' || a.categorieAlert === 'SCURGERI_ULEI';
+    if (activeCategoryFilter === 'DOCUMENTE') return a.categorieAlert === 'DOCUMENTE_FLOTA' || a.categorieAlert === 'LICENTE_CUSTOM';
+    return true;
+  });
+
+  const numStoc = alerteList.filter((a) => a.categorieAlert === 'STOC_CRITIC').length;
+  const numMent = alerteList.filter((a) => a.categorieAlert === 'MENTENANTA_CONSUMABIL' || a.categorieAlert === 'SCURGERI_ULEI').length;
+  const numDoc = alerteList.filter((a) => a.categorieAlert === 'DOCUMENTE_FLOTA' || a.categorieAlert === 'LICENTE_CUSTOM').length;
 
   return (
     <header className="h-16 border-b border-morning-200 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -98,28 +121,172 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* DREAPTA: STATUS ALERTE & PROFIL USER */}
-      <div className="flex items-center space-x-4">
-        <Link
-          href="/alerte"
-          className="flex items-center space-x-2 bg-roseash-100 hover:bg-roseash-200 border border-roseash-300 text-terracotta-700 px-3 py-1.5 rounded-full text-xs font-bold transition shadow-2xs"
-        >
-          <ShieldAlert className="w-3.5 h-3.5 text-terracotta-600 animate-pulse" />
-          <span>Monitorizare: {numAlerte > 0 ? `${numAlerte} Alerte Active` : 'Flotă Optimă'}</span>
-        </Link>
+      {/* DREAPTA: HARANGOCSKÁ CU DROPDOWN & PROFIL USER */}
+      <div className="flex items-center space-x-3">
+        {/* CLOPOȚEL DE NOTIFICĂRI FACEBOOK-STYLE */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+            className={`relative p-2 rounded-xl transition ${
+              isNotificationsOpen
+                ? 'bg-sapphire-500 text-white shadow-md shadow-sapphire-500/20'
+                : 'text-sage-600 hover:text-sapphire-900 hover:bg-morning-100'
+            }`}
+            title="Notificări & Alerte Active"
+          >
+            <Bell className="w-5 h-5" />
+            {numAlerte > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-600 text-white font-black text-[10px] min-w-[19px] h-[19px] flex items-center justify-center rounded-full px-1 shadow-md border-2 border-white animate-bounce">
+                {numAlerte > 99 ? '99+' : numAlerte}
+              </span>
+            )}
+          </button>
 
-        <Link
-          href="/alerte"
-          className="relative p-2 text-sage-600 hover:text-sapphire-900 rounded-xl hover:bg-morning-100 transition"
-        >
-          <Bell className="w-5 h-5" />
-          {numAlerte > 0 && (
+          {/* DROPDOWN NOTIFICĂRI FACEBOOK-STYLE */}
+          {isNotificationsOpen && (
             <>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-terracotta-500 rounded-full animate-ping"></span>
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-terracotta-500 rounded-full"></span>
+              <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
+
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-[420px] bg-white border border-morning-200 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in divide-y divide-morning-200">
+                {/* Header Dropdown */}
+                <div className="p-4 bg-morning-50/90 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Bell className="w-4 h-4 text-sapphire-600" />
+                    <h3 className="font-extrabold text-sapphire-900 text-sm">Notificări & Alerte Active</h3>
+                    <span className="px-2 py-0.5 bg-terracotta-500 text-white font-black text-[10px] rounded-full">
+                      {numAlerte}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="text-sage-400 hover:text-sapphire-900 text-xs font-bold p-1 rounded-lg hover:bg-morning-200"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Filtre Categorie Tip Facebook */}
+                <div className="px-3 py-2 bg-white flex items-center space-x-1.5 overflow-x-auto text-[11px] font-bold">
+                  <button
+                    onClick={() => setActiveCategoryFilter('TOATE')}
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                      activeCategoryFilter === 'TOATE'
+                        ? 'bg-sapphire-500 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-morning-100'
+                    }`}
+                  >
+                    Toate ({alerteList.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveCategoryFilter('STOC')}
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                      activeCategoryFilter === 'STOC'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'text-purple-800 bg-purple-50 hover:bg-purple-100'
+                    }`}
+                  >
+                    📦 Stoc ({numStoc})
+                  </button>
+                  <button
+                    onClick={() => setActiveCategoryFilter('MENTENANTA')}
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                      activeCategoryFilter === 'MENTENANTA'
+                        ? 'bg-sapphire-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-morning-100'
+                    }`}
+                  >
+                    🛠️ Mentenanță ({numMent})
+                  </button>
+                  <button
+                    onClick={() => setActiveCategoryFilter('DOCUMENTE')}
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                      activeCategoryFilter === 'DOCUMENTE'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                    }`}
+                  >
+                    📄 Acte ({numDoc})
+                  </button>
+                </div>
+
+                {/* Listă Notificări */}
+                <div className="max-h-80 overflow-y-auto divide-y divide-morning-100">
+                  {filteredNotifications.length > 0 ? (
+                    filteredNotifications.map((al) => {
+                      const esteStoc = al.categorieAlert === 'STOC_CRITIC';
+                      const linkHref = esteStoc ? '/stocuri?tab=stoc' : '/alerte';
+
+                      return (
+                        <Link
+                          key={al.id}
+                          href={linkHref}
+                          onClick={() => setIsNotificationsOpen(false)}
+                          className={`p-3.5 flex items-start space-x-3 hover:bg-morning-50 transition block text-xs ${
+                            al.urgenta === 'CRITIC' ? 'bg-roseash-50/40' : ''
+                          }`}
+                        >
+                          <div className={`mt-0.5 p-2 rounded-xl border shadow-2xs shrink-0 ${
+                            esteStoc
+                              ? 'bg-purple-50 border-purple-200 text-purple-600'
+                              : al.categorieAlert === 'SCURGERI_ULEI'
+                              ? 'bg-sapphire-50 border-sapphire-200 text-sapphire-600'
+                              : al.categorieAlert === 'DOCUMENTE_FLOTA' || al.categorieAlert === 'LICENTE_CUSTOM'
+                              ? 'bg-amber-50 border-amber-200 text-amber-600'
+                              : 'bg-roseash-50 border-roseash-200 text-terracotta-600'
+                          }`}>
+                            {esteStoc ? (
+                              <PackageCheck className="w-4 h-4" />
+                            ) : al.categorieAlert === 'SCURGERI_ULEI' ? (
+                              <Droplets className="w-4 h-4" />
+                            ) : al.categorieAlert === 'DOCUMENTE_FLOTA' || al.categorieAlert === 'LICENTE_CUSTOM' ? (
+                              <FileText className="w-4 h-4" />
+                            ) : (
+                              <Wrench className="w-4 h-4" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                                al.urgenta === 'CRITIC'
+                                  ? 'bg-terracotta-100 text-terracotta-700'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {al.urgenta === 'CRITIC' ? '🚨 Critic' : '⚠️ Avertizare'}
+                              </span>
+                              <span className="text-[10px] text-sage-500 font-mono truncate max-w-[120px]">
+                                {al.vehiculNumar || 'Depozit'}
+                              </span>
+                            </div>
+                            <p className="font-extrabold text-sapphire-900 leading-snug line-clamp-1">{al.titlu}</p>
+                            <p className="text-[11px] text-slate-700 font-medium line-clamp-2">{al.mesaj}</p>
+                          </div>
+                        </Link>
+                      );
+                    })
+                  ) : (
+                    <div className="p-6 text-center text-xs text-sage-600 font-medium">
+                      Nu există notificări active în această categorie.
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Dropdown */}
+                <div className="p-3 bg-morning-50 text-center">
+                  <Link
+                    href="/alerte"
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="text-xs font-extrabold text-sapphire-600 hover:text-sapphire-800 hover:underline inline-flex items-center space-x-1"
+                  >
+                    <span>Vezi Toate Alertele în Centrul de Notificări</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
             </>
           )}
-        </Link>
+        </div>
 
         <div className="h-5 w-px bg-morning-200"></div>
 

@@ -48,9 +48,35 @@ export class StocuriGarantiiController {
     return this.stocuriGarantiiService.createCategorie(body);
   }
 
+  @Patch('categorii/:id')
+  updateCategorie(
+    @Param('id') id: string,
+    @Body() body: { nume?: string; descriere?: string; stocMinimImplicit?: number }
+  ) {
+    return this.stocuriGarantiiService.updateCategorie(id, body);
+  }
+
+  @Delete('categorii/:id')
+  deleteCategorie(@Param('id') id: string) {
+    return this.stocuriGarantiiService.deleteCategorie(id);
+  }
+
   @Post('subcategorii')
   createSubcategorie(@Body() body: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string }) {
     return this.stocuriGarantiiService.createSubcategorie(body);
+  }
+
+  @Patch('subcategorii/:id')
+  updateSubcategorie(
+    @Param('id') id: string,
+    @Body() body: { nume?: string; descriere?: string; categorieStocId?: string }
+  ) {
+    return this.stocuriGarantiiService.updateSubcategorie(id, body);
+  }
+
+  @Delete('subcategorii/:id')
+  deleteSubcategorie(@Param('id') id: string) {
+    return this.stocuriGarantiiService.deleteSubcategorie(id);
   }
 
   // Avertisment Stoc Critic

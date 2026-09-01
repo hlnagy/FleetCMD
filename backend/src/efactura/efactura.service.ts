@@ -4,6 +4,84 @@ import { XMLParser } from 'fast-xml-parser';
 import * as AdmZip from 'adm-zip';
 import axios from 'axios';
 
+export function normalizeUnitateMasura(rawUnit?: string): string {
+  if (!rawUnit) return 'buc';
+  const u = String(rawUnit).trim().toUpperCase();
+  switch (u) {
+    case 'H87': // Piece / bucată
+    case 'C62': // One / unit
+    case 'PCE': // Piece
+    case 'EA':  // Each
+    case 'NAR': // Number of articles
+    case 'XPP': // Piece
+    case 'ZZ':  // Mutually defined
+    case 'BUC':
+    case 'BUC.':
+    case 'BUCATI':
+    case 'BUCĂȚI':
+      return 'buc';
+    case 'LTR':
+    case 'L':
+    case 'LITRU':
+    case 'LITRI':
+      return 'L';
+    case 'KGM':
+    case 'KG':
+    case 'KILOGRAM':
+    case 'KILOGRAME':
+      return 'kg';
+    case 'MTR':
+    case 'M':
+    case 'METRU':
+    case 'METRI':
+    case 'LM':
+    case 'ML':
+      return 'm';
+    case 'MTK':
+    case 'M2':
+    case 'MP':
+      return 'mp';
+    case 'MTQ':
+    case 'M3':
+    case 'MC':
+      return 'mc';
+    case 'SET':
+    case 'SETURI':
+      return 'set';
+    default:
+      return String(rawUnit).toLowerCase();
+  }
+}
+
+export function parseDimensiune(desc: string): string {
+  const match = desc.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
+  return match ? match[0].replace(/\s+/g, '') : '315/80R22.5';
+}
+
+export function parseMarca(desc: string): string {
+  const d = desc.toUpperCase();
+  if (d.includes('MICHELIN')) return 'MICHELIN';
+  if (d.includes('BRIDGESTONE')) return 'BRIDGESTONE';
+  if (d.includes('CONTINENTAL')) return 'CONTINENTAL';
+  if (d.includes('GOODYEAR')) return 'GOODYEAR';
+  if (d.includes('PIRELLI')) return 'PIRELLI';
+  if (d.includes('BENCHMARK')) return 'BENCHMARK';
+  if (d.includes('INFINITY')) return 'INFINITY';
+  if (d.includes('HANKOOK')) return 'HANKOOK';
+  if (d.includes('SAVA')) return 'SAVA';
+  if (d.includes('KORMORAN')) return 'KORMORAN';
+  if (d.includes('BARUM')) return 'BARUM';
+  if (d.includes('MATADOR')) return 'MATADOR';
+  if (d.includes('TRIANGLE')) return 'TRIANGLE';
+  if (d.includes('WESTLAKE')) return 'WESTLAKE';
+  return 'GENERICĂ';
+}
+
+export function parseModel(desc: string): string {
+  const d = desc.replace(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/gi, '').trim();
+  return d.length > 45 ? d.substring(0, 45) : d || 'Standard';
+}
+
 @Injectable()
 export class EFacturaService {
   private readonly logger = new Logger(EFacturaService.name);
@@ -384,35 +462,55 @@ export class EFacturaService {
     const parsed = parser.parse(xmlContent);
     const invoice = parsed.Invoice || parsed.CreditNote || {};
 
-    const numarFactura = invoice.ID || `FAC-${msgMeta.id_descarcare || Date.now()}`;
-    const dataFacturaRaw = invoice.IssueDate || invoice.TaxPointDate;
+    const extractText = (val: any): string => {
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'object') {
+        return String(val['#text'] ?? val['text'] ?? val['value'] ?? '').trim();
+      }
+      const s = String(val).trim();
+      return s === '[object Object]' ? '' : s;
+    };
+
+    const numarFactura = extractText(invoice.ID) || `FAC-${msgMeta.id_descarcare || Date.now()}`;
+    const dataFacturaRaw = extractText(invoice.IssueDate) || extractText(invoice.TaxPointDate);
     const dataFactura = dataFacturaRaw ? new Date(dataFacturaRaw) : new Date();
 
     // Furnizor / Vanzator
     const supplierParty = invoice.AccountingSupplierParty?.Party || {};
     const numeVanzator =
-      supplierParty.PartyName?.Name ||
-      supplierParty.PartyLegalEntity?.RegistrationName ||
-      msgMeta.detalii ||
+      extractText(supplierParty.PartyName?.Name) ||
+      extractText(supplierParty.PartyLegalEntity?.RegistrationName) ||
+      extractText(msgMeta.detalii) ||
       'Furnizor Nespecificat';
 
     const cifVanzator =
-      supplierParty.PartyTaxScheme?.CompanyID ||
-      supplierParty.PartyIdentification?.ID ||
-      msgMeta.cif_emitent ||
+      extractText(supplierParty.PartyTaxScheme?.CompanyID) ||
+      extractText(supplierParty.PartyIdentification?.ID) ||
+      extractText(msgMeta.cif_emitent) ||
       'N/A';
 
     // Cumpărător
     const customerParty = invoice.AccountingCustomerParty?.Party || {};
     const cifCumparator =
-      customerParty.PartyTaxScheme?.CompanyID ||
-      customerParty.PartyIdentification?.ID ||
+      extractText(customerParty.PartyTaxScheme?.CompanyID) ||
+      extractText(customerParty.PartyIdentification?.ID) ||
       'N/A';
 
-    // Totaluri
+    // Totaluri (Prioritizăm TaxInclusiveAmount pentru că PayableAmount este 0 la achizițiile plătite pe loc / POS / bon / avans)
     const monetaryTotal = invoice.LegalMonetaryTotal || {};
-    const valoareTotala = Number(monetaryTotal.PayableAmount?.['#text'] || monetaryTotal.PayableAmount || msgMeta.valoare || 0);
-    const moneda = monetaryTotal.PayableAmount?.['@_currencyID'] || 'RON';
+    let valoareTotala = Number(
+      monetaryTotal.TaxInclusiveAmount?.['#text'] ??
+      monetaryTotal.TaxInclusiveAmount ??
+      monetaryTotal.PayableAmount?.['#text'] ??
+      monetaryTotal.PayableAmount ??
+      msgMeta.valoare ??
+      0
+    );
+    const moneda =
+      monetaryTotal.TaxInclusiveAmount?.['@_currencyID'] ||
+      monetaryTotal.PayableAmount?.['@_currencyID'] ||
+      extractText(invoice.DocumentCurrencyCode) ||
+      'RON';
 
     // Linii Factură (InvoiceLine)
     const rawLines = invoice.InvoiceLine || invoice.CreditNoteLine || [];
@@ -429,24 +527,39 @@ export class EFacturaService {
       cotaTVA: number;
     }> = [];
 
-    linesArray.forEach((line: any) => {
+    const cleanCifVanzatorDigits = (cifVanzator || '').replace(/[^0-9]/g, '') || 'ART';
+
+    linesArray.forEach((line: any, idx: number) => {
       if (!line) return;
       const itemNode = line.Item || {};
-      const descrierePiesa = itemNode.Name || itemNode.Description || 'Articol Nespecificat';
-      const codArticolFurnizor = itemNode.SellersItemIdentification?.ID || itemNode.StandardItemIdentification?.ID || null;
+      const rawName = extractText(itemNode.Name);
+      const rawDesc = extractText(itemNode.Description);
+      
+      let descrierePiesa = rawName || rawDesc || 'Articol Nespecificat';
+      if (rawName && rawDesc && rawName.toLowerCase() !== rawDesc.toLowerCase()) {
+        descrierePiesa = `${rawName} (${rawDesc})`;
+      }
+
+      const sellersId = extractText(itemNode.SellersItemIdentification?.ID);
+      const standardId = extractText(itemNode.StandardItemIdentification?.ID);
+      const classificationId = extractText(itemNode.CommodityClassification?.ItemClassificationCode);
+      
+      // Dacă furnizorul nu a specificat un cod de articol în XML, generăm automat: CUI Furnizor + "-" + Număr Linie (ex: 55358546-1)
+      const generatedDefaultCode = `${cleanCifVanzatorDigits}-${idx + 1}`;
+      const codArticolFurnizor = sellersId || standardId || (classificationId && classificationId.length > 3 ? classificationId : generatedDefaultCode);
 
       const qtyNode = line.InvoicedQuantity || line.CreditedQuantity || { '#text': 1 };
-      const cantitate = Number(qtyNode['#text'] || qtyNode || 1);
-      const unitateMasura = qtyNode['@_unitCode'] || 'buc';
+      const cantitate = Number(qtyNode['#text'] ?? qtyNode ?? 1);
+      const unitateMasura = normalizeUnitateMasura(qtyNode['@_unitCode'] || 'buc');
 
       const lineAmountNode = line.LineExtensionAmount || {};
-      const valoareFaraTVA = Number(lineAmountNode['#text'] || lineAmountNode || 0);
+      const valoareFaraTVA = Number((Number(lineAmountNode['#text'] ?? lineAmountNode ?? 0)).toFixed(2));
 
       const priceNode = line.Price?.PriceAmount || {};
-      const pretUnitar = Number(priceNode['#text'] || priceNode || (cantitate > 0 ? valoareFaraTVA / cantitate : 0));
+      const pretUnitar = Number((Number(priceNode['#text'] ?? priceNode ?? (cantitate > 0 ? valoareFaraTVA / cantitate : 0))).toFixed(2));
 
       const taxCategory = itemNode.ClassifiedTaxCategory || line.TaxTotal?.TaxSubtotal?.TaxCategory || {};
-      const cotaTVA = Number(taxCategory.Percent || 19);
+      const cotaTVA = Number(taxCategory.Percent ?? 19);
       const valoareTVA = Number((valoareFaraTVA * (cotaTVA / 100)).toFixed(2));
 
       items.push({
@@ -461,6 +574,16 @@ export class EFacturaService {
       });
     });
 
+    // Dacă valoareTotala a rezultat 0 (de ex. la facturi cu plată integrală pe loc / bon / card), calculăm din liniile facturii
+    if ((isNaN(valoareTotala) || valoareTotala === 0) && items.length > 0) {
+      const sumLinii = items.reduce((acc, it) => acc + (it.valoareFaraTVA + it.valoareTVA), 0);
+      if (sumLinii > 0) {
+        valoareTotala = Number(sumLinii.toFixed(2));
+      }
+    } else {
+      valoareTotala = Number(valoareTotala.toFixed(2));
+    }
+
     return {
       numarFactura: String(numarFactura),
       dataFactura,
@@ -471,6 +594,132 @@ export class EFacturaService {
       moneda: String(moneda),
       tipFactura: invoice.CreditNote ? 'STORNO' : 'FACTURA',
       items,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // ÎNCĂRCARE DIRECTĂ FIȘIERE XML / ZIP (DIN SPV)
+  // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // ÎNCĂRCARE DIRECTĂ FIȘIERE XML / ZIP (DIN SPV) CU DEDUPLICARE AVANSATĂ
+  // -------------------------------------------------------------------------
+  async incarcaFisiereXmlSauZip(files: Array<{ numeFisier: string; continutBase64: string }>) {
+    const cfg = await this.getConfig();
+    let procesateCount = 0;
+    let duplicateCount = 0;
+    let eroriCount = 0;
+    const facturiSalvate: any[] = [];
+    const seenInBatch = new Set<string>();
+
+    for (const f of files) {
+      try {
+        const buffer = Buffer.from(f.continutBase64, 'base64');
+        const xmlStrings: Array<{ xml: string; nume: string }> = [];
+
+        if (f.numeFisier.toLowerCase().endsWith('.zip')) {
+          const zip = new AdmZip(buffer);
+          const zipEntries = zip.getEntries();
+          for (const entry of zipEntries) {
+            if (entry.entryName.toLowerCase().endsWith('.xml') && !entry.entryName.toLowerCase().includes('semnatura')) {
+              xmlStrings.push({ xml: entry.getData().toString('utf8'), nume: entry.entryName });
+            }
+          }
+        } else {
+          // Direct XML
+          xmlStrings.push({ xml: buffer.toString('utf8'), nume: f.numeFisier });
+        }
+
+        for (const item of xmlStrings) {
+          const parsed = this.parseUBL21Xml(item.xml, { id_descarcare: Date.now() });
+          
+          const cleanNumar = (parsed.numarFactura || '').trim();
+          const cleanCif = (parsed.cifVanzator || '').replace(/[^0-9]/g, '');
+          const batchKey = `${cleanNumar.toLowerCase()}_${cleanCif}`;
+
+          // Verificare duplicat în cadrul aceluiași lot de fișiere
+          if (seenInBatch.has(batchKey)) {
+            duplicateCount++;
+            continue;
+          }
+          seenInBatch.add(batchKey);
+
+          const idDescarcare = `UPLOAD-${cleanNumar}-${cleanCif}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+          // 1. Verificare dacă factura există deja după idDescarcare
+          let exist = await this.prisma.eFacturaFactura.findUnique({
+            where: { idDescarcare },
+          });
+
+          // 2. Verificare dacă factura a fost deja importată după Număr Factură + CIF Vânzător (ex. din SPV sync sau alte încărcări)
+          if (!exist && cleanNumar) {
+            const potentialDuplicates = await this.prisma.eFacturaFactura.findMany({
+              where: {
+                numarFactura: cleanNumar,
+              },
+            });
+
+            exist = potentialDuplicates.find((p) => {
+              const pCif = (p.cifVanzator || '').replace(/[^0-9]/g, '');
+              return pCif && cleanCif && (pCif === cleanCif || pCif.includes(cleanCif) || cleanCif.includes(pCif));
+            }) || null;
+          }
+
+          if (exist) {
+            duplicateCount++;
+            continue;
+          }
+
+          const savedFactura = await this.prisma.eFacturaFactura.create({
+            data: {
+              idDescarcare,
+              numarInregistrare: `UPLOAD-${Date.now()}`,
+              cifVanzator: parsed.cifVanzator || 'N/A',
+              numeVanzator: parsed.numeVanzator || 'Furnizor Nespecificat',
+              cifCumparator: parsed.cifCumparator || cfg.cifFirma,
+              numarFactura: parsed.numarFactura,
+              dataFactura: parsed.dataFactura,
+              dataMesaj: new Date(),
+              valoareTotala: parsed.valoareTotala,
+              moneda: parsed.moneda,
+              tipFactura: parsed.tipFactura,
+              xmlRawContent: item.xml,
+              articole: {
+                create: parsed.items.map((it, idx) => ({
+                  numarLinie: idx + 1,
+                  descrierePiesa: it.descrierePiesa,
+                  codArticolFurnizor: it.codArticolFurnizor,
+                  cantitate: it.cantitate,
+                  unitateMasura: it.unitateMasura,
+                  pretUnitar: it.pretUnitar,
+                  valoareFaraTVA: it.valoareFaraTVA,
+                  valoareTVA: it.valoareTVA,
+                  cotaTVA: it.cotaTVA,
+                  stare: 'NEPROCESAT',
+                })),
+              },
+            },
+            include: { articole: true },
+          });
+
+          facturiSalvate.push(savedFactura);
+          procesateCount++;
+        }
+      } catch (err: any) {
+        this.logger.error(`Eroare la procesarea fișierului ${f.numeFisier}: ${err.message}`);
+        eroriCount++;
+      }
+    }
+
+    const mesaj = duplicateCount > 0
+      ? `✅ Au fost importate ${procesateCount} facturi noi! (${duplicateCount} facturi duplicate deja existente au fost ignorate automat).`
+      : `✅ Au fost procesate și importate cu succes ${procesateCount} facturi din fișierele încărcate!`;
+
+    return {
+      mesaj,
+      procesateCount,
+      duplicateCount,
+      eroriCount,
+      facturi: facturiSalvate,
     };
   }
 
@@ -506,14 +755,29 @@ export class EFacturaService {
     categorieNume?: string;
     subcategorieNume?: string;
     codArticolCalculat?: string;
+    pretUnitarCustom?: number;
+    areGarantie?: boolean;
+    luniGarantie?: number;
+    kilometriGarantie?: number;
+    oreGarantie?: number;
+    serieUnica?: string;
+    esteAnvelopa?: boolean;
+    codDot?: string;
+    seriiIndividuale?: Array<{
+      serie: string;
+      dot?: string;
+      dimensiune?: string;
+      marca?: string;
+      model?: string;
+    }>;
   }) {
     const item = await this.prisma.eFacturaItem.findUnique({
       where: { id: itemId },
       include: { factura: true },
     });
 
-    if (!item) throw new NotFoundException('Tétel nu a fost găsit.');
-    if (item.stare === 'IMPORTAT') throw new BadRequestException('Acest tétel a fost deja importat în raktár.');
+    if (!item) throw new NotFoundException('Articolul din factură nu a fost găsit.');
+    if (item.stare === 'IMPORTAT') throw new BadRequestException('Acest articol a fost deja importat în stoc.');
 
     // 1. Identificare sau Creare Depozit target
     let targetDepozitId = data.depozitId;
@@ -531,6 +795,9 @@ export class EFacturaService {
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'PIESE_AUTO';
+    const rawPretUnitar = typeof data.pretUnitarCustom === 'number' ? data.pretUnitarCustom : item.pretUnitar;
+    const effectivePretUnitar = Number(Number(rawPretUnitar || 0).toFixed(2));
+    const effectivePretTotal = Number((effectivePretUnitar * item.cantitate).toFixed(2));
 
     // 2. Căutare sau Creare ArticolStoc în Depozit
     let articol = await this.prisma.articolStoc.findFirst({
@@ -547,7 +814,8 @@ export class EFacturaService {
         where: { id: articol.id },
         data: {
           stocCurent: articol.stocCurent + item.cantitate,
-          pretUnitar: item.pretUnitar > 0 ? item.pretUnitar : articol.pretUnitar,
+          pretUnitar: effectivePretUnitar > 0 ? effectivePretUnitar : articol.pretUnitar,
+          esteSerializat: data.areGarantie ? true : articol.esteSerializat,
         },
       });
     } else {
@@ -559,14 +827,15 @@ export class EFacturaService {
           subcategorie: data.subcategorieNume || null,
           stocCurent: item.cantitate,
           stocMinim: 5,
-          pretUnitar: item.pretUnitar,
-          unitateMasura: item.unitateMasura || 'buc',
+          pretUnitar: effectivePretUnitar,
+          unitateMasura: normalizeUnitateMasura(item.unitateMasura || 'buc'),
+          esteSerializat: !!data.areGarantie,
           depozitId: targetDepozitId,
         },
       });
     }
 
-    // 3. Înregistrare Recepție IntrareStoc
+    // 3. Înregistrare Recepție IntrareStoc (Recepție e-Factura)
     await this.prisma.intrareStoc.create({
       data: {
         articolStocId: articol.id,
@@ -575,13 +844,97 @@ export class EFacturaService {
         numarFactura: item.factura.numarFactura,
         dataFactura: item.factura.dataFactura,
         cantitateIntrata: item.cantitate,
-        pretUnitar: item.pretUnitar,
-        pretTotal: item.valoareFaraTVA,
-        observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})`,
+        pretUnitar: effectivePretUnitar,
+        pretTotal: effectivePretTotal,
+        observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' 🛡️ Înregistrat în Garanții Componente' : ''}`,
       },
     });
 
-    // 4. Actualizare stare EFacturaItem & Parent EFacturaFactura
+    // 4. Înregistrare Serii Individuale (pentru anvelope sau componente serializate)
+    const esteAnvelopa =
+      data.esteAnvelopa === true ||
+      catName.toLowerCase().includes('anvelop') ||
+      item.descrierePiesa.toLowerCase().includes('anvelop') ||
+      item.descrierePiesa.toLowerCase().includes('r22.5') ||
+      item.descrierePiesa.toLowerCase().includes('r17.5') ||
+      item.descrierePiesa.toLowerCase().includes('r20') ||
+      item.descrierePiesa.toLowerCase().includes('cauciuc') ||
+      (codArticol || '').toUpperCase().startsWith('ANV');
+
+    if (Array.isArray(data.seriiIndividuale) && data.seriiIndividuale.length > 0) {
+      for (const s of data.seriiIndividuale) {
+        const serieText = String(s.serie || '').trim();
+        if (!serieText) continue;
+
+        if (esteAnvelopa) {
+          const dim = s.dimensiune || parseDimensiune(item.descrierePiesa);
+          const mrc = s.marca || parseMarca(item.descrierePiesa);
+          const mdl = s.model || parseModel(item.descrierePiesa);
+          const dot = s.dot || data.codDot || 'DOT-2026';
+
+          await this.prisma.anvelopa.create({
+            data: {
+              serieAnvelopa: serieText,
+              codDot: dot,
+              marca: mrc,
+              model: mdl,
+              dimensiune: dim,
+              adancimeInitialaMm: 16,
+              adancimeCurentaMm: 16,
+              pretAchizitie: effectivePretUnitar,
+              stare: 'IN_STOC',
+              depozitId: targetDepozitId,
+            },
+          });
+        }
+
+        // De asemenea înregistrare în ComponentaSerializata pentru trasabilitate și garanții
+        await this.prisma.componentaSerializata.upsert({
+          where: { serieUnica: serieText },
+          update: {
+            luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+            kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+            dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+            stare: 'IN_STOC',
+          },
+          create: {
+            articolStocId: articol.id,
+            serieUnica: serieText,
+            luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+            kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+            dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+            stare: 'IN_STOC',
+          },
+        });
+      }
+    } else if (data.areGarantie) {
+      const cleanNumar = (item.factura?.numarFactura || '').replace(/[^a-zA-Z0-9]/g, '');
+      const serieUnicaFinal =
+        data.serieUnica?.trim() ||
+        `SN-${codArticol}-${cleanNumar}-${item.numarLinie || 1}`;
+
+      await this.prisma.componentaSerializata.upsert({
+        where: { serieUnica: serieUnicaFinal },
+        update: {
+          luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+          kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+          oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
+          dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+          stare: 'IN_STOC',
+        },
+        create: {
+          articolStocId: articol.id,
+          serieUnica: serieUnicaFinal,
+          luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+          kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+          oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
+          dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+          stare: 'IN_STOC',
+        },
+      });
+    }
+
+    // 5. Actualizare stare EFacturaItem
     const updatedItem = await this.prisma.eFacturaItem.update({
       where: { id: itemId },
       data: {
@@ -590,19 +943,39 @@ export class EFacturaService {
       },
     });
 
+    // 6. Închidere automată a liniilor de reducere / garanție financiară dacă s-a importat garanție gratuită (0 RON)
+    if (effectivePretUnitar === 0 || (item.factura && item.factura.valoareTotala === 0)) {
+      const remainingItems = await this.prisma.eFacturaItem.findMany({
+        where: { facturaId: item.facturaId, stare: 'NEPROCESAT' },
+      });
+
+      for (const rem of remainingItems) {
+        const isReducere =
+          rem.cantitate < 0 ||
+          rem.valoareFaraTVA < 0 ||
+          /reducere|discount|discont|storno|bonificatie|garantie/i.test(rem.descrierePiesa);
+        if (isReducere) {
+          await this.prisma.eFacturaItem.update({
+            where: { id: rem.id },
+            data: { stare: 'ELIMINAT' },
+          });
+        }
+      }
+    }
+
     await this.recalculeazaStareFactura(item.facturaId);
 
     return {
-      mesaj: `📦 Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în raktár!`,
+      mesaj: `📦 Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? ' 🛡️ Înregistrat în Garanții Componente!' : ''}`,
       item: updatedItem,
       articolStoc: articol,
     };
   }
 
-  // ELIMINARE TÉTEL (REZSI / SERVICII / ELVET)
+  // ELIMINARE ARTICOL INDIVIDUAL (SERVICII / CHELTUIALĂ OPERAȚIONALĂ)
   async eliminaItem(itemId: string) {
     const item = await this.prisma.eFacturaItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new NotFoundException('Tétel nu a fost găsit.');
+    if (!item) throw new NotFoundException('Articolul nu a fost găsit.');
 
     const updated = await this.prisma.eFacturaItem.update({
       where: { id: itemId },
@@ -611,7 +984,92 @@ export class EFacturaService {
 
     await this.recalculeazaStareFactura(item.facturaId);
 
-    return { mesaj: `🗑️ Linia "${item.descrierePiesa}" a fost marcată ca ELVET / ELIMINAT.`, item: updated };
+    return { mesaj: `🗑️ Linia "${item.descrierePiesa}" a fost marcată ca exclusă (servicii).`, item: updated };
+  }
+
+  // ELIMINARE TOATĂ FACTURA (SERVICII / CHELTUIELI OPERAȚIONALE)
+  async eliminaToataFactura(facturaId: string) {
+    const factura = await this.prisma.eFacturaFactura.findUnique({
+      where: { id: facturaId },
+      include: { articole: true },
+    });
+
+    if (!factura) throw new NotFoundException('Factura nu a fost găsită.');
+
+    // Marcăm toate articolele care nu sunt deja IMPORTAT ca ELIMINAT
+    await this.prisma.eFacturaItem.updateMany({
+      where: {
+        facturaId,
+        stare: { not: 'IMPORTAT' },
+      },
+      data: { stare: 'ELIMINAT' },
+    });
+
+    await this.recalculeazaStareFactura(facturaId);
+
+    const updatedFactura = await this.prisma.eFacturaFactura.findUnique({
+      where: { id: facturaId },
+      include: { articole: true },
+    });
+
+    return {
+      mesaj: `🗑️ Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura.articole.length} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
+      factura: updatedFactura,
+    };
+  }
+
+  // EXCLUDE BULK FACTURI (TÖMEGES SZÁMLA KIIKTATÁS)
+  async bulkEliminaFacturi(facturaIds: string[]) {
+    if (!facturaIds || facturaIds.length === 0) {
+      throw new BadRequestException('Nu au fost specificate facturi pentru excludere.');
+    }
+
+    await this.prisma.eFacturaItem.updateMany({
+      where: {
+        facturaId: { in: facturaIds },
+        stare: { not: 'IMPORTAT' },
+      },
+      data: { stare: 'ELIMINAT' },
+    });
+
+    for (const fId of facturaIds) {
+      await this.recalculeazaStareFactura(fId);
+    }
+
+    return {
+      mesaj: `🗑️ ${facturaIds.length} facturi au fost excluse cu succes (marcate ca Servicii / Cheltuieli operaționale).`,
+      count: facturaIds.length,
+    };
+  }
+
+  // EXCLUDE BULK ITEMS (TÖMEGES TÉTEL KIIKTATÁS EGY VAGY TÖBB SZÁMLÁN BELÜL)
+  async bulkEliminaItems(itemIds: string[]) {
+    if (!itemIds || itemIds.length === 0) {
+      throw new BadRequestException('Nu au fost specificate linii pentru excludere.');
+    }
+
+    const items = await this.prisma.eFacturaItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, facturaId: true },
+    });
+
+    await this.prisma.eFacturaItem.updateMany({
+      where: {
+        id: { in: itemIds },
+        stare: { not: 'IMPORTAT' },
+      },
+      data: { stare: 'ELIMINAT' },
+    });
+
+    const uniqueFacturaIds = Array.from(new Set(items.map((i) => i.facturaId)));
+    for (const fId of uniqueFacturaIds) {
+      await this.recalculeazaStareFactura(fId);
+    }
+
+    return {
+      mesaj: `🗑️ ${itemIds.length} linii au fost excluse cu succes.`,
+      count: itemIds.length,
+    };
   }
 
   private async recalculeazaStareFactura(facturaId: string) {

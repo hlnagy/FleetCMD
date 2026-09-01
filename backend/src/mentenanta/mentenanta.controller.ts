@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Patch, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, Query } from '@nestjs/common';
 import { MentenantaService } from './mentenanta.service';
 
 @Controller('mentenanta')
@@ -14,6 +14,11 @@ export class MentenantaController {
   @Post('mecanici')
   createMecanic(@Body() body: { nume: string; functie?: string; telefon?: string }) {
     return this.mentenantaService.createMecanic(body);
+  }
+
+  @Delete('mecanici/:id')
+  deleteMecanic(@Param('id') id: string) {
+    return this.mentenantaService.deleteMecanic(id);
   }
 
   @Get('istoric-servicii-mecanic')

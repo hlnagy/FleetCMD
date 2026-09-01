@@ -55,7 +55,7 @@ export default function AlertePage() {
           fetchAlerte();
         }
       } else {
-        alert('Notificarea a fost confirmată és luată în evidență!');
+        alert('Notificarea a fost confirmată și luată în evidență!');
         setSelectedAlerta(null);
         setSolutie('');
         fetchAlerte();
@@ -193,6 +193,7 @@ export default function AlertePage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 font-bold text-sapphire-900 cursor-pointer"
             >
               <option value="TOATE">Toate Categoriile</option>
+              <option value="STOC_CRITIC">📦 Stoc Critic / Piese & Uleiuri</option>
               <option value="MENTENANTA_CONSUMABIL">🛠️ Mentenanță & Consumabile</option>
               <option value="DOCUMENTE_FLOTA">📄 Documente Legale Flotă</option>
               <option value="LICENTE_CUSTOM">🔏 Licențe & Atestate Firmă</option>
@@ -208,7 +209,7 @@ export default function AlertePage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 font-bold text-sapphire-900 cursor-pointer"
             >
               <option value="TOATE">Toate Urgențele</option>
-              <option value="CRITIC">🚨 Doar Critice (Depășite/Expirate)</option>
+              <option value="CRITIC">🚨 Doar Critice (Depășite/Expirate/Epuizate)</option>
               <option value="AVERTIZARE">⚠️ Doar Avertizări În Prealabil</option>
             </select>
           </div>
@@ -220,6 +221,8 @@ export default function AlertePage() {
         {alerteFiltrate.length > 0 ? (
           alerteFiltrate.map((a) => {
             const esteCritic = a.urgenta === 'CRITIC';
+            const esteStoc = a.categorieAlert === 'STOC_CRITIC';
+
             return (
               <div
                 key={a.id}
@@ -230,7 +233,7 @@ export default function AlertePage() {
                 }`}
               >
                 <div className="space-y-1.5">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
                         esteCritic ? 'bg-terracotta-600 text-white' : 'bg-amber-500 text-white'
@@ -239,7 +242,11 @@ export default function AlertePage() {
                       {esteCritic ? '🚨 CRITIC' : '⚠️ AVERTIZARE'}
                     </span>
 
-                    <span className="px-2.5 py-0.5 rounded-lg bg-sapphire-100 text-sapphire-900 font-extrabold text-[11px]">
+                    <span className={`px-2.5 py-0.5 rounded-lg font-extrabold text-[11px] ${
+                      esteStoc
+                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                        : 'bg-sapphire-100 text-sapphire-900'
+                    }`}>
                       {a.categorieText}
                     </span>
 
@@ -261,13 +268,23 @@ export default function AlertePage() {
                 </div>
 
                 <div className="flex items-center space-x-2 self-end md:self-center">
-                  <button
-                    onClick={() => setSelectedAlerta(a)}
-                    className="px-4 py-2 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1 whitespace-nowrap"
-                  >
-                    <span>Rezolvă / Confirmă</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  {esteStoc ? (
+                    <Link
+                      href="/stocuri?tab=stoc"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5 whitespace-nowrap"
+                    >
+                      <span>Vezi Stoc & Comandă</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedAlerta(a)}
+                      className="px-4 py-2 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1 whitespace-nowrap"
+                    >
+                      <span>Rezolvă / Confirmă</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -276,7 +293,7 @@ export default function AlertePage() {
           <div className="pleasant-card p-8 rounded-2xl text-center space-y-2">
             <CheckCircle2 className="w-10 h-10 text-sage-500 mx-auto" />
             <h3 className="font-extrabold text-sapphire-900 text-base">Nu există alerte active pentru filtrele selectate!</h3>
-            <p className="text-xs text-sage-700 font-medium">Toate documentele flotei, consumabilele és licențele sunt în parametri optimi.</p>
+            <p className="text-xs text-sage-700 font-medium">Toate documentele flotei, consumabilele și licențele sunt în parametri optimi.</p>
           </div>
         )}
       </div>

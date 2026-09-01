@@ -6,6 +6,7 @@ import {
   Filter, Search, Truck, Layers, ShieldAlert, Check, RefreshCw, FileText, ShoppingCart
 } from 'lucide-react';
 import Link from 'next/link';
+import { showConfirm } from '@/lib/swal';
 
 export default function MentenantaPage() {
   const [toateSarcinile, setToateSarcinile] = useState<any[]>([]);
@@ -123,7 +124,13 @@ export default function MentenantaPage() {
     const valCurrent = selectedSarcina.valoareContorCurent || 0;
     const valEntered = Number(valoareContorComanda || valCurrent);
     if (valEntered > 0 && valEntered < valCurrent) {
-      if (!confirm(`⚠️ ATENȚIE CONTOR!\n\nValoarea introdusă (${valEntered} ${selectedSarcina.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat (${valCurrent} ${selectedSarcina.tipMasurare}).\n\nSunteți sigur că doriți să salvați o valoare mai mică (corecție manuală / schimbare de bord)?`)) {
+      const confirmed = await showConfirm(
+        'Atenție Index Contor',
+        `Valoarea introdusă (${valEntered} ${selectedSarcina.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat (${valCurrent} ${selectedSarcina.tipMasurare}).\n\nSunteți sigur că doriți să salvați o valoare mai mică (corecție manuală / schimbare de bord)?`,
+        'Da, salvează valoarea',
+        'Anulează'
+      );
+      if (!confirmed) {
         return;
       }
     }

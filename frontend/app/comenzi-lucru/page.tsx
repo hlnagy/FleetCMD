@@ -6,6 +6,7 @@ import {
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
   Unlock, RotateCcw, Calendar, Truck
 } from 'lucide-react';
+import { showConfirm } from '@/lib/swal';
 
 export default function ComenziLucruPage() {
   const [comenzi, setComenzi] = useState<any[]>([]);
@@ -194,8 +195,21 @@ export default function ComenziLucruPage() {
     if (!selectedVehiculId) return;
 
     const selV = vehicule.find((v) => v.id === selectedVehiculId);
-    if (selV && Number(valoareContorExecutie) > 0 && Number(valoareContorExecutie) < selV.valoareContorCurent) {
-      if (!confirm(`⚠️ ATENȚIE CONTOR!\n\nValoarea introdusă (${valoareContorExecutie} ${selV.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat pe vehicul (${selV.valoareContorCurent} ${selV.tipMasurare}).\n\nSunteți sigur că este o corecție manuală / schimbare de bord?\nApăsați OK pentru a confirma salvările.`)) {
+    const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
+
+    if (isTrailer && (!valoareContorExecutie || Number(valoareContorExecutie) <= 0)) {
+      alert('⛔ Index KM Obligatoriu pentru Semiremorci!\n\nSemiremorcile nu au contor propriu. Vă rugăm să introduceți indexul kilometrajului al capului tractor care tractează semiremorca!');
+      return;
+    }
+
+    if (selV && !isTrailer && Number(valoareContorExecutie) > 0 && Number(valoareContorExecutie) < selV.valoareContorCurent) {
+      const confirmed = await showConfirm(
+        'Atenție Index Contor',
+        `Valoarea introdusă (${valoareContorExecutie} ${selV.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat pe vehicul (${selV.valoareContorCurent} ${selV.tipMasurare}).\n\nSunteți sigur că este o corecție manuală / schimbare de bord?`,
+        'Da, confirmă valoarea',
+        'Anulează'
+      );
+      if (!confirmed) {
         return;
       }
     }
@@ -290,7 +304,13 @@ export default function ComenziLucruPage() {
   };
 
   const handleFinalizeazaComanda = async (id: string, numarComanda: string) => {
-    if (!confirm(`Doriți să finalizați Comanda de Lucru ${numarComanda}? Aceasta va scădea stocul pieselor și va înregistra data finalizării!`)) return;
+    const confirmed = await showConfirm(
+      'Finalizare Comandă de Lucru',
+      `Doriți să finalizați Comanda de Lucru ${numarComanda}? Aceasta va scădea stocul pieselor și va înregistra data finalizării!`,
+      'Da, finalizează comanda',
+      'Anulează'
+    );
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/finalizeaza`, { method: 'PATCH' });
@@ -307,7 +327,13 @@ export default function ComenziLucruPage() {
   };
 
   const handleAnuleazaComanda = async (id: string) => {
-    if (!confirm('Anularea acestei comenzi de lucru va RESTAURA automat stocul piesa. Continuați?')) return;
+    const confirmed = await showConfirm(
+      'Anulare Comandă de Lucru',
+      'Anularea acestei comenzi de lucru va RESTAURA automat stocul pieselor în magazie. Continuați?',
+      'Da, anulează comanda',
+      'Înapoi'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/anuleaza`, { method: 'PATCH' });
       if (res.ok) {
@@ -321,7 +347,13 @@ export default function ComenziLucruPage() {
 
   // 🔓 DEVALIDARE COMANDĂ DE LUCRU (Re-opens work order, restores stock & reveals EDIT / ANULARE buttons)
   const handleDevalideazaComanda = async (id: string, numarComanda: string) => {
-    if (!confirm(`Doriți să DEVALIDAȚI Comanda de Lucru ${numarComanda}?\n\nAccțiunea va debloca comanda, va stabili starea DEVALIDAT și va permite editarea sau anularea acesteia!`)) return;
+    const confirmed = await showConfirm(
+      'Devalidare Comandă de Lucru',
+      `Doriți să DEVALIDAȚI Comanda de Lucru ${numarComanda}?\n\nAcțiunea va debloca comanda, va stabili starea DEVALIDAT și va permite editarea sau anularea acesteia!`,
+      'Da, devalidează',
+      'Anulează'
+    );
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/devalideaza`, { method: 'PATCH' });
@@ -734,7 +766,7 @@ export default function ComenziLucruPage() {
                     </td>
 
                     <td className="p-3 text-right font-extrabold text-sapphire-900 font-mono text-sm">
-                      {totalCost.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} RON
+                      {Number(totalCost || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                     </td>
 
                     {/* ─── ACȚIUNI MANAGEMENT (USER STRICT LOGIC) ─── */}
@@ -1139,8 +1171,8 @@ export default function ComenziLucruPage() {
                   <div className="flex justify-between border-t border-slate-400 pt-1 text-sm font-extrabold text-slate-900">
                     <span>TOTAL GENERAL DEVIZ:</span>
                     <span className="font-mono text-sapphire-900">
-                      {(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
-                        .toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} RON
+                      {Number(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
+                        .toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                     </span>
                   </div>
                 </div>
@@ -1284,9 +1316,23 @@ export default function ComenziLucruPage() {
                 <select
                   value={selectedVehiculId}
                   onChange={(e) => {
-                    setSelectedVehiculId(e.target.value);
-                    const sel = vehicule.find(v => v.id === e.target.value);
-                    if (sel) setValoareContorExecutie(sel.valoareContorCurent || 0);
+                    const vId = e.target.value;
+                    setSelectedVehiculId(vId);
+                    const sel = vehicule.find((v) => v.id === vId);
+                    if (sel) {
+                      const isTrailer = sel.categorieEnum === 'REMORCA' || sel.categorieEnum === 'SEMIREMORCA' || sel.categorieEnum?.includes('REMORCA');
+                      if (isTrailer) {
+                        const coupled = sel.cuplariSemiremorca?.[0]?.capTractor;
+                        if (coupled) {
+                          setValoareContorExecutie(coupled.valoareContorCurent || 0);
+                        } else {
+                          const firstTractor = vehicule.find((v) => v.categorieEnum === 'CAP_TRACTOR');
+                          setValoareContorExecutie(firstTractor ? firstTractor.valoareContorCurent : 0);
+                        }
+                      } else {
+                        setValoareContorExecutie(sel.valoareContorCurent || 0);
+                      }
+                    }
                   }}
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
@@ -1298,40 +1344,99 @@ export default function ComenziLucruPage() {
                 </select>
               </div>
 
-              {/* KM INDEX / MUNKAÓRA KÖTELEZŐ MEZŐ */}
-              <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-1">
-                <label className="text-sapphire-900 font-extrabold block text-xs">
-                  Index Contor (KM / mTH) la Execuție: *
-                </label>
-                {(() => {
-                  const selV = vehicule.find((v) => v.id === selectedVehiculId);
-                  const currentContor = selV?.valoareContorCurent || 0;
-                  const isLower = selV && valoareContorExecutie > 0 && Number(valoareContorExecutie) < currentContor;
-                  return (
-                    <>
+              {/* KM INDEX / MUNKAÓRA KÖTELEZŐ MEZŐ (CU SUPORT DEDICAT SEMIREMORCI) */}
+              {(() => {
+                const selV = vehicule.find((v) => v.id === selectedVehiculId);
+                const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
+                const coupledTractor = selV?.cuplariSemiremorca?.[0]?.capTractor;
+                const currentContor = selV?.valoareContorCurent || 0;
+                const isLower = selV && !isTrailer && valoareContorExecutie > 0 && Number(valoareContorExecutie) < currentContor;
+
+                return (
+                  <div className="space-y-2">
+                    {isTrailer && (
+                      <div className="p-3 rounded-2xl border bg-amber-50/90 border-amber-300 space-y-2 text-xs">
+                        <div className="flex items-center space-x-2 text-amber-900 font-extrabold">
+                          <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                          <span>🚛 Semiremorcă / Remorcă (Fără odometru propriu pe șasiu)</span>
+                        </div>
+
+                        {coupledTractor ? (
+                          <div className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between shadow-xs">
+                            <div>
+                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">🔗 Cuplat Activ la Cap Tractor:</p>
+                              <p className="font-extrabold text-sapphire-900">
+                                {coupledTractor.numarIntern} ({coupledTractor.numarInmatriculare}) - {coupledTractor.marca}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setValoareContorExecutie(coupledTractor.valoareContorCurent || 0)}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-xs transition"
+                            >
+                              Preia KM: {coupledTractor.valoareContorCurent} KM
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-amber-800 font-medium">
+                            Semiremorca nu este cuplată momentan. Selectați capul tractor care o tractează pentru preluarea kilometrajului:
+                          </p>
+                        )}
+
+                        <div>
+                          <label className="text-[10px] text-sage-700 font-bold block mb-1">
+                            Alege Cap Tractor din flotă care tractează semiremorca:
+                          </label>
+                          <select
+                            onChange={(e) => {
+                              const tr = vehicule.find((v) => v.id === e.target.value);
+                              if (tr) setValoareContorExecutie(tr.valoareContorCurent || 0);
+                            }}
+                            className="w-full bg-white border border-amber-300 rounded-xl p-2 font-bold text-sapphire-900 text-xs"
+                          >
+                            <option value="">-- Selectează Cap Tractor --</option>
+                            {vehicule
+                              .filter((v) => v.categorieEnum === 'CAP_TRACTOR')
+                              .map((tr) => (
+                                <option key={tr.id} value={tr.id}>
+                                  🚚 {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-1">
+                      <label className="text-sapphire-900 font-extrabold block text-xs">
+                        {isTrailer ? 'Index KM Cap Tractor la Execuție (Obligatoriu): *' : 'Index Contor (KM / mTH) la Execuție: *'}
+                      </label>
                       <input
                         type="number"
                         required
                         min="1"
                         value={valoareContorExecutie}
                         onChange={(e) => setValoareContorExecutie(Number(e.target.value))}
-                        placeholder="ex: 125000"
+                        placeholder={isTrailer ? 'Introduceți KM cap tractor...' : 'ex: 125000'}
                         className={`w-full border rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm ${
                           isLower ? 'bg-amber-50 border-amber-400 text-amber-900' : 'bg-white border-morning-200'
                         }`}
                       />
                       <p className="text-[10px] text-sage-600 font-medium">
-                        • Valoarea contorului curent înregistrată pe utilaj: <span className="font-extrabold text-sapphire-700">{currentContor} {selV?.tipMasurare || 'KM/mTH'}</span>
+                        {isTrailer
+                          ? '• Pentru semiremorci este obligatoriu indexul kilometrajului capului tractor la momentul intervenției.'
+                          : '• Valoarea contorului curent înregistrată pe utilaj: '}
+                        {!isTrailer && <span className="font-extrabold text-sapphire-700">{currentContor} {selV?.tipMasurare || 'KM/mTH'}</span>}
                       </p>
                       {isLower && (
                         <div className="mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
                           <span>⚠️ ATENȚIE: Valoarea introdusă ({valoareContorExecutie} {selV?.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({currentContor} {selV?.tipMasurare})! Se va salva ca o corecție manuală.</span>
                         </div>
                       )}
-                    </>
-                  );
-                })()}
-              </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* SELECȚIE MULTIPLĂ MECANICI */}
               <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-2">

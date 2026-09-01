@@ -6,6 +6,7 @@ import {
   Truck, AlertTriangle, Droplets, AlertCircle, Plus, CheckCircle2, RefreshCw,
   Filter, Edit3, Trash2, Clock, DollarSign, TrendingUp, ShieldAlert, ArrowUpRight, Wrench, X, Calendar, Layers, UserCheck, Users, Search, Phone, Settings
 } from 'lucide-react';
+import { showConfirm } from '@/lib/swal';
 
 export default function DashboardPage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -137,7 +138,13 @@ export default function DashboardPage() {
   };
 
   const handleDeleteVehicul = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest vehicul?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Vehicul',
+      'Sigur doriți să ștergeți acest vehicul din sistem?',
+      'Da, șterge vehiculul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) {

@@ -47,6 +47,18 @@ export class MentenantaService {
     });
   }
 
+  async deleteMecanic(id: string) {
+    const mecanic = await this.prisma.mecanic.findUnique({ where: { id } });
+    if (!mecanic) throw new NotFoundException('Mecanicul nu a fost găsit.');
+
+    await this.prisma.mecanic.delete({ where: { id } });
+
+    return {
+      mesaj: `👨‍🔧 Mecanicul "${mecanic.nume}" a fost eliminat din lista mecanicilor activi. Toate comenzile de lucru și operațiunile efectuate anterior de acesta rămân salvate intact în istoric.`,
+      mecanic,
+    };
+  }
+
   async getIstoricServiciiMecanic(mecanicNume?: string) {
     const filter = mecanicNume ? { contains: mecanicNume } : undefined;
 

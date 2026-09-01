@@ -184,28 +184,28 @@ export class VehiculeService {
 
         if (numRoti === 2) {
           axe.push(
-            { codPozitie: `${axNum}-SS`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Simplu` },
-            { codPozitie: `${axNum}-DS`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Simplu` }
+            { codPozitie: `${axNum}-ST`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga` },
+            { codPozitie: `${axNum}-DR`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta` }
           );
         } else if (numRoti === 4) {
           axe.push(
-            { codPozitie: `${axNum}-SS`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Exterior` },
-            { codPozitie: `${axNum}-SI`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Interior` },
-            { codPozitie: `${axNum}-DI`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Interior` },
-            { codPozitie: `${axNum}-DS`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Exterior` }
+            { codPozitie: `${axNum}-ST-EXT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Exterior` },
+            { codPozitie: `${axNum}-ST-INT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Interior` },
+            { codPozitie: `${axNum}-DR-INT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Interior` },
+            { codPozitie: `${axNum}-DR-EXT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Exterior` }
           );
         } else if (numRoti === 6) {
           axe.push(
-            { codPozitie: `${axNum}-SS1`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Ext 1` },
-            { codPozitie: `${axNum}-SS2`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Ext 2` },
-            { codPozitie: `${axNum}-SI`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Int` },
-            { codPozitie: `${axNum}-DI`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Int` },
-            { codPozitie: `${axNum}-DS2`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Ext 2` },
-            { codPozitie: `${axNum}-DS1`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Ext 1` }
+            { codPozitie: `${axNum}-ST-EXT2`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Ext 2` },
+            { codPozitie: `${axNum}-ST-EXT1`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Ext 1` },
+            { codPozitie: `${axNum}-ST-INT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Stânga Int` },
+            { codPozitie: `${axNum}-DR-INT`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Int` },
+            { codPozitie: `${axNum}-DR-EXT1`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Ext 1` },
+            { codPozitie: `${axNum}-DR-EXT2`, numarAx: axNum, descrierePozitie: `Axă ${axNum} Dreapta Ext 2` }
           );
         } else {
           for (let r = 1; r <= numRoti; r++) {
-            const side = r <= Math.ceil(numRoti / 2) ? 'S' : 'D';
+            const side = r <= Math.ceil(numRoti / 2) ? 'ST' : 'DR';
             const posCode = `${axNum}-${side}${r}`;
             axe.push({ codPozitie: posCode, numarAx: axNum, descrierePozitie: `Axă ${axNum} Poziție ${r}` });
           }
@@ -213,43 +213,43 @@ export class VehiculeService {
       }
     } else if (categorie === 'CAP_TRACTOR') {
       axe.push(
-        { codPozitie: '1-SS', numarAx: 1, descrierePozitie: 'Axă 1 Stânga Simplu (Directoare)' },
-        { codPozitie: '1-DS', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta Simplu (Directoare)' },
-        { codPozitie: '2-SS', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Exterior (Tracțiune)' },
-        { codPozitie: '2-SI', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Interior (Tracțiune)' },
-        { codPozitie: '2-DI', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Interior (Tracțiune)' },
-        { codPozitie: '2-DS', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Exterior (Tracțiune)' }
+        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga (Directoare)' },
+        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta (Directoare)' },
+        { codPozitie: '2-ST-EXT', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Exterior (Tracțiune)' },
+        { codPozitie: '2-ST-INT', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Interior (Tracțiune)' },
+        { codPozitie: '2-DR-INT', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Interior (Tracțiune)' },
+        { codPozitie: '2-DR-EXT', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Exterior (Tracțiune)' }
       );
     } else if (categorie === 'REMORCA' || categorie === 'SEMIREMORCA') {
       axe.push(
-        { codPozitie: '1-SS', numarAx: 1, descrierePozitie: 'Axă 1 Stânga Simplu' },
-        { codPozitie: '1-DS', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta Simplu' },
-        { codPozitie: '2-SS', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Simplu' },
-        { codPozitie: '2-DS', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Simplu' },
-        { codPozitie: '3-SS', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Simplu' },
-        { codPozitie: '3-DS', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Simplu' }
+        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga' },
+        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta' },
+        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga' },
+        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta' },
+        { codPozitie: '3-ST', numarAx: 3, descrierePozitie: 'Axă 3 Stânga' },
+        { codPozitie: '3-DR', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta' }
       );
     } else if (categorie === 'BASCULANTA') {
       axe.push(
-        { codPozitie: '1-SS', numarAx: 1, descrierePozitie: 'Axă 1 Stânga Simplu (Directoare)' },
-        { codPozitie: '1-DS', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta Simplu (Directoare)' },
-        { codPozitie: '2-SS', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Simplu (Directoare 2)' },
-        { codPozitie: '2-DS', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Simplu (Directoare 2)' },
-        { codPozitie: '3-SS', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Ext (Tracțiune)' },
-        { codPozitie: '3-SI', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Int (Tracțiune)' },
-        { codPozitie: '3-DI', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Int (Tracțiune)' },
-        { codPozitie: '3-DS', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Ext (Tracțiune)' },
-        { codPozitie: '4-SS', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Ext (Tracțiune)' },
-        { codPozitie: '4-SI', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Int (Tracțiune)' },
-        { codPozitie: '4-DI', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Int (Tracțiune)' },
-        { codPozitie: '4-DS', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Ext (Tracțiune)' }
+        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga (Directoare)' },
+        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta (Directoare)' },
+        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga (Directoare 2)' },
+        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta (Directoare 2)' },
+        { codPozitie: '3-ST-EXT', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Exterior (Tracțiune)' },
+        { codPozitie: '3-ST-INT', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Interior (Tracțiune)' },
+        { codPozitie: '3-DR-INT', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Interior (Tracțiune)' },
+        { codPozitie: '3-DR-EXT', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Exterior (Tracțiune)' },
+        { codPozitie: '4-ST-EXT', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Exterior (Tracțiune)' },
+        { codPozitie: '4-ST-INT', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Interior (Tracțiune)' },
+        { codPozitie: '4-DR-INT', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Interior (Tracțiune)' },
+        { codPozitie: '4-DR-EXT', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Exterior (Tracțiune)' }
       );
     } else {
       axe.push(
-        { codPozitie: '1-SS', numarAx: 1, descrierePozitie: 'Axă 1 Stânga Simplu' },
-        { codPozitie: '1-DS', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta Simplu' },
-        { codPozitie: '2-SS', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Simplu' },
-        { codPozitie: '2-DS', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Simplu' }
+        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga' },
+        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta' },
+        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga' },
+        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta' }
       );
     }
 
@@ -287,6 +287,8 @@ export class VehiculeService {
         anvelope: true,
         completariLichid: true,
         pozitiiAxe: { include: { anvelopa: true } },
+        cuplariCapTractor: { where: { esteActiv: true }, include: { semiremorca: true } },
+        cuplariSemiremorca: { where: { esteActiv: true }, include: { capTractor: true } },
       },
       orderBy: { numarIntern: 'asc' },
     });
@@ -301,6 +303,8 @@ export class VehiculeService {
         pozitiiAxe: { include: { anvelopa: true } },
         completariLichid: true,
         sarciniMentenanta: true,
+        cuplariCapTractor: { where: { esteActiv: true }, include: { semiremorca: true } },
+        cuplariSemiremorca: { where: { esteActiv: true }, include: { capTractor: true } },
       },
     });
 
@@ -312,15 +316,35 @@ export class VehiculeService {
     const v = await this.prisma.vehicul.findUnique({ where: { id } });
     if (!v) throw new NotFoundException('Vehicul negăsit');
 
+    let normalizedTipMasurare = v.tipMasurare;
+    if (data.tipMasurare) {
+      const tm = String(data.tipMasurare).toUpperCase();
+      if (tm === 'ORE' || tm === 'MTH' || tm === 'M_TH' || tm === 'HOUR' || tm === 'HOURS') {
+        normalizedTipMasurare = 'mTH';
+      } else {
+        normalizedTipMasurare = 'KM';
+      }
+    }
+
+    if (data.categorieEnum && data.categorieEnum !== v.categorieEnum) {
+      await this.prisma.categorieVehicul.upsert({
+        where: { nume: data.categorieEnum },
+        update: {},
+        create: { nume: data.categorieEnum, descriere: `Categorie ${data.categorieEnum}` },
+      });
+    }
+
     const updated = await this.prisma.vehicul.update({
       where: { id },
       data: {
         numarInmatriculare: data.numarInmatriculare ?? v.numarInmatriculare,
         serieSasiu: data.serieSasiu || data.vin || v.serieSasiu,
         numarIntern: data.numarIntern ?? v.numarIntern,
+        categorieEnum: data.categorieEnum ?? v.categorieEnum,
         marca: data.marca ?? v.marca,
         model: data.model ?? v.model,
         anFabricatie: data.anFabricatie ? Number(data.anFabricatie) : v.anFabricatie,
+        tipMasurare: normalizedTipMasurare,
         valoareContorCurent: data.valoareContorCurent !== undefined ? Number(data.valoareContorCurent) : v.valoareContorCurent,
         valoareContorInitial: data.valoareContorInitial !== undefined ? Number(data.valoareContorInitial) : v.valoareContorInitial,
         dataInregistrareContor: data.dataContorInitial || data.dataInregistrareContor ? new Date(data.dataContorInitial || data.dataInregistrareContor) : v.dataInregistrareContor,
@@ -330,6 +354,10 @@ export class VehiculeService {
 
     if (data.configuratieManualAxe && Array.isArray(data.configuratieManualAxe)) {
       await this.generarePozitiiAxeImplicit(id, updated.categorieEnum, data.configuratieManualAxe);
+    }
+
+    if (v.categorieEnum === 'CAP_TRACTOR' && data.valoareContorCurent !== undefined && Number(data.valoareContorCurent) > v.valoareContorCurent) {
+      await this.propagaKmCuplare(id, v.valoareContorCurent, Number(data.valoareContorCurent));
     }
 
     return updated;
@@ -410,6 +438,10 @@ export class VehiculeService {
     });
 
     // Update current vehicle odometer
+    if (v.categorieEnum === 'CAP_TRACTOR' && valContor > v.valoareContorCurent) {
+      await this.propagaKmCuplare(data.vehiculId, v.valoareContorCurent, valContor);
+    }
+
     await this.prisma.vehicul.update({
       where: { id: data.vehiculId },
       data: {
@@ -447,8 +479,71 @@ export class VehiculeService {
       where,
       include: { vehicul: true },
       orderBy: { dataInregistrare: 'desc' },
-      take: 100,
+      take: 200,
     });
+  }
+
+  async updateIstoricContor(id: string, data: {
+    valoareContor?: number;
+    dataInregistrare?: string | Date;
+    operator?: string;
+    observatii?: string;
+  }) {
+    const entry = await this.prisma.istoricContorVehicul.findUnique({ where: { id } });
+    if (!entry) throw new NotFoundException('Înregistrarea de contor nu există.');
+
+    const updated = await this.prisma.istoricContorVehicul.update({
+      where: { id },
+      data: {
+        valoareContor: data.valoareContor !== undefined ? Number(data.valoareContor) : entry.valoareContor,
+        dataInregistrare: data.dataInregistrare ? new Date(data.dataInregistrare) : entry.dataInregistrare,
+        operator: data.operator !== undefined ? data.operator : entry.operator,
+        observatii: data.observatii !== undefined ? data.observatii : entry.observatii,
+      },
+    });
+
+    // Recalculare valoare contor curent pentru vehicul
+    const latest = await this.prisma.istoricContorVehicul.findFirst({
+      where: { vehiculId: entry.vehiculId },
+      orderBy: { valoareContor: 'desc' },
+    });
+
+    if (latest) {
+      await this.prisma.vehicul.update({
+        where: { id: entry.vehiculId },
+        data: {
+          valoareContorCurent: latest.valoareContor,
+          dataInregistrareContor: latest.dataInregistrare,
+        },
+      });
+    }
+
+    return { mesaj: '✅ Înregistrare contor actualizată cu succes!', entry: updated };
+  }
+
+  async deleteIstoricContor(id: string) {
+    const entry = await this.prisma.istoricContorVehicul.findUnique({ where: { id } });
+    if (!entry) throw new NotFoundException('Înregistrarea de contor nu există.');
+
+    await this.prisma.istoricContorVehicul.delete({ where: { id } });
+
+    // Recalculare valoare contor curent pentru vehicul
+    const latest = await this.prisma.istoricContorVehicul.findFirst({
+      where: { vehiculId: entry.vehiculId },
+      orderBy: { valoareContor: 'desc' },
+    });
+
+    if (latest) {
+      await this.prisma.vehicul.update({
+        where: { id: entry.vehiculId },
+        data: {
+          valoareContorCurent: latest.valoareContor,
+          dataInregistrareContor: latest.dataInregistrare,
+        },
+      });
+    }
+
+    return { mesaj: '✅ Înregistrare contor ștearsă cu succes!' };
   }
 
   // Import / Sincronizare Date GPS Telematică (CSV, JSON sau API GPS)
@@ -503,7 +598,10 @@ export class VehiculeService {
         },
       });
 
-      if (valContor >= vehicul.valoareContorCurent) {
+    if (valContor >= vehicul.valoareContorCurent) {
+        if (vehicul.categorieEnum === 'CAP_TRACTOR' && valContor > vehicul.valoareContorCurent) {
+          await this.propagaKmCuplare(vehicul.id, vehicul.valoareContorCurent, valContor);
+        }
         await this.prisma.vehicul.update({
           where: { id: vehicul.id },
           data: {
@@ -527,5 +625,196 @@ export class VehiculeService {
       rezultate,
       erori,
     };
+  }
+
+  // ==========================================
+  // MANAGEMENT CUPLARE CAP TRACTOR - SEMIREMORCĂ
+  // ==========================================
+
+  public async propagaKmCuplare(capTractorId: string, kmVechi: number, kmNou: number) {
+    const deltaKm = Number((kmNou - kmVechi).toFixed(2));
+    if (deltaKm <= 0) return;
+
+    const activeCoupling = await this.prisma.istoricCuplare.findFirst({
+      where: { capTractorId, esteActiv: true },
+      include: { capTractor: true, semiremorca: true },
+    });
+
+    if (!activeCoupling || !activeCoupling.semiremorca) return;
+
+    const semiremorca = activeCoupling.semiremorca;
+    const valoareNouaSemi = Number((semiremorca.valoareContorCurent + deltaKm).toFixed(2));
+    const dataInreg = new Date();
+
+    // Actualizare contor semiremorcă
+    await this.prisma.vehicul.update({
+      where: { id: semiremorca.id },
+      data: {
+        valoareContorCurent: valoareNouaSemi,
+        dataInregistrareContor: dataInreg,
+      },
+    });
+
+    // Istoric contor semiremorcă
+    await this.prisma.istoricContorVehicul.create({
+      data: {
+        vehiculId: semiremorca.id,
+        valoareContor: valoareNouaSemi,
+        dataInregistrare: dataInreg,
+        sursa: 'CUPLARE_CAP_TRACTOR',
+        operator: 'Sistem Cuplare Dinamică',
+        observatii: `Rulaj acumulat automat de la Cap Tractor ${activeCoupling.capTractor.numarIntern} (${activeCoupling.capTractor.numarInmatriculare}): +${deltaKm} KM`,
+      },
+    });
+  }
+
+  async cupleazaAnsamblu(capTractorId: string, semiremorcaId: string) {
+    if (capTractorId === semiremorcaId) {
+      throw new BadRequestException('Nu poți cupla un vehicul cu el însuși.');
+    }
+
+    const capTractor = await this.prisma.vehicul.findUnique({ where: { id: capTractorId } });
+    if (!capTractor) throw new NotFoundException('Cap Tractor negăsit.');
+
+    if (capTractor.categorieEnum !== 'CAP_TRACTOR') {
+      throw new BadRequestException(`Vehiculul ${capTractor.numarIntern} nu este din categoria CAP_TRACTOR (categorie: ${capTractor.categorieEnum}).`);
+    }
+
+    const semiremorca = await this.prisma.vehicul.findUnique({ where: { id: semiremorcaId } });
+    if (!semiremorca) throw new NotFoundException('Semiremorcă negăsită.');
+
+    if (semiremorca.categorieEnum !== 'SEMIREMORCA' && semiremorca.categorieEnum !== 'REMORCA') {
+      throw new BadRequestException(`Vehiculul ${semiremorca.numarIntern} nu este din categoria SEMIREMORCA sau REMORCA (categorie: ${semiremorca.categorieEnum}).`);
+    }
+
+    // Decuplare automată ansamblu activ existent pentru Cap Tractor
+    const activeTractor = await this.prisma.istoricCuplare.findFirst({
+      where: { capTractorId, esteActiv: true },
+    });
+    if (activeTractor) {
+      await this.decupleazaAnsamblu({ cuplareId: activeTractor.id });
+    }
+
+    // Decuplare automată ansamblu activ existent pentru Semiremorcă
+    const activeSemi = await this.prisma.istoricCuplare.findFirst({
+      where: { semiremorcaId, esteActiv: true },
+    });
+    if (activeSemi) {
+      await this.decupleazaAnsamblu({ cuplareId: activeSemi.id });
+    }
+
+    // Creare cuplare nouă
+    const cuplare = await this.prisma.istoricCuplare.create({
+      data: {
+        capTractorId,
+        semiremorcaId,
+        kmInceputTractor: capTractor.valoareContorCurent,
+        dataCuplare: new Date(),
+        esteActiv: true,
+      },
+      include: {
+        capTractor: true,
+        semiremorca: true,
+      },
+    });
+
+    return {
+      mesaj: `✅ Ansamblu cuplat cu succes: Cap Tractor ${capTractor.numarInmatriculare} 🔗 Semiremorcă ${semiremorca.numarInmatriculare}`,
+      cuplare,
+    };
+  }
+
+  async decupleazaAnsamblu(params: { cuplareId?: string; capTractorId?: string; semiremorcaId?: string }) {
+    let cuplare: any = null;
+
+    if (params.cuplareId) {
+      cuplare = await this.prisma.istoricCuplare.findUnique({
+        where: { id: params.cuplareId },
+        include: { capTractor: true, semiremorca: true },
+      });
+    } else if (params.capTractorId) {
+      cuplare = await this.prisma.istoricCuplare.findFirst({
+        where: { capTractorId: params.capTractorId, esteActiv: true },
+        include: { capTractor: true, semiremorca: true },
+      });
+    } else if (params.semiremorcaId) {
+      cuplare = await this.prisma.istoricCuplare.findFirst({
+        where: { semiremorcaId: params.semiremorcaId, esteActiv: true },
+        include: { capTractor: true, semiremorca: true },
+      });
+    }
+
+    if (!cuplare) {
+      throw new NotFoundException('Nu a fost găsită nicio cuplare activă pentru decuplare.');
+    }
+
+    const capTractorActual = await this.prisma.vehicul.findUnique({ where: { id: cuplare.capTractorId } });
+    const kmSfarsitTractor = capTractorActual ? capTractorActual.valoareContorCurent : cuplare.capTractor.valoareContorCurent;
+    const kmParcursiAnsa = Number(Math.max(0, kmSfarsitTractor - cuplare.kmInceputTractor).toFixed(2));
+
+    const decuplare = await this.prisma.istoricCuplare.update({
+      where: { id: cuplare.id },
+      data: {
+        kmSfarsitTractor,
+        kmParcursiAnsa,
+        dataDecuplare: new Date(),
+        esteActiv: false,
+      },
+      include: {
+        capTractor: true,
+        semiremorca: true,
+      },
+    });
+
+    return {
+      mesaj: `✅ Decuplare efectuată cu succes! Total KM parcurși în ansamblu: ${kmParcursiAnsa} KM`,
+      decuplare,
+    };
+  }
+
+  async getCuplariActive() {
+    return this.prisma.istoricCuplare.findMany({
+      where: { esteActiv: true },
+      include: {
+        capTractor: true,
+        semiremorca: true,
+      },
+      orderBy: { dataCuplare: 'desc' },
+    });
+  }
+
+  async getIstoricCuplari(vehiculId?: string) {
+    const where: any = {};
+    if (vehiculId) {
+      where.OR = [{ capTractorId: vehiculId }, { semiremorcaId: vehiculId }];
+    }
+    return this.prisma.istoricCuplare.findMany({
+      where,
+      include: {
+        capTractor: true,
+        semiremorca: true,
+      },
+      orderBy: { dataCuplare: 'desc' },
+    });
+  }
+
+  async getStareCuplareVehicul(vehiculId: string) {
+    const activeAsTractor = await this.prisma.istoricCuplare.findFirst({
+      where: { capTractorId: vehiculId, esteActiv: true },
+      include: { semiremorca: true },
+    });
+    if (activeAsTractor) {
+      return { tipRol: 'CAP_TRACTOR', cuplareActiv: activeAsTractor, partener: activeAsTractor.semiremorca };
+    }
+
+    const activeAsSemi = await this.prisma.istoricCuplare.findFirst({
+      where: { semiremorcaId: vehiculId, esteActiv: true },
+      include: { capTractor: true },
+    });
+    if (activeAsSemi) {
+      return { tipRol: 'SEMIREMORCA', cuplareActiv: activeAsSemi, partener: activeAsSemi.capTractor };
+    }
+
+    return { tipRol: 'NECUPLAT', cuplareActiv: null, partener: null };
   }
 }

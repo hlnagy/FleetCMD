@@ -13,7 +13,15 @@ export class StocuriGarantiiService {
     let depozite = await this.prisma.depozit.findMany({
       include: {
         articoleStoc: true,
-        _count: { select: { articoleStoc: true } },
+        anvelope: {
+          where: { stare: 'IN_STOC' },
+        },
+        _count: {
+          select: {
+            articoleStoc: true,
+            anvelope: { where: { stare: 'IN_STOC' } },
+          },
+        },
       },
     });
 
@@ -28,7 +36,15 @@ export class StocuriGarantiiService {
       depozite = await this.prisma.depozit.findMany({
         include: {
           articoleStoc: true,
-          _count: { select: { articoleStoc: true } },
+          anvelope: {
+            where: { stare: 'IN_STOC' },
+          },
+          _count: {
+            select: {
+              articoleStoc: true,
+              anvelope: { where: { stare: 'IN_STOC' } },
+            },
+          },
         },
       });
     }
@@ -69,103 +85,56 @@ export class StocuriGarantiiService {
   async getCategorii() {
     const categoriiCustom = await this.prisma.categorieStoc.findMany({
       include: { subcategorii: true },
+      orderBy: { nume: 'asc' },
     });
-
-    const categoriiImplicite = [
-      {
-        id: '1',
-        nume: 'Anvelope',
-        descriere: 'Anvelope vehicule, utilaje șantier și echipamente',
-        stocMinimImplicit: 4,
-        subcategorii: [
-          { id: 'sub-anv-1', nume: 'anv tracțiune', descriere: 'Anvelope axă motrică / tracțiune' },
-          { id: 'sub-anv-2', nume: 'anv. remorcă', descriere: 'Anvelope axă remorcă / semiremorcă' },
-          { id: 'sub-anv-3', nume: 'anv direcție', descriere: 'Anvelope axă directorială / ghidaj' },
-          { id: 'sub-anv-4', nume: 'anv volă Komatsu', descriere: 'Anvelope industriale volă & încărcător' },
-        ],
-      },
-      {
-        id: '2',
-        nume: 'Lubrifianți',
-        descriere: 'Ulei motor, hidraulic, transmisie, antigel',
-        stocMinimImplicit: 50,
-        subcategorii: [
-          { id: 'sub-lub-1', nume: 'ulei motor', descriere: '15W40, 10W40, 5W30' },
-          { id: 'sub-lub-2', nume: 'ulei hidraulic', descriere: 'HVI 46, HVI 68' },
-          { id: 'sub-lub-3', nume: 'ulei transmisie', descriere: '80W90, UTTO' },
-          { id: 'sub-lub-4', nume: 'vaselină greasă', descriere: 'Vaselină gresare șasiu' },
-        ],
-      },
-      {
-        id: '3',
-        nume: 'Piese Motor',
-        descriere: 'Componente motor, turbosuflante, filtre, injectoare',
-        stocMinimImplicit: 2,
-        subcategorii: [
-          { id: 'sub-pm-1', nume: 'injectoare', descriere: 'Injectoare motorină și duze' },
-          { id: 'sub-pm-2', nume: 'turbosuflante', descriere: 'Turbine și kituri supraalimentare' },
-          { id: 'sub-pm-3', nume: 'set filtre', descriere: 'Filtre aer, ulei, combustibil' },
-          { id: 'sub-pm-4', nume: 'pistoane & supape', descriere: 'Kituri de reparație motor' },
-        ],
-      },
-      {
-        id: '4',
-        nume: 'Componente Motor Majore',
-        descriere: 'Turbine, pompe, injectoare',
-        stocMinimImplicit: 1,
-        subcategorii: [
-          { id: 'sub-cmm-1', nume: 'turbosuflante', descriere: 'Turbosuflet & kituri' },
-          { id: 'sub-cmm-2', nume: 'pompe injecție', descriere: 'Pompe și sisteme alimentare' },
-        ],
-      },
-      {
-        id: '5',
-        nume: 'Filtre',
-        descriere: 'Filtre aer, motorină, hidraulice',
-        stocMinimImplicit: 3,
-        subcategorii: [
-          { id: 'sub-flt-1', nume: 'filtre ulei', descriere: 'Filtre ulei motor & transmisie' },
-          { id: 'sub-flt-2', nume: 'filtre aer', descriere: 'Filtre aer motor & cabină' },
-          { id: 'sub-flt-3', nume: 'filtre hidraulice', descriere: 'Filtre retur hidraulic' },
-        ],
-      },
-      {
-        id: '6',
-        nume: 'Consumabile Motor',
-        descriere: 'Filtre, curele, garnituri',
-        stocMinimImplicit: 5,
-        subcategorii: [
-          { id: 'sub-con-1', nume: 'curele transmisie', descriere: 'Curele trapezoidale & canelate' },
-          { id: 'sub-con-2', nume: 'baterii & acumulatori', descriere: 'Baterii 12V / 24V' },
-        ],
-      },
-      {
-        id: '7',
-        nume: 'Frână & Suspensie',
-        descriere: 'Plăcuțe, discuri, bucșe, perne aer',
-        stocMinimImplicit: 4,
-        subcategorii: [
-          { id: 'sub-fr-1', nume: 'plăcuțe frână', descriere: 'Garnituri și plăcuțe frână' },
-          { id: 'sub-fr-2', nume: 'discuri & tamburi', descriere: 'Discuri frână și cilindri' },
-          { id: 'sub-fr-3', nume: 'bucșe & perne aer', descriere: 'Elemente de suspensie' },
-        ],
-      },
-    ];
 
     const dbSubcats = await this.prisma.subcategorieStoc.findMany();
 
-    return { categoriiImplicite, categoriiCustom, subcategoriiExistente: dbSubcats };
+    return { categoriiImplicite: [], categoriiCustom, subcategoriiExistente: dbSubcats };
   }
 
   async createCategorie(data: { nume: string; descriere?: string; stocMinimImplicit?: number }) {
     if (!data.nume) throw new BadRequestException('Numele categoriei este obligatoriu.');
     return this.prisma.categorieStoc.create({
       data: {
-        nume: data.nume,
-        descriere: data.descriere,
+        nume: data.nume.trim(),
+        descriere: data.descriere?.trim() || null,
         stocMinimImplicit: data.stocMinimImplicit ? Number(data.stocMinimImplicit) : 5,
       },
+      include: { subcategorii: true },
     });
+  }
+
+  async updateCategorie(id: string, data: { nume?: string; descriere?: string; stocMinimImplicit?: number }) {
+    const existing = await this.prisma.categorieStoc.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Categoria nu a fost găsită.');
+
+    const updated = await this.prisma.categorieStoc.update({
+      where: { id },
+      data: {
+        nume: data.nume ? data.nume.trim() : undefined,
+        descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
+        stocMinimImplicit: data.stocMinimImplicit !== undefined ? Number(data.stocMinimImplicit) : undefined,
+      },
+      include: { subcategorii: true },
+    });
+
+    if (data.nume && data.nume.trim() !== existing.nume) {
+      await this.prisma.articolStoc.updateMany({
+        where: { categorie: existing.nume },
+        data: { categorie: data.nume.trim() },
+      });
+    }
+
+    return updated;
+  }
+
+  async deleteCategorie(id: string) {
+    const existing = await this.prisma.categorieStoc.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Categoria nu a fost găsită.');
+
+    await this.prisma.subcategorieStoc.deleteMany({ where: { categorieStocId: id } });
+    return this.prisma.categorieStoc.delete({ where: { id } });
   }
 
   async createSubcategorie(data: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string }) {
@@ -182,11 +151,41 @@ export class StocuriGarantiiService {
 
     return this.prisma.subcategorieStoc.create({
       data: {
-        nume: data.nume,
-        descriere: data.descriere,
+        nume: data.nume.trim(),
+        descriere: data.descriere?.trim() || null,
         categorieStocId: catId || null,
       },
     });
+  }
+
+  async updateSubcategorie(id: string, data: { nume?: string; descriere?: string; categorieStocId?: string }) {
+    const existing = await this.prisma.subcategorieStoc.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Subcategoria nu a fost găsită.');
+
+    const updated = await this.prisma.subcategorieStoc.update({
+      where: { id },
+      data: {
+        nume: data.nume ? data.nume.trim() : undefined,
+        descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
+        categorieStocId: data.categorieStocId !== undefined ? data.categorieStocId : undefined,
+      },
+    });
+
+    if (data.nume && data.nume.trim() !== existing.nume) {
+      await this.prisma.articolStoc.updateMany({
+        where: { subcategorie: existing.nume },
+        data: { subcategorie: data.nume.trim() },
+      });
+    }
+
+    return updated;
+  }
+
+  async deleteSubcategorie(id: string) {
+    const existing = await this.prisma.subcategorieStoc.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Subcategoria nu a fost găsită.');
+
+    return this.prisma.subcategorieStoc.delete({ where: { id } });
   }
 
   // ==========================================
@@ -425,13 +424,16 @@ export class StocuriGarantiiService {
     return this.prisma.articolStoc.update({
       where: { id },
       data: {
-        denumire: data.denumire,
-        subcategorie: data.subcategorie,
+        codArticol: data.codArticol !== undefined ? data.codArticol : undefined,
+        denumire: data.denumire !== undefined ? data.denumire : undefined,
+        categorie: data.categorie !== undefined ? data.categorie : undefined,
+        subcategorie: data.subcategorie !== undefined ? data.subcategorie : undefined,
         stocCurent: data.stocCurent !== undefined ? Number(data.stocCurent) : undefined,
         stocMinim: data.stocMinim !== undefined ? Number(data.stocMinim) : undefined,
         pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
-        depozitId: data.depozitId,
-        marcaUlei: data.marcaUlei,
+        unitateMasura: data.unitateMasura !== undefined ? data.unitateMasura : undefined,
+        depozitId: data.depozitId !== undefined ? data.depozitId : undefined,
+        marcaUlei: data.marcaUlei !== undefined ? data.marcaUlei : undefined,
       },
     });
   }
@@ -585,7 +587,17 @@ export class StocuriGarantiiService {
 
   async getComponenteSerializate() {
     return this.prisma.componentaSerializata.findMany({
-      include: { articolStoc: true },
+      include: {
+        articolStoc: {
+          include: {
+            depozit: true,
+            intrariStoc: {
+              orderBy: { dataFactura: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

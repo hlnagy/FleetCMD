@@ -58,8 +58,30 @@ model Vehicul {
   documente              DocumentVehicul[]
   executiiReguli         ExecutieRegulaVehicul[]
 
+  cuplariCapTractor      IstoricCuplare[]    @relation("CapTractorCuplari")
+  cuplariSemiremorca     IstoricCuplare[]    @relation("SemiremorcaCuplari")
+
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
+}
+
+model IstoricCuplare {
+  id                 String    @id @default(uuid())
+  capTractorId       String
+  capTractor         Vehicul   @relation("CapTractorCuplari", fields: [capTractorId], references: [id], onDelete: Cascade)
+  semiremorcaId      String
+  semiremorca        Vehicul   @relation("SemiremorcaCuplari", fields: [semiremorcaId], references: [id], onDelete: Cascade)
+
+  kmInceputTractor   Float
+  kmSfarsitTractor   Float?
+  kmParcursiAnsa     Float?
+
+  dataCuplare        DateTime  @default(now())
+  dataDecuplare      DateTime?
+  esteActiv          Boolean   @default(true)
+
+  @@index([capTractorId, esteActiv])
+  @@index([semiremorcaId, esteActiv])
 }
 
 model IstoricContorVehicul {
@@ -253,6 +275,9 @@ model Anvelopa {
   pozitieAxId          String?             @unique
   pozitieAx            PozitieAx?          @relation(fields: [pozitieAxId], references: [id], onDelete: SetNull)
 
+  depozitId            String?
+  depozit              Depozit?            @relation(fields: [depozitId], references: [id], onDelete: SetNull)
+
   kilometrajMontare    Float?              @default(0)
   oreMontare           Float?              @default(0)
   rulajTotalKm         Float               @default(0)
@@ -317,6 +342,7 @@ model Depozit {
 
   articoleStoc ArticolStoc[]
   intrariStoc  IntrareStoc[]
+  anvelope     Anvelopa[]
   
   transferuriSursa      TransferStoc[] @relation("TransferSursa")
   transferuriDestinatie TransferStoc[] @relation("TransferDestinatie")

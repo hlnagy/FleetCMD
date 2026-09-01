@@ -27,11 +27,17 @@ export class EFacturaController {
     return this.efacturaService.exchangeCodeForToken(body.code);
   }
 
-  // MANUÁLIS SZINKRONIZÁLÁS (FORCE SYNC) - Max 60 zile
+  // SINCRONIZARE MANUALĂ (FORCE SYNC) - Max 60 zile
   @Post('sync')
   async forceSync(@Body() body: { zile?: number }) {
     const zile = body?.zile || 15;
     return this.efacturaService.syncFacturi(zile);
+  }
+
+  // ÎNCĂRCARE DIRECTĂ FIȘIERE XML / ZIP DIN SPV
+  @Post('upload')
+  async uploadFiles(@Body() body: { files: Array<{ numeFisier: string; continutBase64: string }> }) {
+    return this.efacturaService.incarcaFisiereXmlSauZip(body.files || []);
   }
 
   @Get('facturi')
@@ -57,5 +63,23 @@ export class EFacturaController {
   @Post('items/:itemId/elimina')
   async eliminaItem(@Param('itemId') itemId: string) {
     return this.efacturaService.eliminaItem(itemId);
+  }
+
+  // EXCLUDE TOATĂ FACTURA (SERVICII / REZSHI PE TOT DOCUMENTUL)
+  @Post('facturi/:id/elimina-tot')
+  async eliminaToataFactura(@Param('id') id: string) {
+    return this.efacturaService.eliminaToataFactura(id);
+  }
+
+  // TÖMEGES FACTURA KIIKTATÁS (BULK EXCLUDE FACTURI)
+  @Post('facturi/bulk-elimina')
+  async bulkEliminaFacturi(@Body() body: { facturaIds: string[] }) {
+    return this.efacturaService.bulkEliminaFacturi(body.facturaIds || []);
+  }
+
+  // TÖMEGES TÉTEL KIIKTATÁS (BULK EXCLUDE ITEMS)
+  @Post('items/bulk-elimina')
+  async bulkEliminaItems(@Body() body: { itemIds: string[] }) {
+    return this.efacturaService.bulkEliminaItems(body.itemIds || []);
   }
 }

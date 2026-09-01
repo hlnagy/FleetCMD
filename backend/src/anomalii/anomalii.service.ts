@@ -84,7 +84,7 @@ export class AnomaliiService {
     });
 
     return {
-      mesaj: `Bevételezés sikeres! Hozzáadva ${cantitate}L ${denumire} (${pretPerLitru} RON/L) a stocul curent (${articol.stocCurent}L total). Számla: ${data.numarFactura}`,
+      mesaj: `Intrare în stoc recepționată cu succes! S-au adăugat ${cantitate}L ${denumire} (${pretPerLitru} RON/L) la stocul curent (${articol.stocCurent}L total). Factură: ${data.numarFactura}`,
       articol,
       intrare,
       pretPerLitru,
@@ -111,21 +111,50 @@ export class AnomaliiService {
     const valoareContor = Number(data.valoareContor);
     const dataOp = data.dataOperatiune ? new Date(data.dataOperatiune) : new Date();
 
+    const sursaOp = data.tipOperatiune === 'SCHIMB_ULEI' ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
+
+    await this.prisma.istoricContorVehicul.create({
+      data: {
+        vehiculId: vehicul.id,
+        valoareContor,
+        dataInregistrare: dataOp,
+        sursa: sursaOp,
+        operator: data.mecanic,
+        observatii: `Înregistrat la ${data.tipOperatiune}: ${cantitate}L ${data.tipLichid} (${data.marcaUlei || ''})`,
+      },
+    });
+
     if (valoareContor > vehicul.valoareContorCurent) {
+      if (vehicul.categorieEnum === 'CAP_TRACTOR') {
+        const delta = valoareContor - vehicul.valoareContorCurent;
+        const activeCoupling = await this.prisma.istoricCuplare.findFirst({
+          where: { capTractorId: vehicul.id, esteActiv: true },
+          include: { semiremorca: true },
+        });
+
+        if (activeCoupling && activeCoupling.semiremorca) {
+          const valNouaSemi = Number((activeCoupling.semiremorca.valoareContorCurent + delta).toFixed(2));
+          await this.prisma.vehicul.update({
+            where: { id: activeCoupling.semiremorca.id },
+            data: { valoareContorCurent: valNouaSemi, dataInregistrareContor: dataOp },
+          });
+
+          await this.prisma.istoricContorVehicul.create({
+            data: {
+              vehiculId: activeCoupling.semiremorca.id,
+              valoareContor: valNouaSemi,
+              dataInregistrare: dataOp,
+              sursa: 'CUPLARE_CAP_TRACTOR',
+              operator: 'Sistem Cuplare Dinamică',
+              observatii: `Rulaj acumulat automat la ${data.tipOperatiune} Cap Tractor ${vehicul.numarIntern}: +${delta} KM`,
+            },
+          });
+        }
+      }
+
       await this.prisma.vehicul.update({
         where: { id: vehicul.id },
-        data: { valoareContorCurent: valoareContor },
-      });
-
-      await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: vehicul.id,
-          valoareContor,
-          dataInregistrare: dataOp,
-          sursa: 'SERVICE',
-          operator: data.mecanic,
-          observatii: `Înregistrat la ${data.tipOperatiune}: ${cantitate}L ${data.tipLichid}`,
-        },
+        data: { valoareContorCurent: valoareContor, dataInregistrareContor: dataOp },
       });
     }
 
@@ -672,7 +701,7 @@ export class AnomaliiService {
       const ultimulSchimbData = executie ? executie.ultimulSchimbData : vehicul.createdAt;
 
       let rulajEfectiv = 0;
-      if (regula.tipTrigger === 'KM' || regula.tipTrigger === 'MTH') {
+      if (regula.tipTrigger === 'KM' || regula.tipTrigger === 'MTH' || regula.tipTrigger === 'mTH' || regula.tipTrigger === 'ORE') {
         rulajEfectiv = Math.max(0, vehicul.valoareContorCurent - ultimulSchimbContor);
       } else if (regula.tipTrigger === 'ZILE') {
         const diffMs = Math.abs(acum.getTime() - new Date(ultimulSchimbData).getTime());
@@ -782,7 +811,7 @@ export class AnomaliiService {
         const ultimaData = executie ? executie.ultimulSchimbData : v.createdAt;
 
         let rulajEfectiv = 0;
-        if (regula.tipTrigger === 'KM' || regula.tipTrigger === 'MTH') {
+        if (regula.tipTrigger === 'KM' || regula.tipTrigger === 'MTH' || regula.tipTrigger === 'mTH' || regula.tipTrigger === 'ORE') {
           rulajEfectiv = Math.max(0, v.valoareContorCurent - ultimulContor);
         } else if (regula.tipTrigger === 'ZILE') {
           const diffMs = Math.abs(acum.getTime() - new Date(ultimaData).getTime());
@@ -867,6 +896,34 @@ export class AnomaliiService {
             : `Atenție: ${ac.titlu} expiră în ${zileRamase} zile! Dată expirare: ${dataExp.toLocaleDateString('ro-RO')}`,
           dataReferinta: dataExp,
           modCalcul: `Notificare setată cu ${ac.zileAvertizareInainte} zile înainte`,
+        });
+      }
+    });
+
+    // 5. Alerte Stoc Critic & Aprovizionare Piese / Uleiuri
+    const articoleStoc = await this.prisma.articolStoc.findMany({
+      include: { depozit: true },
+    });
+
+    articoleStoc.forEach((art) => {
+      if (art.stocCurent <= art.stocMinim) {
+        const esteEpuizat = art.stocCurent <= 0;
+        const lipsa = Math.max(0, art.stocMinim - art.stocCurent);
+        listaAlerte.push({
+          id: `stoc-critic-${art.id}`,
+          dbId: art.id,
+          categorieAlert: 'STOC_CRITIC',
+          categorieText: '📦 Stoc Critic',
+          titlu: `Stoc critic: ${art.denumire} (${art.codArticol})`,
+          vehiculId: null,
+          vehiculNumar: art.depozit?.nume || 'Depozit Central',
+          urgenta: esteEpuizat ? 'CRITIC' : 'AVERTIZARE',
+          mesaj: esteEpuizat
+            ? `STOC EPUIZAT! Cantitate disponibilă: 0 ${art.unitateMasura} (Limita minimă: ${art.stocMinim} ${art.unitateMasura}) în ${art.depozit?.nume || 'Depozit'}`
+            : `Stoc sub limita minimă! Disponibil: ${art.stocCurent} ${art.unitateMasura} (Limita minimă: ${art.stocMinim} ${art.unitateMasura}, necesar: +${lipsa} ${art.unitateMasura})`,
+          dataReferinta: art.updatedAt || art.createdAt,
+          modCalcul: `Depozit: ${art.depozit?.nume || 'Depozit Central'} • Preț: ${art.pretUnitar} RON/${art.unitateMasura}`,
+          linkDirect: '/stocuri?tab=stoc',
         });
       }
     });

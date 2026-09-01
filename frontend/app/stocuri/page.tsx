@@ -1,12 +1,19 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   PackageCheck, ShieldAlert, FileText, Wrench, AlertTriangle, CheckCircle, Plus,
-  Filter, Edit3, X, ShoppingCart, History, Trash2, Search, Building2, Layers, AlertCircle, ArrowRight, ShieldCheck, ArrowLeftRight
+  Filter, Edit3, X, ShoppingCart, History, Trash2, Search, Building2, Layers, AlertCircle,
+  ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2
 } from 'lucide-react';
+import { showConfirm } from '@/lib/swal';
 
-export default function StocuriGarantiiPage() {
+function StocuriGarantiiContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams?.get('tab');
+
   const [stocuri, setStocuri] = useState<any[]>([]);
   const [componente, setComponente] = useState<any[]>([]);
   const [intrariHistory, setIntrariHistory] = useState<any[]>([]);
@@ -14,15 +21,43 @@ export default function StocuriGarantiiPage() {
   const [depozite, setDepozite] = useState<any[]>([]);
   const [stocuriCritice, setStocuriCritice] = useState<any[]>([]);
   const [transferuriHistory, setTransferuriHistory] = useState<any[]>([]);
+  const [mecanici, setMecanici] = useState<any[]>([]);
 
-  // Filtre Multi-Criteriu
+  // Stoc Anvelope Serializate pe Bucată (Magazie Anvelope)
+  const [anvelopeStocList, setAnvelopeStocList] = useState<any[]>([]);
+  const [anvelopeStocSearch, setAnvelopeStocSearch] = useState('');
+  const [anvelopeStocFilterState, setAnvelopeStocFilterState] = useState<'ALL' | 'NOUA' | 'RULATA'>('ALL');
+  const [anvelopeStocDepozitFilter, setAnvelopeStocDepozitFilter] = useState('');
+  const [editingAnvelopaStoc, setEditingAnvelopaStoc] = useState<any>(null);
+  const [showAddAnvelopeStocModal, setShowAddAnvelopeStocModal] = useState(false);
+  const [newBatchAnv, setNewBatchAnv] = useState<any>({
+    marca: 'BENCHMARK',
+    model: 'KMD406 TRACTION',
+    dimensiune: '315/80 R22.5',
+    codDot: '2625',
+    adancimeMm: 16,
+    pretAchizitie: 1286.59,
+    depozitId: '',
+    cantitate: 4,
+    serii: ['', '', '', ''],
+  });
+
+  // Filtre Multi-Criteriu Stoc Piese
+  const [hideZeroStock, setHideZeroStock] = useState(true);
   const [selectedCategorieFilter, setSelectedCategorieFilter] = useState('');
   const [selectedSubcategorieFilter, setSelectedSubcategorieFilter] = useState('');
   const [selectedDepozitFilter, setSelectedDepozitFilter] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('TOATE'); // TOATE, CRITIC, IN_STOC
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'stoc' | 'bevetelez' | 'istoric' | 'depozite' | 'componente'>('stoc');
+  const [activeTab, setActiveTab] = useState<'stoc' | 'anvelope_stoc' | 'depozite' | 'componente'>('stoc');
+
+  // Ascultăm schimbarea tab-ului din URL / Sidebar
+  useEffect(() => {
+    if (tabParam && ['stoc', 'anvelope_stoc', 'depozite', 'componente'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam]);
 
   // Modale
   const [showAddModal, setShowAddModal] = useState(false);
@@ -137,6 +172,19 @@ export default function StocuriGarantiiPage() {
       // Fetch Componente Serializate în Garanție
       const resComp = await fetch('http://localhost:3001/stocuri-garantii/componente-serializate');
       if (resComp.ok) setComponente(await resComp.json());
+
+      // Fetch Mecanici Atelier
+      const resMecanici = await fetch('http://localhost:3001/mentenanta/mecanici');
+      if (resMecanici.ok) {
+        const mecData = await resMecanici.json();
+        setMecanici(mecData);
+      }
+
+      // Fetch Magazie Anvelope Serializate din Depozite
+      const resAnvStoc = await fetch('http://localhost:3001/anvelope/depozit-stoc');
+      if (resAnvStoc.ok) {
+        setAnvelopeStocList(await resAnvStoc.json());
+      }
     } catch (e) {
       console.log('Error fetching stock data', e);
     }
@@ -289,7 +337,13 @@ export default function StocuriGarantiiPage() {
 
   // Ștergere Depozit
   const handleDeleteDepozit = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest depozit?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Depozit',
+      'Sigur doriți să ștergeți acest depozit?',
+      'Da, șterge depozitul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -386,10 +440,16 @@ export default function StocuriGarantiiPage() {
     e.preventDefault();
     if (!editingArticol) return;
     try {
+      const payload = {
+        ...editingArticol,
+        pretUnitar: Number(Number(editingArticol.pretUnitar || 0).toFixed(2)),
+        stocCurent: Number(Number(editingArticol.stocCurent || 0).toFixed(2)),
+        stocMinim: Number(Number(editingArticol.stocMinim || 0).toFixed(2)),
+      };
       const res = await fetch(`http://localhost:3001/stocuri-garantii/stocuri/${editingArticol.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingArticol),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -403,7 +463,13 @@ export default function StocuriGarantiiPage() {
   };
 
   const handleDeleteArticol = async (id: string) => {
-    if (!confirm('Sigur doriți să ștergeți acest articol din stoc?')) return;
+    const confirmed = await showConfirm(
+      'Ștergere Articol din Stoc',
+      'Sigur doriți să ștergeți acest articol din stoc?',
+      'Da, șterge articolul',
+      'Anulează'
+    );
+    if (!confirmed) return;
     try {
       const res = await fetch(`http://localhost:3001/stocuri-garantii/stocuri/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -413,6 +479,85 @@ export default function StocuriGarantiiPage() {
       }
     } catch (e) {
       alert('Eroare la ștergerea articolului.');
+    }
+  };
+
+  // Actualizare Anvelopă Serializată
+  const handleUpdateAnvelopaStoc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAnvelopaStoc) return;
+    try {
+      const payload = {
+        serieAnvelopa: editingAnvelopaStoc.serieAnvelopa,
+        codDot: editingAnvelopaStoc.codDot,
+        marca: editingAnvelopaStoc.marca,
+        model: editingAnvelopaStoc.model,
+        dimensiune: editingAnvelopaStoc.dimensiune,
+        adancimeCurentaMm: Number(editingAnvelopaStoc.adancimeCurentaMm),
+        adancimeInitialaMm: Number(editingAnvelopaStoc.adancimeInitialaMm || 16),
+        pretAchizitie: Number(Number(editingAnvelopaStoc.pretAchizitie || 0).toFixed(2)),
+        depozitId: editingAnvelopaStoc.depozitId,
+      };
+      const res = await fetch(`http://localhost:3001/anvelope/${editingAnvelopaStoc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditingAnvelopaStoc(null);
+        fetchData();
+        alert('Datele anvelopei au fost actualizate!');
+      }
+    } catch (e) {
+      alert('Eroare la salvarea anvelopei.');
+    }
+  };
+
+  // Eliminare / Casare Anvelopă din Magazie
+  const handleDeleteAnvelopaStoc = async (id: string, serie: string) => {
+    const confirmed = await showConfirm(
+      'Eliminare Anvelopă din Magazie',
+      `Sigur doriți să eliminați definitiv anvelopa ${serie} din stoc?`,
+      'Da, elimină',
+      'Anulează'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`http://localhost:3001/anvelope/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setEditingAnvelopaStoc(null);
+        fetchData();
+        alert('Anvelopa a fost eliminată din magazie.');
+      }
+    } catch (e) {
+      alert('Eroare la eliminarea anvelopei.');
+    }
+  };
+
+  // Adăugare Lot Anvelope Serializate în Magazie
+  const handleAddAnvelopeBatchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBatchAnv.depozitId && depozite.length > 0) {
+      newBatchAnv.depozitId = depozite[0].id;
+    }
+    try {
+      const res = await fetch('http://localhost:3001/anvelope/adauga-stoc-serializat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newBatchAnv,
+          pretAchizitie: Number(Number(newBatchAnv.pretAchizitie || 0).toFixed(2)),
+          adancimeMm: Number(newBatchAnv.adancimeMm || 16),
+          cantitate: Number(newBatchAnv.cantitate || 1),
+        }),
+      });
+      if (res.ok) {
+        setShowAddAnvelopeStocModal(false);
+        fetchData();
+        alert('Anvelopele au fost înregistrate individual cu succes!');
+      }
+    } catch (e) {
+      alert('Eroare la adăugarea anvelopelor.');
     }
   };
 
@@ -441,6 +586,37 @@ export default function StocuriGarantiiPage() {
 
   const pretUnitarKiszamolva = (bevPretTotal / Math.max(1, bevCantitate)).toFixed(2);
 
+  // Filtrare stocuri disponibile vs stoc 0
+  const countZeroStock = stocuri.filter((s) => (s.stocCurent || 0) <= 0).length;
+  const stocuriAfisate = stocuri.filter((s) => {
+    if (hideZeroStock && (s.stocCurent || 0) <= 0) return false;
+    return true;
+  });
+
+  // Filtrare anvelope serializate din magazie
+  const anvelopeStocFiltrate = anvelopeStocList.filter((a) => {
+    const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+    if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
+    if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
+    if (anvelopeStocDepozitFilter && a.depozitId !== anvelopeStocDepozitFilter) return false;
+    if (anvelopeStocSearch.trim()) {
+      const q = anvelopeStocSearch.toLowerCase();
+      const match =
+        (a.serieAnvelopa || '').toLowerCase().includes(q) ||
+        (a.marca || '').toLowerCase().includes(q) ||
+        (a.model || '').toLowerCase().includes(q) ||
+        (a.dimensiune || '').toLowerCase().includes(q) ||
+        (a.codDot || '').toLowerCase().includes(q) ||
+        (a.depozit?.nume || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  const totalValoareAnvelopeStoc = anvelopeStocList.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
+  const countAnvelopeNoi = anvelopeStocList.filter((a) => (a.adancimeCurentaMm || 16) >= 15).length;
+  const countAnvelopeRulate = anvelopeStocList.length - countAnvelopeNoi;
+
   return (
     <div className="space-y-6">
       {/* Antet Titlu & Acțiuni - 100% PURE ROMANIAN */}
@@ -450,98 +626,88 @@ export default function StocuriGarantiiPage() {
             <PackageCheck className="w-6 h-6 text-sapphire-500" />
             <span>Gestiune Stocuri, Depozite & Transferuri</span>
           </h1>
-          <p className="text-xs text-sage-700 font-medium">Gestiune depozite, transfer parțial de produse între depozite, recepție facturi și garanții</p>
+          <p className="text-xs text-sage-700 font-medium">Gestiune depozite, inventar anvelope serializate pe bucată, transferuri parțiale și garanții</p>
         </div>
 
         <div className="flex items-center space-x-2 flex-wrap">
-          <button
-            onClick={() => setActiveTab('bevetelez')}
+          <Link
+            href="/efactura?tab=manual"
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
           >
             <ShoppingCart className="w-4 h-4" />
             <span>Recepție Marfă pe Factură</span>
-          </button>
+          </Link>
         </div>
       </div>
 
-      {/* BANNER AVERTISMENT STOC CRITIC */}
-      {stocuriCritice.length > 0 && (
-        <div className="p-4 rounded-2xl bg-roseash-100 border-2 border-roseash-300 space-y-2 shadow-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-terracotta-600 font-extrabold text-xs uppercase tracking-wider">
-              <AlertTriangle className="w-5 h-5 text-terracotta-500 animate-bounce" />
-              <span>⚠️ Avertisment Stoc Critic ({stocuriCritice.length} articole sub limita minimă!):</span>
-            </div>
-            <span className="text-[10px] bg-terracotta-500 text-white font-bold px-2 py-0.5 rounded-full uppercase">Reaprovizionare Urgentă</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-            {stocuriCritice.map((c) => (
-              <div key={c.id} className="p-2.5 rounded-xl bg-white/80 border border-roseash-300 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-extrabold text-sapphire-900">{c.denumire}</span>
-                  <span className="font-mono text-sage-600 ml-1">({c.codArticol})</span>
-                  <p className="text-[10px] text-sage-700 font-medium">Depozit: <span className="font-bold">{c.depozit}</span></p>
-                </div>
-                <div className="text-right font-mono">
-                  <span className="text-terracotta-600 font-extrabold text-sm">{c.stocCurent} {c.unitateMasura}</span>
-                  <p className="text-[10px] text-sage-500">Minim: {c.stocMinim} {c.unitateMasura}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Navigație File (Tabs) */}
-      <div className="pleasant-card p-2 rounded-2xl flex items-center space-x-2">
+      {/* SELECTOR TABURI PRINCIPALE (CU CONTOR LIVE) */}
+      <div className="flex items-center space-x-2 border-b border-morning-200 pb-2 overflow-x-auto">
         <button
+          type="button"
           onClick={() => setActiveTab('stoc')}
-          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition ${
-            activeTab === 'stoc' ? 'bg-sapphire-500 text-white shadow-sm' : 'text-sage-700 hover:bg-morning-100'
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'stoc'
+              ? 'bg-sapphire-500 text-white shadow-xs'
+              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
           }`}
         >
-          1. Gestiune Stoc Curent ({stocuri.length})
+          <PackageCheck className="w-4 h-4" />
+          <span>1. Gestiune Piese & Consumabile</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'stoc' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
+            {stocuriAfisate.length}
+          </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('bevetelez')}
-          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition ${
-            activeTab === 'bevetelez' ? 'bg-sapphire-500 text-white shadow-sm' : 'text-sage-700 hover:bg-morning-100'
+          type="button"
+          onClick={() => setActiveTab('anvelope_stoc')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'anvelope_stoc'
+              ? 'bg-sapphire-500 text-white shadow-xs'
+              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
           }`}
         >
-          2. Recepție Marfă pe Factură (Piese & Uleiuri)
+          <CircleDot className="w-4 h-4" />
+          <span>2. Magazie Centrală Anvelope (Serializat)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-black ${activeTab === 'anvelope_stoc' ? 'bg-emerald-400 text-slate-900' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'}`}>
+            {anvelopeStocList.length} buc
+          </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('istoric')}
-          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition ${
-            activeTab === 'istoric' ? 'bg-sapphire-500 text-white shadow-sm' : 'text-sage-700 hover:bg-morning-100'
-          }`}
-        >
-          3. Căutare Facturi ({intrariHistory.length})
-        </button>
-
-        <button
+          type="button"
           onClick={() => setActiveTab('depozite')}
-          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition ${
-            activeTab === 'depozite' ? 'bg-sapphire-500 text-white shadow-sm' : 'text-sage-700 hover:bg-morning-100'
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'depozite'
+              ? 'bg-sapphire-500 text-white shadow-xs'
+              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
           }`}
         >
-          4. Depozite Flotă ({depozite.length})
+          <Building2 className="w-4 h-4" />
+          <span>3. Depozite Flotă & Transferuri</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'depozite' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
+            {depozite.length}
+          </span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('componente')}
-          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition ${
-            activeTab === 'componente' ? 'bg-sapphire-500 text-white shadow-sm' : 'text-sage-700 hover:bg-morning-100'
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'componente'
+              ? 'bg-sapphire-500 text-white shadow-xs'
+              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
           }`}
         >
-          5. Garanții Componente ({componente.length})
+          <ShieldCheck className="w-4 h-4" />
+          <span>4. Garanții Componente</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'componente' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
+            {componente.length}
+          </span>
         </button>
       </div>
 
-      {/* TAB 1: GESTIUNE STOC CURENT, TRANSFER PARȚIAL & FILTRE MULTI-CRITERIU */}
+      {/* TAB 1: GESTIUNE PIESE, FLUIDE & CONSUMABILE */}
       {activeTab === 'stoc' && (
         <div className="pleasant-card rounded-2xl p-6 space-y-4">
           {/* Panou Filtre & Căutare Rapidă */}
@@ -611,6 +777,20 @@ export default function StocuriGarantiiPage() {
                   <option value="IN_STOC">✅ Doar Stoc Optim (În Grafic)</option>
                 </select>
 
+                {/* Comutator Filtrare Stoc Zero (0) */}
+                <button
+                  type="button"
+                  onClick={() => setHideZeroStock(!hideZeroStock)}
+                  className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center space-x-1.5 ${
+                    hideZeroStock
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                      : 'bg-morning-200 border-morning-300 text-slate-700'
+                  }`}
+                  title="Comută afișarea articolelor cu stoc 0"
+                >
+                  <span>{hideZeroStock ? '✓ Doar Stoc Disponibil (>0)' : '👁️ Include Stoc Zero (0)'}</span>
+                </button>
+
                 <button
                   onClick={() => setShowAddModal(true)}
                   className="px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-xs transition"
@@ -628,6 +808,25 @@ export default function StocuriGarantiiPage() {
             )}
           </div>
 
+          {/* Banner Notificare Articole cu Stoc Zero ascunse */}
+          {hideZeroStock && countZeroStock > 0 && (
+            <div className="p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2 text-sapphire-900 font-medium">
+                <AlertCircle className="w-4 h-4 text-sapphire-500 shrink-0" />
+                <span>
+                  Sunt ascunse <strong>{countZeroStock} articole</strong> cu stoc zero (epuizate) pentru a păstra tabelul curat.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHideZeroStock(false)}
+                className="text-xs font-bold text-sapphire-700 hover:text-sapphire-900 hover:underline px-2 py-0.5"
+              >
+                Afișează-le în tabel
+              </button>
+            </div>
+          )}
+
           {/* Tabel Stocuri */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
@@ -643,8 +842,9 @@ export default function StocuriGarantiiPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200">
-                {stocuri.map((s) => {
+                {stocuriAfisate.map((s) => {
                   const esteCritic = s.stocCurent <= s.stocMinim;
+                  const isAnvelopa = (s.categorie || '').toLowerCase().includes('anvelop') || (s.codArticol || '').startsWith('ANV');
                   return (
                     <tr key={s.id} className={`hover:bg-morning-50 transition ${esteCritic ? 'bg-roseash-50' : ''}`}>
                       <td className="p-3 font-mono text-sapphire-600 font-bold flex items-center space-x-1">
@@ -654,6 +854,18 @@ export default function StocuriGarantiiPage() {
                       <td className="p-3 font-bold text-sapphire-900">
                         {s.denumire}
                         {s.marcaUlei && <span className="text-[10px] text-sage-600 font-medium block">Marcă: {s.marcaUlei}</span>}
+                        {isAnvelopa && (
+                          <div className="mt-1">
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('anvelope_stoc')}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold hover:bg-emerald-100 transition"
+                            >
+                              <CircleDot className="w-3 h-3 text-emerald-600" />
+                              <span>🛞 Vezi Serii în Magazie Anvelope ({s.stocCurent} buc)</span>
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="flex items-center space-x-1 flex-wrap gap-1">
@@ -683,7 +895,7 @@ export default function StocuriGarantiiPage() {
                         <span className="text-sage-500 font-normal text-[10px] ml-1">(min {s.stocMinim})</span>
                       </td>
                       <td className="p-3 font-mono font-bold text-sapphire-900">
-                        {s.pretUnitar} RON / {s.unitateMasura}
+                        {Number(s.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON / {s.unitateMasura}
                       </td>
                       <td className="p-3 text-right space-x-1.5">
                         <button
@@ -703,7 +915,12 @@ export default function StocuriGarantiiPage() {
                         </button>
 
                         <button
-                          onClick={() => setEditingArticol(s)}
+                          onClick={() => setEditingArticol({
+                            ...s,
+                            pretUnitar: Number(Number(s.pretUnitar || 0).toFixed(2)),
+                            stocCurent: Number(Number(s.stocCurent || 0).toFixed(2)),
+                            stocMinim: Number(Number(s.stocMinim || 0).toFixed(2)),
+                          })}
                           className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-[11px] font-semibold border border-morning-200 transition"
                         >
                           Editează
@@ -718,322 +935,255 @@ export default function StocuriGarantiiPage() {
         </div>
       )}
 
-      {/* TAB 2: RECEPȚIE MARFĂ PE FACTURĂ */}
-      {activeTab === 'bevetelez' && (
-        <div className="pleasant-card p-6 rounded-2xl space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-            <ShoppingCart className="w-5 h-5 text-sapphire-500" />
-            <span>2. Recepție Marfă pe Factură Nouă (Piese, Consumabile & Uleiuri)</span>
-          </h2>
-          <p className="text-xs text-sage-700 font-medium">Introduceți Prețul Total al Facturii și Cantitatea, iar sistemul va calcula automat Prețul Unitar (RON/unitate)!</p>
 
-          <form onSubmit={handleBevetelez} className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+      {/* TAB 2: MAGAZIE CENTRALĂ ANVELOPE (SERIALIZAT & BUCATĂ CU BUCATĂ) */}
+      {activeTab === 'anvelope_stoc' && (
+        <div className="space-y-4">
+          {/* Carduri KPI Statistica Magazie Anvelope */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
+              <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl">
+                <CircleDot className="w-6 h-6" />
+              </div>
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Destinație:</label>
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Total Anvelope în Stoc</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">{anvelopeStocList.length} buc</p>
+                <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">Disponibile pentru montaj</p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
+              <div className="p-3 bg-sapphire-100 text-sapphire-800 rounded-xl">
+                <Tag className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Anvelope Noi (Profil 16mm)</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">{countAnvelopeNoi} buc</p>
+                <p className="text-[10px] text-sapphire-600 font-semibold mt-0.5">Nerulate / Achiziții noi</p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
+              <div className="p-3 bg-amber-100 text-amber-900 rounded-xl">
+                <RotateCcw className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Rulate / Rezervă</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">{countAnvelopeRulate} buc</p>
+                <p className="text-[10px] text-amber-700 font-semibold mt-0.5">Demontate & refolosibile</p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
+              <div className="p-3 bg-periwinkle-100 text-periwinkle-800 rounded-xl">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Valoare Totală Stoc</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">
+                  {Number(totalValoareAnvelopeStoc).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                </p>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Inventar magazie</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Panou Filtre & Căutare Magazie Anvelope */}
+          <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
+                <input
+                  type="text"
+                  value={anvelopeStocSearch}
+                  onChange={(e) => setAnvelopeStocSearch(e.target.value)}
+                  placeholder="🔍 Caută anvelopă după Serie (SN), Marcă, Model, Dimensiune, DOT, Depozit..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-4 py-2.5 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 text-xs flex-wrap">
+                {/* Filtru Stare Anvelopă */}
+                <div className="flex items-center space-x-1 bg-morning-100 p-1 rounded-xl border border-morning-200">
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('ALL')}
+                    className={`px-3 py-1 rounded-lg font-bold transition ${
+                      anvelopeStocFilterState === 'ALL' ? 'bg-white text-sapphire-900 shadow-xs' : 'text-sage-600 hover:text-sapphire-900'
+                    }`}
+                  >
+                    Toate ({anvelopeStocList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('NOUA')}
+                    className={`px-3 py-1 rounded-lg font-bold transition ${
+                      anvelopeStocFilterState === 'NOUA' ? 'bg-emerald-500 text-white shadow-xs' : 'text-sage-600 hover:text-emerald-800'
+                    }`}
+                  >
+                    ✨ Noi ({countAnvelopeNoi})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('RULATA')}
+                    className={`px-3 py-1 rounded-lg font-bold transition ${
+                      anvelopeStocFilterState === 'RULATA' ? 'bg-amber-500 text-white shadow-xs' : 'text-sage-600 hover:text-amber-800'
+                    }`}
+                  >
+                    📦 Rulate ({countAnvelopeRulate})
+                  </button>
+                </div>
+
+                {/* Filtru Depozit */}
                 <select
-                  value={bevDepozitId}
-                  onChange={(e) => setBevDepozitId(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  value={anvelopeStocDepozitFilter}
+                  onChange={(e) => setAnvelopeStocDepozitFilter(e.target.value)}
+                  className="bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
                 >
+                  <option value="">Toate Depozitele ({depozite.length})</option>
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume}</option>
                   ))}
                 </select>
-              </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Cod Articol / Cod Piesă:</label>
-                <input
-                  required
-                  value={bevCodArticol}
-                  onChange={(e) => setBevCodArticol(e.target.value)}
-                  placeholder="ex: OIL-HID-46 sau FLT-VOL-001"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Denumire Articol / Ulei:</label>
-                <input
-                  required
-                  value={bevDenumire}
-                  onChange={(e) => setBevDenumire(e.target.value)}
-                  placeholder="ex: Ulei Hidraulic Mobil DTE 25 HLP 46"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc:</label>
-                <select
-                  value={bevCategorie}
-                  onChange={(e) => {
-                    setBevCategorie(e.target.value);
-                    setBevSubcategorie('');
-                  }}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                <button
+                  type="button"
+                  onClick={() => setShowAddAnvelopeStocModal(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5"
                 >
-                  {categorii.map((c, idx) => (
-                    <option key={idx} value={c.nume}>{c.nume}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Subcategorie Stoc:</label>
-                <select
-                  value={bevSubcategorie}
-                  onChange={(e) => setBevSubcategorie(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  <option value="">-- Fără Subcategorie --</option>
-                  {getSubcategoriiPentruCategorie(bevCategorie).map((sub: any, idx: number) => (
-                    <option key={idx} value={sub.nume}>{sub.nume}</option>
-                  ))}
-                </select>
+                  <Plus className="w-4 h-4" />
+                  <span>+ Adaugă Anvelope Noi</span>
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* Suport Special Achiziție Uleiuri */}
-            <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sapphire-900 block mb-1 font-bold">Dacă este Achiziție Ulei, alegeți Tipul:</label>
-                <select
-                  value={bevTipLichid}
-                  onChange={(e) => setBevTipLichid(e.target.value)}
-                  className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
-                >
-                  <option value="NICIUNUL">Nu este ulei (Piesă / Filtru / Consumabil)</option>
-                  <option value="ULEI_MOTOR">Ulei motor</option>
-                  <option value="ULEI_HIDRAULIC">Ulei hidraulic</option>
-                  <option value="ULEI_LIEBHERR_PUNTE">Ulei - Liebherr Punte faţă + spate</option>
-                  <option value="ULEI_LIEBHERR_CUTIE">Ulei - Liebherr Cutie Viteze</option>
-                  <option value="ULEI_CUTIE_MANUALA">Ulei cutie manuală</option>
-                  <option value="ULEI_CUTIE_AUTOMATA">Ulei cutie automată</option>
-                </select>
-              </div>
+          {/* Grid Carduri Anvelope Serializate */}
+          {anvelopeStocFiltrate.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {anvelopeStocFiltrate.map((a: any) => {
+                const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+                const procentProfil = Math.min(100, Math.round(((a.adancimeCurentaMm || 16) / 16) * 100));
 
-              <div>
-                <label className="text-sapphire-900 block mb-1 font-bold">Marcă Ulei (Mobil, Castrol, Liebherr):</label>
-                <input
-                  value={bevMarcaUlei}
-                  onChange={(e) => setBevMarcaUlei(e.target.value)}
-                  placeholder="ex: Mobil1 Delvac / Castrol / Fuchs"
-                  className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
-                />
-              </div>
-            </div>
+                return (
+                  <div
+                    key={a.id}
+                    className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 hover:border-sapphire-300 hover:shadow-md transition space-y-3 text-xs"
+                  >
+                    {/* Header Card */}
+                    <div className="flex items-center justify-between border-b border-morning-100 pb-2.5">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-mono font-black text-xs tracking-wide shadow-xs">
+                          🏷️ {a.serieAnvelopa}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isNoua
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}
+                        >
+                          {isNoua ? '✨ NOUĂ' : '📦 RULATĂ'}
+                        </span>
+                      </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Furnizor (Companie / Producător):</label>
-                <input
-                  required
-                  value={bevFurnizor}
-                  onChange={(e) => setBevFurnizor(e.target.value)}
-                  placeholder="ex: AUTONET SRL / LUBRICANTS ROMANIA"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
+                      <span className="font-mono font-black text-sapphire-900 text-xs bg-sapphire-50 px-2 py-1 rounded-lg border border-sapphire-100">
+                        {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                      </span>
+                    </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Număr Factură și Dată:</label>
-                <div className="flex space-x-2">
-                  <input
-                    required
-                    value={bevNumarFactura}
-                    onChange={(e) => setBevNumarFactura(e.target.value)}
-                    placeholder="Factură: FACT-2026-99"
-                    className="w-1/2 bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
-                  />
-                  <input
-                    type="date"
-                    required
-                    value={bevDataFactura}
-                    onChange={(e) => setBevDataFactura(e.target.value)}
-                    className="w-1/2 bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  />
-                </div>
-              </div>
+                    {/* Detalii Anvelopă */}
+                    <div className="space-y-1.5">
+                      <p className="font-extrabold text-sapphire-900 text-sm">{a.marca} {a.model}</p>
+                      <div className="flex items-center justify-between text-slate-700 font-semibold">
+                        <span className="bg-morning-100 px-2 py-0.5 rounded-md font-mono text-[11px] text-sapphire-800">
+                          {a.dimensiune}
+                        </span>
+                        <span className="text-[11px] font-mono text-sage-600">
+                          DOT: <strong className="text-sapphire-900">{a.codDot || '2625'}</strong>
+                        </span>
+                      </div>
+                    </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">UM (Unitate Măsură):</label>
-                <select
-                  value={bevUM}
-                  onChange={(e) => setBevUM(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  <option value="buc">buc (Bucăți)</option>
-                  <option value="L">L (Litri)</option>
-                  <option value="kg">kg (Kilograme)</option>
-                  <option value="set">set (Seturi)</option>
-                </select>
-              </div>
-            </div>
+                    {/* Bară Profil & Depozit */}
+                    <div className="p-2.5 bg-morning-50 rounded-xl border border-morning-200 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-sage-600 font-medium">Adâncime Profil:</span>
+                        <span className="font-mono font-extrabold text-sapphire-900">
+                          {a.adancimeCurentaMm} mm <span className="text-sage-400 font-normal text-[10px]">/ 16mm</span>
+                        </span>
+                      </div>
+                      <div className="w-full bg-morning-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-1.5 rounded-full ${
+                            procentProfil > 60 ? 'bg-emerald-500' : procentProfil > 30 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${procentProfil}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-sage-600 font-medium flex items-center space-x-1 pt-0.5">
+                        <Building2 className="w-3 h-3 text-sapphire-500" />
+                        <span>Locație: <strong>{a.depozit?.nume || 'Depozit Central'}</strong></span>
+                      </p>
+                    </div>
 
-            {/* PREȚ TOTAL FACTURĂ & CALCUL AUTOMAT PREȚ UNITAR */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-periwinkle-100 border border-periwinkle-300 rounded-2xl">
-              <div>
-                <label className="text-periwinkle-700 block mb-1 font-extrabold">1. Preț Total Factură (RON):</label>
-                <input
-                  type="number"
-                  required
-                  value={bevPretTotal}
-                  onChange={(e) => setBevPretTotal(Number(e.target.value))}
-                  placeholder="ex: 1500 RON"
-                  className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
-                />
-              </div>
+                    {/* Butoane Acțiuni Rapide */}
+                    <div className="flex items-center justify-between pt-1 border-t border-morning-100 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditingAnvelopaStoc({
+                          ...a,
+                          pretAchizitie: Number(Number(a.pretAchizitie || 0).toFixed(2)),
+                        })}
+                        className="flex-1 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[11px] border border-morning-200 transition text-center"
+                      >
+                        ✏️ Editează
+                      </button>
 
-              <div>
-                <label className="text-periwinkle-700 block mb-1 font-extrabold">2. Cantitate Recepționată:</label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={bevCantitate}
-                  onChange={(e) => setBevCantitate(Number(e.target.value))}
-                  className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
-                />
-              </div>
+                      <Link
+                        href="/anvelope"
+                        className="flex-1 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-[11px] shadow-xs transition text-center flex items-center justify-center space-x-1"
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>Montează</span>
+                      </Link>
 
-              <div>
-                <label className="text-periwinkle-700 block mb-1 font-extrabold">3. Calcul Automat Preț Unitar:</label>
-                <input
-                  disabled
-                  value={`${pretUnitarKiszamolva} RON / ${bevUM}`}
-                  className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-600 font-mono font-extrabold text-sm opacity-95"
-                />
-              </div>
-            </div>
-
-            {/* ÎNREGISTRARE GARANȚIE PRODUCĂTOR */}
-            <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl space-y-3">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="areGarantie"
-                  checked={bevAreGarantie}
-                  onChange={(e) => setBevAreGarantie(e.target.checked)}
-                  className="w-4 h-4 rounded text-sapphire-500 cursor-pointer"
-                />
-                <label htmlFor="areGarantie" className="text-sapphire-900 font-extrabold text-xs cursor-pointer flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4 text-sapphire-500" />
-                  <span>Piesa / Componenta Are Garanție de la Producător? (Va fi salvată în "Garanții Componente")</span>
-                </label>
-              </div>
-
-              {bevAreGarantie && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                  <div>
-                    <label className="text-sage-700 block mb-1 font-bold">Serie Unică / SN (Serial Number):</label>
-                    <input
-                      value={bevSerieUnica}
-                      onChange={(e) => setBevSerieUnica(e.target.value)}
-                      placeholder="ex: SN-GARRETT-998822"
-                      className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
-                    />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAnvelopaStoc(a.id, a.serieAnvelopa)}
+                        className="p-1.5 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 border border-roseash-300 transition"
+                        title="Elimină din stoc"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sage-700 block mb-1 font-bold">Durată Garanție (Luni):</label>
-                    <input
-                      type="number"
-                      value={bevDurataGarantieLuni}
-                      onChange={(e) => setBevDurataGarantieLuni(Number(e.target.value))}
-                      placeholder="ex: 24 Luni"
-                      className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sage-700 block mb-1 font-bold">Durată Garanție Rulaj (KM / mTH):</label>
-                    <input
-                      type="number"
-                      value={bevDurataGarantieRulaj}
-                      onChange={(e) => setBevDurataGarantieRulaj(Number(e.target.value))}
-                      placeholder="ex: 2000 mTH sau 50000 KM"
-                      className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
-                    />
-                  </div>
-                </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="pleasant-card bg-white p-8 rounded-2xl border border-morning-200 text-center space-y-2">
+              <CircleDot className="w-10 h-10 text-sage-300 mx-auto" />
+              <h3 className="font-bold text-sapphire-900 text-sm">Nicio anvelopă nu corespunde filtrelor selectate</h3>
+              <p className="text-xs text-sage-500">
+                Puteți reseta căutarea sau înregistra anvelope noi folosind butonul de mai sus.
+              </p>
+              {anvelopeStocSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAnvelopeStocSearch('')}
+                  className="px-3 py-1.5 rounded-lg bg-morning-200 text-sapphire-900 font-bold text-xs hover:bg-morning-300"
+                >
+                  Resetează căutarea
+                </button>
               )}
             </div>
-
-            <div>
-              <label className="text-sage-700 block mb-1 font-bold">Observații & Notițe Recepție:</label>
-              <input
-                value={bevObservatii}
-                onChange={(e) => setBevObservatii(e.target.value)}
-                placeholder="ex: Recepție 200L hordó ulei hidraulic sau turbină în garanție"
-                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
-              />
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                className="px-6 py-3 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20"
-              >
-                Salvează Recepție Marfă pe Factură
-              </button>
-            </div>
-          </form>
+          )}
         </div>
       )}
 
-      {/* TAB 3: CĂUTARE RETROACTIVĂ FACTURI */}
-      {activeTab === 'istoric' && (
-        <div className="pleasant-card rounded-2xl p-6 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-              <History className="w-5 h-5 text-sapphire-500" />
-              <span>Istoric Recepții Marfă & Căutare Retroactivă Facturi</span>
-            </h2>
-
-            <div className="relative w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Căutare după furnizor, număr factură..."
-                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-4 py-2 text-xs text-sapphire-900 font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
-                <tr>
-                  <th className="p-3">Data Recepției</th>
-                  <th className="p-3">Furnizor</th>
-                  <th className="p-3">Număr Factură</th>
-                  <th className="p-3">Articol Achiziționat</th>
-                  <th className="p-3 font-mono">Cantitate</th>
-                  <th className="p-3 font-mono">Preț Unitar</th>
-                  <th className="p-3 font-mono text-right">Valoare Totală</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200">
-                {intrariHistory.map((i) => (
-                  <tr key={i.id} className="hover:bg-morning-50 transition">
-                    <td className="p-3 font-semibold text-sage-700">{new Date(i.dataFactura).toLocaleDateString('ro-RO')}</td>
-                    <td className="p-3 font-bold text-sapphire-900">{i.furnizor}</td>
-                    <td className="p-3 font-mono font-bold text-sapphire-600">{i.numarFactura}</td>
-                    <td className="p-3 font-medium text-slate-800">{i.articolStoc?.denumire}</td>
-                    <td className="p-3 font-mono font-bold text-sage-700">{i.cantitateIntrata} {i.articolStoc?.unitateMasura}</td>
-                    <td className="p-3 font-mono text-slate-700">{i.pretUnitar} RON</td>
-                    <td className="p-3 text-right font-extrabold text-sapphire-900 font-mono text-sm">{i.pretTotal.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} RON</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: DEPOZITE FLOTĂ */}
+      {/* TAB 3: DEPOZITE FLOTĂ */}
       {activeTab === 'depozite' && (
         <div className="pleasant-card rounded-2xl p-6 space-y-4">
           <div className="flex justify-between items-center">
@@ -1075,9 +1225,14 @@ export default function StocuriGarantiiPage() {
                 <p className="text-xs text-sage-700 font-medium">Responsabil: <span className="font-semibold text-slate-800">{d.responsabil || 'N/A'}</span></p>
 
                 <div className="pt-2 border-t border-morning-200 flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full bg-sapphire-50 text-sapphire-600 font-extrabold text-[10px]">
-                    {d._count?.articoleStoc || 0} articole în stoc
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="px-2.5 py-1 rounded-full bg-sapphire-50 text-sapphire-600 font-extrabold text-[10px]">
+                      {d._count?.articoleStoc || 0} piese
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 font-extrabold text-[10px]">
+                      🛞 {d._count?.anvelope || 0} anvelope
+                    </span>
+                  </div>
 
                   <button
                     onClick={() => handleOpenDepozitStoc(d.id)}
@@ -1130,14 +1285,14 @@ export default function StocuriGarantiiPage() {
                       <div className="text-[10px] text-sapphire-600 font-mono font-bold">Serie: {c.serieUnica}</div>
                     </td>
                     <td className="p-3 text-slate-700 font-medium">
-                      {c.furnizor}
-                      <div className="text-[10px] text-sage-700 font-mono">Factură: {c.numarFactura}</div>
+                      {c.articolStoc?.intrariStoc?.[0]?.furnizor || c.furnizor || 'Furnizor e-Factura'}
+                      <div className="text-[10px] text-sage-700 font-mono">Factură: {c.articolStoc?.intrariStoc?.[0]?.numarFactura || c.numarFactura || '-'}</div>
                     </td>
                     <td className="p-3 font-bold text-sage-700">
-                      {c.vehicul?.numarIntern ? `${c.vehicul.numarIntern} (${c.vehicul.numarInmatriculare})` : 'În Stoc Depozit'}
+                      {c.vehicul?.numarIntern ? `${c.vehicul.numarIntern} (${c.vehicul.numarInmatriculare})` : `În Stoc (${c.articolStoc?.depozit?.nume || 'Depozit Central'})`}
                     </td>
                     <td className="p-3 font-mono font-semibold text-slate-800">
-                      {c.garantieProducatorLuni || 24} Luni / {c.garantieProducatorKm || 2000} mTH/KM
+                      {c.luniGarantie || c.garantieProducatorLuni || 24} Luni / {c.kilometriGarantie || c.garantieProducatorKm || 2000} km/mTH
                     </td>
                     <td className="p-3">
                       <span className="px-2.5 py-1 rounded-full bg-sapphire-50 border border-sapphire-200 text-sapphire-700 text-[10px] font-bold">
@@ -1266,8 +1421,28 @@ export default function StocuriGarantiiPage() {
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit:</label>
-                <input value={editingDepozit.responsabil || ''} onChange={(e) => setEditingDepozit({ ...editingDepozit, responsabil: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold" />
+                <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit (din Mecanici / Personal):</label>
+                {mecanici.length > 0 ? (
+                  <select
+                    value={editingDepozit.responsabil || ''}
+                    onChange={(e) => setEditingDepozit({ ...editingDepozit, responsabil: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Fără Responsabil Desemnat --</option>
+                    {mecanici.map((m) => (
+                      <option key={m.id} value={m.nume}>
+                        👨‍🔧 {m.nume} {m.functie ? `(${m.functie})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={editingDepozit.responsabil || ''}
+                    onChange={(e) => setEditingDepozit({ ...editingDepozit, responsabil: e.target.value })}
+                    placeholder="ex: Brașoveanu Virgil (Șef Atelier)"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold"
+                  />
+                )}
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-morning-200">
@@ -1396,8 +1571,30 @@ export default function StocuriGarantiiPage() {
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit:</label>
-                <input value={responsabilDepozitNou} onChange={(e) => setResponsabilDepozitNou(e.target.value)} placeholder="ex: Brașoveanu Virgil (Șef Atelier)" className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold" />
+                <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit (din Mecanici Înregistrați): *</label>
+                {mecanici.length > 0 ? (
+                  <select
+                    required
+                    value={responsabilDepozitNou}
+                    onChange={(e) => setResponsabilDepozitNou(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Selectează Responsabil Depozit --</option>
+                    {mecanici.map((m) => (
+                      <option key={m.id} value={m.nume}>
+                        👨‍🔧 {m.nume} {m.functie ? `(${m.functie})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required
+                    value={responsabilDepozitNou}
+                    onChange={(e) => setResponsabilDepozitNou(e.target.value)}
+                    placeholder="ex: Brașoveanu Virgil (Șef Atelier)"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold"
+                  />
+                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-3">
@@ -1557,25 +1754,78 @@ export default function StocuriGarantiiPage() {
       {/* MODÁL EDITARE ARTICOL */}
       {editingArticol && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900">Editare Articol Stoc ({editingArticol.codArticol})</h3>
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900">Editare Articol Stoc ({editingArticol.codArticol})</h3>
               <button onClick={() => setEditingArticol(null)} className="text-sage-500 hover:text-sapphire-900">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateArticol} className="space-y-3 text-xs">
+            <form onSubmit={handleUpdateArticol} className="space-y-3.5 text-xs">
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Denumire Articol</label>
-                <input required value={editingArticol.denumire} onChange={(e) => setEditingArticol({ ...editingArticol, denumire: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold" />
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Articol: *</label>
+                <input
+                  required
+                  value={editingArticol.denumire || ''}
+                  onChange={(e) => setEditingArticol({ ...editingArticol, denumire: e.target.value })}
+                  placeholder="ex: Filtru ulei, Anvelopă 385/65R22.5, etc."
+                  className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc: *</label>
+                  <select
+                    required
+                    value={editingArticol.categorie || ''}
+                    onChange={(e) => {
+                      const newCat = e.target.value;
+                      setEditingArticol({
+                        ...editingArticol,
+                        categorie: newCat,
+                        subcategorie: '',
+                      });
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Alege Categorie --</option>
+                    {categorii.map((c, idx) => (
+                      <option key={c.id || c.nume || idx} value={c.nume}>
+                        {c.nume}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Subcategorie Stoc:</label>
+                  <select
+                    value={editingArticol.subcategorie || ''}
+                    onChange={(e) => setEditingArticol({ ...editingArticol, subcategorie: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Fără Subcategorie --</option>
+                    {getSubcategoriiPentruCategorie(editingArticol.categorie || '').map((sub: any, idx: number) => (
+                      <option key={sub.id || sub.nume || idx} value={sub.nume}>
+                        📁 {sub.nume}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Depozit Destinație</label>
-                <select value={editingArticol.depozitId || ''} onChange={(e) => setEditingArticol({ ...editingArticol, depozitId: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold">
+                <label className="text-sage-700 block mb-1 font-bold">Depozit Stoc: *</label>
+                <select
+                  required
+                  value={editingArticol.depozitId || ''}
+                  onChange={(e) => setEditingArticol({ ...editingArticol, depozitId: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
                   {depozite.map((d) => (
-                    <option key={d.id} value={d.id}>{d.nume}</option>
+                    <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                   ))}
                 </select>
               </div>
@@ -1583,15 +1833,33 @@ export default function StocuriGarantiiPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Stoc Curent</label>
-                  <input type="number" value={editingArticol.stocCurent} onChange={(e) => setEditingArticol({ ...editingArticol, stocCurent: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-bold" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingArticol.stocCurent}
+                    onChange={(e) => setEditingArticol({ ...editingArticol, stocCurent: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Stoc Minim</label>
-                  <input type="number" value={editingArticol.stocMinim} onChange={(e) => setEditingArticol({ ...editingArticol, stocMinim: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-extrabold text-terracotta-600" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingArticol.stocMinim}
+                    onChange={(e) => setEditingArticol({ ...editingArticol, stocMinim: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-extrabold text-terracotta-600"
+                  />
                 </div>
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Preț Unitar</label>
-                  <input type="number" value={editingArticol.pretUnitar} onChange={(e) => setEditingArticol({ ...editingArticol, pretUnitar: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-bold" />
+                  <label className="text-sage-700 block mb-1 font-bold">Preț Unitar (RON)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingArticol.pretUnitar}
+                    onChange={(e) => setEditingArticol({ ...editingArticol, pretUnitar: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
                 </div>
               </div>
 
@@ -1609,6 +1877,297 @@ export default function StocuriGarantiiPage() {
                   <button type="button" onClick={() => setEditingArticol(null)} className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold">Anulează</button>
                   <button type="submit" className="px-4 py-2 rounded-lg bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITARE ANVELOPĂ SERIALIZATĂ DIN MAGAZIE */}
+      {editingAnvelopaStoc && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2">
+                <CircleDot className="w-5 h-5 text-sapphire-500" />
+                <h3 className="text-base font-bold text-sapphire-900">
+                  Editare Anvelopă Serializată ({editingAnvelopaStoc.serieAnvelopa})
+                </h3>
+              </div>
+              <button onClick={() => setEditingAnvelopaStoc(null)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateAnvelopaStoc} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Serie Unică (SN): *</label>
+                  <input
+                    required
+                    value={editingAnvelopaStoc.serieAnvelopa || ''}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, serieAnvelopa: e.target.value })}
+                    className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-black text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cod DOT / Fabricație:</label>
+                  <input
+                    value={editingAnvelopaStoc.codDot || ''}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, codDot: e.target.value })}
+                    placeholder="ex: 2625"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input
+                    required
+                    value={editingAnvelopaStoc.marca || ''}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, marca: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model:</label>
+                  <input
+                    value={editingAnvelopaStoc.model || ''}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, model: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Dimensiune: *</label>
+                  <input
+                    required
+                    value={editingAnvelopaStoc.dimensiune || ''}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, dimensiune: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Adâncime Profil Curentă (mm):</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editingAnvelopaStoc.adancimeCurentaMm || 16}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, adancimeCurentaMm: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-black"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Preț Achiziție (RON):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingAnvelopaStoc.pretAchizitie || 0}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, pretAchizitie: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Depozit / Locație Depozitare: *</label>
+                <select
+                  value={editingAnvelopaStoc.depozitId || ''}
+                  onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, depozitId: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  {depozite.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAnvelopaStoc(editingAnvelopaStoc.id, editingAnvelopaStoc.serieAnvelopa)}
+                  className="px-3 py-1.5 rounded-lg bg-roseash-100 text-terracotta-600 hover:bg-terracotta-100 border border-roseash-300 text-xs font-bold flex items-center space-x-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Elimină din Magazie</span>
+                </button>
+
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAnvelopaStoc(null)}
+                    className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20"
+                  >
+                    Salvează Modificările
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ÎNREGISTRARE LOT NOU ANVELOPE SERIALIZATE */}
+      {showAddAnvelopeStocModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2">
+                <Plus className="w-5 h-5 text-sapphire-500" />
+                <h3 className="text-base font-bold text-sapphire-900">
+                  Adăugare Anvelope Noi pe Serii în Magazie
+                </h3>
+              </div>
+              <button onClick={() => setShowAddAnvelopeStocModal(false)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAnvelopeBatchSubmit} className="space-y-3 text-xs">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă: *</label>
+                  <input
+                    required
+                    value={newBatchAnv.marca}
+                    onChange={(e) => setNewBatchAnv({ ...newBatchAnv, marca: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Model:</label>
+                  <input
+                    value={newBatchAnv.model}
+                    onChange={(e) => setNewBatchAnv({ ...newBatchAnv, model: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Dimensiune: *</label>
+                  <input
+                    required
+                    value={newBatchAnv.dimensiune}
+                    onChange={(e) => setNewBatchAnv({ ...newBatchAnv, dimensiune: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cantitate (Buc): *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    required
+                    value={newBatchAnv.cantitate}
+                    onChange={(e) => {
+                      const count = Math.max(1, Number(e.target.value));
+                      const newSerii = Array(count).fill('').map((_, i) => newBatchAnv.serii[i] || '');
+                      setNewBatchAnv({ ...newBatchAnv, cantitate: count, serii: newSerii });
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-black"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cod DOT:</label>
+                  <input
+                    value={newBatchAnv.codDot}
+                    onChange={(e) => setNewBatchAnv({ ...newBatchAnv, codDot: e.target.value })}
+                    placeholder="2625"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Preț Unitar (RON):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={newBatchAnv.pretAchizitie}
+                    onChange={(e) => setNewBatchAnv({ ...newBatchAnv, pretAchizitie: Number(e.target.value) })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Depozit Destinație: *</label>
+                <select
+                  value={newBatchAnv.depozitId || ''}
+                  onChange={(e) => setNewBatchAnv({ ...newBatchAnv, depozitId: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  {depozite.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Serii Individuale per Bucată */}
+              <div className="p-3 bg-morning-50 rounded-xl border border-morning-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-sapphire-900 text-xs">
+                    Serii Individuale per Bucată ({newBatchAnv.cantitate} buc):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prefix = (newBatchAnv.marca.slice(0, 3) || 'ANV').toUpperCase();
+                      const genSerii = Array(newBatchAnv.cantitate).fill('').map((_, i) => `${prefix}-${Date.now().toString().slice(-4)}${i + 1}`);
+                      setNewBatchAnv({ ...newBatchAnv, serii: genSerii });
+                    }}
+                    className="text-[10px] text-sapphire-600 hover:underline font-bold"
+                  >
+                    ⚡ Generează Serii Automate
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                  {Array.from({ length: newBatchAnv.cantitate }).map((_, idx) => (
+                    <div key={idx} className="flex items-center space-x-1.5">
+                      <span className="text-[10px] text-sage-500 font-mono w-5">#{idx + 1}</span>
+                      <input
+                        value={newBatchAnv.serii[idx] || ''}
+                        onChange={(e) => {
+                          const sCopy = [...newBatchAnv.serii];
+                          sCopy[idx] = e.target.value;
+                          setNewBatchAnv({ ...newBatchAnv, serii: sCopy });
+                        }}
+                        placeholder={`Serie bucata ${idx + 1}`}
+                        className="w-full bg-white border border-morning-200 rounded-lg p-1.5 font-mono font-bold text-sapphire-900 text-[11px]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAnvelopeStocModal(false)}
+                  className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20"
+                >
+                  Înregistrează {newBatchAnv.cantitate} Anvelope
+                </button>
               </div>
             </form>
           </div>
@@ -1653,5 +2212,13 @@ export default function StocuriGarantiiPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function StocuriGarantiiPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs font-bold text-slate-500">Se încarcă modulul Stocuri & Garanții...</div>}>
+      <StocuriGarantiiContent />
+    </Suspense>
   );
 }
