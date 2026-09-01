@@ -64,6 +64,17 @@ function EFacturaContent() {
   const [sortKey, setSortKey] = useState<'furnizor' | 'numarFactura' | 'dataFactura' | 'valoareTotala'>('dataFactura');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
+  // LIVE BACKGROUND SYNC STATUS
+  const [syncStatusData, setSyncStatusData] = useState<{
+    inProgress: boolean;
+    zile: number;
+    totalMessages: number;
+    processed: number;
+    downloaded: number;
+    duplicates: number;
+    errorMessage?: string | null;
+  } | null>(null);
+
   // MULTI-SELECTION STATE
   const [selectedFacturaIds, setSelectedFacturaIds] = useState<string[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -380,15 +391,30 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(`✅ ${data.mesaj}`);
-        fetchData();
+        // Poll status every 2 seconds until complete
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+            if (statusRes.ok) {
+              const sData = await statusRes.json();
+              setSyncStatusData(sData);
+              if (!sData.inProgress) {
+                clearInterval(pollInterval);
+                setSyncing(false);
+                fetchData();
+              }
+            }
+          } catch (e) {
+            console.error('Eroare polling status sync:', e);
+          }
+        }, 2000);
       } else {
         const err = await res.json();
         alert(`Eroare Sincronizare: ${err.message}`);
+        setSyncing(false);
       }
     } catch (e) {
-      alert('Eroare la sincronizarea cu ANAF SPV.');
-    } finally {
+      alert('Eroare la pornirea sincronizării cu ANAF SPV.');
       setSyncing(false);
     }
   };
@@ -1002,6 +1028,26 @@ function EFacturaContent() {
           </div>
         </div>
       </div>
+
+      {/* LIVE PROGRESS BANNER PENTRU SINCRONIZARE ANAF */}
+      {(syncing || syncStatusData?.inProgress) && (
+        <div className="p-4 rounded-2xl bg-sapphire-500 text-white shadow-md flex items-center justify-between animate-pulse">
+          <div className="flex items-center space-x-3">
+            <RefreshCw className="w-5 h-5 animate-spin text-white" />
+            <div>
+              <p className="text-xs font-black tracking-wide uppercase">Sincronizare ANAF SPV în desfășurare în fundal...</p>
+              <p className="text-xs text-sapphire-100 font-medium">
+                {syncStatusData?.totalMessages
+                  ? `Progres: ${syncStatusData.processed} / ${syncStatusData.totalMessages} mesaje verificate • ${syncStatusData.downloaded} facturi noi descărcate • ${syncStatusData.duplicates} duplicate omise`
+                  : `Se interoghează serverele ANAF pentru ultimele ${selectedZile} zile...`}
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] bg-white/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
+            Non-blocant • 0-24h Cloud
+          </span>
+        </div>
+      )}
 
       {/* FILTRARE & CĂUTARE FACTURI */}
       <div className="pleasant-card p-4 rounded-2xl space-y-3">

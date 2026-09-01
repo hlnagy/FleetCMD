@@ -34,6 +34,12 @@ export class EFacturaController {
     return this.efacturaService.syncFacturi(zile);
   }
 
+  // STATUS SINCRONIZARE ÎN FUNDAL
+  @Get('sync/status')
+  async getSyncStatus() {
+    return this.efacturaService.getSyncStatus();
+  }
+
   // ÎNCĂRCARE DIRECTĂ FIȘIERE XML / ZIP DIN SPV
   @Post('upload')
   async uploadFiles(@Body() body: { files: Array<{ numeFisier: string; continutBase64: string }> }) {

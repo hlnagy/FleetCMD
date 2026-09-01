@@ -333,161 +333,202 @@ export class EFacturaService {
     throw new BadRequestException('Eroare conexiune ANAF.');
   }
 
+  public syncStatus = {
+    inProgress: false,
+    zile: 15,
+    totalMessages: 0,
+    processed: 0,
+    downloaded: 0,
+    duplicates: 0,
+    startTime: null as Date | null,
+    endTime: null as Date | null,
+    errorMessage: null as string | null,
+  };
+
+  getSyncStatus() {
+    return this.syncStatus;
+  }
+
   // -------------------------------------------------------------------------
   // HYBRID SYNC: FETCH MESSAGES & DEDUPLICATE & DOWNLOAD UBL 2.1 XML
   // -------------------------------------------------------------------------
   async syncFacturi(zile = 15) {
-    const safeZile = Math.min(Math.max(1, Number(zile) || 15), 60); // Max 60 zile
-    const cfg = await this.getConfig();
-    const token = await this.refreshOAuthTokenIfNeeded();
-
-    if (!token) {
-      throw new BadRequestException('Vă rugăm să configurați Token-ul OAuth2 ANAF e-Factura în Setări.');
+    if (this.syncStatus.inProgress) {
+      return {
+        mesaj: 'O sincronizare ANAF este deja în curs de desfășurare în fundal.',
+        syncStatus: this.syncStatus,
+      };
     }
 
-    const cif = cfg.cifFirma.replace(/[^0-9]/g, ''); // CUI fără RO pentru API ANAF
-    this.logger.log(`Inițiere sincronizare e-Factura pentru CUI ${cif} pe ultimele ${safeZile} zile...`);
-
-    // ANAF listaMesajePaginatieFactura: startTime, endTime (milisecunde), cif, pagina
-    // Setăm endTime cu 60 secunde în trecut pentru a preveni deviațiile de ceas cu serverele ANAF
-    const nowMs = Date.now() - 60000;
-    const startMs = nowMs - safeZile * 24 * 60 * 60 * 1000;
-
-    const mesajeList: any[] = [];
-    let currentPage = 1;
-    let totalPages = 1;
-
-    while (currentPage <= totalPages) {
-      const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?startTime=${startMs}&endTime=${nowMs}&cif=${cif}&pagina=${currentPage}`;
-      try {
-        const response = await this.executeWithRetry(() =>
-          axios.get(url, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-        );
-        const pageData = response.data;
-        const pageMessages = pageData?.mesaje || pageData?.lista_mesaje || [];
-        mesajeList.push(...pageMessages);
-
-        totalPages = pageData?.numar_total_pagini ? Number(pageData.numar_total_pagini) : 1;
-        this.logger.log(`Pagină e-Factura ${currentPage}/${totalPages} descărcată (${pageMessages.length} mesaje).`);
-        currentPage++;
-      } catch (err: any) {
-        this.logger.error(`Eroare la interogarea paginii ${currentPage} ANAF: ${err?.message}`);
-        break;
-      }
-    }
-
-    if (mesajeList.length === 0) {
-      this.logger.log(`Nu au fost găsite mesaje e-Factura noi pentru CUI ${cif} pe ultimele ${safeZile} zile.`);
-    }
-    let descarcateCount = 0;
-    let omiseDuplicateCount = 0;
-
-    for (const msg of mesajeList) {
-      const idDescarcare = msg.id_descarcare || msg.id;
-      if (!idDescarcare) continue;
-
-      // 1. DEDUPLICARE STRICTĂ: Verificare dacă idDescarcare există deja în DB
-      const exist = await this.prisma.eFacturaFactura.findUnique({
-        where: { idDescarcare: String(idDescarcare) },
-      });
-
-      if (exist) {
-        omiseDuplicateCount++;
-        continue;
-      }
-
-      // 2. DESCĂRCARE ARCHIVĂ ZIP DUPĂ ID_DESCARCARE
-      try {
-        const downloadUrl = `https://api.anaf.ro/prod/FCTEL/rest/descarcare?id=${idDescarcare}`;
-        const zipResponse = await this.executeWithRetry(() =>
-          axios.get(downloadUrl, {
-            headers: { Authorization: `Bearer ${token}` },
-            responseType: 'arraybuffer',
-          })
-        );
-
-        const zipBuffer = Buffer.from(zipResponse.data);
-        const zip = new AdmZip(zipBuffer);
-        const zipEntries = zip.getEntries();
-
-        let xmlRawContent: string | null = null;
-        for (const entry of zipEntries) {
-          if (entry.entryName.endsWith('.xml') && !entry.entryName.includes('semnatura')) {
-            xmlRawContent = entry.getData().toString('utf8');
-            break;
-          }
-        }
-
-        if (!xmlRawContent && zipEntries.length > 0) {
-          xmlRawContent = zipEntries[0].getData().toString('utf8');
-        }
-
-        if (xmlRawContent) {
-          // 3. PARSARE UBL 2.1 XML FACTURĂ
-          const parsedInvoice = this.parseUBL21Xml(xmlRawContent, msg);
-
-          // DOAR FACTURI PRIMITE (ACHIZIȚII / FURNIZORI) - Ignorăm facturile emise de noi către clienți
-          const cifVanzatorClean = (parsedInvoice.cifVanzator || msg.cif_emitent || '').replace(/[^0-9]/g, '');
-          if (cifVanzatorClean === cif) {
-            this.logger.log(`Factura ${parsedInvoice.numarFactura} este emisă de noi (ieșire către client). Ignorată.`);
-            continue;
-          }
-
-          // 4. PERSISTENȚĂ ÎN BAZA DE DATE PRISMA
-          await this.prisma.eFacturaFactura.create({
-            data: {
-              idDescarcare: String(idDescarcare),
-              numarInregistrare: String(msg.numar_solicitare || msg.id || ''),
-              cifVanzator: parsedInvoice.cifVanzator || msg.cif_emitent || 'N/A',
-              numeVanzator: parsedInvoice.numeVanzator || msg.detalii || 'Furnizor Nespecificat',
-              cifCumparator: parsedInvoice.cifCumparator || cfg.cifFirma,
-              numarFactura: parsedInvoice.numarFactura || `FAC-${idDescarcare}`,
-              dataFactura: parsedInvoice.dataFactura || new Date(),
-              dataMesaj: parseAnafDataCreare(msg.data_creare),
-              valoareTotala: parsedInvoice.valoareTotala || Number(msg.valoare || 0),
-              moneda: parsedInvoice.moneda || 'RON',
-              tipFactura: parsedInvoice.tipFactura || 'FACTURA',
-              xmlRawContent: xmlRawContent,
-              articole: {
-                create: parsedInvoice.items.map((item, idx) => ({
-                  numarLinie: idx + 1,
-                  descrierePiesa: item.descrierePiesa,
-                  codArticolFurnizor: item.codArticolFurnizor,
-                  cantitate: item.cantitate,
-                  unitateMasura: item.unitateMasura,
-                  pretUnitar: item.pretUnitar,
-                  valoareFaraTVA: item.valoareFaraTVA,
-                  valoareTVA: item.valoareTVA,
-                  cotaTVA: item.cotaTVA,
-                  stare: 'NEPROCESAT',
-                })),
-              },
-            },
-          });
-          descarcateCount++;
-        }
-      } catch (err: any) {
-        this.logger.error(`Eroare la descărcarea/parsarea facturii idDescarcare ${idDescarcare}: ${err?.message}`);
-      }
-    }
-
-    await this.prisma.eFacturaConfig.update({
-      where: { id: 'default' },
-      data: { ultimulSyncSucces: new Date() },
-    });
-
-    const rez = {
-      mesaj: `✅ Sincronizare e-Factura finalizată! ${descarcateCount} facturi noi descărcate și parsate, ${omiseDuplicateCount} facturi existente omise (deduplicate).`,
-      descarcateCount,
-      omiseDuplicateCount,
-      totalMesajeAnalizate: mesajeList.length,
-      ultimulSync: new Date(),
+    const safeZile = Math.min(Math.max(1, Number(zile) || 15), 60);
+    this.syncStatus = {
+      inProgress: true,
+      zile: safeZile,
+      totalMessages: 0,
+      processed: 0,
+      downloaded: 0,
+      duplicates: 0,
+      startTime: new Date(),
+      endTime: null,
+      errorMessage: null,
     };
 
-    this.logger.log(rez.mesaj);
-    return rez;
+    // Lansăm procesul în fundal fără a bloca conexiunea HTTP (evităm timeout-ul)
+    this.executeBackgroundSync(safeZile).catch((err) => {
+      this.logger.error(`Eroare neprevăzută în background sync ANAF: ${err?.message || err}`);
+    });
+
+    return {
+      mesaj: `Sincronizarea e-Factura pe ultimele ${safeZile} zile a fost pornită în fundal.`,
+      syncStatus: this.syncStatus,
+    };
+  }
+
+  private async executeBackgroundSync(safeZile: number) {
+    try {
+      const cfg = await this.getConfig();
+      const token = await this.refreshOAuthTokenIfNeeded();
+
+      if (!token) {
+        throw new BadRequestException('Vă rugăm să configurați Token-ul OAuth2 ANAF e-Factura în Setări.');
+      }
+
+      const cif = cfg.cifFirma.replace(/[^0-9]/g, ''); // CUI fără RO pentru API ANAF
+      this.logger.log(`Inițiere sincronizare e-Factura pentru CUI ${cif} pe ultimele ${safeZile} zile...`);
+
+      // ANAF listaMesajePaginatieFactura: startTime, endTime (milisecunde), cif, pagina
+      const nowMs = Date.now() - 60000;
+      const startMs = nowMs - safeZile * 24 * 60 * 60 * 1000;
+
+      const mesajeList: any[] = [];
+      let currentPage = 1;
+      let totalPages = 1;
+
+      while (currentPage <= totalPages) {
+        const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?startTime=${startMs}&endTime=${nowMs}&cif=${cif}&pagina=${currentPage}`;
+        try {
+          const response = await this.executeWithRetry(() =>
+            axios.get(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          );
+          const pageData = response.data;
+          const pageMessages = pageData?.mesaje || pageData?.lista_mesaje || [];
+          mesajeList.push(...pageMessages);
+
+          totalPages = pageData?.numar_total_pagini ? Number(pageData.numar_total_pagini) : 1;
+          this.logger.log(`Pagină e-Factura ${currentPage}/${totalPages} descărcată (${pageMessages.length} mesaje).`);
+          currentPage++;
+        } catch (err: any) {
+          this.logger.error(`Eroare la interogarea paginii ${currentPage} ANAF: ${err?.message}`);
+          break;
+        }
+      }
+
+      this.syncStatus.totalMessages = mesajeList.length;
+      this.logger.log(`Total mesaje găsite în ANAF SPV pe ${safeZile} zile: ${mesajeList.length}`);
+
+      for (const msg of mesajeList) {
+        this.syncStatus.processed++;
+        const idDescarcare = msg.id_descarcare || msg.id;
+        if (!idDescarcare) continue;
+
+        // 1. DEDUPLICARE STRICTĂ: Verificare dacă idDescarcare există deja în DB
+        const exist = await this.prisma.eFacturaFactura.findUnique({
+          where: { idDescarcare: String(idDescarcare) },
+        });
+
+        if (exist) {
+          this.syncStatus.duplicates++;
+          continue;
+        }
+
+        // 2. DESCĂRCARE ARCHIVĂ ZIP DUPĂ ID_DESCARCARE
+        try {
+          const downloadUrl = `https://api.anaf.ro/prod/FCTEL/rest/descarcare?id=${idDescarcare}`;
+          const zipResponse = await this.executeWithRetry(() =>
+            axios.get(downloadUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+              responseType: 'arraybuffer',
+            })
+          );
+
+          const zipBuffer = Buffer.from(zipResponse.data);
+          const zip = new AdmZip(zipBuffer);
+          const zipEntries = zip.getEntries();
+
+          let xmlRawContent: string | null = null;
+          for (const entry of zipEntries) {
+            if (entry.entryName.endsWith('.xml') && !entry.entryName.includes('semnatura')) {
+              xmlRawContent = entry.getData().toString('utf8');
+              break;
+            }
+          }
+
+          if (!xmlRawContent && zipEntries.length > 0) {
+            xmlRawContent = zipEntries[0].getData().toString('utf8');
+          }
+
+          if (xmlRawContent) {
+            // 3. PARSARE UBL 2.1 XML FACTURĂ
+            const parsedInvoice = this.parseUBL21Xml(xmlRawContent, msg);
+
+            // DOAR FACTURI PRIMITE (ACHIZIȚII / FURNIZORI) - Ignorăm facturile emise de noi către clienți
+            const cifVanzatorClean = (parsedInvoice.cifVanzator || msg.cif_emitent || '').replace(/[^0-9]/g, '');
+            if (cifVanzatorClean === cif) {
+              continue;
+            }
+
+            // 4. PERSISTENȚĂ ÎN BAZA DE DATE PRISMA
+            await this.prisma.eFacturaFactura.create({
+              data: {
+                idDescarcare: String(idDescarcare),
+                numarInregistrare: String(msg.numar_solicitare || msg.id || ''),
+                cifVanzator: parsedInvoice.cifVanzator || msg.cif_emitent || 'N/A',
+                numeVanzator: parsedInvoice.numeVanzator || msg.detalii || 'Furnizor Nespecificat',
+                cifCumparator: parsedInvoice.cifCumparator || cfg.cifFirma,
+                numarFactura: parsedInvoice.numarFactura || `FAC-${idDescarcare}`,
+                dataFactura: parsedInvoice.dataFactura || new Date(),
+                dataMesaj: parseAnafDataCreare(msg.data_creare),
+                valoareTotala: parsedInvoice.valoareTotala || Number(msg.valoare || 0),
+                moneda: parsedInvoice.moneda || 'RON',
+                tipFactura: parsedInvoice.tipFactura || 'FACTURA',
+                xmlRawContent: xmlRawContent,
+                articole: {
+                  create: parsedInvoice.items.map((item, idx) => ({
+                    numarLinie: idx + 1,
+                    descrierePiesa: item.descrierePiesa,
+                    codArticolFurnizor: item.codArticolFurnizor,
+                    cantitate: item.cantitate,
+                    unitateMasura: item.unitateMasura,
+                    pretUnitar: item.pretUnitar,
+                    valoareFaraTVA: item.valoareFaraTVA,
+                    valoareTVA: item.valoareTVA,
+                    cotaTVA: item.cotaTVA,
+                    stare: 'NEPROCESAT',
+                  })),
+                },
+              },
+            });
+            this.syncStatus.downloaded++;
+          }
+        } catch (err: any) {
+          this.logger.error(`Eroare la descărcarea/parsarea facturii idDescarcare ${idDescarcare}: ${err?.message}`);
+        }
+      }
+
+      await this.prisma.eFacturaConfig.update({
+        where: { id: 'default' },
+        data: { ultimulSyncSucces: new Date() },
+      });
+      this.logger.log(`Sincronizare finalizată: ${this.syncStatus.downloaded} facturi noi, ${this.syncStatus.duplicates} duplicate.`);
+    } catch (err: any) {
+      this.syncStatus.errorMessage = err?.message || 'Eroare sincronizare';
+      this.logger.error(`Eroare la sincronizarea de fundal: ${err?.message}`);
+    } finally {
+      this.syncStatus.inProgress = false;
+      this.syncStatus.endTime = new Date();
+    }
   }
 
   // -------------------------------------------------------------------------
