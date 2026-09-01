@@ -433,6 +433,19 @@ export class EFacturaService {
         const idDescarcare = msg.id_descarcare || msg.id;
         if (!idDescarcare) continue;
 
+        // Ignorăm mesajele de sistem / erori de validare transmise de ANAF (nu sunt facturi reale de furnizor)
+        const tipMesaj = (msg.tip || '').toUpperCase();
+        const detaliiMesaj = (msg.detalii || '').toLowerCase();
+        if (
+          tipMesaj.includes('EROARE') ||
+          tipMesaj.includes('ERORI') ||
+          detaliiMesaj.includes('erori de validare') ||
+          detaliiMesaj.includes('eroare validare')
+        ) {
+          this.logger.warn(`Mesaj de eroare de validare ANAF ignorat (id: ${idDescarcare}): ${msg.detalii}`);
+          continue;
+        }
+
         // 1. DEDUPLICARE STRICTĂ: Verificare dacă idDescarcare există deja în DB
         const exist = await this.prisma.eFacturaFactura.findUnique({
           where: { idDescarcare: String(idDescarcare) },
