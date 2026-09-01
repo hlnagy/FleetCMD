@@ -216,6 +216,32 @@ function EFacturaContent() {
         const iList = await resIntrari.json();
         setIntrariHistory(Array.isArray(iList) ? iList : []);
       }
+
+      // Verificăm dacă o sincronizare este deja în curs pe server la încărcarea paginii
+      const resSync = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+      if (resSync.ok) {
+        const sData = await resSync.json();
+        setSyncStatusData(sData);
+        if (sData.inProgress) {
+          setSyncing(true);
+          const pollInterval = setInterval(async () => {
+            try {
+              const statusRes = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+              if (statusRes.ok) {
+                const polled = await statusRes.json();
+                setSyncStatusData(polled);
+                if (!polled.inProgress) {
+                  clearInterval(pollInterval);
+                  setSyncing(false);
+                  fetchData();
+                }
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }, 2000);
+        }
+      }
     } catch (e) {
       console.log('Eroare la încărcarea datelor e-Factura:', e);
     } finally {

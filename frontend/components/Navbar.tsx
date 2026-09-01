@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
-  Droplets, FileText, CheckCircle2, ChevronRight, X
+  Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw
 } from 'lucide-react';
+import { API_BASE_URL } from '../lib/api';
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -15,10 +16,11 @@ export default function Navbar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'TOATE' | 'STOC' | 'MENTENANTA' | 'DOCUMENTE'>('TOATE');
+  const [globalSyncStatus, setGlobalSyncStatus] = useState<any>(null);
 
   const fetchAlerte = async () => {
     try {
-      const resAlerte = await fetch('http://localhost:3001/anomalii/alerte-centralizate');
+      const resAlerte = await fetch(`${API_BASE_URL}/anomalii/alerte-centralizate`);
       if (resAlerte.ok) {
         const alerte = await resAlerte.json();
         const list = Array.isArray(alerte) ? alerte : [];
@@ -26,10 +28,16 @@ export default function Navbar() {
         setNumAlerte(list.length);
       }
 
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const vData = await resVeh.json();
         setVehicule(Array.isArray(vData) ? vData : (vData?.data || []));
+      }
+
+      const resSync = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+      if (resSync.ok) {
+        const sData = await resSync.json();
+        setGlobalSyncStatus(sData);
       }
     } catch (e) {
       console.log('Error fetching navbar data', e);
@@ -38,7 +46,7 @@ export default function Navbar() {
 
   useEffect(() => {
     fetchAlerte();
-    const interval = setInterval(fetchAlerte, 30000); // Reîmprospătare la 30 secunde
+    const interval = setInterval(fetchAlerte, 4000); // Polling la fiecare 4 secunde
     return () => clearInterval(interval);
   }, []);
 
@@ -123,6 +131,23 @@ export default function Navbar() {
 
       {/* DREAPTA: HARANGOCSKÁ CU DROPDOWN & PROFIL USER */}
       <div className="flex items-center space-x-3">
+        {/* GLOBAL ANAF SYNC BADGE */}
+        {globalSyncStatus?.inProgress && (
+          <Link
+            href="/efactura?tab=efactura"
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-sapphire-50 border border-sapphire-300 text-sapphire-800 hover:bg-sapphire-100 transition shadow-xs animate-pulse"
+            title="Sincronizare ANAF SPV în curs în fundal - Click pentru a deschide"
+          >
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-sapphire-600 shrink-0" />
+            <div className="text-left leading-none">
+              <p className="text-[10px] font-black uppercase tracking-wider text-sapphire-900">ANAF Sync Activ</p>
+              <p className="text-[10px] font-bold font-mono text-sapphire-600">
+                {globalSyncStatus.processed}/{globalSyncStatus.totalMessages || '...'} ({globalSyncStatus.downloaded} noi)
+              </p>
+            </div>
+          </Link>
+        )}
+
         {/* CLOPOȚEL DE NOTIFICĂRI FACEBOOK-STYLE */}
         <div className="relative">
           <button
