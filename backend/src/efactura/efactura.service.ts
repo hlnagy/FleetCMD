@@ -53,6 +53,24 @@ export function normalizeUnitateMasura(rawUnit?: string): string {
   }
 }
 
+export function parseAnafDataCreare(raw: string | number | undefined): Date {
+  if (!raw) return new Date();
+  const s = String(raw).trim();
+  // Format YYYYMMDDHHmm or YYYYMMDDHHmmss (ex: "202608171155")
+  if (/^\d{12,14}$/.test(s)) {
+    const year = parseInt(s.substring(0, 4), 10);
+    const month = parseInt(s.substring(4, 6), 10) - 1;
+    const day = parseInt(s.substring(6, 8), 10);
+    const hour = parseInt(s.substring(8, 10), 10);
+    const min = parseInt(s.substring(10, 12), 10);
+    const sec = s.length >= 14 ? parseInt(s.substring(12, 14), 10) : 0;
+    const d = new Date(Date.UTC(year, month, day, hour, min, sec));
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
 export function parseDimensiune(desc: string): string {
   const match = desc.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
   return match ? match[0].replace(/\s+/g, '') : '315/80R22.5';
@@ -330,23 +348,39 @@ export class EFacturaService {
     const cif = cfg.cifFirma.replace(/[^0-9]/g, ''); // CUI fără RO pentru API ANAF
     this.logger.log(`Inițiere sincronizare e-Factura pentru CUI ${cif} pe ultimele ${safeZile} zile...`);
 
-    // API ANAF Lista Mesaje: /rest/listaMesajePaginatieFactura?zile=X&cif=Y
-    const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?zile=${safeZile}&cif=${cif}`;
+    // ANAF listaMesajePaginatieFactura: startTime, endTime (milisecunde), cif, pagina
+    // Setăm endTime cu 60 secunde în trecut pentru a preveni deviațiile de ceas cu serverele ANAF
+    const nowMs = Date.now() - 60000;
+    const startMs = nowMs - safeZile * 24 * 60 * 60 * 1000;
 
-    let mesajeData: any = null;
-    try {
-      const response = await this.executeWithRetry(() =>
-        axios.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-      );
-      mesajeData = response.data;
-    } catch (err: any) {
-      this.logger.error(`Eroare la interogarea listei de mesaje ANAF: ${err?.message}`);
-      throw new BadRequestException(`Eroare comunicare ANAF SPV: ${err?.response?.data?.message || err?.message}`);
+    const mesajeList: any[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    while (currentPage <= totalPages) {
+      const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?startTime=${startMs}&endTime=${nowMs}&cif=${cif}&pagina=${currentPage}`;
+      try {
+        const response = await this.executeWithRetry(() =>
+          axios.get(url, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        );
+        const pageData = response.data;
+        const pageMessages = pageData?.mesaje || pageData?.lista_mesaje || [];
+        mesajeList.push(...pageMessages);
+
+        totalPages = pageData?.numar_total_pagini ? Number(pageData.numar_total_pagini) : 1;
+        this.logger.log(`Pagină e-Factura ${currentPage}/${totalPages} descărcată (${pageMessages.length} mesaje).`);
+        currentPage++;
+      } catch (err: any) {
+        this.logger.error(`Eroare la interogarea paginii ${currentPage} ANAF: ${err?.message}`);
+        break;
+      }
     }
 
-    const mesajeList = mesajeData?.mesaje || mesajeData?.lista_mesaje || [];
+    if (mesajeList.length === 0) {
+      this.logger.log(`Nu au fost găsite mesaje e-Factura noi pentru CUI ${cif} pe ultimele ${safeZile} zile.`);
+    }
     let descarcateCount = 0;
     let omiseDuplicateCount = 0;
 
@@ -404,7 +438,7 @@ export class EFacturaService {
               cifCumparator: parsedInvoice.cifCumparator || cfg.cifFirma,
               numarFactura: parsedInvoice.numarFactura || `FAC-${idDescarcare}`,
               dataFactura: parsedInvoice.dataFactura || new Date(),
-              dataMesaj: msg.data_creare ? new Date(msg.data_creare) : new Date(),
+              dataMesaj: parseAnafDataCreare(msg.data_creare),
               valoareTotala: parsedInvoice.valoareTotala || Number(msg.valoare || 0),
               moneda: parsedInvoice.moneda || 'RON',
               tipFactura: parsedInvoice.tipFactura || 'FACTURA',
