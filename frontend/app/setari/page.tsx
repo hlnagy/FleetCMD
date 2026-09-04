@@ -224,14 +224,25 @@ function SetariContent() {
         setDepozite(Array.isArray(dList) ? dList : []);
       }
 
-      const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
-      if (resCat.ok) {
-        const cData = await resCat.json();
-        const cArr = [
-          ...(Array.isArray(cData.categoriiImplicite) ? cData.categoriiImplicite : []),
-          ...(Array.isArray(cData.categoriiCustom) ? cData.categoriiCustom : []),
-        ];
-        setCategorii(cArr);
+      // Fetch Categorii cu retry pentru a tolera trezirea la rece pe serverul cloud
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
+          if (resCat.ok) {
+            const cData = await resCat.json();
+            const cArr = [
+              ...(Array.isArray(cData.categoriiImplicite) ? cData.categoriiImplicite : []),
+              ...(Array.isArray(cData.categoriiCustom) ? cData.categoriiCustom : []),
+            ];
+            if (cArr.length > 0) {
+              setCategorii(cArr);
+              break;
+            }
+          }
+        } catch (err) {
+          console.warn(`Tentativă ${attempt + 1} la încărcare categorii în setări:`, err);
+        }
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       const resReguli = await fetch(`${API_BASE_URL}/anomalii/reguli-mentenanta`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   FileText, RefreshCw, CheckCircle2, AlertTriangle, Download, Plus, Search,
@@ -34,9 +34,10 @@ function EFacturaContent() {
 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [selectedZile, setSelectedZile] = useState(15);
+  const [selectedZile, setSelectedZile] = useState(60);
   const [searchQuery, setSearchQuery] = useState('');
   const [stareFilter, setStareFilter] = useState('NEPROCESAT');
+  const [lunaFilter, setLunaFilter] = useState<'TOATE' | string>('TOATE');
 
   // STARE PENTRU RECEPȚIE MANUALĂ & ISTORIC FACTURI
   const [bevDepozitId, setBevDepozitId] = useState('');
@@ -175,9 +176,11 @@ function EFacturaContent() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      let loadedConfig: any = null;
       const resConfig = await fetch(`${API_BASE_URL}/efactura/config`);
       if (resConfig.ok) {
         const cfg = await resConfig.json();
+        loadedConfig = cfg;
         setConfig(cfg);
         setCifFirma(cfg.cifFirma || '');
         setClientId(cfg.clientId || '');
@@ -201,14 +204,25 @@ function EFacturaContent() {
         if (dList.length > 0 && !targetDepozitId) setTargetDepozitId(dList[0].id);
       }
 
-      const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
-      if (resCat.ok) {
-        const cData = await resCat.json();
-        const merged = [
-          ...(Array.isArray(cData.categoriiImplicite) ? cData.categoriiImplicite : []),
-          ...(Array.isArray(cData.categoriiCustom) ? cData.categoriiCustom : []),
-        ];
-        setCategoriiStoc(merged);
+      // Încărcare categorii stoc cu retry (pentru a tolera trezirea la rece a backend-ului pe serverul cloud)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
+          if (resCat.ok) {
+            const cData = await resCat.json();
+            const merged = [
+              ...(Array.isArray(cData.categoriiImplicite) ? cData.categoriiImplicite : []),
+              ...(Array.isArray(cData.categoriiCustom) ? cData.categoriiCustom : []),
+            ];
+            if (merged.length > 0) {
+              setCategoriiStoc(merged);
+              break;
+            }
+          }
+        } catch (err) {
+          console.warn(`Tentativă ${attempt + 1} de încărcare categorii:`, err);
+        }
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       const resIntrari = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`);
@@ -240,12 +254,12 @@ function EFacturaContent() {
               console.error(e);
             }
           }, 2000);
-        } else if (config?.stareCronAuto && config?.accessToken) {
+        } else if (loadedConfig?.stareCronAuto && loadedConfig?.accessToken) {
           // AUTO-SYNC INTELIGENT: Dacă ultimul sync a fost acum mai mult de 60 de minute (sau după weekend/inactivitate), pornim automat sync în fundal!
-          const lastSyncTime = config?.ultimulSyncSucces ? new Date(config.ultimulSyncSucces).getTime() : 0;
+          const lastSyncTime = loadedConfig?.ultimulSyncSucces ? new Date(loadedConfig.ultimulSyncSucces).getTime() : 0;
           const oneHourMs = 60 * 60 * 1000;
           if (Date.now() - lastSyncTime > oneHourMs) {
-            handleForceSync();
+            handleForceSync(60);
           }
         }
       }
@@ -413,13 +427,14 @@ function EFacturaContent() {
   };
 
   // FORCE SYNC HANDLER (MANUAL SYNCHRONIZATION WITH ANAF SPV)
-  const handleForceSync = async () => {
+  const handleForceSync = async (customZile?: number) => {
     try {
       setSyncing(true);
+      const zileToSync = customZile || Number(selectedZile) || 60;
       const res = await fetch(`${API_BASE_URL}/efactura/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ zile: Number(selectedZile) }),
+        body: JSON.stringify({ zile: zileToSync }),
       });
 
       if (res.ok) {
@@ -728,6 +743,18 @@ function EFacturaContent() {
     }
   };
 
+  // AVAILABLE INVOICE MONTHS FOR QUICK FILTERING
+  const luniDisponibile = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const f of facturi) {
+      if (f.dataFactura) {
+        const key = new Date(f.dataFactura).toISOString().slice(0, 7);
+        map[key] = (map[key] || 0) + 1;
+      }
+    }
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [facturi]);
+
   // FILTERED & SORTED INVOICES
   const facturiFiltrate = facturi
     .filter((f) => {
@@ -737,6 +764,13 @@ function EFacturaContent() {
         f.numarFactura?.toLowerCase().includes(searchQuery.toLowerCase());
 
       if (!matchesSearch) return false;
+
+      // Filtru după lună (ex: "2026-08", "2026-09")
+      if (lunaFilter !== 'TOATE') {
+        const lunaFactura = f.dataFactura ? new Date(f.dataFactura).toISOString().slice(0, 7) : '';
+        if (lunaFactura !== lunaFilter) return false;
+      }
+
       if (stareFilter === 'TOATE') return true;
       if (stareFilter === 'NEPROCESAT') {
         return (
@@ -1045,13 +1079,13 @@ function EFacturaContent() {
               onChange={(e) => setSelectedZile(Number(e.target.value))}
               className="bg-white border border-sapphire-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-sapphire-900"
             >
-              <option value={15}>Ultimile 15 Zile</option>
-              <option value={30}>Ultimile 30 Zile</option>
-              <option value={60}>Ultimile 60 Zile (Max ANAF)</option>
+              <option value={60}>Ultimele 60 Zile (Complet ANAF)</option>
+              <option value={30}>Ultimele 30 Zile</option>
+              <option value={15}>Ultimele 15 Zile</option>
             </select>
 
             <button
-              onClick={handleForceSync}
+              onClick={() => handleForceSync()}
               disabled={syncing}
               className="flex-1 flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-sm transition disabled:opacity-50"
             >
@@ -1084,6 +1118,34 @@ function EFacturaContent() {
 
       {/* FILTRARE & CĂUTARE FACTURI */}
       <div className="pleasant-card p-4 rounded-2xl space-y-3">
+        {/* BARA FILTRU LUNĂ (AUGUST / SEPTEMBRIE) */}
+        {luniDisponibile.length > 0 && (
+          <div className="flex items-center space-x-1.5 bg-morning-100 p-1.5 rounded-xl overflow-x-auto">
+            <span className="text-[11px] font-extrabold text-sage-700 px-2 flex items-center space-x-1 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-sapphire-600" />
+              <span>Filtru Lună:</span>
+            </span>
+            <button
+              onClick={() => setLunaFilter('TOATE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${lunaFilter === 'TOATE' ? 'bg-sapphire-600 text-white shadow-xs' : 'text-slate-700 hover:bg-morning-200'}`}
+            >
+              Toate Lunile ({facturi.length})
+            </button>
+            {luniDisponibile.map(([lunaKey, count]) => {
+              const [an, luna] = lunaKey.split('-');
+              const numeLuna = luna === '08' ? 'August' : luna === '09' ? 'Septembrie' : luna === '10' ? 'Octombrie' : luna === '07' ? 'Iulie' : `Luna ${luna}`;
+              return (
+                <button
+                  key={lunaKey}
+                  onClick={() => setLunaFilter(lunaKey)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${lunaFilter === lunaKey ? 'bg-sapphire-600 text-white shadow-xs' : 'text-slate-700 hover:bg-morning-200'}`}
+                >
+                  {numeLuna} {an} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
@@ -2017,12 +2079,7 @@ function EFacturaContent() {
                         <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                       ))
                     ) : (
-                      <>
-                        <option value="PIESE_AUTO">PIESE AUTO & UTILAJE</option>
-                        <option value="FILTRE">FILTRE & ULEIURI</option>
-                        <option value="CONSUMABILE">CONSUMABILE ATELIER</option>
-                        <option value="ANVELOPE">ANVELOPE & ROȚI</option>
-                      </>
+                      <option value="">Se încarcă categoriile din sistem...</option>
                     )}
                   </select>
                 )}

@@ -352,7 +352,7 @@ export class EFacturaService {
   // -------------------------------------------------------------------------
   // HYBRID SYNC: FETCH MESSAGES & DEDUPLICATE & DOWNLOAD UBL 2.1 XML
   // -------------------------------------------------------------------------
-  async syncFacturi(zile = 15) {
+  async syncFacturi(zile = 60) {
     if (this.syncStatus.inProgress) {
       return {
         mesaj: 'O sincronizare ANAF este deja în curs de desfășurare în fundal.',
@@ -360,7 +360,7 @@ export class EFacturaService {
       };
     }
 
-    const safeZile = Math.min(Math.max(1, Number(zile) || 15), 60);
+    const safeZile = Math.min(Math.max(1, Number(zile) || 60), 60);
     this.syncStatus = {
       inProgress: true,
       zile: safeZile,

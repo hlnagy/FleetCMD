@@ -138,11 +138,25 @@ function StocuriGarantiiContent() {
         if (depData.length > 1 && !transferDepozitDestinatieId) setTransferDepozitDestinatieId(depData[1].id);
       }
 
-      // Fetch Categorii
-      const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
-      if (resCat.ok) {
-        const catData = await resCat.json();
-        setCategorii([...catData.categoriiImplicite, ...catData.categoriiCustom]);
+      // Fetch Categorii cu retry pentru a rezista trezirii la rece pe serverul cloud
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
+          if (resCat.ok) {
+            const catData = await resCat.json();
+            const allCats = [
+              ...(Array.isArray(catData.categoriiImplicite) ? catData.categoriiImplicite : []),
+              ...(Array.isArray(catData.categoriiCustom) ? catData.categoriiCustom : []),
+            ];
+            if (allCats.length > 0) {
+              setCategorii(allCats);
+              break;
+            }
+          }
+        } catch (err) {
+          console.warn(`Tentativă ${attempt + 1} la încărcare categorii stoc:`, err);
+        }
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
       // Fetch Stocuri Critice
