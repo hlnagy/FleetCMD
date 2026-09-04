@@ -200,7 +200,7 @@ export default function ComenziLucruPage() {
     const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
 
     if (isTrailer && (!valoareContorExecutie || Number(valoareContorExecutie) <= 0)) {
-      alert('⛔ Index KM Obligatoriu pentru Semiremorci!\n\nSemiremorcile nu au contor propriu. Vă rugăm să introduceți indexul kilometrajului al capului tractor care tractează semiremorca!');
+      alert('Index KM Obligatoriu pentru Semiremorci!\n\nSemiremorcile nu au contor propriu. Vă rugăm să introduceți indexul kilometrajului al capului tractor care tractează semiremorca!');
       return;
     }
 
@@ -223,7 +223,7 @@ export default function ComenziLucruPage() {
       if (pilonCost === 'PIESA_STOC' && selectedArticolStocId) {
         const itemStoc = stocuri.find((s) => s.id === selectedArticolStocId);
         if (itemStoc && Number(cantitate) > itemStoc.stocCurent) {
-          alert(`⛔ Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
+          alert(` Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
           return;
         }
       }
@@ -276,7 +276,7 @@ export default function ComenziLucruPage() {
     if (elemPilonCost === 'PIESA_STOC' && elemArticolStocId) {
       const itemStoc = stocuri.find((s) => s.id === elemArticolStocId);
       if (itemStoc && Number(elemCantitate) > itemStoc.stocCurent) {
-        alert(`⛔ Stoc Insuficient!\n\nNu puteți adăuga ${elemCantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
+        alert(` Stoc Insuficient!\n\nNu puteți adăuga ${elemCantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
         return;
       }
     }
@@ -347,7 +347,7 @@ export default function ComenziLucruPage() {
     }
   };
 
-  // 🔓 DEVALIDARE COMANDĂ DE LUCRU (Re-opens work order, restores stock & reveals EDIT / ANULARE buttons)
+  //  DEVALIDARE COMANDĂ DE LUCRU (Re-opens work order, restores stock & reveals EDIT / ANULARE buttons)
   const handleDevalideazaComanda = async (id: string, numarComanda: string) => {
     const confirmed = await showConfirm(
       'Devalidare Comandă de Lucru',
@@ -595,7 +595,7 @@ export default function ComenziLucruPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="🔍 Nr. Comandă, utilaj, mecanic, piesă..."
+              placeholder="Nr. Comandă, utilaj, mecanic, piesă..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-sapphire-900 font-medium focus:bg-white transition"
             />
           </div>
@@ -608,10 +608,10 @@ export default function ComenziLucruPage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
             >
               <option value="TOATE">Stare: Toate Stările</option>
-              <option value="IN_LUCRU">⚙️ ÎN LUCRU</option>
-              <option value="FINALIZAT">✅ FINALIZAT</option>
-              <option value="DEVALIDAT">🔓 DEVALIDAT</option>
-              <option value="ANULAT">❌ ANULAT</option>
+              <option value="IN_LUCRU">ÎN LUCRU</option>
+              <option value="FINALIZAT">FINALIZAT</option>
+              <option value="DEVALIDAT">DEVALIDAT</option>
+              <option value="ANULAT">ANULAT</option>
             </select>
           </div>
 
@@ -625,7 +625,7 @@ export default function ComenziLucruPage() {
               <option value="TOATE">Utilaj: Toate Flota</option>
               {vehicule.map((v) => (
                 <option key={v.id} value={v.id}>
-                  🚜 {v.numarIntern} ({v.numarInmatriculare})
+                   {v.numarIntern} ({v.numarInmatriculare})
                 </option>
               ))}
             </select>
@@ -641,7 +641,7 @@ export default function ComenziLucruPage() {
               <option value="TOATE">Mecanic: Toți Mecanicii</option>
               {mecaniciList.map((m) => (
                 <option key={m.id} value={m.nume}>
-                  👨‍🔧 {m.nume}
+                   {m.nume}
                 </option>
               ))}
             </select>
@@ -717,7 +717,7 @@ export default function ComenziLucruPage() {
                       {cl.dataFinalizare ? (
                         <div className="text-sapphire-600 font-semibold"><strong>Finalizat:</strong> {new Date(cl.dataFinalizare).toLocaleDateString('ro-RO')}</div>
                       ) : cl.stare === 'DEVALIDAT' ? (
-                        <div className="text-terracotta-600 font-bold">🔓 DEVALIDAT (În Ediție)</div>
+                        <div className="text-terracotta-600 font-bold">DEVALIDAT (În Ediție)</div>
                       ) : (
                         <div className="text-periwinkle-700 font-bold">În Desfășurare</div>
                       )}
@@ -763,7 +763,7 @@ export default function ComenziLucruPage() {
                         cl.stare === 'ANULAT' ? 'bg-slate-100 text-slate-500 border border-slate-300' :
                         'bg-periwinkle-100 text-periwinkle-700 border border-periwinkle-300 animate-pulse'
                       }`}>
-                        {cl.stare === 'IN_LUCRU' ? '⚙️ ÎN LUCRU' : cl.stare === 'DEVALIDAT' ? '🔓 DEVALIDAT' : cl.stare}
+                        {cl.stare === 'IN_LUCRU' ? 'ÎN LUCRU' : cl.stare === 'DEVALIDAT' ? 'DEVALIDAT' : cl.stare}
                       </span>
                     </td>
 
@@ -820,7 +820,7 @@ export default function ComenziLucruPage() {
                             title="Finalizează & Închide Comanda"
                             className="px-2.5 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white text-[11px] font-bold shadow-xs transition"
                           >
-                            ✅ Finalizează
+                             Finalizează
                           </button>
                         </>
                       )}
@@ -890,7 +890,7 @@ export default function ComenziLucruPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-sapphire-900 font-extrabold text-xs block">
-                      ⚙️ Felszerelés / Elemente & Piese pe Comandă ({editElemente.length}):
+                       Felszerelés / Elemente & Piese pe Comandă ({editElemente.length}):
                     </label>
                     <span className="text-[11px] text-sage-600 font-medium">
                       Puteți adăuga piese noi, alege pilonul de cost și conecta articole din stocul intern
@@ -1065,7 +1065,7 @@ export default function ComenziLucruPage() {
                   className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 flex items-center space-x-2 transition"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>🖨️ Printează / Salvează PDF</span>
+                  <span>Printează / Salvează PDF</span>
                 </button>
 
                 <button onClick={() => setShowViewModal(null)} className="text-sage-500 hover:text-sapphire-900">
@@ -1074,7 +1074,7 @@ export default function ComenziLucruPage() {
               </div>
             </div>
 
-            {/* 📄 PRINTABLE A4 SHEET VIEW 📄 */}
+            {/*  PRINTABLE A4 SHEET VIEW  */}
             <div id="printable-a4-area" className="p-8 bg-white border border-slate-200 rounded-xl space-y-6 text-slate-800 font-sans">
               {/* Document Header */}
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
@@ -1273,7 +1273,7 @@ export default function ComenziLucruPage() {
                         />
                         {isElemExceeded && (
                           <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center space-x-1">
-                            <span>⚠️ Stoc insuficient! Disponibil: {currentElemStockItem.stocCurent} {currentElemStockItem.unitateMasura || 'buc'}</span>
+                            <span>Stoc insuficient! Disponibil: {currentElemStockItem.stocCurent} {currentElemStockItem.unitateMasura || 'buc'}</span>
                           </p>
                         )}
                       </>
@@ -1360,13 +1360,13 @@ export default function ComenziLucruPage() {
                       <div className="p-3 rounded-2xl border bg-amber-50/90 border-amber-300 space-y-2 text-xs">
                         <div className="flex items-center space-x-2 text-amber-900 font-extrabold">
                           <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                          <span>🚛 Semiremorcă / Remorcă (Fără odometru propriu pe șasiu)</span>
+                          <span>Semiremorcă / Remorcă (Fără odometru propriu pe șasiu)</span>
                         </div>
 
                         {coupledTractor ? (
                           <div className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between shadow-xs">
                             <div>
-                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">🔗 Cuplat Activ la Cap Tractor:</p>
+                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider"> Cuplat Activ la Cap Tractor:</p>
                               <p className="font-extrabold text-sapphire-900">
                                 {coupledTractor.numarIntern} ({coupledTractor.numarInmatriculare}) - {coupledTractor.marca}
                               </p>
@@ -1401,7 +1401,7 @@ export default function ComenziLucruPage() {
                               .filter((v) => v.categorieEnum === 'CAP_TRACTOR')
                               .map((tr) => (
                                 <option key={tr.id} value={tr.id}>
-                                  🚚 {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
+                                   {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
                                 </option>
                               ))}
                           </select>
@@ -1432,7 +1432,7 @@ export default function ComenziLucruPage() {
                       </p>
                       {isLower && (
                         <div className="mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
-                          <span>⚠️ ATENȚIE: Valoarea introdusă ({valoareContorExecutie} {selV?.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({currentContor} {selV?.tipMasurare})! Se va salva ca o corecție manuală.</span>
+                          <span>ATENȚIE: Valoarea introdusă ({valoareContorExecutie} {selV?.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({currentContor} {selV?.tipMasurare})! Se va salva ca o corecție manuală.</span>
                         </div>
                       )}
                     </div>
@@ -1543,7 +1543,7 @@ export default function ComenziLucruPage() {
                               />
                               {isExceeded && (
                                 <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center space-x-1">
-                                  <span>⚠️ Stoc insuficient! Disponibil: {currentStockItem.stocCurent} {currentStockItem.unitateMasura || 'buc'}</span>
+                                  <span>Stoc insuficient! Disponibil: {currentStockItem.stocCurent} {currentStockItem.unitateMasura || 'buc'}</span>
                                 </p>
                               )}
                             </>

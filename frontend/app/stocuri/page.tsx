@@ -214,7 +214,7 @@ function StocuriGarantiiContent() {
         }),
       });
       if (res.ok) {
-        alert('✅ Subcategoria a fost adăugată cu succes!');
+        alert('Subcategoria a fost adăugată cu succes!');
         setShowAddSubcatModal(false);
         setNumeSubcatNoua('');
         fetchData();
@@ -775,8 +775,8 @@ function StocuriGarantiiContent() {
                   className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
                 >
                   <option value="TOATE">Toate Stările</option>
-                  <option value="CRITIC">⚠️ Doar Stoc Critic (Sub Minim)</option>
-                  <option value="IN_STOC">✅ Doar Stoc Optim (În Grafic)</option>
+                  <option value="CRITIC"> Doar Stoc Critic (Sub Minim)</option>
+                  <option value="IN_STOC">Doar Stoc Optim (În Grafic)</option>
                 </select>
 
                 {/* Comutator Filtrare Stoc Zero (0) */}
@@ -790,7 +790,7 @@ function StocuriGarantiiContent() {
                   }`}
                   title="Comută afișarea articolelor cu stoc 0"
                 >
-                  <span>{hideZeroStock ? '✓ Doar Stoc Disponibil (>0)' : '👁️ Include Stoc Zero (0)'}</span>
+                  <span>{hideZeroStock ? ' Doar Stoc Disponibil (>0)' : ' Include Stoc Zero (0)'}</span>
                 </button>
 
                 <button
@@ -815,8 +815,7 @@ function StocuriGarantiiContent() {
             <div className="p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl flex items-center justify-between text-xs">
               <div className="flex items-center space-x-2 text-sapphire-900 font-medium">
                 <AlertCircle className="w-4 h-4 text-sapphire-500 shrink-0" />
-                <span>
-                  Sunt ascunse <strong>{countZeroStock} articole</strong> cu stoc zero (epuizate) pentru a păstra tabelul curat.
+                <span>Sunt ascunse <strong>{countZeroStock} articole</strong> cu stoc zero (epuizate) pentru a păstra tabelul curat.
                 </span>
               </div>
               <button
@@ -864,7 +863,7 @@ function StocuriGarantiiContent() {
                               className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold hover:bg-emerald-100 transition"
                             >
                               <CircleDot className="w-3 h-3 text-emerald-600" />
-                              <span>🛞 Vezi Serii în Magazie Anvelope ({s.stocCurent} buc)</span>
+                              <span>Vezi Serii în Magazie Anvelope ({s.stocCurent} buc)</span>
                             </button>
                           </div>
                         )}
@@ -1000,7 +999,7 @@ function StocuriGarantiiContent() {
                   type="text"
                   value={anvelopeStocSearch}
                   onChange={(e) => setAnvelopeStocSearch(e.target.value)}
-                  placeholder="🔍 Caută anvelopă după Serie (SN), Marcă, Model, Dimensiune, DOT, Depozit..."
+                  placeholder="Caută anvelopă după Serie (SN), Marcă, Model, Dimensiune, DOT, Depozit..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-4 py-2.5 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
                 />
               </div>
@@ -1024,7 +1023,7 @@ function StocuriGarantiiContent() {
                       anvelopeStocFilterState === 'NOUA' ? 'bg-emerald-500 text-white shadow-xs' : 'text-sage-600 hover:text-emerald-800'
                     }`}
                   >
-                    ✨ Noi ({countAnvelopeNoi})
+                    Noi ({countAnvelopeNoi})
                   </button>
                   <button
                     type="button"
@@ -1033,7 +1032,7 @@ function StocuriGarantiiContent() {
                       anvelopeStocFilterState === 'RULATA' ? 'bg-amber-500 text-white shadow-xs' : 'text-sage-600 hover:text-amber-800'
                     }`}
                   >
-                    📦 Rulate ({countAnvelopeRulate})
+                    Rulate ({countAnvelopeRulate})
                   </button>
                 </div>
 
@@ -1077,7 +1076,7 @@ function StocuriGarantiiContent() {
                     <div className="flex items-center justify-between border-b border-morning-100 pb-2.5">
                       <div className="flex items-center space-x-1.5">
                         <span className="px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-mono font-black text-xs tracking-wide shadow-xs">
-                          🏷️ {a.serieAnvelopa}
+                           {a.serieAnvelopa}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1086,7 +1085,7 @@ function StocuriGarantiiContent() {
                               : 'bg-amber-100 text-amber-900 border border-amber-300'
                           }`}
                         >
-                          {isNoua ? '✨ NOUĂ' : '📦 RULATĂ'}
+                          {isNoua ? 'NOUĂ' : 'RULATĂ'}
                         </span>
                       </div>
 
@@ -1140,7 +1139,7 @@ function StocuriGarantiiContent() {
                         })}
                         className="flex-1 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[11px] border border-morning-200 transition text-center"
                       >
-                        ✏️ Editează
+                         Editează
                       </button>
 
                       <Link
@@ -1232,7 +1231,7 @@ function StocuriGarantiiContent() {
                       {d._count?.articoleStoc || 0} piese
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 font-extrabold text-[10px]">
-                      🛞 {d._count?.anvelope || 0} anvelope
+                       {d._count?.anvelope || 0} anvelope
                     </span>
                   </div>
 
@@ -1263,7 +1262,7 @@ function StocuriGarantiiContent() {
             </div>
 
             <span className="px-3 py-1 rounded-full bg-sapphire-50 border border-sapphire-100 text-sapphire-600 font-extrabold text-xs">
-              🛡️ {componente.length} Componente în Garanție
+               {componente.length} Componente în Garanție
             </span>
           </div>
 
@@ -1298,7 +1297,7 @@ function StocuriGarantiiContent() {
                     </td>
                     <td className="p-3">
                       <span className="px-2.5 py-1 rounded-full bg-sapphire-50 border border-sapphire-200 text-sapphire-700 text-[10px] font-bold">
-                        ✅ În Garanție Activă
+                         În Garanție Activă
                       </span>
                     </td>
                     <td className="p-3 text-right">
@@ -1433,7 +1432,7 @@ function StocuriGarantiiContent() {
                     <option value="">-- Fără Responsabil Desemnat --</option>
                     {mecanici.map((m) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume} {m.functie ? `(${m.functie})` : ''}
+                         {m.nume} {m.functie ? `(${m.functie})` : ''}
                       </option>
                     ))}
                   </select>
@@ -1474,7 +1473,7 @@ function StocuriGarantiiContent() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div>
                 <h3 className="text-lg font-bold text-sapphire-900">Gestiune Categorii & Subcategorii Stoc</h3>
-                <p className="text-xs text-sage-600 font-medium">Configurați structura de categorii ➔ subcategorii a flotei</p>
+                <p className="text-xs text-sage-600 font-medium">Configurați structura de categorii  subcategorii a flotei</p>
               </div>
               <button onClick={() => setShowAddCatModal(false)} className="text-sage-500 hover:text-sapphire-900">
                 <X className="w-5 h-5" />
@@ -1584,7 +1583,7 @@ function StocuriGarantiiContent() {
                     <option value="">-- Selectează Responsabil Depozit --</option>
                     {mecanici.map((m) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume} {m.functie ? `(${m.functie})` : ''}
+                         {m.nume} {m.functie ? `(${m.functie})` : ''}
                       </option>
                     ))}
                   </select>
@@ -1811,7 +1810,7 @@ function StocuriGarantiiContent() {
                     <option value="">-- Fără Subcategorie --</option>
                     {getSubcategoriiPentruCategorie(editingArticol.categorie || '').map((sub: any, idx: number) => (
                       <option key={sub.id || sub.nume || idx} value={sub.nume}>
-                        📁 {sub.nume}
+                         {sub.nume}
                       </option>
                     ))}
                   </select>
@@ -2133,7 +2132,7 @@ function StocuriGarantiiContent() {
                     }}
                     className="text-[10px] text-sapphire-600 hover:underline font-bold"
                   >
-                    ⚡ Generează Serii Automate
+                    Generează Serii Automate
                   </button>
                 </div>
 

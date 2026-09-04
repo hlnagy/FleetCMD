@@ -56,7 +56,7 @@ export default function AlertePage() {
       });
 
       if (res.ok) {
-        alert('✅ Alerta a fost confirmată și rezolvată! A fost eliminată din lista de atenționări active.');
+        alert('Alerta a fost confirmată și rezolvată! A fost eliminată din lista de atenționări active.');
         const resolvedId = selectedAlerta.id;
         setSelectedAlerta(null);
         setSolutie('');
@@ -103,7 +103,7 @@ export default function AlertePage() {
           className="px-4 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-2 self-start"
         >
           <Wrench className="w-4 h-4" />
-          <span>⚙️ Configurare Praguri Alerte & Valabilități</span>
+          <span>Configurare Praguri Alerte & Valabilități</span>
         </Link>
       </div>
 
@@ -146,7 +146,7 @@ export default function AlertePage() {
           <div>
             <p className="text-[10px] uppercase font-black text-sage-700 tracking-wider">Status General Flotă</p>
             <p className="text-lg font-black text-sapphire-900 mt-1">
-              {numCritice === 0 ? '✅ Flotă Optimă' : '⚠️ Atenție Necesară'}
+              {numCritice === 0 ? 'Flotă Optimă' : 'Atenție Necesară'}
             </p>
             <p className="text-[11px] text-sage-600 font-semibold">monitorizare continuă</p>
           </div>
@@ -187,7 +187,7 @@ export default function AlertePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="🔍 Căutare titlu alertă, utilaj, document, mesaj..."
+              placeholder="Căutare titlu alertă, utilaj, document, mesaj..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-sapphire-900 font-bold focus:bg-white transition"
             />
           </div>
@@ -200,11 +200,11 @@ export default function AlertePage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 font-bold text-sapphire-900 cursor-pointer"
             >
               <option value="TOATE">Toate Categoriile</option>
-              <option value="STOC_CRITIC">📦 Stoc Critic / Piese & Uleiuri</option>
-              <option value="MENTENANTA_CONSUMABIL">🛠️ Mentenanță & Consumabile</option>
-              <option value="DOCUMENTE_FLOTA">📄 Documente Legale Flotă</option>
-              <option value="LICENTE_CUSTOM">🔏 Licențe & Atestate Firmă</option>
-              <option value="SCURGERI_ULEI">💧 Scurgeri Ulei</option>
+              <option value="STOC_CRITIC">Stoc Critic / Piese & Uleiuri</option>
+              <option value="MENTENANTA_CONSUMABIL"> Mentenanță & Consumabile</option>
+              <option value="DOCUMENTE_FLOTA">Documente Legale Flotă</option>
+              <option value="LICENTE_CUSTOM">Licențe & Atestate Firmă</option>
+              <option value="SCURGERI_ULEI">Scurgeri Ulei</option>
             </select>
           </div>
 
@@ -216,8 +216,8 @@ export default function AlertePage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 font-bold text-sapphire-900 cursor-pointer"
             >
               <option value="TOATE">Toate Urgențele</option>
-              <option value="CRITIC">🚨 Doar Critice (Depășite/Expirate/Epuizate)</option>
-              <option value="AVERTIZARE">⚠️ Doar Avertizări În Prealabil</option>
+              <option value="CRITIC">Doar Critice (Depășite/Expirate/Epuizate)</option>
+              <option value="AVERTIZARE"> Doar Avertizări În Prealabil</option>
             </select>
           </div>
         </div>
@@ -246,7 +246,7 @@ export default function AlertePage() {
                         esteCritic ? 'bg-terracotta-600 text-white' : 'bg-amber-500 text-white'
                       }`}
                     >
-                      {esteCritic ? '🚨 CRITIC' : '⚠️ AVERTIZARE'}
+                      {esteCritic ? 'CRITIC' : 'AVERTIZARE'}
                     </span>
 
                     <span className={`px-2.5 py-0.5 rounded-lg font-extrabold text-[11px] ${
@@ -311,7 +311,7 @@ export default function AlertePage() {
           <div className="bg-white rounded-2xl border border-morning-200 p-6 max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="font-extrabold text-sapphire-900 text-base">Rezolvare / Confirmare Alertă</h3>
-              <button onClick={() => setSelectedAlerta(null)} className="text-sage-400 hover:text-sapphire-900 font-bold">✕</button>
+              <button onClick={() => setSelectedAlerta(null)} className="text-sage-400 hover:text-sapphire-900 font-bold"></button>
             </div>
 
             <div className="space-y-2 text-xs">

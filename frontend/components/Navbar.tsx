@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
-  Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw, Menu
+  Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw, Menu,
+  Users, Settings, LogOut, Package
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useSidebar } from '../lib/SidebarContext';
@@ -111,7 +112,7 @@ export default function Navbar() {
               }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-sage-400 hover:text-sapphire-900 font-bold"
             >
-              ✕
+              
             </button>
           )}
         </div>
@@ -203,7 +204,7 @@ export default function Navbar() {
                     onClick={() => setIsNotificationsOpen(false)}
                     className="text-sage-400 hover:text-sapphire-900 text-xs font-bold p-1 rounded-lg hover:bg-morning-200"
                   >
-                    ✕
+                    
                   </button>
                 </div>
 
@@ -221,33 +222,36 @@ export default function Navbar() {
                   </button>
                   <button
                     onClick={() => setActiveCategoryFilter('STOC')}
-                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap flex items-center gap-1 ${
                       activeCategoryFilter === 'STOC'
                         ? 'bg-purple-600 text-white shadow-xs'
                         : 'text-purple-800 bg-purple-50 hover:bg-purple-100'
                     }`}
                   >
-                    📦 Stoc ({numStoc})
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Stoc ({numStoc})</span>
                   </button>
                   <button
                     onClick={() => setActiveCategoryFilter('MENTENANTA')}
-                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap flex items-center gap-1 ${
                       activeCategoryFilter === 'MENTENANTA'
                         ? 'bg-sapphire-600 text-white shadow-xs'
                         : 'text-slate-600 hover:bg-morning-100'
                     }`}
                   >
-                    🛠️ Mentenanță ({numMent})
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>Mentenanță ({numMent})</span>
                   </button>
                   <button
                     onClick={() => setActiveCategoryFilter('DOCUMENTE')}
-                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                    className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap flex items-center gap-1 ${
                       activeCategoryFilter === 'DOCUMENTE'
                         ? 'bg-amber-600 text-white shadow-xs'
                         : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
                     }`}
                   >
-                    📄 Acte ({numDoc})
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Acte ({numDoc})</span>
                   </button>
                 </div>
 
@@ -294,7 +298,7 @@ export default function Navbar() {
                                   ? 'bg-terracotta-100 text-terracotta-700'
                                   : 'bg-amber-100 text-amber-800'
                               }`}>
-                                {al.urgenta === 'CRITIC' ? '🚨 Critic' : '⚠️ Avertizare'}
+                                {al.urgenta === 'CRITIC' ? 'Critic' : 'Avertizare'}
                               </span>
                               <span className="text-[10px] text-sage-500 font-mono truncate max-w-[120px]">
                                 {al.vehiculNumar || 'Depozit'}
@@ -401,7 +405,7 @@ export default function Navbar() {
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-amber-100 text-amber-800'
                     }`}>
-                      {user?.rol === 'ADMIN' ? '⚡ Full Admin' : user?.rol === 'OPERATOR' ? '🛠️ Operator Flotă' : '👁️ Vizitator (Citire)'}
+                      {user?.rol === 'ADMIN' ? 'Full Admin' : user?.rol === 'OPERATOR' ? 'Operator Flotă' : 'Vizitator (Citire)'}
                     </span>
                   </div>
                 </div>
@@ -413,9 +417,9 @@ export default function Navbar() {
                       setIsUserMenuOpen(false);
                       setIsLoginModalOpen(true);
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2"
+                    className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2.5"
                   >
-                    <span>👥</span>
+                    <Users className="w-4 h-4 text-sapphire-600" />
                     <span>Schimbă Utilizatorul / Profilul</span>
                   </button>
 
@@ -423,9 +427,9 @@ export default function Navbar() {
                     <Link
                       href="/setari"
                       onClick={() => setIsUserMenuOpen(false)}
-                      className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2"
+                      className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2.5"
                     >
-                      <span>⚙️</span>
+                      <Settings className="w-4 h-4 text-sapphire-600" />
                       <span>Gestiune Utilizatori & Jurnal Audit</span>
                     </Link>
                   )}
@@ -436,9 +440,9 @@ export default function Navbar() {
                       setIsUserMenuOpen(false);
                       logout();
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-terracotta-600 hover:bg-roseash-100 transition flex items-center space-x-2"
+                    className="w-full text-left px-3 py-2 rounded-xl text-terracotta-600 hover:bg-roseash-100 transition flex items-center space-x-2.5"
                   >
-                    <span>🚪</span>
+                    <LogOut className="w-4 h-4 text-terracotta-600" />
                     <span>Deconectare (Logout)</span>
                   </button>
                 </div>

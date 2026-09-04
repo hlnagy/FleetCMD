@@ -398,7 +398,7 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(`✅ ${data.mesaj}`);
+        alert(` ${data.mesaj}`);
         setAuthCodeInput('');
         fetchData();
       } else {
@@ -471,7 +471,7 @@ function EFacturaContent() {
       });
 
       if (res.ok) {
-        alert('⚙️ Configurația ANAF e-Factura a fost salvată cu succes!');
+        alert(' Configurația ANAF e-Factura a fost salvată cu succes!');
         setShowConfigModal(false);
         fetchData();
       } else {
@@ -923,7 +923,7 @@ function EFacturaContent() {
         <div className="flex items-center space-x-2 flex-wrap">
           <label className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer">
             <Download className="w-4 h-4 rotate-180" />
-            <span>{uploadingFiles ? 'Se procesează fișierele...' : '📤 Încarcă XML / ZIP din SPV'}</span>
+            <span>{uploadingFiles ? 'Se procesează fișierele...' : ' Încarcă XML / ZIP din SPV'}</span>
             <input
               type="file"
               multiple
@@ -975,12 +975,12 @@ function EFacturaContent() {
           <div className="p-3 bg-white/80 rounded-xl border text-xs space-y-1 font-mono">
             {urlDiagnostic.code && <p><strong>Cod Eroare Brut (raw):</strong> {urlDiagnostic.code}</p>}
             {urlDiagnostic.description && <p><strong>Descriere ANAF:</strong> {urlDiagnostic.description}</p>}
-            <p className="font-sans font-medium pt-1 text-slate-800"><strong>🔍 Cauză Diagnosticată:</strong> {urlDiagnostic.details}</p>
+            <p className="font-sans font-medium pt-1 text-slate-800"><strong> Cauză Diagnosticată:</strong> {urlDiagnostic.details}</p>
           </div>
 
           <div className="flex items-center justify-between pt-1 text-xs">
             <p className="font-bold flex items-center space-x-1 text-slate-900">
-              <span>💡 Soluție Recomandată:</span>
+              <span>Soluție Recomandată:</span>
               <span className="font-normal">{urlDiagnostic.actionHint}</span>
             </p>
 
@@ -990,7 +990,7 @@ function EFacturaContent() {
                 urlDiagnostic.type === 'error' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
               }`}
             >
-              ⚙️ Deschide Configurare Token-uri
+               Deschide Configurare Token-uri
             </button>
           </div>
         </div>
@@ -1101,7 +1101,7 @@ function EFacturaContent() {
                 className="absolute right-2.5 top-2.5 text-sage-400 hover:text-slate-700 bg-morning-200 hover:bg-morning-300 rounded-full w-5 h-5 flex items-center justify-center text-xs transition"
                 title="Șterge căutarea (Arată toate)"
               >
-                ✕
+                
               </button>
             )}
           </div>
@@ -1460,7 +1460,7 @@ function EFacturaContent() {
                             <span>{art.descrierePiesa}</span>
                             {isReducereSauFinanciar(art) && (
                               <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
-                                🏷️ Reducere / Garanție
+                                 Reducere / Garanție
                               </span>
                             )}
                           </div>
@@ -1495,7 +1495,7 @@ function EFacturaContent() {
                                 className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition inline-flex items-center space-x-1 cursor-pointer whitespace-nowrap"
                                 title="Exclude această linie financiară / reducere comercială"
                               >
-                                <span>💸 Exclude (Reducere)</span>
+                                <span>Exclude (Reducere)</span>
                               </button>
                             )
                           ) : (
@@ -1507,7 +1507,7 @@ function EFacturaContent() {
                                     className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
                                     title="Importă rapid toată cantitatea în stoc"
                                   >
-                                    <span>📦 Importă în Stoc</span>
+                                    <span>Importă în Stoc</span>
                                   </button>
 
                                   <button
@@ -1515,7 +1515,7 @@ function EFacturaContent() {
                                     className="px-3 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
                                     title="Importă bucată cu bucată cu introducerea seriilor unice (anvelope, baterii, garanții)"
                                   >
-                                    <span>🏷️ Cu Serii</span>
+                                    <span>Cu Serii</span>
                                   </button>
                                 </>
                               )}
@@ -1525,7 +1525,7 @@ function EFacturaContent() {
                                   className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition cursor-pointer flex items-center space-x-1"
                                   title="Exclude această linie (cheltuială/servicii)"
                                 >
-                                  <span>🗑️ Exclude</span>
+                                  <span>Exclude</span>
                                 </button>
                               )}
                             </div>
@@ -1919,7 +1919,7 @@ function EFacturaContent() {
                   !isImportSerializat ? 'bg-emerald-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
                 }`}
               >
-                📦 Import Rapid În Vrac
+                 Import Rapid În Vrac
               </button>
 
               <button
@@ -1929,7 +1929,7 @@ function EFacturaContent() {
                   isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
                 }`}
               >
-                🏷️ Import cu Serii / Bucată ({seriiList.length} buc)
+                 Import cu Serii / Bucată ({seriiList.length} buc)
               </button>
             </div>
 
@@ -2084,7 +2084,7 @@ function EFacturaContent() {
                       const availableSubcats = currentCatObj?.subcategorii || [];
                       return availableSubcats.map((sub: any) => (
                         <option key={sub.id || sub.nume} value={sub.nume}>
-                          📁 {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
+                           {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
                         </option>
                       ));
                     })()}
@@ -2127,7 +2127,7 @@ function EFacturaContent() {
                       }}
                       className="text-[11px] font-bold text-sapphire-700 hover:text-sapphire-900 bg-white border border-sapphire-200 px-2 py-1 rounded-lg shadow-2xs transition"
                     >
-                      ⚡ Generează Serii Automate
+                      Generează Serii Automate
                     </button>
                   </div>
 
@@ -2234,7 +2234,7 @@ function EFacturaContent() {
                       </div>
 
                       <p className="text-[10px] text-sapphire-800 font-medium">
-                        🛡️ Componenta va fi adăugată automat în registrul <b>Garanții Componente</b> (Gestiune Stocuri), monitorizată la montajul pe utilaj.
+                         Componenta va fi adăugată automat în registrul <b>Garanții Componente</b> (Gestiune Stocuri), monitorizată la montajul pe utilaj.
                       </p>
                     </div>
                   )}
@@ -2271,7 +2271,7 @@ function EFacturaContent() {
                   />
                 ) : (
                   <p className="text-[11px] text-purple-800 font-medium italic">
-                    ℹ️ Articolul va fi introdus în stoc cu preț de 0 RON (nu va încărca costurile flotei).
+                     Articolul va fi introdus în stoc cu preț de 0 RON (nu va încărca costurile flotei).
                   </p>
                 )}
               </div>
@@ -2475,7 +2475,7 @@ function EFacturaContent() {
                 <p className="pl-8 text-sage-700">
                   Accesați portalul oficial ANAF: <a href="https://www.anaf.ro/InregOauth/index.xhtml" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">https://www.anaf.ro/InregOauth/index.xhtml</a> cu token-ul conectat și înregistrați aplicația FleetCMD.<br />
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block my-1">
-                    💡 Notă: Pentru utilizatorii cu cont SPV existent (username/parolă), utilizați opțiunea dedicată de autentificare de pe portalul ANAF.
+                     Notă: Pentru utilizatorii cu cont SPV existent (username/parolă), utilizați opțiunea dedicată de autentificare de pe portalul ANAF.
                   </span><br />
                   Setați <strong>Redirect URI</strong> la <code>http://localhost:3000/efactura</code> (sau adresa dvs. din browser).<br />
                   Veți primi un <strong>Client ID</strong> și un <strong>Client Secret</strong> pe care le introduceți în câmpurile din stânga.

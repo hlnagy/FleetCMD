@@ -273,7 +273,7 @@ export class StocuriGarantiiService {
     });
 
     return {
-      mesaj: `✅ Transfer parțial efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
+      mesaj: ` Transfer parțial efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
       transferLog,
       stocSursaNou: articolSursa.stocCurent - cantitate,
       stocDestinatieNou: articolDestinatie.stocCurent,
@@ -373,7 +373,7 @@ export class StocuriGarantiiService {
         stocMinim: a.stocMinim,
         unitateMasura: a.unitateMasura,
         depozit: a.depozit?.nume || 'Depozit Central Atelier',
-        mesaj: `⚠️ AVERTISMENT STOC CRITIC: Articolul "${a.denumire}" (${a.codArticol}) are stocul de ${a.stocCurent} ${a.unitateMasura}, sub limita minimă de ${a.stocMinim} ${a.unitateMasura}!`,
+        mesaj: ` AVERTISMENT STOC CRITIC: Articolul "${a.denumire}" (${a.codArticol}) are stocul de ${a.stocCurent} ${a.unitateMasura}, sub limita minimă de ${a.stocMinim} ${a.unitateMasura}!`,
       })),
     };
   }
@@ -554,7 +554,7 @@ export class StocuriGarantiiService {
     const depozit = await this.prisma.depozit.findUnique({ where: { id: depozitIdFinal } });
 
     return {
-      mesaj: `Recepție marfă înregistrată! ${cantitate} ${articol.unitateMasura} de "${articol.denumire}" (Preț unitar: ${pretUnitar} RON) adăugate în ${depozit?.nume || 'Depozit Central'}.${data.areGarantie ? ' 🛡️ Garanție producător activată în registru!' : ''}`,
+      mesaj: `Recepție marfă înregistrată! ${cantitate} ${articol.unitateMasura} de "${articol.denumire}" (Preț unitar: ${pretUnitar} RON) adăugate în ${depozit?.nume || 'Depozit Central'}.${data.areGarantie ? '  Garanție producător activată în registru!' : ''}`,
       articol,
       intrare,
       pretUnitar,
@@ -616,7 +616,7 @@ export class StocuriGarantiiService {
     });
 
     return {
-      mesaj: `⚠️ Piesa ${serieUnica} marcată ca DEFECTĂ (Cerere Reclamație Garanție).`,
+      mesaj: ` Piesa ${serieUnica} marcată ca DEFECTĂ (Cerere Reclamație Garanție).`,
       esteInGarantie: true,
     };
   }

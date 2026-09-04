@@ -285,7 +285,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`🚗 Vehiculul "${numarIntern}" a fost adăugat cu succes!`);
+        alert(` Vehiculul "${numarIntern}" a fost adăugat cu succes!`);
         setShowAddVehiculModal(false);
         setNumarIntern('');
         setNumarInmatriculare('');
@@ -328,7 +328,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`🚗 Vehiculul "${editingVehicul.numarIntern}" a fost actualizat cu succes!`);
+        alert(` Vehiculul "${editingVehicul.numarIntern}" a fost actualizat cu succes!`);
         setEditingVehicul(null);
         fetchData();
       } else {
@@ -358,7 +358,7 @@ function SetariContent() {
 
       if (res.ok) {
         const created = await res.json();
-        alert(`🚛 Categorie vehicul nou/utilaj "${created.nume || numeCatVehiculNou}" creată cu succes!`);
+        alert(` Categorie vehicul nou/utilaj "${created.nume || numeCatVehiculNou}" creată cu succes!`);
         setShowAddVehiculCatModal(false);
         setNumeCatVehiculNou('');
         setDescriereCatVehiculNou('');
@@ -390,7 +390,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`🚛 Categoria "${editingVehiculCat.nume}" a fost actualizată!`);
+        alert(` Categoria "${editingVehiculCat.nume}" a fost actualizată!`);
         setEditingVehiculCat(null);
         fetchData();
       } else {
@@ -484,7 +484,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(editingMecanic ? `👨‍🔧 Datele mecanicului "${newMecanicNume}" au fost actualizate!` : '👨‍🔧 Mecanic înregistrat cu succes!');
+        alert(editingMecanic ? ` Datele mecanicului "${newMecanicNume}" au fost actualizate!` : ' Mecanic înregistrat cu succes!');
         setShowAddMecanicModal(false);
         setEditingMecanic(null);
         setNewMecanicNume('');
@@ -545,7 +545,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`🏢 Depozit "${numeDepozitNou}" ${editingDepozit ? 'actualizat' : 'creat'} cu succes!`);
+        alert(` Depozit "${numeDepozitNou}" ${editingDepozit ? 'actualizat' : 'creat'} cu succes!`);
         setShowAddDepozitModal(false);
         setEditingDepozit(null);
         setNumeDepozitNou('');
@@ -638,7 +638,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`📦 Categorie "${numeCategorieNoua.trim()}" ${editingCat ? 'actualizată' : 'creată'} cu succes!`);
+        alert(` Categorie "${numeCategorieNoua.trim()}" ${editingCat ? 'actualizată' : 'creată'} cu succes!`);
         setShowAddCatModal(false);
         setEditingCat(null);
         setNumeCategorieNoua('');
@@ -714,7 +714,7 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(`📂 Subcategorie "${numeSubcatNoua.trim()}" ${editingSubcat ? 'actualizată' : 'adăugată'} cu succes!`);
+        alert(` Subcategorie "${numeSubcatNoua.trim()}" ${editingSubcat ? 'actualizată' : 'adăugată'} cu succes!`);
         setShowAddSubcatModal(false);
         setEditingSubcat(null);
         setNumeSubcatNoua('');
@@ -1179,7 +1179,7 @@ function SetariContent() {
           }`}
         >
           <Truck className="w-4 h-4 text-sapphire-500" />
-          <span>🚛 Flotă & Vehicule ({vehicule.length})</span>
+          <span>Flotă & Vehicule ({vehicule.length})</span>
         </button>
 
         <button
@@ -1191,7 +1191,7 @@ function SetariContent() {
           }`}
         >
           <Users className="w-4 h-4 text-periwinkle-600" />
-          <span>👨‍🔧 Mecanici Atelier ({mecanici.length})</span>
+          <span>Mecanici Atelier ({mecanici.length})</span>
         </button>
 
         <button
@@ -1203,7 +1203,7 @@ function SetariContent() {
           }`}
         >
           <Building2 className="w-4 h-4 text-sapphire-500" />
-          <span>🏢 Depozite Flotă ({depozite.length})</span>
+          <span>Depozite Flotă ({depozite.length})</span>
         </button>
 
         <button
@@ -1215,7 +1215,7 @@ function SetariContent() {
           }`}
         >
           <Layers className="w-4 h-4 text-periwinkle-700" />
-          <span>📦 Categorii Stoc Piese ({categorii.length})</span>
+          <span>Categorii Stoc Piese ({categorii.length})</span>
         </button>
 
         <button
@@ -1227,7 +1227,7 @@ function SetariContent() {
           }`}
         >
           <Clock className="w-4 h-4 text-terracotta-600" />
-          <span>⚙️ Reguli Alerte ({reguli.length})</span>
+          <span>Reguli Alerte ({reguli.length})</span>
         </button>
 
         <button
@@ -1239,7 +1239,7 @@ function SetariContent() {
           }`}
         >
           <FileText className="w-4 h-4 text-sapphire-500" />
-          <span>📄 Documente Vehicule ({documente.length})</span>
+          <span>Documente Vehicule ({documente.length})</span>
         </button>
 
         <button
@@ -1251,7 +1251,7 @@ function SetariContent() {
           }`}
         >
           <ShieldAlert className="w-4 h-4 text-terracotta-500" />
-          <span>🔔 Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
+          <span>Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
         </button>
 
         <button
@@ -1263,7 +1263,7 @@ function SetariContent() {
           }`}
         >
           <Users className="w-4 h-4 text-sapphire-600" />
-          <span>👥 Utilizatori & Roluri ({usersList.length})</span>
+          <span>Utilizatori & Roluri ({usersList.length})</span>
           {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
         </button>
 
@@ -1276,7 +1276,7 @@ function SetariContent() {
           }`}
         >
           <History className="w-4 h-4 text-periwinkle-700" />
-          <span>📜 Jurnal Audit ({auditTotal})</span>
+          <span>Jurnal Audit ({auditTotal})</span>
           {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
         </button>
       </div>
@@ -1320,7 +1320,7 @@ function SetariContent() {
                   onClick={() => setSearchVehicule('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-sage-400 hover:text-sapphire-900 font-bold"
                 >
-                  ✕
+                  
                 </button>
               )}
             </div>
@@ -2035,7 +2035,7 @@ function SetariContent() {
                                 : 'bg-amber-100 text-amber-800 border border-amber-300'
                             }`}
                           >
-                            {isUserAdmin ? '⚡ ADMIN (Full Access)' : isUserOperator ? '🛠️ OPERATOR FLOTĂ' : '👁️ VIEWER (Doar Citire)'}
+                            {isUserAdmin ? 'ADMIN (Full Access)' : isUserOperator ? 'OPERATOR FLOTĂ' : 'VIEWER (Doar Citire)'}
                           </span>
                         </div>
                       </div>
@@ -2916,9 +2916,9 @@ function SetariContent() {
                     onChange={(e) => setUserRol(e.target.value as any)}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
-                    <option value="ADMIN">⚡ ADMIN - Teljes körű administráció</option>
-                    <option value="OPERATOR">🛠️ OPERATOR - Módosítások a programban (kivéve Setări)</option>
-                    <option value="VIEWER">👁️ VIEWER - Csak megtekintő (módosítás letiltva)</option>
+                    <option value="ADMIN">ADMIN - Teljes körű administráció</option>
+                    <option value="OPERATOR">OPERATOR - Módosítások a programban (kivéve Setări)</option>
+                    <option value="VIEWER">VIEWER - Csak megtekintő (módosítás letiltva)</option>
                   </select>
                 </div>
                 <div>

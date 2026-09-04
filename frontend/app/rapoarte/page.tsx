@@ -65,31 +65,31 @@ export default function RapoartePage() {
       case 'EXPLOZIE_PUNCTURA':
         return (
           <span className="px-2.5 py-1 rounded-lg bg-roseash-100 text-terracotta-900 font-extrabold border border-terracotta-300 inline-flex items-center space-x-1 text-[11px]">
-            <span>💥 Explozie în Mers</span>
+            <span>Explozie în Mers</span>
           </span>
         );
       case 'TAIETURA_STRUCTURA':
         return (
           <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 font-bold border border-amber-300 inline-flex items-center space-x-1 text-[11px]">
-            <span>✂️ Tăietură / Cordon Defect</span>
+            <span>Tăietură / Cordon Defect</span>
           </span>
         );
       case 'UZURA_NEUNIFORMA':
         return (
           <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-900 font-bold border border-purple-300 inline-flex items-center space-x-1 text-[11px]">
-            <span>📐 Uzură Neuniformă</span>
+            <span>Uzură Neuniformă</span>
           </span>
         );
       case 'ALTELE':
         return (
           <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold border border-slate-300 inline-flex items-center space-x-1 text-[11px]">
-            <span>📝 Alt Motiv</span>
+            <span>Alt Motiv</span>
           </span>
         );
       default:
         return (
           <span className="px-2.5 py-1 rounded-lg bg-morning-200 text-sapphire-900 font-bold border border-morning-300 inline-flex items-center space-x-1 text-[11px]">
-            <span>⚠️ Uzură Normală (End-of-Life)</span>
+            <span>Uzură Normală (End-of-Life)</span>
           </span>
         );
     }
@@ -299,7 +299,7 @@ export default function RapoartePage() {
             </p>
             {analiticaCasari?.motiveCount?.EXPLOZIE_PUNCTURA > 0 && (
               <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-roseash-300 text-terracotta-900">
-                💥 {analiticaCasari.motiveCount.EXPLOZIE_PUNCTURA} explozii
+                 {analiticaCasari.motiveCount.EXPLOZIE_PUNCTURA} explozii
               </span>
             )}
           </div>
@@ -392,7 +392,7 @@ export default function RapoartePage() {
                   : 'bg-white border-morning-200 hover:bg-roseash-50 font-bold text-slate-700'
               }`}
             >
-              <p className="text-[10px] uppercase text-terracotta-800">💥 Explozii în Mers</p>
+              <p className="text-[10px] uppercase text-terracotta-800"> Explozii în Mers</p>
               <p className="text-lg font-mono font-extrabold text-terracotta-900 mt-0.5">
                 {analiticaCasari?.motiveCount?.EXPLOZIE_PUNCTURA || 0} buc
               </p>
@@ -406,7 +406,7 @@ export default function RapoartePage() {
                   : 'bg-white border-morning-200 hover:bg-morning-50 font-bold text-slate-700'
               }`}
             >
-              <p className="text-[10px] uppercase text-sapphire-800">⚠️ Uzură Normală</p>
+              <p className="text-[10px] uppercase text-sapphire-800"> Uzură Normală</p>
               <p className="text-lg font-mono font-extrabold text-sapphire-900 mt-0.5">
                 {analiticaCasari?.motiveCount?.UZURA_FINITA || 0} buc
               </p>
@@ -420,7 +420,7 @@ export default function RapoartePage() {
                   : 'bg-white border-morning-200 hover:bg-amber-50 font-bold text-slate-700'
               }`}
             >
-              <p className="text-[10px] uppercase text-amber-800">✂️ Tăieturi / Cordon</p>
+              <p className="text-[10px] uppercase text-amber-800"> Tăieturi / Cordon</p>
               <p className="text-lg font-mono font-extrabold text-amber-900 mt-0.5">
                 {analiticaCasari?.motiveCount?.TAIETURA_STRUCTURA || 0} buc
               </p>
@@ -434,7 +434,7 @@ export default function RapoartePage() {
                   : 'bg-white border-morning-200 hover:bg-purple-50 font-bold text-slate-700'
               }`}
             >
-              <p className="text-[10px] uppercase text-purple-800">📐 Geometrie Axă</p>
+              <p className="text-[10px] uppercase text-purple-800"> Geometrie Axă</p>
               <p className="text-lg font-mono font-extrabold text-purple-900 mt-0.5">
                 {analiticaCasari?.motiveCount?.UZURA_NEUNIFORMA || 0} buc
               </p>
@@ -534,7 +534,7 @@ export default function RapoartePage() {
                           </span>
                         </td>
                         <td className="p-3">
-                          <p className="font-semibold text-slate-800 text-[11px]">👨‍🔧 {c.operator}</p>
+                          <p className="font-semibold text-slate-800 text-[11px]"> {c.operator}</p>
                           <p className="text-[10px] text-sage-600 truncate max-w-xs">{c.observatii || '-'}</p>
                         </td>
                       </tr>
@@ -647,7 +647,7 @@ export default function RapoartePage() {
                           <span>{b.marca}</span>
                           {idx === 0 && sortFieldTco === 'tco' && (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-extrabold">
-                              ⭐ Cel mai rentabil
+                              Cel mai rentabil
                             </span>
                           )}
                         </td>

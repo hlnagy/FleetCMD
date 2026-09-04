@@ -235,7 +235,7 @@ export default function FluidePage() {
         body: JSON.stringify({ solutie: solutieRezolvare }),
       });
       if (res.ok) {
-        alert('✅ Alertă marcată ca REZOLVATĂ!');
+        alert('Alertă marcată ca REZOLVATĂ!');
         setSolvingAlerta(null);
         fetchInitialData();
       }
@@ -312,7 +312,7 @@ export default function FluidePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-terracotta-700 font-extrabold text-xs uppercase tracking-wider">
               <ShieldAlert className="w-5 h-5 text-terracotta-600 animate-bounce" />
-              <span>🚨 Alerte Active Schimb Ulei & Fluide ({alerte.length} active):</span>
+              <span>Alerte Active Schimb Ulei & Fluide ({alerte.length} active):</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -343,7 +343,7 @@ export default function FluidePage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <span className="px-2.5 py-0.5 rounded-lg bg-sapphire-100 border border-sapphire-200 text-sapphire-900 font-black text-[11px] font-mono">
-                          🚜 {a.vehiculNumar || 'Utilaj'}
+                           {a.vehiculNumar || 'Utilaj'}
                         </span>
                         <span className="font-extrabold text-slate-900 text-xs truncate max-w-[200px]" title={a.titlu}>
                           {a.titlu}
@@ -460,9 +460,9 @@ export default function FluidePage() {
                 className="bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
               >
                 <option value="TOATE">Toate Stările</option>
-                <option value="DEPASITE">🔴 Doar Schimburi Depășite</option>
-                <option value="AVERTIZARE">⚠️ Doar În Prag Avertizare</option>
-                <option value="OK">✅ Doar În Grafic (OK)</option>
+                <option value="DEPASITE">Doar Schimburi Depășite</option>
+                <option value="AVERTIZARE"> Doar În Prag Avertizare</option>
+                <option value="OK">Doar În Grafic (OK)</option>
               </select>
 
               <select
@@ -766,7 +766,7 @@ export default function FluidePage() {
                               cfg.esteInPragAvertizare ? 'bg-amber-100 text-amber-800' :
                               'bg-sapphire-50 text-sapphire-700'
                             }`}>
-                              {cfg.esteDepasit ? '🔴 DEPAȘIT' : cfg.esteInPragAvertizare ? '⚠️ AVERTIZARE' : '✅ OK'}
+                              {cfg.esteDepasit ? 'DEPAȘIT' : cfg.esteInPragAvertizare ? 'AVERTIZARE' : 'OK'}
                             </span>
                           </td>
                         </tr>
@@ -808,9 +808,9 @@ export default function FluidePage() {
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
                       <span className="px-2.5 py-0.5 rounded-md bg-terracotta-500 text-white font-extrabold text-[10px] uppercase">
-                        {a.categorieText || '🚨 Alertă Activă'}
+                        {a.categorieText || ' Alertă Activă'}
                       </span>
-                      <span className="font-extrabold text-sapphire-900 text-sm">🚜 {a.vehiculNumar || 'Utilaj'}</span>
+                      <span className="font-extrabold text-sapphire-900 text-sm"> {a.vehiculNumar || 'Utilaj'}</span>
                       <span className="text-xs text-slate-700 font-bold">• {a.titlu}</span>
                     </div>
                     <p className="text-xs text-terracotta-700 font-bold">{a.mesaj}</p>
@@ -888,7 +888,7 @@ export default function FluidePage() {
                   >
                     {vehicule.map((v) => (
                       <option key={v.id} value={v.id}>
-                        🚜 {v.numarIntern} ({v.numarInmatriculare}) - {v.marca}
+                         {v.numarIntern} ({v.numarInmatriculare}) - {v.marca}
                       </option>
                     ))}
                   </select>
@@ -926,7 +926,7 @@ export default function FluidePage() {
                     ) : (
                       stocUleiuri.map((s: any) => (
                         <option key={s.id} value={s.id}>
-                          🛢️ {s.denumire} (Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L)
+                           {s.denumire} (Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L)
                         </option>
                       ))
                     )}
@@ -965,7 +965,7 @@ export default function FluidePage() {
                   >
                     {mecaniciList.map((m: any) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume} ({m.functie || 'Mecanic'})
+                         {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
                   </select>

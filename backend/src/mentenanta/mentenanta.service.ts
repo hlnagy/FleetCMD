@@ -68,7 +68,7 @@ export class MentenantaService {
     await this.prisma.mecanic.delete({ where: { id } });
 
     return {
-      mesaj: `👨‍🔧 Mecanicul "${mecanic.nume}" a fost eliminat din lista mecanicilor activi. Toate comenzile de lucru și operațiunile efectuate anterior de acesta rămân salvate intact în istoric.`,
+      mesaj: ` Mecanicul "${mecanic.nume}" a fost eliminat din lista mecanicilor activi. Toate comenzile de lucru și operațiunile efectuate anterior de acesta rămân salvate intact în istoric.`,
       mecanic,
     };
   }
@@ -143,7 +143,7 @@ export class MentenantaService {
         vehicul: p.vehicul ? `${p.vehicul.numarIntern} (${p.vehicul.numarInmatriculare})` : '-',
         data: p.dataPermutare,
         stare: 'FINALIZAT',
-        detalii: `Mutare de pe poz. ${p.pozitieSursaCod} ➔ ${p.pozitieDestCod}. Contor: ${p.valoareContor}`,
+        detalii: `Mutare de pe poz. ${p.pozitieSursaCod}  ${p.pozitieDestCod}. Contor: ${p.valoareContor}`,
         costTotal: 0,
       });
     });
@@ -341,7 +341,7 @@ export class MentenantaService {
     });
 
     return {
-      mesaj: `✅ Inspecție/Manoperă finalizată! Contorul a fost resetat la ${valoareContor} ${sarcina.tipMasurare}.`,
+      mesaj: ` Inspecție/Manoperă finalizată! Contorul a fost resetat la ${valoareContor} ${sarcina.tipMasurare}.`,
       valoareContor,
     };
   }
@@ -758,7 +758,7 @@ export class MentenantaService {
     });
 
     return {
-      mesaj: `✅ Comandă de Lucru ${comanda.numarComanda} deschisă cu succes (Stare: ÎN LUCRU)! Puteți adăuga piese suplimentare și o puteți finaliza din Comenzi de Lucru.`,
+      mesaj: ` Comandă de Lucru ${comanda.numarComanda} deschisă cu succes (Stare: ÎN LUCRU)! Puteți adăuga piese suplimentare și o puteți finaliza din Comenzi de Lucru.`,
       comanda,
     };
   }

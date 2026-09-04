@@ -235,7 +235,7 @@ export class AnomaliiService {
 
     return {
       mesaj: data.tipOperatiune === 'SCHIMB_ULEI'
-        ? `✅ SCHIMB ULEI ÎNREGISTRAT! Contorul pentru ${data.tipLichid} a fost RESETAT la ${valoareContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Stoc scos: ${cantitate}L din ${articolUlei.denumire})` : ''}`
+        ? ` SCHIMB ULEI ÎNREGISTRAT! Contorul pentru ${data.tipLichid} a fost RESETAT la ${valoareContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Stoc scos: ${cantitate}L din ${articolUlei.denumire})` : ''}`
         : `Completare ${cantitate}L ${data.tipLichid} înregistrată. Cost: ${costTotal} RON.${articolUlei ? ` (Stoc scos: ${cantitate}L din ${articolUlei.denumire})` : ''}`,
       completare,
       anomalie: verificareScurgere,
@@ -871,7 +871,7 @@ export class AnomaliiService {
         id: `scurgere-${c.id}`,
         dbId: c.id,
         categorieAlert: 'SCURGERI_ULEI',
-        categorieText: '💧 Detector Scurgere Ulei',
+        categorieText: 'Detector Scurgere Ulei',
         titlu: `Anomalie Nivel Ulei pe ${c.vehicul?.numarIntern}`,
         vehiculId: c.vehiculId,
         vehiculNumar: c.vehicul?.numarIntern,
@@ -913,7 +913,7 @@ export class AnomaliiService {
             id: `regula-${regula.id}-${v.id}`,
             dbId: regula.id,
             categorieAlert: 'MENTENANTA_CONSUMABIL',
-            categorieText: '🛠️ Consumabile & Mentenanță',
+            categorieText: 'Consumabile & Mentenanță',
             titlu: `${regula.denumireOperatiune} - ${v.numarIntern}`,
             vehiculId: v.id,
             vehiculNumar: v.numarIntern,
@@ -944,7 +944,7 @@ export class AnomaliiService {
           id: `doc-${doc.id}`,
           dbId: doc.id,
           categorieAlert: 'DOCUMENTE_FLOTA',
-          categorieText: '📄 Documente Legale Flotă',
+          categorieText: 'Documente Legale Flotă',
           titlu: `Document ${doc.tipDocument} - ${doc.vehicul?.numarIntern} (${doc.vehicul?.numarInmatriculare})`,
           vehiculId: doc.vehiculId,
           vehiculNumar: doc.vehicul?.numarIntern,
@@ -974,7 +974,7 @@ export class AnomaliiService {
           id: `custom-${ac.id}`,
           dbId: ac.id,
           categorieAlert: 'LICENTE_CUSTOM',
-          categorieText: '🔏 Licențe & Atestate Firmă',
+          categorieText: 'Licențe & Atestate Firmă',
           titlu: `${ac.titlu}`,
           vehiculId: null,
           vehiculNumar: ac.responsabil || 'Firmă',
@@ -1001,7 +1001,7 @@ export class AnomaliiService {
           id: `stoc-critic-${art.id}`,
           dbId: art.id,
           categorieAlert: 'STOC_CRITIC',
-          categorieText: '📦 Stoc Critic',
+          categorieText: 'Stoc Critic',
           titlu: `Stoc critic: ${art.denumire} (${art.codArticol})`,
           vehiculId: null,
           vehiculNumar: art.depozit?.nume || 'Depozit Central',

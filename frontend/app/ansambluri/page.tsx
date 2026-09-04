@@ -151,7 +151,7 @@ export default function AnsambluriPage() {
         <div>
           <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight flex items-center space-x-2">
             <Link2 className="w-6 h-6 text-sapphire-500" />
-            <span>Management Ansambluri (Cuplare Cap Tractor 🔗 Semiremorcă)</span>
+            <span>Management Ansambluri (Cuplare Cap Tractor  Semiremorcă)</span>
           </h1>
           <p className="text-xs text-sage-700 font-medium">
             Cuplare dinamică și acumulare automată de kilometri pe semiremorci în timp real
@@ -194,7 +194,7 @@ export default function AnsambluriPage() {
                   const isCoupled = cuplariActive.some((c) => c.capTractorId === v.id);
                   return (
                     <option key={v.id} value={v.id}>
-                      {v.numarIntern} — {v.numarInmatriculare} ({v.valoareContorCurent} KM) {isCoupled ? '🔗 [Cuplat]' : '🟢 [Disponibil]'}
+                      {v.numarIntern} — {v.numarInmatriculare} ({v.valoareContorCurent} KM) {isCoupled ? '[Cuplat]' : '[Disponibil]'}
                     </option>
                   );
                 })}
@@ -221,7 +221,7 @@ export default function AnsambluriPage() {
                   const isCoupled = cuplariActive.some((c) => c.semiremorcaId === v.id);
                   return (
                     <option key={v.id} value={v.id}>
-                      {v.numarIntern} — {v.numarInmatriculare} ({v.valoareContorCurent} KM) {isCoupled ? '🔗 [Cuplată]' : '🟢 [Disponibilă]'}
+                      {v.numarIntern} — {v.numarInmatriculare} ({v.valoareContorCurent} KM) {isCoupled ? '[Cuplată]' : '[Disponibilă]'}
                     </option>
                   );
                 })}
@@ -280,7 +280,7 @@ export default function AnsambluriPage() {
                     <p className="text-[10px] font-mono text-sage-600 font-bold">{item.capTractor?.valoareContorCurent} KM</p>
                   </div>
 
-                  {/* ICON 🔗 */}
+                  {/* ICON  */}
                   <div className="col-span-1 flex justify-center text-sapphire-500 font-bold">
                     <div className="p-2 rounded-full bg-sapphire-50">
                       <Link2 className="w-5 h-5 text-sapphire-500" />
@@ -380,7 +380,7 @@ export default function AnsambluriPage() {
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           : 'bg-morning-200 text-sage-700'
                       }`}>
-                        {item.esteActiv ? '🔗 ACTIV' : '⏹️ DECUPALAT'}
+                        {item.esteActiv ? 'ACTIV' : 'DECUPALAT'}
                       </span>
                     </td>
                     <td className="p-3">
@@ -400,7 +400,7 @@ export default function AnsambluriPage() {
                         : '— Active —'}
                     </td>
                     <td className="p-3 font-mono text-right font-semibold text-slate-800">
-                      {item.kmInceputTractor} KM ➔ {item.kmSfarsitTractor !== null && item.kmSfarsitTractor !== undefined ? `${item.kmSfarsitTractor} KM` : 'En-route'}
+                      {item.kmInceputTractor} KM  {item.kmSfarsitTractor !== null && item.kmSfarsitTractor !== undefined ? `${item.kmSfarsitTractor} KM` : 'En-route'}
                     </td>
                     <td className="p-3 font-mono text-right font-black text-sapphire-900 text-sm">
                       {item.kmParcursiAnsa !== null && item.kmParcursiAnsa !== undefined

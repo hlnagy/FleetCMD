@@ -102,7 +102,7 @@ export default function DashboardPage() {
       });
 
       if (res.ok) {
-        alert('✅ Mecanic înregistrat cu succes în echipa atelierului!');
+        alert('Mecanic înregistrat cu succes în echipa atelierului!');
         setShowAddMecanicModal(false);
         setNewMecanicNume('');
         setNewMecanicFunctie('Mecanic Atelier');
@@ -324,7 +324,7 @@ export default function DashboardPage() {
             >
               <option value="">Toți Mecanicii ({istoricServicii.length} servicii total)</option>
               {mecanici.map((m) => (
-                <option key={m.id} value={m.nume}>👨‍🔧 {m.nume} ({m.totalLucrari || 0} lucrări)</option>
+                <option key={m.id} value={m.nume}> {m.nume} ({m.totalLucrari || 0} lucrări)</option>
               ))}
             </select>
 
@@ -334,11 +334,11 @@ export default function DashboardPage() {
               className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
             >
               <option value="">Toate Tipurile de Lucrări</option>
-              <option value="COMANDA_LUCRU">🛠️ Comenzi de Lucru / Reparații</option>
-              <option value="SCHIMB_ULEI">🛢️ Schimb Complet Ulei</option>
-              <option value="COMPLETARE_ULEI">💧 Completare / Dopare Ulei</option>
-              <option value="ROTIRE_ANVELOPA">🛞 Rotiri & Permutări Anvelope</option>
-              <option value="MASURARE_PROFIL">📏 Măsurători Profil Anvelope</option>
+              <option value="COMANDA_LUCRU"> Comenzi de Lucru / Reparații</option>
+              <option value="SCHIMB_ULEI"> Schimb Complet Ulei</option>
+              <option value="COMPLETARE_ULEI">Completare / Dopare Ulei</option>
+              <option value="ROTIRE_ANVELOPA">Rotiri & Permutări Anvelope</option>
+              <option value="MASURARE_PROFIL">Măsurători Profil Anvelope</option>
             </select>
           </div>
         </div>
@@ -372,7 +372,7 @@ export default function DashboardPage() {
                     </td>
                     <td className="p-3 font-extrabold text-sapphire-900">
                       <span className="px-2.5 py-1 rounded-lg bg-sapphire-50 border border-sapphire-200 text-sapphire-800 text-[11px] inline-block">
-                        👨‍🔧 {s.mecanic}
+                         {s.mecanic}
                       </span>
                     </td>
                     <td className="p-3 font-bold text-slate-800">

@@ -450,7 +450,7 @@ export class VehiculeService {
       },
     });
 
-    return { mesaj: `✅ Contor înregistrat cu succes pentru ${v.numarIntern}: ${valContor} ${v.tipMasurare}!`, entry };
+    return { mesaj: ` Contor înregistrat cu succes pentru ${v.numarIntern}: ${valContor} ${v.tipMasurare}!`, entry };
   }
 
   // Înregistrare Rapidă în Lot (Batch) Contoare Flotă
@@ -468,7 +468,7 @@ export class VehiculeService {
         rezultate.push(r);
       }
     }
-    return { mesaj: `✅ Actualizate ${rezultate.length} contoare de flotă cu succes!`, rezultate };
+    return { mesaj: ` Actualizate ${rezultate.length} contoare de flotă cu succes!`, rezultate };
   }
 
   // Istoric Audit Contoare Flotă
@@ -518,7 +518,7 @@ export class VehiculeService {
       });
     }
 
-    return { mesaj: '✅ Înregistrare contor actualizată cu succes!', entry: updated };
+    return { mesaj: ' Înregistrare contor actualizată cu succes!', entry: updated };
   }
 
   async deleteIstoricContor(id: string) {
@@ -543,7 +543,7 @@ export class VehiculeService {
       });
     }
 
-    return { mesaj: '✅ Înregistrare contor ștearsă cu succes!' };
+    return { mesaj: ' Înregistrare contor ștearsă cu succes!' };
   }
 
   // Import / Sincronizare Date GPS Telematică (CSV, JSON sau API GPS)
@@ -621,7 +621,7 @@ export class VehiculeService {
     }
 
     return {
-      mesaj: `✅ Import GPS finalizat! S-au procesat ${rezultate.length} contoare.`,
+      mesaj: ` Import GPS finalizat! S-au procesat ${rezultate.length} contoare.`,
       rezultate,
       erori,
     };
@@ -719,7 +719,7 @@ export class VehiculeService {
     });
 
     return {
-      mesaj: `✅ Ansamblu cuplat cu succes: Cap Tractor ${capTractor.numarInmatriculare} 🔗 Semiremorcă ${semiremorca.numarInmatriculare}`,
+      mesaj: ` Ansamblu cuplat cu succes: Cap Tractor ${capTractor.numarInmatriculare}  Semiremorcă ${semiremorca.numarInmatriculare}`,
       cuplare,
     };
   }
@@ -767,7 +767,7 @@ export class VehiculeService {
     });
 
     return {
-      mesaj: `✅ Decuplare efectuată cu succes! Total KM parcurși în ansamblu: ${kmParcursiAnsa} KM`,
+      mesaj: ` Decuplare efectuată cu succes! Total KM parcurși în ansamblu: ${kmParcursiAnsa} KM`,
       decuplare,
     };
   }

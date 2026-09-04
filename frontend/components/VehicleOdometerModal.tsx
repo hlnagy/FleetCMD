@@ -96,7 +96,7 @@ export default function VehicleOdometerModal({
       });
 
       if (res.ok) {
-        alert('✅ Înregistrare contor adăugată cu succes!');
+        alert('Înregistrare contor adăugată cu succes!');
         setShowAddForm(false);
         setNewObservatii('');
         fetchIstoric();
@@ -171,24 +171,24 @@ export default function VehicleOdometerModal({
   const getSourceBadge = (sursa: string) => {
     const sUpper = (sursa || '').toUpperCase();
     if (sUpper.includes('GPS') || sUpper.includes('TELEMATICA')) {
-      return { label: '📡 Automatizat (GPS)', type: 'AUTO', class: 'bg-purple-100 text-purple-800 border-purple-300 whitespace-nowrap' };
+      return { label: ' Automatizat (GPS)', type: 'AUTO', class: 'bg-purple-100 text-purple-800 border-purple-300 whitespace-nowrap' };
     }
     if (sUpper.includes('CUPLARE') || sUpper.includes('TRACTOR')) {
-      return { label: '🔗 Automatizat (Ansamblu)', type: 'AUTO', class: 'bg-indigo-100 text-indigo-800 border-indigo-300 whitespace-nowrap' };
+      return { label: ' Automatizat (Ansamblu)', type: 'AUTO', class: 'bg-indigo-100 text-indigo-800 border-indigo-300 whitespace-nowrap' };
     }
     if (sUpper.includes('SERVICE') || sUpper.includes('COMANDĂ') || sUpper.includes('REPARAȚIE')) {
-      return { label: '👨‍🔧 Service / Comandă Lucru', type: 'MANUAL', class: 'bg-amber-100 text-amber-800 border-amber-300 whitespace-nowrap' };
+      return { label: ' Service / Comandă Lucru', type: 'MANUAL', class: 'bg-amber-100 text-amber-800 border-amber-300 whitespace-nowrap' };
     }
     if (sUpper.includes('SCHIMB') || sUpper.includes('COMPLETARE') || sUpper.includes('ULEI')) {
-      return { label: '🛢️ Operat Ulei / Fluide', type: 'MANUAL', class: 'bg-cyan-100 text-cyan-800 border-cyan-300 whitespace-nowrap' };
+      return { label: ' Operat Ulei / Fluide', type: 'MANUAL', class: 'bg-cyan-100 text-cyan-800 border-cyan-300 whitespace-nowrap' };
     }
     if (sUpper.includes('ANVELOPE')) {
-      return { label: '🛞 Anvelope', type: 'MANUAL', class: 'bg-emerald-100 text-emerald-800 border-emerald-300 whitespace-nowrap' };
+      return { label: ' Anvelope', type: 'MANUAL', class: 'bg-emerald-100 text-emerald-800 border-emerald-300 whitespace-nowrap' };
     }
     if (sUpper.includes('CORECȚIE')) {
-      return { label: '🔧 Manual Corecție', type: 'MANUAL', class: 'bg-roseash-200 text-terracotta-800 border-roseash-300 whitespace-nowrap' };
+      return { label: ' Manual Corecție', type: 'MANUAL', class: 'bg-roseash-200 text-terracotta-800 border-roseash-300 whitespace-nowrap' };
     }
-    return { label: '🖐️ Manual', type: 'MANUAL', class: 'bg-sapphire-100 text-sapphire-800 border-sapphire-300 whitespace-nowrap' };
+    return { label: ' Manual', type: 'MANUAL', class: 'bg-sapphire-100 text-sapphire-800 border-sapphire-300 whitespace-nowrap' };
   };
 
   const istoricFiltrat = istoric.filter((item) => {
@@ -251,12 +251,12 @@ export default function VehicleOdometerModal({
               className="bg-white border border-morning-200 rounded-xl p-1.5 font-bold text-sapphire-900 focus:outline-none cursor-pointer"
             >
               <option value="">Toate Sursele</option>
-              <option value="MANUAL">🖐️ Doar Manual</option>
-              <option value="GPS">📡 Doar GPS (Automat)</option>
-              <option value="SERVICE">👨‍🔧 Service / Comenzi</option>
-              <option value="ULEI">🛢️ Schimb Ulei / Fluide</option>
-              <option value="ANVELOPE">🛞 Anvelope</option>
-              <option value="CUPLARE">🔗 Cuplare Ansamblu</option>
+              <option value="MANUAL"> Doar Manual</option>
+              <option value="GPS">Doar GPS (Automat)</option>
+              <option value="SERVICE"> Service / Comenzi</option>
+              <option value="ULEI"> Schimb Ulei / Fluide</option>
+              <option value="ANVELOPE">Anvelope</option>
+              <option value="CUPLARE">Cuplare Ansamblu</option>
             </select>
           </div>
 
@@ -436,7 +436,7 @@ export default function VehicleOdometerModal({
                       </td>
                       <td className="p-3">
                         <span className={`text-[10px] font-bold whitespace-nowrap ${badge.type === 'AUTO' ? 'text-purple-700' : 'text-slate-600'}`}>
-                          {badge.type === 'AUTO' ? '⚡ Automatizat' : '✍️ Manual'}
+                          {badge.type === 'AUTO' ? 'Automatizat' : 'Manual'}
                         </span>
                       </td>
                       <td className="p-3">

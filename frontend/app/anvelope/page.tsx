@@ -297,7 +297,7 @@ export default function AnvelopePage() {
       });
 
       if (res.ok) {
-        alert(`🔄 Permutarea directă între pozițiile ${getLabelPozitie(pozitieA).titlu} ↔️ ${getLabelPozitie(pozitieB).titlu} a fost executată cu succes!`);
+        alert(` Permutarea directă între pozițiile ${getLabelPozitie(pozitieA).titlu}  ${getLabelPozitie(pozitieB).titlu} a fost executată cu succes!`);
         setShowPermutareModal(false);
         setPozitieA(null);
         setPozitieB(null);
@@ -353,7 +353,7 @@ export default function AnvelopePage() {
       });
 
       if (res.ok) {
-        alert('✅ Configurația axelor și a roților a fost actualizată cu succes!');
+        alert('Configurația axelor și a roților a fost actualizată cu succes!');
         setShowConfigAxeModal(false);
         fetchVehicule();
         fetchHartaAxe(selectedId);
@@ -396,7 +396,7 @@ export default function AnvelopePage() {
       });
 
       if (res.ok) {
-        alert('✅ Anvelopa a fost înregistrată și montată cu succes pe poziția selectată!');
+        alert('Anvelopa a fost înregistrată și montată cu succes pe poziția selectată!');
         setShowAddAnvelopaModal(false);
         setNewSerie('');
         setNewMountPositionId('');
@@ -451,7 +451,7 @@ export default function AnvelopePage() {
       });
 
       if (res.ok) {
-        alert('✅ Anvelopa din stoc a fost montată pe vehicul! Stocul a fost actualizat.');
+        alert('Anvelopa din stoc a fost montată pe vehicul! Stocul a fost actualizat.');
         setShowAddAnvelopaModal(false);
         setSelectedAnvelopaDinStocId('');
         fetchHartaAxe(selectedId);
@@ -546,7 +546,7 @@ export default function AnvelopePage() {
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
           >
             <Settings className="w-4 h-4 text-sapphire-500" />
-            <span>⚙️ Configurează Axe & Roți</span>
+            <span>Configurează Axe & Roți</span>
           </button>
 
           <button
@@ -563,7 +563,7 @@ export default function AnvelopePage() {
               className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white text-xs font-bold shadow-md shadow-terracotta-500/20 transition animate-pulse"
             >
               <ArrowLeftRight className="w-4 h-4" />
-              <span>🔄 Execută Permutare între {getLabelPozitie(pozitieA).titlu} ↔️ {getLabelPozitie(pozitieB).titlu}</span>
+              <span>Execută Permutare între {getLabelPozitie(pozitieA).titlu}  {getLabelPozitie(pozitieB).titlu}</span>
             </button>
           )}
         </div>
@@ -727,7 +727,7 @@ export default function AnvelopePage() {
                                     className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-extrabold shadow-xs transition"
                                     title="Demontează anvelopa și trimite-o în stoc"
                                   >
-                                    📦 Demontează
+                                     Demontează
                                   </button>
 
                                   <button
@@ -738,7 +738,7 @@ export default function AnvelopePage() {
                                     className="px-2 py-1 bg-white hover:bg-morning-100 border border-morning-300 text-sapphire-900 rounded-lg text-[10px] font-bold shadow-xs transition"
                                     title="Vezi istoricul complet al anvelopei"
                                   >
-                                    📜 Istoric
+                                     Istoric
                                   </button>
                                 </>
                               ) : (
@@ -813,7 +813,7 @@ export default function AnvelopePage() {
                                     className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-extrabold shadow-xs transition"
                                     title="Demontează anvelopa și trimite-o în stoc"
                                   >
-                                    📦 Demontează
+                                     Demontează
                                   </button>
 
                                   <button
@@ -824,7 +824,7 @@ export default function AnvelopePage() {
                                     className="px-2 py-1 bg-white hover:bg-morning-100 border border-morning-300 text-sapphire-900 rounded-lg text-[10px] font-bold shadow-xs transition"
                                     title="Vezi istoricul complet al anvelopei"
                                   >
-                                    📜 Istoric
+                                     Istoric
                                   </button>
                                 </>
                               ) : (
@@ -892,7 +892,7 @@ export default function AnvelopePage() {
                         }`}>
                           {a.stare === 'MONTATA' 
                             ? `MONTATĂ (${a.vehicul?.numarIntern || ''} ${a.pozitieAx ? `• ${getLabelPozitie(a.pozitieAx).titlu}` : ''})` 
-                            : `📦 ÎN STOC (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
+                            : ` ÎN STOC (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
                         </span>
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-900">
@@ -922,7 +922,7 @@ export default function AnvelopePage() {
       {/* TAB 3: AUDIT ISTORIC SCHIMBURI & PERMUTĂRI */}
       {activeTab === 'istoric' && (
         <div className="pleasant-card rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900">📜 Registru Audit Schimburi & Permutări Roți (Istoric Mutări)</h2>
+          <h2 className="text-base font-bold text-sapphire-900"> Registru Audit Schimburi & Permutări Roți (Istoric Mutări)</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
@@ -930,7 +930,7 @@ export default function AnvelopePage() {
                   <th className="p-3">Dată Intervenție</th>
                   <th className="p-3">Utilaj</th>
                   <th className="p-3">Anvelopă / Serie</th>
-                  <th className="p-3">Poziție Sursă ➔ Destinație</th>
+                  <th className="p-3">Poziție Sursă  Destinație</th>
                   <th className="p-3 font-mono">Odometru (KM/mTH)</th>
                   <th className="p-3 text-right">Operator</th>
                 </tr>
@@ -942,7 +942,7 @@ export default function AnvelopePage() {
                     <td className="p-3 font-extrabold text-sapphire-900">{h.vehicul?.numarIntern}</td>
                     <td className="p-3 font-bold text-slate-800">{h.anvelopa?.marca} ({h.anvelopa?.serieAnvelopa})</td>
                     <td className="p-3 font-mono font-bold text-sapphire-900">
-                      <span className="px-2 py-0.5 rounded bg-morning-200">{h.pozitieSursaCod}</span> ➔ <span className="px-2 py-0.5 rounded bg-sapphire-100 text-sapphire-900">{h.pozitieDestCod}</span>
+                      <span className="px-2 py-0.5 rounded bg-morning-200">{h.pozitieSursaCod}</span>  <span className="px-2 py-0.5 rounded bg-sapphire-100 text-sapphire-900">{h.pozitieDestCod}</span>
                     </td>
                     <td className="p-3 font-mono font-extrabold text-sapphire-900">{h.valoareContor}</td>
                     <td className="p-3 text-right text-sage-600 font-bold">{h.operator || 'Atelier'}</td>
@@ -992,7 +992,7 @@ export default function AnvelopePage() {
                   modalMountMode === 'DIN_STOC' ? 'bg-sapphire-500 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
                 }`}
               >
-                📦 Din Stoc Intern ({stocAnvelope.length} articole disponibile)
+                 Din Stoc Intern ({stocAnvelope.length} articole disponibile)
               </button>
 
               <button
@@ -1002,7 +1002,7 @@ export default function AnvelopePage() {
                   modalMountMode === 'NOUA' ? 'bg-sapphire-500 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
                 }`}
               >
-                🆕 Anvelopă Nouă Nemenționată în Stoc
+                 Anvelopă Nouă Nemenționată în Stoc
               </button>
             </div>
 
@@ -1024,7 +1024,7 @@ export default function AnvelopePage() {
                         </span>
                       </div>
                       <p className="text-[11px] text-sage-700 font-medium">
-                        {getLabelPozitie(targetSelectedPositionObj, targetPozitii.filter((p: any) => p.numarAx === targetSelectedPositionObj.numarAx).length).descriere} {targetSelectedPositionObj.anvelopa ? `• (⚠️ Ocupată: ${targetSelectedPositionObj.anvelopa.serieAnvelopa})` : '• (Poziție Liberă)'}
+                        {getLabelPozitie(targetSelectedPositionObj, targetPozitii.filter((p: any) => p.numarAx === targetSelectedPositionObj.numarAx).length).descriere} {targetSelectedPositionObj.anvelopa ? `• ( Ocupată: ${targetSelectedPositionObj.anvelopa.serieAnvelopa})` : '• (Poziție Liberă)'}
                       </p>
                     </div>
                   </div>
@@ -1120,8 +1120,7 @@ export default function AnvelopePage() {
                 <div>
                   <label className="text-sage-700 block mb-1 font-extrabold text-sapphire-900 flex items-center space-x-1">
                     <Ruler className="w-3.5 h-3.5 text-sapphire-500" />
-                    <span>
-                      Index Contor la Montare ({targetVehiculObj?.tipMasurare === 'ORE_MTH' ? 'Ore mTH' : 'KM'}): *
+                    <span>Index Contor la Montare ({targetVehiculObj?.tipMasurare === 'ORE_MTH' ? 'Ore mTH' : 'KM'}): *
                     </span>
                   </label>
                   <input
@@ -1145,7 +1144,7 @@ export default function AnvelopePage() {
                   >
                     {mecaniciList.map((m: any) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume} ({m.functie || 'Mecanic'})
+                         {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
                   </select>
@@ -1211,7 +1210,7 @@ export default function AnvelopePage() {
                       type="text"
                       value={stocSearchTerm}
                       onChange={(e) => setStocSearchTerm(e.target.value)}
-                      placeholder="🔍 Filtrează activ după Serie (SN), Marcă, Model, Dimensiune, Cod..."
+                      placeholder="Filtrează activ după Serie (SN), Marcă, Model, Dimensiune, Cod..."
                       className="w-full pl-9 pr-8 py-2.5 bg-white border-2 border-sapphire-300 rounded-xl text-xs font-bold text-sapphire-900 placeholder:text-sage-400 placeholder:font-normal focus:outline-hidden focus:border-sapphire-500 focus:ring-2 focus:ring-sapphire-500/20"
                     />
                     {stocSearchTerm && (
@@ -1251,7 +1250,7 @@ export default function AnvelopePage() {
                                         ? 'bg-amber-100 text-amber-900 border border-amber-300' 
                                         : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   }`}>
-                                    {isSerialized ? `🏷️ SN: ${a.serieAnvelopa}` : `📦 Lot Stoc (${a.stocDisponibil} buc)`}
+                                    {isSerialized ? ` SN: ${a.serieAnvelopa}` : ` Lot Stoc (${a.stocDisponibil} buc)`}
                                   </span>
                                   <span className={`font-mono font-bold text-[11px] ${isSelected ? 'text-sapphire-100' : 'text-sapphire-800'}`}>
                                     {a.dimensiune}
@@ -1267,7 +1266,7 @@ export default function AnvelopePage() {
                                   {a.marca} {a.model}
                                 </p>
                                 <span className={`text-[10px] font-medium ${isSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
-                                  📍 {a.depozitNume || 'Depozit Central'}
+                                   {a.depozitNume || 'Depozit Central'}
                                 </span>
                               </div>
                             </div>
@@ -1418,12 +1417,12 @@ export default function AnvelopePage() {
                 {demountActiune === 'CASARE_DIRECTA' ? (
                   <>
                     <Trash2 className="w-5 h-5 text-terracotta-500" />
-                    <span>Casare Anvelopă (Deșeu / Explozie) 🗑️</span>
+                    <span>Casare Anvelopă (Deșeu / Explozie) </span>
                   </>
                 ) : (
                   <>
                     <PackageCheck className="w-5 h-5 text-amber-500" />
-                    <span>Demontare Anvelopă 📦</span>
+                    <span>Demontare Anvelopă </span>
                   </>
                 )}
               </h3>
@@ -1455,7 +1454,7 @@ export default function AnvelopePage() {
                         : 'bg-morning-100 border-morning-200 text-sage-700 hover:bg-morning-200'
                     }`}
                   >
-                    <span>📦 În Stoc Depozit</span>
+                    <span>În Stoc Depozit</span>
                     <span className="text-[10px] font-medium text-sage-600">(Refolosibilă)</span>
                   </button>
 
@@ -1471,7 +1470,7 @@ export default function AnvelopePage() {
                         : 'bg-morning-100 border-morning-200 text-sage-700 hover:bg-morning-200'
                     }`}
                   >
-                    <span>🗑️ Casare / Deșeu</span>
+                    <span>Casare / Deșeu</span>
                     <span className="text-[10px] font-medium text-terracotta-600">(Explozie / Uzată)</span>
                   </button>
                 </div>
@@ -1488,14 +1487,14 @@ export default function AnvelopePage() {
                     onChange={(e) => setDemountMotivCasare(e.target.value)}
                     className="w-full bg-white border border-roseash-300 rounded-lg p-2 text-terracotta-900 font-bold text-xs"
                   >
-                    <option value="EXPLOZIE_PUNCTURA">💥 Explozie / Punctură ireparabilă (Explozie în mers)</option>
-                    <option value="UZURA_FINITA">⚠️ Uzură completă / Limită profil atinsă (End-of-life)</option>
-                    <option value="TAIETURA_STRUCTURA">✂️ Tăietură laterală / Deformare cordon structură</option>
-                    <option value="UZURA_NEUNIFORMA">📐 Uzură neuniformă / Problemă geometrie axă</option>
-                    <option value="ALTELE">📝 Alt motiv specific de casare</option>
+                    <option value="EXPLOZIE_PUNCTURA">Explozie / Punctură ireparabilă (Explozie în mers)</option>
+                    <option value="UZURA_FINITA"> Uzură completă / Limită profil atinsă (End-of-life)</option>
+                    <option value="TAIETURA_STRUCTURA"> Tăietură laterală / Deformare cordon structură</option>
+                    <option value="UZURA_NEUNIFORMA">Uzură neuniformă / Problemă geometrie axă</option>
+                    <option value="ALTELE">Alt motiv specific de casare</option>
                   </select>
                   <p className="text-[10px] text-terracotta-700 font-medium">
-                    ℹ️ Datele vor fi transferate automat în modulul <strong>Rapoarte & Analitică (TCO)</strong> pentru analiza defecțiunilor și a calității mărcilor.
+                     Datele vor fi transferate automat în modulul <strong>Rapoarte & Analitică (TCO)</strong> pentru analiza defecțiunilor și a calității mărcilor.
                   </p>
                 </div>
               )}
@@ -1514,12 +1513,12 @@ export default function AnvelopePage() {
                   >
                     {depoziteList.map((dep: any) => (
                       <option key={dep.id} value={dep.id}>
-                        🏢 {dep.nume} {dep.responsabil ? `(Resp: ${dep.responsabil})` : ''}
+                         {dep.nume} {dep.responsabil ? `(Resp: ${dep.responsabil})` : ''}
                       </option>
                     ))}
                   </select>
                   <p className="text-[10px] text-amber-800 font-medium">
-                    📦 Anvelopa va fi înregistrată automat în gestiunea stocului din acest depozit.
+                     Anvelopa va fi înregistrată automat în gestiunea stocului din acest depozit.
                   </p>
                 </div>
               )}
@@ -1546,7 +1545,7 @@ export default function AnvelopePage() {
                   >
                     {mecaniciList.map((m: any) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume}
+                         {m.nume}
                       </option>
                     ))}
                   </select>
@@ -1566,7 +1565,7 @@ export default function AnvelopePage() {
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
                 />
                 <div className="mt-1 flex items-center justify-between text-[11px] font-bold text-sapphire-800 bg-sapphire-50 p-2 rounded-lg border border-sapphire-200">
-                  <span>📊 KM rulați pe acest vehicul:</span>
+                  <span>KM rulați pe acest vehicul:</span>
                   <span className="font-mono font-extrabold">+{Math.max(0, demountContor - (demountPozitie.anvelopa.kilometrajMontare || 0)).toLocaleString('ro-RO')} KM</span>
                 </div>
               </div>
@@ -1585,11 +1584,11 @@ export default function AnvelopePage() {
                 <button type="button" onClick={() => setShowDemountModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
                 {demountActiune === 'CASARE_DIRECTA' ? (
                   <button type="submit" className="px-5 py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold shadow-md shadow-terracotta-500/20">
-                    🗑️ Confirmă Casarea & Transmite în Rapoarte
+                     Confirmă Casarea & Transmite în Rapoarte
                   </button>
                 ) : (
                   <button type="submit" className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md shadow-amber-500/20">
-                    📦 Confirmă Depozitarea în {depoziteList.find((d) => d.id === demountDepozitId)?.nume || 'Stoc'}
+                     Confirmă Depozitarea în {depoziteList.find((d) => d.id === demountDepozitId)?.nume || 'Stoc'}
                   </button>
                 )}
               </div>
@@ -1643,7 +1642,7 @@ export default function AnvelopePage() {
                   }`}>
                     {historyTireData.anvelopa?.stare === 'MONTATA'
                       ? `MONTATĂ pe ${historyTireData.anvelopa?.vehicul?.numarIntern || ''} (${getLabelPozitie(historyTireData.anvelopa?.pozitieAx).titlu})`
-                      : '📦 ÎN STOC DEPOZIT'}
+                      : ' ÎN STOC DEPOZIT'}
                   </span>
                 </div>
 
@@ -1705,7 +1704,7 @@ export default function AnvelopePage() {
                                 {h.vehiculNumarIntern} <span className="text-[11px] font-normal text-sage-600 font-mono">({h.vehiculInmatriculare})</span>
                               </td>
                               <td className="p-2.5 font-mono font-bold text-sapphire-900 whitespace-nowrap">
-                                <span className="px-2 py-0.5 rounded bg-morning-200">{h.pozitieSursaCod}</span> ➔ <span className="px-2 py-0.5 rounded bg-sapphire-100 text-sapphire-900">{h.pozitieDestCod}</span>
+                                <span className="px-2 py-0.5 rounded bg-morning-200">{h.pozitieSursaCod}</span>  <span className="px-2 py-0.5 rounded bg-sapphire-100 text-sapphire-900">{h.pozitieDestCod}</span>
                               </td>
                               <td className="p-2.5 font-mono font-extrabold text-sapphire-900">
                                 {h.valoareContor?.toLocaleString('ro-RO')} KM
@@ -1750,13 +1749,13 @@ export default function AnvelopePage() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <RefreshCw className="w-5 h-5 text-sapphire-500" />
-                <span>Confirmare Permutare Directă 🔄</span>
+                <span>Confirmare Permutare Directă </span>
               </h3>
               <button onClick={() => setShowPermutareModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-4 bg-morning-100 rounded-2xl border border-morning-200 text-xs space-y-2 text-center">
-              <p className="font-extrabold text-sapphire-900 text-sm">Rotire între Poziția {getLabelPozitie(pozitieA).titlu} ↔️ Poziția {getLabelPozitie(pozitieB).titlu}</p>
+              <p className="font-extrabold text-sapphire-900 text-sm">Rotire între Poziția {getLabelPozitie(pozitieA).titlu}  Poziția {getLabelPozitie(pozitieB).titlu}</p>
               <p className="text-[11px] text-sage-600 font-medium">Sistemul va schimba fizic locurile celor 2 anvelope pe șasiu și va înregistra un audit istoric complet cu data, contorul curent și operatorul!</p>
             </div>
 
@@ -1783,7 +1782,7 @@ export default function AnvelopePage() {
                   >
                     {mecaniciList.map((m: any) => (
                       <option key={m.id} value={m.nume}>
-                        👨‍🔧 {m.nume} ({m.functie || 'Mecanic'})
+                         {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
                   </select>
@@ -1859,7 +1858,7 @@ export default function AnvelopePage() {
                         editModConfigurareAxe === 'MANUAL' ? 'bg-sapphire-500 text-white shadow-xs' : 'text-sage-700'
                       }`}
                     >
-                      🛠️ Manual (Personalizat)
+                       Manual (Personalizat)
                     </button>
                   </div>
                 </div>
@@ -1912,7 +1911,7 @@ export default function AnvelopePage() {
                   </div>
                 ) : (
                   <p className="text-slate-800 text-[11px] font-semibold">
-                    ℹ️ Se vor regenera automat axe conform categoriei vehiculului ({currentVehicul.categorieEnum}).
+                     Se vor regenera automat axe conform categoriei vehiculului ({currentVehicul.categorieEnum}).
                   </p>
                 )}
               </div>

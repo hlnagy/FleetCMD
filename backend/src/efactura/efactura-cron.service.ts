@@ -11,7 +11,7 @@ export class EFacturaCronService {
   // 1. Cron Job Háttérfolyamat: Óránként futó szinkronizáció
   @Cron(CronExpression.EVERY_HOUR)
   async handleHourlySyncCron() {
-    this.logger.log('⏰ Execuție Cron Job orar: Verificare și sincronizare e-Factura ANAF...');
+    this.logger.log(' Execuție Cron Job orar: Verificare și sincronizare e-Factura ANAF...');
     try {
       const cfg = await this.efacturaService.getConfig();
       if (!cfg.stareCronAuto) {
@@ -38,7 +38,7 @@ export class EFacturaCronService {
   // 2. Cron Job Zilnic: Auto-refresh Token 48h înainte de 90 zile
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleDailyTokenRefreshCheck() {
-    this.logger.log('🌙 Verificare zilnică valabilitate Token OAuth2 ANAF...');
+    this.logger.log(' Verificare zilnică valabilitate Token OAuth2 ANAF...');
     try {
       await this.efacturaService.refreshOAuthTokenIfNeeded();
     } catch (err: any) {

@@ -47,7 +47,7 @@ export class AnvelopeService {
 
     const listaIndividuale = anvelopeStoc.map((a) => {
       const isNoua = (a.adancimeCurentaMm || 16) >= 15;
-      const tag = isNoua ? '✨ NOUĂ' : '📦 RULATĂ / REZERVĂ';
+      const tag = isNoua ? 'NOUĂ' : 'RULATĂ / REZERVĂ';
       return {
         id: a.id,
         tipSursa: isNoua ? 'ANVELOPA_NOUA_INDIVIDUALA' : 'ANVELOPA_RULATA',
@@ -669,7 +669,7 @@ export class AnvelopeService {
           dataInregistrare: dataPermutare,
           sursa: 'ANVELOPE',
           operator,
-          observatii: `Rotire anvelope ${pozA.codPozitie} ↔ ${pozB.codPozitie}`,
+          observatii: `Rotire anvelope ${pozA.codPozitie} ${pozB.codPozitie}`,
         },
       });
     }
@@ -730,7 +730,7 @@ export class AnvelopeService {
     }
 
     return {
-      mesaj: `✅ Permutare roți executată și ÎNREGISTRATĂ ÎN ISTORIC! Poz. ${pozA.codPozitie} ↔️ ${pozB.codPozitie} la contorul ${valoareContor} ${vehicul?.tipMasurare || 'KM'}.`,
+      mesaj: ` Permutare roți executată și ÎNREGISTRATĂ ÎN ISTORIC! Poz. ${pozA.codPozitie}  ${pozB.codPozitie} la contorul ${valoareContor} ${vehicul?.tipMasurare || 'KM'}.`,
       pozitieA: pozA.codPozitie,
       pozitieB: pozB.codPozitie,
       valoareContor,
@@ -855,8 +855,8 @@ export class AnvelopeService {
     }
 
     const mesaj = actiune === 'CASARE_DIRECTA'
-      ? `🗑️ Anvelopa ${anvelopa.marca} (${anvelopa.serieAnvelopa}) a fost casată definitiv (Stare: CASATĂ) și transmisă în Rapoarte & Analitică! Rulaj final atins: ${rulajTotalNou} KM.`
-      : `📦 Anvelopa ${anvelopa.marca} (${anvelopa.serieAnvelopa}) a fost demontată cu succes în ${depozitSelectat ? depozitSelectat.nume : 'Stoc Depozit'}! (+${deltaKm} KM adăugați la rulaj).`;
+      ? ` Anvelopa ${anvelopa.marca} (${anvelopa.serieAnvelopa}) a fost casată definitiv (Stare: CASATĂ) și transmisă în Rapoarte & Analitică! Rulaj final atins: ${rulajTotalNou} KM.`
+      : ` Anvelopa ${anvelopa.marca} (${anvelopa.serieAnvelopa}) a fost demontată cu succes în ${depozitSelectat ? depozitSelectat.nume : 'Stoc Depozit'}! (+${deltaKm} KM adăugați la rulaj).`;
 
     return {
       mesaj,

@@ -248,7 +248,7 @@ export default function FisaTehnicaPage() {
       });
 
       if (res.ok) {
-        alert('✅ Valoarea de bază a fost salvată cu succes!');
+        alert('Valoarea de bază a fost salvată cu succes!');
         setShowBaselineModal(null);
         fetchBaselines(selectedId);
         fetchVehicule();
@@ -277,7 +277,7 @@ export default function FisaTehnicaPage() {
       });
 
       if (res.ok) {
-        alert(`✅ ${showRezolvatRapidModal.denumireOperatiune} marcat ca REZOLVAT! Contorul a fost resetat.`);
+        alert(` ${showRezolvatRapidModal.denumireOperatiune} marcat ca REZOLVAT! Contorul a fost resetat.`);
         setShowRezolvatRapidModal(null);
         setRzData(new Date().toISOString().split('T')[0]);
         setRzContor(0);
@@ -315,7 +315,7 @@ export default function FisaTehnicaPage() {
 
       if (res.ok) {
         const comanda = await res.json();
-        alert(`✅ Comandă de Lucru ${comanda.numarComanda} creată! Mergeți la secțiunea Comenzi de Lucru pentru a adăuga piesele.`);
+        alert(` Comandă de Lucru ${comanda.numarComanda} creată! Mergeți la secțiunea Comenzi de Lucru pentru a adăuga piesele.`);
         setShowComandaRapidaModal(null);
         setCmdContor(0);
         setCmdMecanic('');
@@ -352,7 +352,7 @@ export default function FisaTehnicaPage() {
       });
 
       if (res.ok) {
-        alert(`✅ Contor actualizat cu succes pentru ${veh.numarIntern}!`);
+        alert(` Contor actualizat cu succes pentru ${veh.numarIntern}!`);
         fetchVehicule();
         if (selectedId) fetchFisa(selectedId);
         fetchIstoricContoare();
@@ -391,7 +391,7 @@ export default function FisaTehnicaPage() {
       });
 
       if (res.ok) {
-        alert(`🚀 Cele ${entries.length} contoare au fost actualizate cu succes!`);
+        alert(` Cele ${entries.length} contoare au fost actualizate cu succes!`);
         fetchVehicule();
         if (selectedId) fetchFisa(selectedId);
         fetchIstoricContoare();
@@ -443,7 +443,7 @@ export default function FisaTehnicaPage() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(`✅ ${data.mesaj}`);
+        alert(` ${data.mesaj}`);
         setGpsRawText('');
         fetchVehicule();
         if (selectedId) fetchFisa(selectedId);
@@ -591,7 +591,7 @@ export default function FisaTehnicaPage() {
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white text-xs font-bold shadow-md shadow-terracotta-500/20 transition"
           >
             <Clock className="w-4 h-4" />
-            <span>⏱️ Înregistrare Rapidă Contoare (KM / mTH)</span>
+            <span>Înregistrare Rapidă Contoare (KM / mTH)</span>
           </button>
         </div>
       </div>
@@ -606,7 +606,7 @@ export default function FisaTehnicaPage() {
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>📋 Tabel Întreaga Flotă pe Categorii ({vehiculeFiltrate.length})</span>
+            <span>Tabel Întreaga Flotă pe Categorii ({vehiculeFiltrate.length})</span>
           </button>
 
           <button
@@ -616,7 +616,7 @@ export default function FisaTehnicaPage() {
             }`}
           >
             <Truck className="w-4 h-4" />
-            <span>🚗 Fișă Tehnică Dedicată ({vehicul ? vehicul.numarIntern : 'Selectează'})</span>
+            <span>Fișă Tehnică Dedicată ({vehicul ? vehicul.numarIntern : 'Selectează'})</span>
           </button>
 
           <Link
@@ -624,7 +624,7 @@ export default function FisaTehnicaPage() {
             className="flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition bg-white text-slate-700 hover:bg-sapphire-50 hover:text-sapphire-900 border border-morning-200 shadow-2xs"
           >
             <Link2 className="w-4 h-4 text-sapphire-500" />
-            <span>🔗 Cuplare Ansambluri (Tractor 🔗 Remorcă)</span>
+            <span>Cuplare Ansambluri (Tractor  Remorcă)</span>
           </Link>
         </div>
 
@@ -678,7 +678,7 @@ export default function FisaTehnicaPage() {
                 type="text"
                 value={searchQueryFleet}
                 onChange={(e) => setSearchQueryFleet(e.target.value)}
-                placeholder="🔍 Căutare cod, număr, marcă..."
+                placeholder="Căutare cod, număr, marcă..."
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-sapphire-900 font-bold focus:bg-white transition"
               />
             </div>
@@ -729,11 +729,11 @@ export default function FisaTehnicaPage() {
                       <td className="p-3 text-center">
                         {numAlerte > 0 ? (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-roseash-200 text-terracotta-700 border border-terracotta-400 animate-pulse">
-                            🚨 {numAlerte} Alerte Active
+                             {numAlerte} Alerte Active
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sage-100 text-sage-700">
-                            🟢 Flotă Optimă
+                             Flotă Optimă
                           </span>
                         )}
                       </td>
@@ -858,7 +858,7 @@ export default function FisaTehnicaPage() {
               }`}
             >
               <ShieldAlert className="w-4 h-4 text-amber-300" />
-              <span>⚙️ Mentenanță Preventivă & Alerte Bază ({baselinesList.length})</span>
+              <span>Mentenanță Preventivă & Alerte Bază ({baselinesList.length})</span>
             </button>
 
             <button
@@ -939,7 +939,7 @@ export default function FisaTehnicaPage() {
               <div className="flex items-center justify-between border-b border-morning-200 pb-3">
                 <div>
                   <h3 className="text-sm font-extrabold text-sapphire-900">
-                    ⚙️ Valori de Bază (Ultimul Schimb) & Monitorizare Alerte Mentenanță
+                     Valori de Bază (Ultimul Schimb) & Monitorizare Alerte Mentenanță
                   </h3>
                   <p className="text-xs text-sage-600 font-medium">
                     Setați contorul sau data ultimului schimb pentru fiecare operațiune. Din aceste date de bază sistemul calculează automat alertarea!
@@ -1338,13 +1338,13 @@ export default function FisaTehnicaPage() {
                       <div className="p-3 rounded-2xl border bg-amber-50/90 border-amber-300 space-y-2 text-xs">
                         <div className="flex items-center space-x-2 text-amber-900 font-extrabold">
                           <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                          <span>🚛 Semiremorcă (Fără contor propriu pe șasiu)</span>
+                          <span>Semiremorcă (Fără contor propriu pe șasiu)</span>
                         </div>
 
                         {coupledTractor ? (
                           <div className="p-2.5 bg-white rounded-xl border border-amber-200 flex items-center justify-between shadow-xs">
                             <div>
-                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">🔗 Cuplat Activ la Cap Tractor:</p>
+                              <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider"> Cuplat Activ la Cap Tractor:</p>
                               <p className="font-extrabold text-sapphire-900">
                                 {coupledTractor.numarIntern} ({coupledTractor.numarInmatriculare}) - {coupledTractor.marca}
                               </p>
@@ -1375,7 +1375,7 @@ export default function FisaTehnicaPage() {
                               .filter((v: any) => v.categorieEnum === 'CAP_TRACTOR')
                               .map((tr: any) => (
                                 <option key={tr.id} value={tr.id}>
-                                  🚚 {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
+                                   {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
                                 </option>
                               ))}
                           </select>
@@ -1452,7 +1452,7 @@ export default function FisaTehnicaPage() {
                   className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md flex items-center space-x-2 transition"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>🖨️ Printează / Salvează PDF</span>
+                  <span>Printează / Salvează PDF</span>
                 </button>
 
                 <button onClick={() => setShowViewModal(null)} className="text-slate-400 hover:text-white">
@@ -1461,7 +1461,7 @@ export default function FisaTehnicaPage() {
               </div>
             </div>
 
-            {/* 📄 PRINTABLE A4 SHEET VIEW 📄 */}
+            {/*  PRINTABLE A4 SHEET VIEW  */}
             <div id="printable-a4-area" className="p-8 bg-white text-slate-800 rounded-xl space-y-6 font-sans">
               {/* Document Header */}
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
@@ -1612,7 +1612,7 @@ export default function FisaTehnicaPage() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div className="flex items-center space-x-2 text-sapphire-900 font-extrabold text-base">
                 <Clock className="w-5 h-5 text-terracotta-500" />
-                <span>⏱️ Înregistrare Rapidă Contoare Flotă (KM / mTH)</span>
+                <span>Înregistrare Rapidă Contoare Flotă (KM / mTH)</span>
               </div>
               <button onClick={() => setShowContorModal(false)} className="text-sage-400 hover:text-sapphire-900 font-bold">
                 <X className="w-5 h-5" />
@@ -1628,7 +1628,7 @@ export default function FisaTehnicaPage() {
                   tabContorModal === 'batch' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
                 }`}
               >
-                📋 Actualizare în Lot (Tabel Flotă)
+                 Actualizare în Lot (Tabel Flotă)
               </button>
 
               <button
@@ -1638,7 +1638,7 @@ export default function FisaTehnicaPage() {
                   tabContorModal === 'gps' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
                 }`}
               >
-                📡 Import Telematică GPS / CSV
+                 Import Telematică GPS / CSV
               </button>
 
               <button
@@ -1648,7 +1648,7 @@ export default function FisaTehnicaPage() {
                   tabContorModal === 'istoric' ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
                 }`}
               >
-                📜 Istoric & Audit Înregistrări ({istoricContoare.length})
+                 Istoric & Audit Înregistrări ({istoricContoare.length})
               </button>
             </div>
 
@@ -1704,7 +1704,7 @@ export default function FisaTehnicaPage() {
                     className="px-5 py-2.5 bg-terracotta-500 hover:bg-terracotta-600 text-white font-bold rounded-xl shadow-md transition flex items-center space-x-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>🚀 Salvează Toate Contoarele Modificate (Batch)</span>
+                    <span>Salvează Toate Contoarele Modificate (Batch)</span>
                   </button>
                 </div>
 
@@ -1797,7 +1797,7 @@ export default function FisaTehnicaPage() {
                     onClick={handleImportGpsText}
                     className="px-5 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold rounded-xl shadow-md transition flex items-center space-x-1.5"
                   >
-                    <span>📡 Importă & Actualizează Flota</span>
+                    <span>Importă & Actualizează Flota</span>
                   </button>
                 </div>
               </div>
@@ -1985,7 +1985,7 @@ export default function FisaTehnicaPage() {
                   type="submit"
                   className="px-5 py-2.5 bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold rounded-xl shadow-md transition"
                 >
-                  💾 Salvează Modificările
+                   Salvează Modificările
                 </button>
               </div>
             </form>

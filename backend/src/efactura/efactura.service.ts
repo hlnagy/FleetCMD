@@ -220,9 +220,9 @@ export class EFacturaService {
           },
         });
 
-        this.logger.log(`✅ Token-urile JWT ANAF au fost generate și salvate cu succes! Expiră la: ${accessTokenExpiresAt.toISOString()}`);
+        this.logger.log(` Token-urile JWT ANAF au fost generate și salvate cu succes! Expiră la: ${accessTokenExpiresAt.toISOString()}`);
         return {
-          mesaj: '🔑 Token-urile OAuth2 ANAF au fost obținute și salvate cu succes în baza de date!',
+          mesaj: ' Token-urile OAuth2 ANAF au fost obținute și salvate cu succes în baza de date!',
           accessTokenExpiresAt,
           refreshTokenExpiresAt,
           config: updatedConfig,
@@ -278,7 +278,7 @@ export class EFacturaService {
             },
           });
 
-          this.logger.log(`✅ Token OAuth2 ANAF reînnoit automat cu succes! Expiră la: ${newExpiresAt.toISOString()}`);
+          this.logger.log(` Token OAuth2 ANAF reînnoit automat cu succes! Expiră la: ${newExpiresAt.toISOString()}`);
           return newAccess;
         }
       } catch (err: any) {
@@ -806,8 +806,8 @@ export class EFacturaService {
     }
 
     const mesaj = duplicateCount > 0
-      ? `✅ Au fost importate ${procesateCount} facturi noi! (${duplicateCount} facturi duplicate deja existente au fost ignorate automat).`
-      : `✅ Au fost procesate și importate cu succes ${procesateCount} facturi din fișierele încărcate!`;
+      ? ` Au fost importate ${procesateCount} facturi noi! (${duplicateCount} facturi duplicate deja existente au fost ignorate automat).`
+      : ` Au fost procesate și importate cu succes ${procesateCount} facturi din fișierele încărcate!`;
 
     return {
       mesaj,
@@ -941,7 +941,7 @@ export class EFacturaService {
         cantitateIntrata: item.cantitate,
         pretUnitar: effectivePretUnitar,
         pretTotal: effectivePretTotal,
-        observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' 🛡️ Înregistrat în Garanții Componente' : ''}`,
+        observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? '  Înregistrat în Garanții Componente' : ''}`,
       },
     });
 
@@ -1061,7 +1061,7 @@ export class EFacturaService {
     await this.recalculeazaStareFactura(item.facturaId);
 
     return {
-      mesaj: `📦 Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? ' 🛡️ Înregistrat în Garanții Componente!' : ''}`,
+      mesaj: ` Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? '  Înregistrat în Garanții Componente!' : ''}`,
       item: updatedItem,
       articolStoc: articol,
     };
@@ -1079,7 +1079,7 @@ export class EFacturaService {
 
     await this.recalculeazaStareFactura(item.facturaId);
 
-    return { mesaj: `🗑️ Linia "${item.descrierePiesa}" a fost marcată ca exclusă (servicii).`, item: updated };
+    return { mesaj: ` Linia "${item.descrierePiesa}" a fost marcată ca exclusă (servicii).`, item: updated };
   }
 
   // ELIMINARE TOATĂ FACTURA (SERVICII / CHELTUIELI OPERAȚIONALE)
@@ -1108,7 +1108,7 @@ export class EFacturaService {
     });
 
     return {
-      mesaj: `🗑️ Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura.articole.length} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
+      mesaj: ` Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura.articole.length} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
       factura: updatedFactura,
     };
   }
@@ -1132,7 +1132,7 @@ export class EFacturaService {
     }
 
     return {
-      mesaj: `🗑️ ${facturaIds.length} facturi au fost excluse cu succes (marcate ca Servicii / Cheltuieli operaționale).`,
+      mesaj: ` ${facturaIds.length} facturi au fost excluse cu succes (marcate ca Servicii / Cheltuieli operaționale).`,
       count: facturaIds.length,
     };
   }
@@ -1162,7 +1162,7 @@ export class EFacturaService {
     }
 
     return {
-      mesaj: `🗑️ ${itemIds.length} linii au fost excluse cu succes.`,
+      mesaj: ` ${itemIds.length} linii au fost excluse cu succes.`,
       count: itemIds.length,
     };
   }

@@ -86,7 +86,7 @@ export default function MentenantaPage() {
   // 1-Click Finalizat Direct (DOAR PENTRU INSPECȚII / MANOPERĂ, RESTRICTED FOR SCHIMB_PIESA PER USER REQUEST)
   const handleFinalizeazaDirect = async (sarcina: any) => {
     if (sarcina.tipSarcina === 'SCHIMB_PIESA') {
-      alert('⚠️ Sarcinile de tip SCHIMB_PIESA / ULEI nu se pot finaliza prin 1-Click! Vă rugăm deschideți o Comandă de Lucru pentru a înregistra piesa sau uleiul consumat.');
+      alert(' Sarcinile de tip SCHIMB_PIESA / ULEI nu se pot finaliza prin 1-Click! Vă rugăm deschideți o Comandă de Lucru pentru a înregistra piesa sau uleiul consumat.');
       setSelectedSarcina(sarcina);
       return;
     }
@@ -118,7 +118,7 @@ export default function MentenantaPage() {
     if (!esteBontott && selectedArticolId) {
       const itemStoc = stocuri.find((s) => s.id === selectedArticolId);
       if (itemStoc && Number(cantitate) > itemStoc.stocCurent) {
-        alert(`⛔ Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
+        alert(` Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
         return;
       }
     }
@@ -265,7 +265,7 @@ export default function MentenantaPage() {
                 activeTabFilter === 'CRITICE' ? 'bg-terracotta-500 text-white shadow-xs' : 'text-terracotta-600 hover:bg-roseash-200'
               }`}
             >
-              2. ⚠️ Depășite / Critice ({sarciniCriticeFlota})
+              2.  Depășite / Critice ({sarciniCriticeFlota})
             </button>
 
             <button
@@ -375,8 +375,7 @@ export default function MentenantaPage() {
                   {/* Progress Bar Rulaj */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-[11px] text-sage-700 font-semibold">
-                      <span>
-                        Rulaj parcurs: <strong className="font-mono text-sapphire-900">{s.rulajParcursDeLaUltima}</strong> / {s.intervalRulaj} {s.tipMasurare}
+                      <span>Rulaj parcurs: <strong className="font-mono text-sapphire-900">{s.rulajParcursDeLaUltima}</strong> / {s.intervalRulaj} {s.tipMasurare}
                         <span className="text-sage-500 ml-1">(Contor curent: {s.valoareContorCurent} {s.tipMasurare})</span>
                       </span>
                       <span className="font-mono font-bold">{s.procentUtilizat}%</span>
@@ -399,7 +398,7 @@ export default function MentenantaPage() {
                         className="flex-1 py-2 rounded-xl bg-sage-100 hover:bg-sage-300/40 text-sage-700 border border-sage-300 text-xs font-bold flex items-center justify-center space-x-1.5 transition"
                       >
                         <CheckCircle2 className="w-4 h-4 text-sage-500" />
-                        <span>✅ 1-Click Finalizat Inspecție</span>
+                        <span>1-Click Finalizat Inspecție</span>
                       </button>
                     ) : (
                       <button
@@ -407,7 +406,7 @@ export default function MentenantaPage() {
                         className="flex-1 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold flex items-center justify-center space-x-1.5 shadow-xs transition"
                       >
                         <Wrench className="w-4 h-4" />
-                        <span>⚡ Deschide Comandă de Lucru (Schimb Piesă/Ulei)</span>
+                        <span>Deschide Comandă de Lucru (Schimb Piesă/Ulei)</span>
                       </button>
                     )}
 
@@ -417,7 +416,7 @@ export default function MentenantaPage() {
                         className="flex-1 py-2 rounded-xl bg-roseash-100 hover:bg-roseash-300 text-terracotta-600 border border-roseash-300 text-xs font-bold flex items-center justify-center space-x-1.5 transition"
                       >
                         <ArrowUpRight className="w-4 h-4 text-terracotta-500" />
-                        <span>⚡ Escaladează (Necesită Înlocuire)</span>
+                        <span>Escaladează (Necesită Înlocuire)</span>
                       </button>
                     )}
                   </div>
@@ -475,7 +474,7 @@ export default function MentenantaPage() {
                       </p>
                       {isLower && (
                         <div className="mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
-                          <span>⚠️ ATENȚIE: Valoarea introdusă ({valEntered} {selectedSarcina.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({valCurrent} {selectedSarcina.tipMasurare})!</span>
+                          <span>ATENȚIE: Valoarea introdusă ({valEntered} {selectedSarcina.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({valCurrent} {selectedSarcina.tipMasurare})!</span>
                         </div>
                       )}
                     </>
