@@ -7,6 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import Navbar from '@/components/Navbar';
 import { SidebarProvider } from '@/lib/SidebarContext';
 import { ShieldCheck } from 'lucide-react';
+import OptiBaseFooter from '@/components/OptiBaseFooter';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -67,6 +68,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
           {children}
         </main>
+        <OptiBaseFooter variant="light" />
       </div>
     </SidebarProvider>
   );

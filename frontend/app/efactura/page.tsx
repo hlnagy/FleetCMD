@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   FileText, RefreshCw, CheckCircle2, AlertTriangle, Download, Plus, Search,
   Settings, Clock, Building2, Layers, Check, X, ShieldCheck, ArrowRight,
   PackageCheck, Trash2, ChevronRight, Eye, Code, ExternalLink, Calendar, Zap,
   HelpCircle, BookOpen, Key, CheckCircle, Shield, ArrowUpDown, ArrowUp, ArrowDown,
-  ShoppingCart, History, Tag
+  ShoppingCart, History, Tag, ShieldAlert
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
@@ -336,6 +337,7 @@ function EFacturaContent() {
   } | null>(null);
 
   useEffect(() => {
+    if (authUser?.rol === 'VIEWER') return;
     fetchData();
 
     if (typeof window !== 'undefined') {
@@ -941,6 +943,25 @@ function EFacturaContent() {
       f.stare === 'ELIMINAT' ||
       (f.articole && f.articole.some((a: any) => a.stare === 'ELIMINAT'))
   ).length;
+
+  if (authUser?.rol === 'VIEWER') {
+    return (
+      <div className="pleasant-card p-12 rounded-2xl text-center space-y-4 max-w-xl mx-auto my-12 border border-roseash-300">
+        <div className="w-16 h-16 rounded-2xl bg-roseash-100 border border-roseash-300 text-terracotta-600 flex items-center justify-center mx-auto shadow-sm">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-lg font-black text-sapphire-900">Acces Restricționat la Facturi Fiscale</h2>
+        <p className="text-xs text-sage-700 leading-relaxed font-medium">
+          Datele financiare și facturile ANAF sunt confidențiale și pot fi accesate exclusiv de către Administratori și Operatori autorizați.
+        </p>
+        <div className="pt-2">
+          <Link href="/" className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md transition inline-block">
+            Înapoi la Dashboard Principal
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

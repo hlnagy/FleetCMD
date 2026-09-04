@@ -9,6 +9,8 @@ import {
   ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
+import { useAuth } from '../lib/AuthContext';
+import OptiBaseFooter from '@/components/OptiBaseFooter';
 
 interface SubNavItem {
   name: string;
@@ -29,6 +31,7 @@ export default function Sidebar() {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
   const { isOpen, close } = useSidebar();
+  const { user } = useAuth();
 
   const navItems: NavItem[] = [
     { name: 'Dashboard Principal', href: '/', icon: LayoutDashboard },
@@ -235,17 +238,15 @@ export default function Sidebar() {
 
         {/* Navigație Principală */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map(renderNavItem)}
+          {navItems
+            .filter((item) => !(user?.rol === 'VIEWER' && item.href === '/efactura'))
+            .map(renderNavItem)}
         </nav>
 
         {/* Subsol & Setări */}
         <div className="p-3 border-t border-morning-200 space-y-2">
           {renderNavItem(setariItem)}
-
-          <div className="px-3 py-1.5 bg-morning-100 rounded-xl text-[10px] text-sage-700 text-center font-medium">
-            <p className="font-bold text-sapphire-900">Sapphire Ash Morning</p>
-            <p className="text-slate-400">v2.5 Enterprise 100% Română</p>
-          </div>
+          <OptiBaseFooter variant="sidebar" />
         </div>
       </aside>
     </>

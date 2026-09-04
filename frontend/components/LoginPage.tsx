@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import {
   ShieldCheck,
@@ -19,19 +20,20 @@ import {
   Zap,
   AlertCircle
 } from 'lucide-react';
+import OptiBaseFooter from '@/components/OptiBaseFooter';
 
 export default function LoginPage() {
+  const router = useRouter();
   const { login } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [parola, setParola] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeDemo, setActiveDemo] = useState<string | null>(null);
 
-  const handleLogin = async (idToUse?: string, passToUse?: string) => {
-    const finalId = (idToUse || identifier).trim();
-    const finalPass = passToUse || parola;
+  const handleLogin = async () => {
+    const finalId = identifier.trim();
+    const finalPass = parola;
 
     if (!finalId || !finalPass) {
       setErrorMsg('Vă rugăm să introduceți utilizatorul și parola.');
@@ -43,14 +45,16 @@ export default function LoginPage() {
 
     try {
       const res = await login(finalId, finalPass);
-      if (!res.success) {
+      if (res.success) {
+        // Redirecționare sigură către Dashboard-ul principal
+        router.push('/');
+      } else {
         setErrorMsg(res.message || 'Credențiale incorecte. Vă rugăm să reîncercați.');
       }
     } catch (err) {
       setErrorMsg('Eroare de conexiune la serverul de autentificare.');
     } finally {
       setLoading(false);
-      setActiveDemo(null);
     }
   };
 
@@ -59,16 +63,8 @@ export default function LoginPage() {
     handleLogin();
   };
 
-  const handleQuickDemo = (username: string, pass: string, demoKey: string) => {
-    setActiveDemo(demoKey);
-    setIdentifier(username);
-    setParola(pass);
-    setErrorMsg('');
-    handleLogin(username, pass);
-  };
-
   return (
-    <div className="relative min-h-screen w-full bg-[#070b14] text-slate-100 flex items-center justify-center p-4 sm:p-8 lg:p-12 overflow-hidden select-none">
+    <div className="relative min-h-screen w-full bg-[#070b14] text-slate-100 flex flex-col justify-between items-center p-4 sm:p-8 lg:p-12 overflow-hidden select-none">
       {/* Subtle grid pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b18_1px,transparent_1px),linear-gradient(to_bottom,#1e293b18_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] pointer-events-none" />
 
@@ -78,7 +74,7 @@ export default function LoginPage() {
       <div className="absolute top-1/2 left-1/3 -translate-y-1/2 w-[30rem] h-[30rem] bg-emerald-500/10 rounded-full blur-[150px] pointer-events-none" />
 
       {/* Main Container */}
-      <div className="relative z-10 w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+      <div className="relative z-10 w-full max-w-7xl mx-auto my-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
         {/* LEFT COLUMN: ENTERPRISE SHOWCASE & BRAND IDENTITY */}
         <div className="lg:col-span-7 space-y-8 text-left">
           {/* Top Status Badge */}
@@ -254,7 +250,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full mt-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-sapphire-600 via-indigo-600 to-cyan-600 hover:from-sapphire-500 hover:to-cyan-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/35 transition duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
               >
-                {loading && !activeDemo ? (
+                {loading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     <span>Se validează accesul...</span>
@@ -268,77 +264,19 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Quick Demo Section (1-Click Roles for Evaluators) */}
-            <div className="mt-6 pt-5 border-t border-slate-800 space-y-2.5">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400 text-center font-bold">
-                Conectare Rapidă Demo (Alege Rolul)
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
-                {/* Admin Demo Button */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo('admin', 'admin123', 'admin')}
-                  disabled={loading}
-                  className={`p-2.5 rounded-xl border transition text-left space-y-0.5 group cursor-pointer ${
-                    activeDemo === 'admin'
-                      ? 'bg-sapphire-600/30 border-sapphire-400 ring-1 ring-sapphire-400/40'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-sapphire-500/60 hover:bg-slate-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white group-hover:text-cyan-300">Admin</span>
-                    <Shield className="w-3.5 h-3.5 text-sapphire-400" />
-                  </div>
-                  <p className="text-[9px] text-slate-400 truncate">Acces Total & Setări</p>
-                </button>
-
-                {/* Operator Demo Button */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo('dispecer', 'operator123', 'operator')}
-                  disabled={loading}
-                  className={`p-2.5 rounded-xl border transition text-left space-y-0.5 group cursor-pointer ${
-                    activeDemo === 'operator'
-                      ? 'bg-emerald-600/30 border-emerald-400 ring-1 ring-emerald-400/40'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-emerald-500/60 hover:bg-slate-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white group-hover:text-emerald-300">Operator</span>
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                  </div>
-                  <p className="text-[9px] text-slate-400 truncate">Flotă, Atelier, Stoc</p>
-                </button>
-
-                {/* Viewer Demo Button */}
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo('vizitator', 'viewer123', 'viewer')}
-                  disabled={loading}
-                  className={`p-2.5 rounded-xl border transition text-left space-y-0.5 group cursor-pointer ${
-                    activeDemo === 'viewer'
-                      ? 'bg-amber-600/30 border-amber-400 ring-1 ring-amber-400/40'
-                      : 'bg-slate-950/60 border-slate-800 hover:border-amber-500/60 hover:bg-slate-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white group-hover:text-amber-300">Vizitator</span>
-                    <FileCheck2 className="w-3.5 h-3.5 text-amber-400" />
-                  </div>
-                  <p className="text-[9px] text-slate-400 truncate">Doar Citire & Audit</p>
-                </button>
-              </div>
-            </div>
-
             {/* Footer Assurance */}
-            <div className="mt-5 pt-3 border-t border-slate-800/60 text-center">
+            <div className="mt-8 pt-4 border-t border-slate-800/60 text-center">
               <p className="text-[10px] text-slate-500 font-medium">
-                FleetCMD v2.4 • Conexiune securizată TLS 1.3 • Protocol Audit ISO 27001
+                FleetCMD Enterprise • Conexiune securizată TLS 1.3 • Protocol Audit ISO 27001
               </p>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* FOOTER OPTIBASE */}
+      <div className="relative z-10 w-full pt-4 pb-2">
+        <OptiBaseFooter variant="dark" />
       </div>
     </div>
   );

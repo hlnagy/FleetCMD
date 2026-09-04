@@ -26,7 +26,6 @@ interface AuthContextType {
   canEdit: (module?: string) => boolean;
   login: (identifier: string, parola: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
-  switchUser: (targetUser: User) => void;
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -134,15 +133,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('fleetcmd_token');
     setUser(null);
     setToken(null);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '/');
+    }
     setIsLoginModalOpen(true);
-  };
-
-  const switchUser = (targetUser: User) => {
-    setUser(targetUser);
-    const mockToken = `token-${targetUser.id}-${Date.now()}`;
-    setToken(mockToken);
-    localStorage.setItem('fleetcmd_user', JSON.stringify(targetUser));
-    localStorage.setItem('fleetcmd_token', mockToken);
   };
 
   const isAdmin = user?.rol === 'ADMIN';
@@ -195,7 +189,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canEdit,
         login,
         logout,
-        switchUser,
         isLoginModalOpen,
         setIsLoginModalOpen,
         authFetch,

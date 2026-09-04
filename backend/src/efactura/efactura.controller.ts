@@ -2,12 +2,16 @@ import { Controller, Get, Post, Patch, Body, Param, Query, Headers, ForbiddenExc
 import { EFacturaService } from './efactura.service';
 import { Roles } from '../auth/roles.decorator';
 
+@Roles('ADMIN', 'OPERATOR')
 @Controller('efactura')
 export class EFacturaController {
   constructor(private readonly efacturaService: EFacturaService) {}
 
   @Get('config')
   async getConfig(@Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a accesa configurația facturilor.');
+    }
     const isAdmin = role === 'ADMIN';
     return this.efacturaService.getConfig(isAdmin);
   }
@@ -61,12 +65,18 @@ export class EFacturaController {
   }
 
   @Get('facturi')
-  async getFacturi(@Query('stare') stare?: string) {
+  async getFacturi(@Query('stare') stare?: string, @Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a accesa facturile fiscale.');
+    }
     return this.efacturaService.getFacturi(stare);
   }
 
   @Get('facturi/:id')
-  async getFacturaById(@Param('id') id: string) {
+  async getFacturaById(@Param('id') id: string, @Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a accesa facturile fiscale.');
+    }
     return this.efacturaService.getFacturaById(id);
   }
 
