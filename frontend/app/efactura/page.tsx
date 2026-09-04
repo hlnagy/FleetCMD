@@ -1330,8 +1330,8 @@ function EFacturaContent() {
       {/* MODAL 1: INSPECTARE FACTURĂ & ARTICOLE (IMPORT / EXCLUDERE) */}
       {/* ========================================================================= */}
       {selectedFactura && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-4xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-6xl xl:max-w-7xl space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div>
                 <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
@@ -1413,8 +1413,8 @@ function EFacturaContent() {
                 </div>
               )}
 
-              <div className="border border-morning-200 rounded-xl overflow-hidden">
-                <table className="w-full text-left border-collapse text-xs">
+              <div className="border border-morning-200 rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full text-left border-collapse text-xs min-w-[1020px]">
                   <thead>
                     <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase">
                       <th className="p-2.5 w-8 text-center">
@@ -1426,14 +1426,14 @@ function EFacturaContent() {
                           title="Selectează / Deselectează toate liniile neprocesate"
                         />
                       </th>
-                      <th className="p-2.5">#</th>
-                      <th className="p-2.5">Descriere Piesă / Serviciu</th>
+                      <th className="p-2.5 w-10">#</th>
+                      <th className="p-2.5 min-w-[200px]">Descriere Piesă / Serviciu</th>
                       <th className="p-2.5">Cod Furnizor</th>
                       <th className="p-2.5">Cantitate</th>
                       <th className="p-2.5">Preț Unitar</th>
                       <th className="p-2.5">Total fără TVA</th>
                       <th className="p-2.5">Stare Articol</th>
-                      <th className="p-2.5 text-right">Acțiune Articol</th>
+                      <th className="p-2.5 text-right min-w-[340px] pr-4">Acțiuni Articol</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
@@ -1454,6 +1454,7 @@ function EFacturaContent() {
                             <span className="text-slate-300 text-[10px]">-</span>
                           )}
                         </td>
+                        <td className="p-2.5 font-mono text-sage-500">{art.numarLinie || artIdx + 1}</td>
                         <td className="p-2.5 font-bold text-sapphire-900">
                           <div className="flex items-center space-x-1.5 flex-wrap">
                             <span>{art.descrierePiesa}</span>
@@ -1474,56 +1475,57 @@ function EFacturaContent() {
                         </td>
                         <td className="p-2.5">
                           {art.stare === 'NEPROCESAT' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">Neprocesat</span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">Neprocesat</span>
                           )}
                           {art.stare === 'IMPORTAT' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 flex items-center space-x-1 w-fit">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-fit">
                               <Check className="w-3 h-3" />
                               <span>Importat în Stoc</span>
                             </span>
                           )}
                           {art.stare === 'ELIMINAT' && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600">Exclus / Servicii</span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">Exclus / Servicii</span>
                           )}
                         </td>
-                        <td className="p-2.5 text-right space-x-1.5 whitespace-nowrap">
+                        <td className="p-2.5 text-right min-w-[340px] pr-4">
                           {isReducereSauFinanciar(art) ? (
                             art.stare === 'NEPROCESAT' && (
                               <button
                                 onClick={() => handleEliminaItem(art.id, art.descrierePiesa)}
-                                className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] shadow-xs transition flex items-center space-x-1 cursor-pointer"
+                                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition inline-flex items-center space-x-1 cursor-pointer whitespace-nowrap"
                                 title="Exclude această linie financiară / reducere comercială"
                               >
                                 <span>💸 Exclude (Reducere)</span>
                               </button>
                             )
                           ) : (
-                            <div className="flex items-center justify-end space-x-1.5">
+                            <div className="flex items-center justify-end space-x-2 whitespace-nowrap">
                               {art.stare !== 'IMPORTAT' && (
                                 <>
                                   <button
                                     onClick={() => openImportItemModal(art, false)}
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[11px] shadow-xs transition cursor-pointer"
+                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
                                     title="Importă rapid toată cantitatea în stoc"
                                   >
-                                    📦 Importă în Stoc
+                                    <span>📦 Importă în Stoc</span>
                                   </button>
 
                                   <button
                                     onClick={() => openImportItemModal(art, true)}
-                                    className="px-2.5 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] shadow-xs transition cursor-pointer flex items-center space-x-1"
+                                    className="px-3 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
                                     title="Importă bucată cu bucată cu introducerea seriilor unice (anvelope, baterii, garanții)"
                                   >
-                                    <span>🏷️ Import cu Serii / Bucată</span>
+                                    <span>🏷️ Cu Serii</span>
                                   </button>
                                 </>
                               )}
                               {art.stare === 'NEPROCESAT' && (
                                 <button
                                   onClick={() => handleEliminaItem(art.id, art.descrierePiesa)}
-                                  className="px-2.5 py-1 rounded-lg bg-morning-200 hover:bg-roseash-200 text-slate-700 hover:text-rose-700 font-bold text-[11px] transition cursor-pointer"
+                                  className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition cursor-pointer flex items-center space-x-1"
+                                  title="Exclude această linie (cheltuială/servicii)"
                                 >
-                                  🗑️ Exclude (Servicii)
+                                  <span>🗑️ Exclude</span>
                                 </button>
                               )}
                             </div>
