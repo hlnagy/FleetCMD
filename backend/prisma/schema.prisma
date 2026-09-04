@@ -547,5 +547,38 @@ model EFacturaItem {
   createdAt          DateTime        @default(now())
 }
 
+// ==========================================
+// UTILIZATORI, ROLURI (RBAC) & JURNAL AUDIT
+// ==========================================
 
+model User {
+  id        String     @id @default(uuid())
+  nume      String
+  email     String     @unique
+  username  String?    @unique
+  parola    String
+  rol       String     @default("OPERATOR") // "ADMIN" | "OPERATOR" | "VIEWER"
+  functie   String?    @default("Operator Sistem")
+  telefon   String?
+  activ     Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail   String?
+  userNume    String?
+  userRol     String?
+  actiune     String   // ex: "CREARE", "MODIFICARE", "STERGERE", "REZOLVARE_ALERTA", "LOGIN"
+  modul       String   // ex: "VEHICULE", "MENTENANTA", "ALERTE", "SETARI", "STOCURI", "ANVELOPE", "UTILIZATORI", "EFACTURA"
+  entitateTip String?  // ex: "Vehicul", "Mecanic", "Alerta", "ComandaLucru", "Depozit", "User"
+  entitateId  String?
+  detalii     String?  // Text sau JSON descriind modificarea
+  ipAdresa    String?
+  createdAt   DateTime @default(now())
+}

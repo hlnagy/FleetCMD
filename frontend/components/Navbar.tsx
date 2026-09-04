@@ -8,15 +8,18 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useSidebar } from '../lib/SidebarContext';
+import { useAuth } from '../lib/AuthContext';
 
 export default function Navbar() {
   const { toggle } = useSidebar();
+  const { user, logout, setIsLoginModalOpen } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [numAlerte, setNumAlerte] = useState(0);
   const [alerteList, setAlerteList] = useState<any[]>([]);
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<'TOATE' | 'STOC' | 'MENTENANTA' | 'DOCUMENTE'>('TOATE');
   const [globalSyncStatus, setGlobalSyncStatus] = useState<any>(null);
 
@@ -328,14 +331,120 @@ export default function Navbar() {
 
         <div className="h-5 w-px bg-morning-200"></div>
 
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-sapphire-500 text-white flex items-center justify-center font-extrabold text-xs shadow-sm">
-            BV
-          </div>
-          <div className="text-xs">
-            <p className="font-extrabold text-sapphire-900 leading-tight">Brașoveanu Virgil</p>
-            <p className="text-[10px] text-sage-600 font-semibold">Șef Flotă & Atelier</p>
-          </div>
+        {/* PROFIL UTILIZATOR & MENIU ROL */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            className="flex items-center space-x-2.5 p-1.5 rounded-xl hover:bg-morning-100 transition text-left"
+          >
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xs ${
+              user?.rol === 'ADMIN'
+                ? 'bg-sapphire-600 ring-2 ring-sapphire-400/20'
+                : user?.rol === 'OPERATOR'
+                ? 'bg-emerald-600'
+                : 'bg-amber-600'
+            }`}>
+              {user?.nume ? user.nume.split(' ').map((n) => n[0]).slice(0, 2).join('') : 'U'}
+            </div>
+            <div className="hidden sm:block text-xs">
+              <div className="flex items-center space-x-1.5">
+                <p className="font-extrabold text-sapphire-900 leading-tight truncate max-w-[130px]">
+                  {user?.nume || 'Utilizator'}
+                </p>
+                <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase ${
+                  user?.rol === 'ADMIN'
+                    ? 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                    : user?.rol === 'OPERATOR'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }`}>
+                  {user?.rol || 'OPERATOR'}
+                </span>
+              </div>
+              <p className="text-[10px] text-sage-600 font-semibold truncate max-w-[150px]">
+                {user?.functie || (user?.rol === 'ADMIN' ? 'Administrator Sistem' : 'Operator')}
+              </p>
+            </div>
+          </button>
+
+          {/* User Dropdown Menu */}
+          {isUserMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsUserMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-morning-200 z-50 overflow-hidden divide-y divide-morning-100 animate-scale-up">
+                <div className="p-4 bg-morning-50/80">
+                  <div className="flex items-center space-x-2.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xs ${
+                      user?.rol === 'ADMIN'
+                        ? 'bg-sapphire-600'
+                        : user?.rol === 'OPERATOR'
+                        ? 'bg-emerald-600'
+                        : 'bg-amber-600'
+                    }`}>
+                      {user?.nume ? user.nume.split(' ').map((n) => n[0]).slice(0, 2).join('') : 'U'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-extrabold text-xs text-sapphire-900 truncate">{user?.nume}</p>
+                      <p className="text-[11px] text-sage-500 truncate">{user?.email}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between text-[11px]">
+                    <span className="text-sage-600 font-medium">Nivel Acces:</span>
+                    <span className={`font-black px-2 py-0.5 rounded text-[10px] uppercase ${
+                      user?.rol === 'ADMIN'
+                        ? 'bg-sapphire-100 text-sapphire-800'
+                        : user?.rol === 'OPERATOR'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {user?.rol === 'ADMIN' ? '⚡ Full Admin' : user?.rol === 'OPERATOR' ? '🛠️ Operator Flotă' : '👁️ Vizitator (Citire)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-2 space-y-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsLoginModalOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2"
+                  >
+                    <span>👥</span>
+                    <span>Schimbă Utilizatorul / Profilul</span>
+                  </button>
+
+                  {user?.rol === 'ADMIN' && (
+                    <Link
+                      href="/setari"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2"
+                    >
+                      <span>⚙️</span>
+                      <span>Gestiune Utilizatori & Jurnal Audit</span>
+                    </Link>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-terracotta-600 hover:bg-roseash-100 transition flex items-center space-x-2"
+                  >
+                    <span>🚪</span>
+                    <span>Deconectare (Logout)</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>

@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import { useAuth } from '@/lib/AuthContext';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -8,21 +9,22 @@ import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
-  ArrowUpDown, ArrowUp, ArrowDown
+  ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, Lock, History, Filter, UserX, Check
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 
 function SetariContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
+  const { user: authUser, isAdmin, isOperator, isViewer, canEdit, authFetch } = useAuth();
 
   const [activeTab, setActiveTab] = useState<
-    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate'
+    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit'
   >('vehicule');
 
   // Ascultăm schimbarea tab-ului din URL / Sidebar
   useEffect(() => {
-    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate'].includes(tabParam)) {
+    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit'].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
   }, [tabParam]);
@@ -143,6 +145,33 @@ function SetariContent() {
   const [customZileAvertizare, setCustomZileAvertizare] = useState(30);
   const [customResponsabil, setCustomResponsabil] = useState('Brașoveanu Virgil');
   const [customStare, setCustomStare] = useState('ACTIV');
+
+  // ==========================================
+  // 8. STATE UTILIZATORI & ROLURI (RBAC)
+  // ==========================================
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [searchUsers, setSearchUsers] = useState('');
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [userNume, setUserNume] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userUsername, setUserUsername] = useState('');
+  const [userParola, setUserParola] = useState('');
+  const [userRol, setUserRol] = useState<'ADMIN' | 'OPERATOR' | 'VIEWER'>('OPERATOR');
+  const [userFunctie, setUserFunctie] = useState('Operator Flotă');
+  const [userTelefon, setUserTelefon] = useState('');
+  const [userActiv, setUserActiv] = useState(true);
+
+  // ==========================================
+  // 9. STATE JURNAL AUDIT (AUDIT TRAIL)
+  // ==========================================
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditFilterModul, setAuditFilterModul] = useState('TOATE');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
+
 
   // FETCH ALL SYSTEM SETTINGS & ENTITIES
   const fetchData = async () => {
@@ -896,6 +925,154 @@ function SetariContent() {
     }
   };
 
+    // ------------------------------------------
+  // HANDLERS UTILIZATORI & AUDIT
+  // ------------------------------------------
+  const fetchUsers = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/auth/users`);
+      if (res.ok) {
+        const uList = await res.json();
+        setUsersList(Array.isArray(uList) ? uList : []);
+      }
+    } catch (e) {
+      console.log('Eroare la încărcarea utilizatorilor', e);
+    }
+  };
+
+  const fetchAuditLogs = async () => {
+    try {
+      setAuditLoading(true);
+      const params = new URLSearchParams();
+      if (auditFilterModul !== 'TOATE') params.append('modul', auditFilterModul);
+      if (auditSearch.trim()) params.append('search', auditSearch.trim());
+      params.append('limit', '50');
+
+      const res = await authFetch(`${API_BASE_URL}/audit/logs?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(Array.isArray(data.logs) ? data.logs : []);
+        setAuditTotal(data.total || 0);
+      }
+    } catch (e) {
+      console.log('Eroare la încărcarea jurnalului de audit', e);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const openAddUser = () => {
+    setEditingUser(null);
+    setUserNume('');
+    setUserEmail('');
+    setUserUsername('');
+    setUserParola('');
+    setUserRol('OPERATOR');
+    setUserFunctie('Operator Flotă');
+    setUserTelefon('');
+    setUserActiv(true);
+    setShowAddUserModal(true);
+  };
+
+  const openEditUser = (u: any) => {
+    setEditingUser(u);
+    setUserNume(u.nume || '');
+    setUserEmail(u.email || '');
+    setUserUsername(u.username || '');
+    setUserParola('');
+    setUserRol(u.rol || 'OPERATOR');
+    setUserFunctie(u.functie || '');
+    setUserTelefon(u.telefon || '');
+    setUserActiv(u.activ !== false);
+    setShowAddUserModal(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userNume || !userEmail) {
+      alert('Vă rugăm să completați numele și adresa de email.');
+      return;
+    }
+    if (!editingUser && !userParola) {
+      alert('Vă rugăm să setați o parolă pentru noul utilizator.');
+      return;
+    }
+
+    try {
+      const url = editingUser
+        ? `${API_BASE_URL}/auth/users/${editingUser.id}`
+        : `${API_BASE_URL}/auth/users`;
+      const method = editingUser ? 'PATCH' : 'POST';
+
+      const payload: any = {
+        nume: userNume,
+        email: userEmail,
+        username: userUsername || userEmail.split('@')[0],
+        rol: userRol,
+        functie: userFunctie,
+        telefon: userTelefon,
+        activ: userActiv,
+      };
+      if (userParola) payload.parola = userParola;
+
+      const res = await authFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        alert(editingUser ? `Utilizatorul "${userNume}" a fost actualizat!` : `Utilizatorul "${userNume}" a fost creat cu succes!`);
+        setShowAddUserModal(false);
+        setEditingUser(null);
+        fetchUsers();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut salva utilizatorul'}`);
+      }
+    } catch (e) {
+      alert('Eroare la salvarea utilizatorului.');
+    }
+  };
+
+  const handleDeleteUser = async (u: any) => {
+    const confirmed = await showConfirm(
+      'Ștergere Utilizator',
+      `Sigur doriți să ștergeți utilizatorul "${u.nume}" (${u.email})? Această acțiune este ireversibilă.`,
+      'Da, șterge utilizatorul',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await authFetch(`${API_BASE_URL}/auth/users/${u.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        alert(`Utilizatorul "${u.nume}" a fost șters.`);
+        fetchUsers();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge utilizatorul'}`);
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea utilizatorului.');
+    }
+  };
+
+  const handleToggleUserActive = async (u: any) => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/auth/users/${u.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activ: !u.activ }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (e) {
+      console.log('Eroare la schimbarea stării utilizatorului', e);
+    }
+  };
+
   const handleDeleteCustom = async (id: string) => {
     const confirmed = await showConfirm(
       'Ștergere Alertă Personalizată',
@@ -1076,7 +1253,54 @@ function SetariContent() {
           <ShieldAlert className="w-4 h-4 text-terracotta-500" />
           <span>🔔 Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
         </button>
+
+        <button
+          onClick={() => { setActiveTab('utilizatori'); fetchUsers(); }}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'utilizatori'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Users className="w-4 h-4 text-sapphire-600" />
+          <span>👥 Utilizatori & Roluri ({usersList.length})</span>
+          {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('audit'); fetchAuditLogs(); }}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'audit'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <History className="w-4 h-4 text-periwinkle-700" />
+          <span>📜 Jurnal Audit ({auditTotal})</span>
+          {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
+        </button>
       </div>
+
+      {/* BANNER INFORMARE ROL & JOGOSULTSÁG */}
+      {isViewer && (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 flex items-center space-x-3 text-amber-900 text-xs shadow-xs">
+          <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
+          <div>
+            <p className="font-extrabold">Mod Numai Citire (Viewer):</p>
+            <p className="text-slate-700">Contul dumneavoastră are drepturi exclusive de vizualizare. Modificarea, crearea sau ștergerea parametrilor de configurare este restricționată.</p>
+          </div>
+        </div>
+      )}
+
+      {isOperator && (
+        <div className="p-3.5 rounded-2xl bg-sapphire-50 border border-sapphire-200 flex items-center space-x-3 text-sapphire-900 text-xs shadow-xs">
+          <ShieldCheck className="w-5 h-5 text-sapphire-600 shrink-0" />
+          <div>
+            <p className="font-extrabold">Mod Operator Flotă:</p>
+            <p className="text-slate-700">Puteți consulta parametrii sistemului. Administrarea utilizatorilor și a regulilor critice este rezervată Administratorilor.</p>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'vehicule' && (
         <div className="space-y-4">
@@ -1732,6 +1956,295 @@ function SetariContent() {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 8: GESTIUNE UTILIZATORI & ROLURI (RBAC) */}
+      {/* ========================================================================= */}
+      {activeTab === 'utilizatori' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                placeholder="Caută utilizator după nume, email sau funcție..."
+                value={searchUsers}
+                onChange={(e) => setSearchUsers(e.target.value)}
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+              />
+            </div>
+            {isAdmin && (
+              <button
+                onClick={openAddUser}
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Înregistrează Utilizator Nou</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {usersList
+              .filter(
+                (u) =>
+                  !searchUsers.trim() ||
+                  u.nume?.toLowerCase().includes(searchUsers.toLowerCase()) ||
+                  u.email?.toLowerCase().includes(searchUsers.toLowerCase()) ||
+                  u.rol?.toLowerCase().includes(searchUsers.toLowerCase()) ||
+                  u.functie?.toLowerCase().includes(searchUsers.toLowerCase())
+              )
+              .map((u) => {
+                const isUserAdmin = u.rol === 'ADMIN';
+                const isUserOperator = u.rol === 'OPERATOR';
+                const isUserViewer = u.rol === 'VIEWER';
+
+                return (
+                  <div
+                    key={u.id}
+                    className={`pleasant-card p-5 rounded-2xl border transition space-y-3 shadow-xs ${
+                      !u.activ ? 'opacity-60 bg-morning-50 border-morning-300' : 'border-morning-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between border-b border-morning-200 pb-3">
+                      <div className="flex items-center space-x-3">
+                        <div
+                          className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm text-white shadow-xs ${
+                            isUserAdmin
+                              ? 'bg-sapphire-600 ring-2 ring-sapphire-400/20'
+                              : isUserOperator
+                              ? 'bg-emerald-600'
+                              : 'bg-amber-600'
+                          }`}
+                        >
+                          {u.nume ? u.nume.split(' ').map((n: string) => n[0]).slice(0, 2).join('') : 'U'}
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-1.5">
+                            <h3 className="font-extrabold text-sapphire-900 text-sm leading-snug">{u.nume}</h3>
+                            {!u.activ && (
+                              <span className="px-1.5 py-0.2 text-[9px] font-black bg-roseash-200 text-terracotta-700 rounded">
+                                Inactiv
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-md mt-0.5 ${
+                              isUserAdmin
+                                ? 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                                : isUserOperator
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}
+                          >
+                            {isUserAdmin ? '⚡ ADMIN (Full Access)' : isUserOperator ? '🛠️ OPERATOR FLOTĂ' : '👁️ VIEWER (Doar Citire)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isAdmin && (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => openEditUser(u)}
+                            className="p-1.5 rounded-lg text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 transition"
+                            title="Editare Utilizator & Rol"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleToggleUserActive(u)}
+                            className={`p-1.5 rounded-lg transition ${
+                              u.activ
+                                ? 'text-sage-500 hover:text-amber-700 hover:bg-amber-50'
+                                : 'text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                            title={u.activ ? 'Dezactivează Cont' : 'Activează Cont'}
+                          >
+                            {u.activ ? <UserX className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
+                            title="Ștergere Utilizator"
+                          >
+                            <Trash2 className="w-4 h-4 text-terracotta-500" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-xs space-y-1 text-slate-700 font-medium">
+                      <p><span className="font-bold text-sage-700">Email:</span> <span className="font-mono text-sapphire-900">{u.email}</span></p>
+                      <p><span className="font-bold text-sage-700">Funcție:</span> {u.functie || 'Nespecificată'}</p>
+                      <p><span className="font-bold text-sage-700">Telefon:</span> {u.telefon || 'Nespecificat'}</p>
+                      <p className="text-[11px] text-sage-500 pt-1 flex items-center justify-between font-mono">
+                        <span>Acțiuni auditate: {u._count?.auditLogs ?? 0}</span>
+                        <span>Creat: {new Date(u.createdAt).toLocaleDateString('ro-RO')}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 9: JURNAL AUDIT & ISTORIC MODIFICĂRI (AUDIT TRAIL) */}
+      {/* ========================================================================= */}
+      {activeTab === 'audit' && (
+        <div className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div>
+              <h3 className="font-extrabold text-sapphire-900 text-base flex items-center space-x-2">
+                <History className="w-5 h-5 text-sapphire-600" />
+                <span>Jurnal Centralizat de Audit & Trasabilitate ({auditTotal} Evenimente)</span>
+              </h3>
+              <p className="text-xs text-sage-700 font-medium">
+                Înregistrare detaliată a fiecărei acțiuni efectuate în sistem cu autorul, rolul și modificările aplicate
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={fetchAuditLogs}
+                className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold border border-morning-200 transition"
+              >
+                <RotateCcw className={`w-4 h-4 text-sapphire-600 ${auditLoading ? 'animate-spin' : ''}`} />
+                <span>Reîmprospătează Jurnal</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filtre Audit */}
+          <div className="pleasant-card p-4 rounded-2xl bg-white border border-morning-200 space-y-3 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Caută în audit după utilizator, email, ID entitate sau detalii..."
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchAuditLogs()}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 overflow-x-auto text-xs font-bold">
+                {['TOATE', 'VEHICULE', 'MENTENANTA', 'ALERTE_FLUIDE', 'ANVELOPE', 'STOCURI', 'UTILIZATORI', 'AUTENTIFICARE'].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      setAuditFilterModul(m);
+                      setTimeout(fetchAuditLogs, 50);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition ${
+                      auditFilterModul === m
+                        ? 'bg-sapphire-500 text-white shadow-xs'
+                        : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
+                    }`}
+                  >
+                    {m === 'TOATE' ? 'Toate Modulele' : m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabel Jurnal Audit */}
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[900px]">
+              <thead>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                  <th className="p-3">Dată & Oră</th>
+                  <th className="p-3">Utilizator / Autor</th>
+                  <th className="p-3">Rol</th>
+                  <th className="p-3">Acțiune</th>
+                  <th className="p-3">Modul</th>
+                  <th className="p-3">Detalii Modificare</th>
+                  <th className="p-3 text-right">Inspecție</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                {auditLogs.length > 0 ? (
+                  auditLogs.map((log) => {
+                    const isCreate = log.actiune.includes('CREARE') || log.actiune.includes('POST');
+                    const isDelete = log.actiune.includes('STERGERE') || log.actiune.includes('DELETE');
+                    const isUpdate = log.actiune.includes('MODIFICARE') || log.actiune.includes('PATCH') || log.actiune.includes('PUT');
+                    const isLogin = log.actiune.includes('LOGIN');
+
+                    return (
+                      <tr key={log.id} className="hover:bg-morning-50 transition">
+                        <td className="p-3 font-mono text-[11px] text-sage-600 whitespace-nowrap font-bold">
+                          {new Date(log.createdAt).toLocaleString('ro-RO')}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-7 h-7 rounded-lg bg-sapphire-100 text-sapphire-800 font-black text-xs flex items-center justify-center">
+                              {log.userNume ? log.userNume.charAt(0) : 'U'}
+                            </div>
+                            <div>
+                              <p className="font-extrabold text-sapphire-900 leading-tight">{log.userNume || 'Sistem'}</p>
+                              <p className="text-[10px] text-sage-500 font-mono">{log.userEmail || '-'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                              log.userRol === 'ADMIN'
+                                ? 'bg-sapphire-100 text-sapphire-800'
+                                : log.userRol === 'OPERATOR'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {log.userRol || 'OPERATOR'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase whitespace-nowrap ${
+                              isCreate
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : isDelete
+                                ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
+                                : isLogin
+                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                : 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                            }`}
+                          >
+                            {log.actiune}
+                          </span>
+                        </td>
+                        <td className="p-3 font-extrabold text-slate-800 text-[11px]">{log.modul}</td>
+                        <td className="p-3 text-[11px] text-slate-700 max-w-xs truncate" title={log.detalii || ''}>
+                          {log.detalii || '-'}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => setSelectedAuditLog(log)}
+                            className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-600 text-slate-700 font-extrabold text-[11px] transition"
+                          >
+                            Detalii
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-xs text-sage-500 italic">
+                      Nicio înregistrare de audit găsită conform filtrelor selectate.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL 1: ADĂUGARE VEHICUL NOU */}
       {/* ========================================================================= */}
       {showAddVehiculModal && (
@@ -2327,6 +2840,211 @@ function SetariContent() {
                 <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Regulă</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 8: CREARE / EDITARE UTILIZATOR */}
+      {/* ========================================================================= */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Users className="w-5 h-5 text-sapphire-500" />
+                <span>{editingUser ? `Editare Utilizator (${editingUser.nume})` : 'Înregistrare Utilizator Nou'}</span>
+              </h3>
+              <button onClick={() => { setShowAddUserModal(false); setEditingUser(null); }} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume: *</label>
+                  <input
+                    required
+                    value={userNume}
+                    onChange={(e) => setUserNume(e.target.value)}
+                    placeholder="ex: Kovács István"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Adresă Email: *</label>
+                  <input
+                    required
+                    type="email"
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                    placeholder="ex: istvan@fleetcmd.ro"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Nume Utilizator (Username):</label>
+                  <input
+                    value={userUsername}
+                    onChange={(e) => setUserUsername(e.target.value)}
+                    placeholder="ex: istvan.k"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    {editingUser ? 'Schimbă Parola (lasă gol dacă nu schimbi):' : 'Parolă Acces: *'}
+                  </label>
+                  <input
+                    type="password"
+                    required={!editingUser}
+                    value={userParola}
+                    onChange={(e) => setUserParola(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Rol & Nivel Drepturi: *</label>
+                  <select
+                    value={userRol}
+                    onChange={(e) => setUserRol(e.target.value as any)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="ADMIN">⚡ ADMIN - Teljes körű administráció</option>
+                    <option value="OPERATOR">🛠️ OPERATOR - Módosítások a programban (kivéve Setări)</option>
+                    <option value="VIEWER">👁️ VIEWER - Csak megtekintő (módosítás letiltva)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Funcție / Poziție:</label>
+                  <input
+                    value={userFunctie}
+                    onChange={(e) => setUserFunctie(e.target.value)}
+                    placeholder="ex: Dispecer Flotă, Mecanic Șef"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Telefon:</label>
+                  <input
+                    value={userTelefon}
+                    onChange={(e) => setUserTelefon(e.target.value)}
+                    placeholder="ex: 0722111222"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+                <div className="flex items-center space-x-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="userActivCheck"
+                    checked={userActiv}
+                    onChange={(e) => setUserActiv(e.target.checked)}
+                    className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500"
+                  />
+                  <label htmlFor="userActivCheck" className="text-sage-700 font-bold cursor-pointer">
+                    Cont Activ (permite autentificarea)
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddUserModal(false); setEditingUser(null); }}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20"
+                >
+                  {editingUser ? 'Salvează Modificările' : 'Creează Utilizator'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 9: DETALII EVENIMENT AUDIT */}
+      {/* ========================================================================= */}
+      {selectedAuditLog && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <History className="w-5 h-5 text-sapphire-500" />
+                <span>Detalii Înregistrare Audit #{selectedAuditLog.id.slice(0, 8)}</span>
+              </h3>
+              <button onClick={() => setSelectedAuditLog(null)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 p-3 bg-morning-50 rounded-xl border border-morning-200">
+                <div>
+                  <span className="text-sage-500 font-bold block">Autor Modificare:</span>
+                  <span className="font-extrabold text-sapphire-900 text-sm">{selectedAuditLog.userNume || 'Sistem'}</span>
+                  <span className="text-sage-600 font-mono block text-[11px]">{selectedAuditLog.userEmail || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-sage-500 font-bold block">Rol Autor:</span>
+                  <span className="font-black px-2 py-0.5 rounded text-[10px] uppercase bg-sapphire-100 text-sapphire-800">
+                    {selectedAuditLog.userRol || 'OPERATOR'}
+                  </span>
+                  <span className="text-sage-500 block text-[11px] mt-1">Data: {new Date(selectedAuditLog.createdAt).toLocaleString('ro-RO')}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-sage-500 font-bold block">Măsură / Acțiune:</span>
+                  <span className="font-extrabold text-sapphire-900">{selectedAuditLog.actiune}</span>
+                </div>
+                <div>
+                  <span className="text-sage-500 font-bold block">Modul Sistem:</span>
+                  <span className="font-extrabold text-slate-800">{selectedAuditLog.modul}</span>
+                </div>
+              </div>
+
+              {selectedAuditLog.entitateId && (
+                <div>
+                  <span className="text-sage-500 font-bold block">ID Entitate Afectată:</span>
+                  <span className="font-mono text-sapphire-900 font-bold bg-morning-100 px-2 py-1 rounded block mt-0.5">
+                    {selectedAuditLog.entitateId}
+                  </span>
+                </div>
+              )}
+
+              <div>
+                <span className="text-sage-500 font-bold block mb-1">Date & Parametri Modificare:</span>
+                <div className="p-3 bg-slate-900 text-emerald-400 rounded-xl font-mono text-[11px] overflow-x-auto max-h-60 leading-relaxed whitespace-pre-wrap">
+                  {selectedAuditLog.detalii || 'Fără detalii adiționale'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-morning-200">
+              <button
+                type="button"
+                onClick={() => setSelectedAuditLog(null)}
+                className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold text-xs"
+              >
+                Închide
+              </button>
+            </div>
           </div>
         </div>
       )}

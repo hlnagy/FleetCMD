@@ -2,7 +2,9 @@ import './globals.css';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import SweetAlertProvider from '../components/SweetAlertProvider';
+import LoginModal from '../components/LoginModal';
 import { SidebarProvider } from '../lib/SidebarContext';
+import { AuthProvider } from '../lib/AuthContext';
 
 export const metadata = {
   title: 'FleetCMD',
@@ -29,15 +31,18 @@ export default function RootLayout({
     <html lang="ro">
       <body className="bg-morning-100 text-sapphire-900 flex min-h-screen">
         <SweetAlertProvider />
-        <SidebarProvider>
-          <Sidebar />
-          <div className="flex-1 flex flex-col min-w-0">
-            <Navbar />
-            <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-              {children}
-            </main>
-          </div>
-        </SidebarProvider>
+        <AuthProvider>
+          <LoginModal />
+          <SidebarProvider>
+            <Sidebar />
+            <div className="flex-1 flex flex-col min-w-0">
+              <Navbar />
+              <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                {children}
+              </main>
+            </div>
+          </SidebarProvider>
+        </AuthProvider>
       </body>
     </html>
   );
