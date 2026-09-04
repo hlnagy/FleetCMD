@@ -24,8 +24,8 @@ export class AuthController {
   createUser(
     @Body() body: {
       nume: string;
-      email: string;
-      username?: string;
+      username: string;
+      email?: string;
       parola: string;
       rol: string;
       functie?: string;

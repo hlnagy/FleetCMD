@@ -554,8 +554,8 @@ model EFacturaItem {
 model User {
   id        String     @id @default(uuid())
   nume      String
-  email     String     @unique
-  username  String?    @unique
+  username  String     @unique
+  email     String?
   parola    String
   rol       String     @default("OPERATOR") // "ADMIN" | "OPERATOR" | "VIEWER"
   functie   String?    @default("Operator Sistem")

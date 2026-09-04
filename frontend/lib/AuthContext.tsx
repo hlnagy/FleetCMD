@@ -8,8 +8,8 @@ export type UserRole = 'ADMIN' | 'OPERATOR' | 'VIEWER';
 export interface User {
   id: string;
   nume: string;
-  email: string;
-  username?: string;
+  username: string;
+  email?: string;
   rol: UserRole;
   functie?: string;
   telefon?: string;

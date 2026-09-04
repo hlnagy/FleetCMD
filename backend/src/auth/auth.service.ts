@@ -56,20 +56,22 @@ export class AuthService implements OnModuleInit {
   async login(data: { identifier: string; parola: string }) {
     const { identifier, parola } = data;
     if (!identifier || !parola) {
-      throw new BadRequestException('Email/Username și parola sunt obligatorii.');
+      throw new BadRequestException('Numele de utilizator și parola sunt obligatorii.');
     }
 
+    const usernameClean = identifier.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [
-          { email: identifier.trim().toLowerCase() },
+          { username: usernameClean },
           { username: identifier.trim() },
+          { email: identifier.trim().toLowerCase() },
         ],
       },
     });
 
     if (!user || user.parola !== parola) {
-      throw new UnauthorizedException('Credențiale invalide. Verificați email-ul/utilizatorul și parola.');
+      throw new UnauthorizedException('Nume de utilizator sau parolă incorectă.');
     }
 
     if (!user.activ) {
@@ -80,14 +82,13 @@ export class AuthService implements OnModuleInit {
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
-        userEmail: user.email,
         userNume: user.nume,
         userRol: user.rol,
         actiune: 'LOGIN',
         modul: 'AUTENTIFICARE',
         entitateTip: 'User',
         entitateId: user.id,
-        detalii: `Autentificare reușită pentru ${user.nume} (${user.rol})`,
+        detalii: `Autentificare reușită pentru ${user.nume} (@${user.username}, ${user.rol})`,
       },
     });
 
@@ -142,30 +143,27 @@ export class AuthService implements OnModuleInit {
 
   async createUser(data: {
     nume: string;
-    email: string;
-    username?: string;
+    username: string;
+    email?: string;
     parola: string;
     rol: string;
     functie?: string;
     telefon?: string;
     actorUserId?: string;
   }) {
-    if (!data.nume || !data.email || !data.parola) {
-      throw new BadRequestException('Numele, emailul și parola sunt obligatorii.');
+    if (!data.nume || !data.username || !data.parola) {
+      throw new BadRequestException('Numele, utilizatorul și parola sunt obligatorii.');
     }
 
-    const emailClean = data.email.trim().toLowerCase();
+    const usernameClean = data.username.trim().toLowerCase();
     const existing = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { email: emailClean },
-          ...(data.username ? [{ username: data.username.trim() }] : []),
-        ],
+        username: usernameClean,
       },
     });
 
     if (existing) {
-      throw new BadRequestException('Un utilizator cu acest email sau nume de utilizator există deja.');
+      throw new BadRequestException('Un utilizator cu acest nume de utilizator există deja.');
     }
 
     const rol = ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol) ? data.rol : 'OPERATOR';
@@ -173,8 +171,8 @@ export class AuthService implements OnModuleInit {
     const newUser = await this.prisma.user.create({
       data: {
         nume: data.nume.trim(),
-        email: emailClean,
-        username: data.username ? data.username.trim() : emailClean.split('@')[0],
+        username: usernameClean,
+        email: data.email?.trim() || null,
         parola: data.parola,
         rol,
         functie: data.functie || (rol === 'ADMIN' ? 'Administrator' : rol === 'OPERATOR' ? 'Operator Flotă' : 'Vizitator'),
@@ -193,7 +191,7 @@ export class AuthService implements OnModuleInit {
         modul: 'UTILIZATORI',
         entitateTip: 'User',
         entitateId: newUser.id,
-        detalii: `Creat utilizator nou: ${newUser.nume} (${newUser.email}) cu rolul ${newUser.rol}`,
+        detalii: `Creat utilizator nou: ${newUser.nume} (@${newUser.username}) cu rolul ${newUser.rol}`,
       },
     });
 
@@ -205,8 +203,8 @@ export class AuthService implements OnModuleInit {
     id: string,
     data: {
       nume?: string;
-      email?: string;
       username?: string;
+      email?: string;
       parola?: string;
       rol?: string;
       functie?: string;
@@ -220,8 +218,8 @@ export class AuthService implements OnModuleInit {
 
     const updateData: any = {};
     if (data.nume) updateData.nume = data.nume.trim();
-    if (data.email) updateData.email = data.email.trim().toLowerCase();
-    if (data.username) updateData.username = data.username.trim();
+    if (data.username) updateData.username = data.username.trim().toLowerCase();
+    if (data.email !== undefined) updateData.email = data.email ? data.email.trim() : null;
     if (data.parola) updateData.parola = data.parola;
     if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol)) updateData.rol = data.rol;
     if (data.functie !== undefined) updateData.functie = data.functie;
@@ -243,7 +241,7 @@ export class AuthService implements OnModuleInit {
         modul: 'UTILIZATORI',
         entitateTip: 'User',
         entitateId: updated.id,
-        detalii: `Actualizat utilizator: ${updated.nume} (${updated.email}). Modificări: ${Object.keys(updateData).join(', ')}`,
+        detalii: `Actualizat utilizator: ${updated.nume} (@${updated.username}). Modificări: ${Object.keys(updateData).join(', ')}`,
       },
     });
 
@@ -275,7 +273,7 @@ export class AuthService implements OnModuleInit {
         modul: 'UTILIZATORI',
         entitateTip: 'User',
         entitateId: id,
-        detalii: `Șters utilizator: ${user.nume} (${user.email})`,
+        detalii: `Șters utilizator: ${user.nume} (@${user.username})`,
       },
     });
 

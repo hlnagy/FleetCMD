@@ -981,7 +981,6 @@ function SetariContent() {
   const openAddUser = () => {
     setEditingUser(null);
     setUserNume('');
-    setUserEmail('');
     setUserUsername('');
     setUserParola('');
     setUserConfirmParola('');
@@ -997,7 +996,6 @@ function SetariContent() {
   const openEditUser = (u: any) => {
     setEditingUser(u);
     setUserNume(u.nume || '');
-    setUserEmail(u.email || '');
     setUserUsername(u.username || '');
     setUserParola('');
     setUserConfirmParola('');
@@ -1101,11 +1099,8 @@ function SetariContent() {
         : `${API_BASE_URL}/auth/users`;
       const method = editingUser ? 'PATCH' : 'POST';
 
-      const emailVal = userEmail.trim() || `${userUsername.trim().toLowerCase()}@fleetcmd.ro`;
-
       const payload: any = {
         nume: userNume.trim(),
-        email: emailVal,
         username: userUsername.trim(),
         rol: userRol,
         functie: userFunctie,
@@ -1137,7 +1132,7 @@ function SetariContent() {
   const handleDeleteUser = async (u: any) => {
     const confirmed = await showConfirm(
       'Ștergere Utilizator',
-      `Sigur doriți să ștergeți utilizatorul "${u.nume}" (${u.email})? Această acțiune este ireversibilă.`,
+      `Sigur doriți să ștergeți utilizatorul "${u.nume}" (@${u.username})? Această acțiune este ireversibilă.`,
       'Da, șterge utilizatorul',
       'Anulează'
     );
@@ -2075,7 +2070,7 @@ function SetariContent() {
               <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
               <input
                 type="text"
-                placeholder="Caută utilizator după nume, email sau funcție..."
+                placeholder="Caută utilizator după nume, utilizator sau funcție..."
                 value={searchUsers}
                 onChange={(e) => setSearchUsers(e.target.value)}
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
@@ -2098,7 +2093,7 @@ function SetariContent() {
                 (u) =>
                   !searchUsers.trim() ||
                   u.nume?.toLowerCase().includes(searchUsers.toLowerCase()) ||
-                  u.email?.toLowerCase().includes(searchUsers.toLowerCase()) ||
+                  u.username?.toLowerCase().includes(searchUsers.toLowerCase()) ||
                   u.rol?.toLowerCase().includes(searchUsers.toLowerCase()) ||
                   u.functie?.toLowerCase().includes(searchUsers.toLowerCase())
               )
@@ -2189,7 +2184,7 @@ function SetariContent() {
                     </div>
 
                     <div className="text-xs space-y-1 text-slate-700 font-medium">
-                      <p><span className="font-bold text-sage-700">Email:</span> <span className="font-mono text-sapphire-900">{u.email}</span></p>
+                      <p><span className="font-bold text-sage-700">Utilizator:</span> <span className="font-mono font-bold text-sapphire-900">@{u.username}</span></p>
                       <p><span className="font-bold text-sage-700">Funcție:</span> {u.functie || 'Nespecificată'}</p>
                       <p><span className="font-bold text-sage-700">Telefon:</span> {u.telefon || 'Nespecificat'}</p>
                       <p className="text-[11px] text-sage-500 pt-1 flex items-center justify-between font-mono">
@@ -3008,22 +3003,21 @@ function SetariContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Adresă Email (Opțional):</label>
-                  <input
-                    type="email"
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    placeholder="ex: ion.popescu@fleetcmd.ro"
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  />
-                </div>
-                <div>
                   <label className="text-sage-700 block mb-1 font-bold">Funcție / Poziție:</label>
                   <input
                     value={userFunctie}
                     onChange={(e) => setUserFunctie(e.target.value)}
                     placeholder="ex: Dispecer Flotă, Șef Atelier"
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Număr Telefon:</label>
+                  <input
+                    value={userTelefon}
+                    onChange={(e) => setUserTelefon(e.target.value)}
+                    placeholder="ex: 0722111222"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                   />
                 </div>
               </div>
@@ -3089,31 +3083,23 @@ function SetariContent() {
                     <option value="VIEWER">VIEWER - Numai citire (Modificări restricționate)</option>
                   </select>
                 </div>
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Număr Telefon:</label>
-                  <input
-                    value={userTelefon}
-                    onChange={(e) => setUserTelefon(e.target.value)}
-                    placeholder="ex: 0722111222"
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
-                  />
+                <div className="pt-6">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="userActivCheck"
+                      checked={userActiv}
+                      onChange={(e) => setUserActiv(e.target.checked)}
+                      className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500"
+                    />
+                    <label htmlFor="userActivCheck" className="text-sage-700 font-bold cursor-pointer">
+                      Cont Activ (permite autentificarea în sistem)
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="userActivCheck"
-                    checked={userActiv}
-                    onChange={(e) => setUserActiv(e.target.checked)}
-                    className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500"
-                  />
-                  <label htmlFor="userActivCheck" className="text-sage-700 font-bold cursor-pointer">
-                    Cont Activ (permite autentificarea în sistem)
-                  </label>
-                </div>
-              </div>
+
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
                 <button
@@ -3153,7 +3139,7 @@ function SetariContent() {
             </div>
 
             <p className="text-xs text-sage-600">
-              Setați o nouă parolă pentru contul <strong className="text-sapphire-900">@{resetPasswordUser.username}</strong> ({resetPasswordUser.email}).
+              Setați o nouă parolă pentru contul <strong className="text-sapphire-900">@{resetPasswordUser.username}</strong> ({resetPasswordUser.nume}).
             </p>
 
             <form onSubmit={handleResetPasswordSubmit} className="space-y-3 text-xs">

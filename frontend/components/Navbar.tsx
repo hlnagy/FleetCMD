@@ -393,7 +393,7 @@ export default function Navbar() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-extrabold text-xs text-sapphire-900 truncate">{user?.nume}</p>
-                      <p className="text-[11px] text-sage-500 truncate">{user?.email}</p>
+                      <p className="text-[11px] text-sage-500 truncate font-mono">@{user?.username || 'utilizator'}</p>
                     </div>
                   </div>
                   <div className="mt-2.5 flex items-center justify-between text-[11px]">
