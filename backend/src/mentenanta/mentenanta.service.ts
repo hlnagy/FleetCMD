@@ -47,6 +47,20 @@ export class MentenantaService {
     });
   }
 
+  async updateMecanic(id: string, data: { nume?: string; functie?: string; telefon?: string }) {
+    const mecanic = await this.prisma.mecanic.findUnique({ where: { id } });
+    if (!mecanic) throw new NotFoundException('Mecanicul nu a fost găsit.');
+
+    return this.prisma.mecanic.update({
+      where: { id },
+      data: {
+        ...(data.nume ? { nume: data.nume } : {}),
+        ...(data.functie !== undefined ? { functie: data.functie } : {}),
+        ...(data.telefon !== undefined ? { telefon: data.telefon } : {}),
+      },
+    });
+  }
+
   async deleteMecanic(id: string) {
     const mecanic = await this.prisma.mecanic.findUnique({ where: { id } });
     if (!mecanic) throw new NotFoundException('Mecanicul nu a fost găsit.');

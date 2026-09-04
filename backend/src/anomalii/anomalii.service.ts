@@ -434,16 +434,104 @@ export class AnomaliiService {
     };
   }
 
-  async rezolvaAlerta(alertaId: string, solutie: string) {
-    return this.prisma.completareLichid.update({
-      where: { id: alertaId },
-      data: {
-        stareAlerta: 'REZOLVATA',
-        alertaScurgereGenerata: false,
-        solutieRezolvare: solutie || 'Constatare și reparație efectuate',
-        dataRezolvare: new Date(),
-      },
-    });
+  async rezolvaAlerta(data: any, solutieFallback?: string) {
+    let payload: {
+      dbId: string;
+      categorieAlert?: string;
+      vehiculId?: string;
+      solutie?: string;
+      dataExpirareNoua?: string;
+    };
+
+    if (typeof data === 'string') {
+      payload = {
+        dbId: data,
+        categorieAlert: 'SCURGERI_ULEI',
+        solutie: solutieFallback,
+      };
+    } else {
+      payload = data;
+    }
+
+    const { dbId, categorieAlert, vehiculId, solutie } = payload;
+
+    // 1. Scurgeri Ulei
+    if (categorieAlert === 'SCURGERI_ULEI' || !categorieAlert) {
+      try {
+        return await this.prisma.completareLichid.update({
+          where: { id: dbId },
+          data: {
+            stareAlerta: 'REZOLVATA',
+            alertaScurgereGenerata: false,
+            solutieRezolvare: solutie || 'Constatare și reparație efectuate',
+            dataRezolvare: new Date(),
+          },
+        });
+      } catch (err) {
+        // If not found in completareLichid, continue checking other types
+      }
+    }
+
+    // 2. Mentenanță & Consumabile (Reguli de alertă per vehicul)
+    if (categorieAlert === 'MENTENANTA_CONSUMABIL') {
+      if (!vehiculId) throw new BadRequestException('Vehicul ID este necesar.');
+      const vehicul = await this.prisma.vehicul.findUnique({ where: { id: vehiculId } });
+      if (!vehicul) throw new NotFoundException('Vehiculul nu a fost găsit.');
+
+      return this.prisma.executieRegulaVehicul.upsert({
+        where: {
+          vehiculId_regulaAlertaId: {
+            vehiculId: vehicul.id,
+            regulaAlertaId: dbId,
+          },
+        },
+        update: {
+          ultimulSchimbContor: Number(vehicul.valoareContorCurent || 0),
+          ultimulSchimbData: new Date(),
+          observatii: solutie || 'Rezolvat și confirmat din Centrul de Alerte',
+        },
+        create: {
+          vehiculId: vehicul.id,
+          regulaAlertaId: dbId,
+          ultimulSchimbContor: Number(vehicul.valoareContorCurent || 0),
+          ultimulSchimbData: new Date(),
+          observatii: solutie || 'Rezolvat și confirmat din Centrul de Alerte',
+        },
+      });
+    }
+
+    // 3. Documente Legale Flotă (ITP, RCA, etc.)
+    if (categorieAlert === 'DOCUMENTE_FLOTA') {
+      const doc = await this.prisma.documentVehicul.findUnique({ where: { id: dbId } });
+      if (!doc) throw new NotFoundException('Documentul nu a fost găsit.');
+
+      let nextExp = new Date();
+      nextExp.setFullYear(nextExp.getFullYear() + 1);
+      if (payload.dataExpirareNoua) {
+        nextExp = new Date(payload.dataExpirareNoua);
+      }
+
+      return this.prisma.documentVehicul.update({
+        where: { id: dbId },
+        data: {
+          dataExpirare: nextExp,
+          observatii: solutie ? `${doc.observatii ? doc.observatii + ' | ' : ''}${solutie}` : doc.observatii,
+        },
+      });
+    }
+
+    // 4. Licențe & Atestate Firmă
+    if (categorieAlert === 'LICENTE_CUSTOM') {
+      return this.prisma.alertaPersonalizata.update({
+        where: { id: dbId },
+        data: {
+          stare: 'REZOLVAT',
+          observatii: solutie || 'Confirmat și rezolvat din Centrul de Alerte',
+        },
+      });
+    }
+
+    return { mesaj: 'Alerta a fost confirmată și rezolvată cu succes!' };
   }
 
   async getAlerteActive() {

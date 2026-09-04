@@ -76,9 +76,10 @@ function SetariContent() {
   const [descriereCatVehiculNou, setDescriereCatVehiculNou] = useState('');
 
   // ==========================================
-  // 2. STATE MECANIC NOU
+  // 2. STATE MECANIC NOU & EDITARE
   // ==========================================
   const [showAddMecanicModal, setShowAddMecanicModal] = useState(false);
+  const [editingMecanic, setEditingMecanic] = useState<any>(null);
   const [newMecanicNume, setNewMecanicNume] = useState('');
   const [newMecanicFunctie, setNewMecanicFunctie] = useState('Mecanic Atelier');
   const [newMecanicTelefon, setNewMecanicTelefon] = useState('');
@@ -418,12 +419,33 @@ function SetariContent() {
   // ------------------------------------------
   // HANDLERS MECANIC
   // ------------------------------------------
-  const handleCreateMecanic = async (e: React.FormEvent) => {
+  const openAddMecanic = () => {
+    setEditingMecanic(null);
+    setNewMecanicNume('');
+    setNewMecanicFunctie('Mecanic Atelier');
+    setNewMecanicTelefon('');
+    setShowAddMecanicModal(true);
+  };
+
+  const openEditMecanic = (m: any) => {
+    setEditingMecanic(m);
+    setNewMecanicNume(m.nume || '');
+    setNewMecanicFunctie(m.functie || 'Mecanic Atelier');
+    setNewMecanicTelefon(m.telefon || '');
+    setShowAddMecanicModal(true);
+  };
+
+  const handleSaveMecanic = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMecanicNume) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`, {
-        method: 'POST',
+      const url = editingMecanic
+        ? `${API_BASE_URL}/mentenanta/mecanici/${editingMecanic.id}`
+        : `${API_BASE_URL}/mentenanta/mecanici`;
+      const method = editingMecanic ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nume: newMecanicNume,
@@ -433,17 +455,18 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert('👨‍🔧 Mecanic înregistrat cu succes!');
+        alert(editingMecanic ? `👨‍🔧 Datele mecanicului "${newMecanicNume}" au fost actualizate!` : '👨‍🔧 Mecanic înregistrat cu succes!');
         setShowAddMecanicModal(false);
+        setEditingMecanic(null);
         setNewMecanicNume('');
         setNewMecanicTelefon('');
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        alert(`Eroare: ${err.message || 'Nu s-a putut salva mecanicul'}`);
       }
     } catch (e) {
-      alert('Eroare la înregistrarea mecanicui.');
+      alert('Eroare la salvarea mecanicului.');
     }
   };
 
@@ -1328,7 +1351,7 @@ function SetariContent() {
               />
             </div>
             <button
-              onClick={() => setShowAddMecanicModal(true)}
+              onClick={openAddMecanic}
               className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
             >
               <Users className="w-4 h-4" />
@@ -1350,12 +1373,22 @@ function SetariContent() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleDeleteMecanic(m.id)}
-                  className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
-                >
-                  <Trash2 className="w-4 h-4 text-terracotta-500" />
-                </button>
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    onClick={() => openEditMecanic(m)}
+                    className="p-1.5 rounded-lg text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 transition"
+                    title="Editare Mecanic"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteMecanic(m.id)}
+                    className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
+                    title="Eliminare Mecanic"
+                  >
+                    <Trash2 className="w-4 h-4 text-terracotta-500" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -2064,7 +2097,7 @@ function SetariContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: ADĂUGARE MECANIC NOU */}
+      {/* MODAL 2: ADĂUGARE / EDITARE MECANIC */}
       {/* ========================================================================= */}
       {showAddMecanicModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2072,12 +2105,12 @@ function SetariContent() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <Users className="w-5 h-5 text-sapphire-500" />
-                <span>Înregistrare Mecanic Nou în Atelier</span>
+                <span>{editingMecanic ? `Editare Mecanic (${editingMecanic.nume})` : 'Înregistrare Mecanic Nou în Atelier'}</span>
               </h3>
-              <button onClick={() => setShowAddMecanicModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setShowAddMecanicModal(false); setEditingMecanic(null); }} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={handleCreateMecanic} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveMecanic} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume Mecanic / Tehnician: *</label>
                 <input required value={newMecanicNume} onChange={(e) => setNewMecanicNume(e.target.value)} placeholder="ex: Alexandru Popa" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
@@ -2101,8 +2134,10 @@ function SetariContent() {
               </div>
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowAddMecanicModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
+                <button type="button" onClick={() => { setShowAddMecanicModal(false); setEditingMecanic(null); }} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">
+                  {editingMecanic ? 'Salvează Modificările' : 'Salvează Mecanic'}
+                </button>
               </div>
             </form>
           </div>

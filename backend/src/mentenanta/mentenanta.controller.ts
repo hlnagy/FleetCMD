@@ -16,6 +16,14 @@ export class MentenantaController {
     return this.mentenantaService.createMecanic(body);
   }
 
+  @Patch('mecanici/:id')
+  updateMecanic(
+    @Param('id') id: string,
+    @Body() body: { nume?: string; functie?: string; telefon?: string },
+  ) {
+    return this.mentenantaService.updateMecanic(id, body);
+  }
+
   @Delete('mecanici/:id')
   deleteMecanic(@Param('id') id: string) {
     return this.mentenantaService.deleteMecanic(id);

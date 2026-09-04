@@ -43,27 +43,32 @@ export default function AlertePage() {
     if (!selectedAlerta) return;
 
     try {
-      if (selectedAlerta.categorieAlert === 'SCURGERI_ULEI') {
-        const res = await fetch(`${API_BASE_URL}/anomalii/alerte/${selectedAlerta.dbId}/rezolva`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ solutie }),
-        });
+      const res = await fetch(`${API_BASE_URL}/anomalii/alerte/rezolva`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedAlerta.id,
+          dbId: selectedAlerta.dbId,
+          categorieAlert: selectedAlerta.categorieAlert,
+          vehiculId: selectedAlerta.vehiculId,
+          solutie,
+        }),
+      });
 
-        if (res.ok) {
-          alert('Alertă scurgere rezolvată și închisă!');
-          setSelectedAlerta(null);
-          setSolutie('');
-          fetchAlerte();
-        }
-      } else {
-        alert('Notificarea a fost confirmată și luată în evidență!');
+      if (res.ok) {
+        alert('✅ Alerta a fost confirmată și rezolvată! A fost eliminată din lista de atenționări active.');
+        const resolvedId = selectedAlerta.id;
         setSelectedAlerta(null);
         setSolutie('');
+        // Optimistic local removal + fresh refetch
+        setAlerteCentralizate((prev) => prev.filter((a) => a.id !== resolvedId));
         fetchAlerte();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut confirma rezolvarea alertei'}`);
       }
     } catch (e) {
-      alert('Eroare la rezolvarea alertei.');
+      alert('Eroare de conexiune la rezolvarea alertei.');
     }
   };
 

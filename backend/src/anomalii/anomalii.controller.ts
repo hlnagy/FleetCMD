@@ -50,9 +50,17 @@ export class AnomaliiController {
     return this.anomaliiService.getAlerteCentralizate();
   }
 
+  @Post('alerte/rezolva')
+  rezolvaAlertaCentralizata(@Body() body: any) {
+    return this.anomaliiService.rezolvaAlerta(body);
+  }
+
   @Patch('alerte/:id/rezolva')
-  rezolvaAlerta(@Param('id') id: string, @Body() body: { solutie: string }) {
-    return this.anomaliiService.rezolvaAlerta(id, body.solutie);
+  rezolvaAlerta(@Param('id') id: string, @Body() body: any) {
+    return this.anomaliiService.rezolvaAlerta({
+      dbId: id,
+      ...body,
+    });
   }
 
   // Reguli Alerte Mentenanță
