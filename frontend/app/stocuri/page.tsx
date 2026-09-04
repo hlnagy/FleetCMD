@@ -1766,10 +1766,10 @@ function StocuriGarantiiContent() {
         </div>
       )}
 
-      {/* MODÁL EDITARE ARTICOL */}
+      {/* MODAL EDITARE ARTICOL */}
       {editingArticol && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900">Editare Articol Stoc ({editingArticol.codArticol})</h3>
               <button onClick={() => setEditingArticol(null)} className="text-sage-500 hover:text-sapphire-900">
@@ -1900,8 +1900,8 @@ function StocuriGarantiiContent() {
 
       {/* MODAL EDITARE ANVELOPĂ SERIALIZATĂ DIN MAGAZIE */}
       {editingAnvelopaStoc && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div className="flex items-center space-x-2">
                 <CircleDot className="w-5 h-5 text-sapphire-500" />
@@ -2035,8 +2035,8 @@ function StocuriGarantiiContent() {
 
       {/* MODAL ÎNREGISTRARE LOT NOU ANVELOPE SERIALIZATE */}
       {showAddAnvelopeStocModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl border border-morning-200">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div className="flex items-center space-x-2">
                 <Plus className="w-5 h-5 text-sapphire-500" />

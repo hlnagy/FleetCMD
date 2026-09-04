@@ -1960,42 +1960,49 @@ function EFacturaContent() {
       {/* MODAL 2: IMPORT ARTICOL ÎN STOC (SELECTARE DEPOZIT, CATEGORIE & SUBCATEGORIE) */}
       {/* ========================================================================= */}
       {importingItem && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="pleasant-card bg-white border border-morning-200 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh] my-auto overflow-hidden animate-fade-in">
+            {/* ANTET FIXAT (STICKY HEADER) */}
+            <div className="flex items-center justify-between border-b border-morning-200 px-6 py-4 bg-white shrink-0">
+              <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
                 <PackageCheck className="w-5 h-5 text-emerald-600" />
                 <span>Import Articol în Stoc</span>
               </h3>
-              <button onClick={() => setImportingItem(null)} className="text-sage-500 hover:text-sapphire-900">
+              <button
+                type="button"
+                onClick={() => setImportingItem(null)}
+                className="w-8 h-8 rounded-xl bg-morning-100 hover:bg-morning-200 text-sage-600 hover:text-sapphire-900 flex items-center justify-center transition cursor-pointer"
+                title="Închide fereastra"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* TAB SELECTOR: IMPORT STANDARD VS CU SERII PER BUCATĂ */}
-            <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200">
-              <button
-                type="button"
-                onClick={() => setIsImportSerializat(false)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                  !isImportSerializat ? 'bg-emerald-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
-                }`}
-              >
-                 Import Rapid În Vrac
-              </button>
+            {/* FORMULAR CU CORP SCROLLABIL & FOOTER FIXAT */}
+            <form onSubmit={handleConfirmImportItem} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
+                {/* TAB SELECTOR: IMPORT STANDARD VS CU SERII PER BUCATĂ */}
+                <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportSerializat(false)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                      !isImportSerializat ? 'bg-emerald-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                    }`}
+                  >
+                     Import Rapid În Vrac
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setIsImportSerializat(true)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                  isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
-                }`}
-              >
-                 Import cu Serii / Bucată ({seriiList.length} buc)
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmImportItem} className="space-y-3.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setIsImportSerializat(true)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                      isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                    }`}
+                  >
+                     Import cu Serii / Bucată ({seriiList.length} buc)
+                  </button>
+                </div>
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
                 <p className="font-extrabold text-emerald-950 text-xs truncate" title={importingItem.descrierePiesa}>
                   {importingItem.descrierePiesa}
@@ -2333,9 +2340,23 @@ function EFacturaContent() {
                 )}
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setImportingItem(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20">Confirmă Importul în Stoc</button>
+              </div>
+
+              {/* BARA BUTOANE FIXATĂ LA BAZĂ (STICKY FOOTER) */}
+              <div className="flex items-center justify-end space-x-3 px-6 py-3.5 border-t border-morning-200 bg-morning-50/90 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setImportingItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  Confirmă Importul în Stoc
+                </button>
               </div>
             </form>
           </div>
@@ -2346,10 +2367,11 @@ function EFacturaContent() {
       {/* MODAL 3: CONFIGURARE OAUTH2 & TOKEN ANAF (CU ICONIȚĂ DE AJUTOR ?) */}
       {/* ========================================================================= */}
       {showConfigModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="pleasant-card bg-white border border-morning-200 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh] my-auto overflow-hidden animate-fade-in">
+            {/* ANTET FIXAT (STICKY HEADER) */}
+            <div className="flex items-center justify-between border-b border-morning-200 px-6 py-4 bg-white shrink-0">
+              <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
                 <Settings className="w-5 h-5 text-sapphire-500" />
                 <span>Configurare Token OAuth2 ANAF SPV</span>
               </h3>
@@ -2365,13 +2387,19 @@ function EFacturaContent() {
                   <HelpCircle className="w-5 h-5 text-sapphire-600" />
                 </button>
 
-                <button onClick={() => setShowConfigModal(false)} className="text-sage-500 hover:text-sapphire-900 p-1">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="w-8 h-8 rounded-xl bg-morning-100 hover:bg-morning-200 text-sage-600 hover:text-sapphire-900 flex items-center justify-center transition cursor-pointer"
+                  title="Închide fereastra"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSaveConfig} className="space-y-3 text-xs max-h-[75vh] overflow-y-auto pr-1">
+            <form onSubmit={handleSaveConfig} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-6 overflow-y-auto space-y-3.5 flex-1 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">CUI / CIF Firmă (ex: RO12345678): *</label>
                 <input required value={cifFirma} onChange={(e) => setCifFirma(e.target.value)} placeholder="RO12345678" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold font-mono" />
@@ -2476,9 +2504,23 @@ function EFacturaContent() {
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowConfigModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Configurația Token</button>
+              </div>
+
+              {/* BARA BUTOANE FIXATĂ LA BAZĂ (STICKY FOOTER) */}
+              <div className="flex items-center justify-end space-x-3 px-6 py-3.5 border-t border-morning-200 bg-morning-50/90 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition cursor-pointer"
+                >
+                  Salvează Configurația Token
+                </button>
               </div>
             </form>
           </div>
