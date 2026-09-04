@@ -61,14 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(storedUser));
         setToken(storedToken || 'local-token');
       } else {
-        // Default initial session
-        setUser(DEFAULT_ADMIN);
-        setToken('default-admin-token');
-        localStorage.setItem('fleetcmd_user', JSON.stringify(DEFAULT_ADMIN));
-        localStorage.setItem('fleetcmd_token', 'default-admin-token');
+        // No active session -> require login on WOW start page
+        setUser(null);
+        setToken(null);
       }
     } catch (e) {
-      setUser(DEFAULT_ADMIN);
+      setUser(null);
+      setToken(null);
     } finally {
       setLoading(false);
     }
