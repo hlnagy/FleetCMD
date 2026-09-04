@@ -46,6 +46,8 @@ function SetariContent() {
   // SORTING STATE VEHICULE
   const [sortField, setSortField] = useState<'numarIntern' | 'numarInmatriculare' | 'categorieEnum' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedCatFilter, setSelectedCatFilter] = useState<string>('TOATE');
+  const [showCatManagerModal, setShowCatManagerModal] = useState<boolean>(false);
 
   // ==========================================
   // 1. STATE VEHICUL NOU & EDITARE & CATEGORIE VEHICUL
@@ -889,12 +891,26 @@ function SetariContent() {
 
   // FILTERED AND SORTED VEHICLES LIST
   const vehiculeFiltrateSiSortate = [...vehicule]
-    .filter((v) =>
-      v.numarIntern?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
-      v.numarInmatriculare?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
-      v.marca?.toLowerCase().includes(searchVehicule.toLowerCase()) ||
-      v.categorieEnum?.toLowerCase().includes(searchVehicule.toLowerCase())
-    )
+    .filter((v) => {
+      // 1. Filtru Categorie Selectată
+      if (selectedCatFilter !== 'TOATE') {
+        if ((v.categorieEnum || '').toUpperCase() !== selectedCatFilter.toUpperCase()) {
+          return false;
+        }
+      }
+      // 2. Căutare Text
+      const q = searchVehicule.toLowerCase();
+      return (
+        !q ||
+        v.numarIntern?.toLowerCase().includes(q) ||
+        v.numarInmatriculare?.toLowerCase().includes(q) ||
+        v.marca?.toLowerCase().includes(q) ||
+        v.model?.toLowerCase().includes(q) ||
+        v.serieSasiu?.toLowerCase().includes(q) ||
+        v.vin?.toLowerCase().includes(q) ||
+        v.categorieEnum?.toLowerCase().includes(q)
+      );
+    })
     .sort((a, b) => {
       if (!sortField) return 0;
       let valA = '';
@@ -1039,84 +1055,137 @@ function SetariContent() {
         </button>
       </div>
 
-      {/* ========================================================================= */}
-      {/* TAB 1: FLOTĂ & VEHICULE (ADĂUGARE, EDITARE & MANAGEMENT CATEGORII) */}
-      {/* ========================================================================= */}
       {activeTab === 'vehicule' && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-3" />
+          {/* STATS HEADER CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
+              <div className="w-12 h-12 rounded-xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-center text-sapphire-600 shadow-xs shrink-0">
+                <Truck className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Total Flotă Înregistrată</p>
+                <p className="text-xl font-black text-sapphire-900 truncate">{vehicule.length} Vehicule & Utilaje</p>
+              </div>
+            </div>
+
+            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
+              <div className="w-12 h-12 rounded-xl bg-periwinkle-50 border border-periwinkle-200 flex items-center justify-center text-periwinkle-700 shadow-xs shrink-0">
+                <Layers className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Categorii Echipamente</p>
+                <p className="text-xl font-black text-sapphire-900 truncate">{categoriiVehicul.length} Categorii Active</p>
+              </div>
+            </div>
+
+            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-xs shrink-0">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Rulaj Total Înregistrat</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono truncate">
+                  {vehicule.reduce((sum, v) => sum + (Number(v.valoareContorCurent) || 0), 0).toLocaleString('ro-RO')} <span className="text-xs font-bold text-sage-600">KM/mTH</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* SEARCH & ACTIONS BAR */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
+            <div className="relative flex-1 max-w-lg">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Caută vehicul după cod intern, număr înmatriculare sau marcă..."
+                placeholder="Caută utilaj după cod intern, număr înmatriculare, VIN sau marcă..."
                 value={searchVehicule}
                 onChange={(e) => setSearchVehicule(e.target.value)}
-                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-sapphire-900"
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-10 pr-8 py-2.5 text-xs font-bold text-sapphire-900 placeholder:text-sage-500 focus:outline-none focus:border-sapphire-500 focus:bg-white transition"
               />
+              {searchVehicule && (
+                <button
+                  onClick={() => setSearchVehicule('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-sage-400 hover:text-sapphire-900 font-bold"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-            <div className="flex items-center space-x-2 flex-wrap">
+
+            <div className="flex items-center space-x-2.5 flex-wrap">
               <button
-                onClick={() => setShowAddVehiculCatModal(true)}
-                className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-morning-200 hover:bg-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
+                type="button"
+                onClick={() => setShowCatManagerModal(true)}
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold shadow-2xs transition"
+                title="Deschide panoul de administrare a categoriilor de vehicule"
               >
                 <Layers className="w-4 h-4 text-periwinkle-700" />
-                <span>+ Categorie Nouă Vehicul</span>
+                <span>Gestiune Categorii ({categoriiVehicul.length})</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setShowAddVehiculModal(true)}
                 className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
               >
                 <Plus className="w-4 h-4" />
-                <span>+ Adaugă Vehicul Nou în Flotă</span>
+                <span>+ Adaugă Vehicul Nou</span>
               </button>
             </div>
           </div>
 
-          {/* LISTĂ CATEGORII VEHICUL DISPONIBILE */}
-          {categoriiVehicul.length > 0 && (
-            <div className="bg-morning-50 p-4 rounded-2xl border border-morning-200 space-y-2">
-              <span className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider block">
-                Categorii de Utilaje & Autovehicule Definite:
+          {/* CATEGORY FILTER CHIPS RIBBON */}
+          <div className="flex items-center space-x-2 overflow-x-auto pb-1 text-xs select-none">
+            <button
+              onClick={() => setSelectedCatFilter('TOATE')}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+                selectedCatFilter === 'TOATE'
+                  ? 'bg-sapphire-500 text-white shadow-sm'
+                  : 'bg-white text-slate-700 border border-morning-200 hover:bg-morning-100 hover:text-sapphire-900'
+              }`}
+            >
+              <span>Toate Echipamentele</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                selectedCatFilter === 'TOATE' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-700'
+              }`}>
+                {vehicule.length}
               </span>
-              <div className="flex flex-wrap gap-2">
-                {categoriiVehicul.map((c) => (
-                  <div
-                    key={c.id || c.nume}
-                    className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white border border-morning-200 shadow-2xs group hover:border-sapphire-300 transition"
-                  >
-                    <span className="text-xs font-bold text-sapphire-900">
-                      {c.nume} {c.descriere ? `(${c.descriere})` : ''}
-                    </span>
-                    <button
-                      onClick={() => openEditVehiculCat(c)}
-                      title="Editare Categorie"
-                      className="p-1 text-sage-500 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-md transition"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteVehiculCat(c.id, c.nume)}
-                      title="Ștergere Categorie"
-                      className="p-1 text-terracotta-500 hover:text-terracotta-700 hover:bg-roseash-100 rounded-md transition"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            </button>
 
+            {categoriiVehicul.map((c) => {
+              const count = vehicule.filter(v => (v.categorieEnum || '').toUpperCase() === c.nume.toUpperCase()).length;
+              const isSelected = selectedCatFilter.toUpperCase() === c.nume.toUpperCase();
+              return (
+                <button
+                  key={c.id || c.nume}
+                  onClick={() => setSelectedCatFilter(isSelected ? 'TOATE' : c.nume)}
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+                    isSelected
+                      ? 'bg-sapphire-500 text-white shadow-sm'
+                      : 'bg-white text-slate-700 border border-morning-200 hover:bg-morning-100 hover:text-sapphire-900'
+                  }`}
+                >
+                  <span>{c.nume}</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-700'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* VEHICLES DATA TABLE */}
           <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
             <table className="w-full text-left border-collapse text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider select-none">
-                  {/* OSZLOP 1: COD INTERN (CLICK SORTS A-Z / Z-A) */}
+                  {/* COD INTERN */}
                   <th
                     onClick={() => toggleSort('numarIntern')}
-                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                    className="p-3.5 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
                   >
                     <div className="flex items-center space-x-1.5">
                       <span>Cod Intern</span>
@@ -1138,13 +1207,13 @@ function SetariContent() {
                     </div>
                   </th>
 
-                  {/* OSZLOP 2: ÎNMATRICULARE & ȘASIU (CLICK SORTS A-Z / Z-A) */}
+                  {/* ÎNMATRICULARE & VIN */}
                   <th
                     onClick={() => toggleSort('numarInmatriculare')}
-                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                    className="p-3.5 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Înmatriculare & Șasiu</span>
+                      <span>Înmatriculare & VIN</span>
                       {sortField === 'numarInmatriculare' ? (
                         sortDirection === 'asc' ? (
                           <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
@@ -1163,13 +1232,13 @@ function SetariContent() {
                     </div>
                   </th>
 
-                  {/* OSZLOP 3: CATEGORIE & MODEL (CLICK SORTS A-Z / Z-A) */}
+                  {/* CATEGORIE & MODEL */}
                   <th
                     onClick={() => toggleSort('categorieEnum')}
-                    className="p-3 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
+                    className="p-3.5 cursor-pointer hover:bg-morning-200 hover:text-sapphire-900 transition group"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Categorie & Model</span>
+                      <span>Categorie & Specificație</span>
                       {sortField === 'categorieEnum' ? (
                         sortDirection === 'asc' ? (
                           <span className="text-sapphire-600 font-extrabold flex items-center space-x-0.5 bg-sapphire-50 px-1.5 py-0.5 rounded-md text-[10px]">
@@ -1188,55 +1257,89 @@ function SetariContent() {
                     </div>
                   </th>
 
-                  <th className="p-3">Contor Curent</th>
-                  <th className="p-3">Tarif Orar Atelier</th>
-                  <th className="p-3 text-right whitespace-nowrap min-w-[170px]">Acțiuni</th>
+                  <th className="p-3.5">Contor Curent</th>
+                  <th className="p-3.5">Tarif Atelier</th>
+                  <th className="p-3.5 text-right whitespace-nowrap min-w-[170px]">Acțiuni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
-                {vehiculeFiltrateSiSortate.map((v) => (
-                  <tr key={v.id} className="hover:bg-morning-50 transition">
-                    <td className="p-3 font-extrabold text-sapphire-900 font-mono">{v.numarIntern}</td>
-                    <td className="p-3">
-                      <span className="font-bold text-slate-800">{v.numarInmatriculare}</span>
-                      <div className="text-[10px] text-sage-500 font-mono">{v.serieSasiu || v.vin || '-'}</div>
-                    </td>
-                    <td className="p-3">
-                      {v.categorieEnum === 'NEALOCAT' || v.categorieEnum === 'Nealocat' ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
-                          Nealocat
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
-                          {v.categorieEnum}
-                        </span>
-                      )}
-                      <div className="text-[11px] font-semibold text-slate-600 mt-0.5">
-                        {v.marca} {v.model} ({v.anFabricatie})
-                      </div>
-                    </td>
-                    <td className="p-3 font-mono font-bold text-sapphire-900">
-                      {v.valoareContorCurent} {v.tipMasurare}
-                    </td>
-                    <td className="p-3 font-mono text-sage-700">
-                      {v.tarifOrarManoperaAtelier || v.tarifOrarStandard ? `${v.tarifOrarManoperaAtelier || v.tarifOrarStandard} RON/h` : '0 RON/h'}
-                    </td>
-                    <td className="p-3 text-right space-x-2 whitespace-nowrap min-w-[170px]">
-                      <button
-                        onClick={() => openEditVehicul(v)}
-                        className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold transition border border-sapphire-200"
-                      >
-                        Editează
-                      </button>
-                      <button
-                        onClick={() => handleDeleteVehicul(v.id)}
-                        className="px-3 py-1.5 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 font-bold transition"
-                      >
-                        Șterge
-                      </button>
+                {vehiculeFiltrateSiSortate.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-sage-500 font-medium">
+                      Nu s-a găsit niciun vehicul conform filtrelor selectate.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  vehiculeFiltrateSiSortate.map((v) => (
+                    <tr key={v.id} className="hover:bg-morning-50/80 transition">
+                      {/* COD INTERN BADGE */}
+                      <td className="p-3.5">
+                        <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-mono font-black text-xs shadow-2xs">
+                          <Truck className="w-3.5 h-3.5 text-sapphire-300" />
+                          <span>{v.numarIntern}</span>
+                        </div>
+                      </td>
+
+                      {/* ÎNMATRICULARE & VIN */}
+                      <td className="p-3.5">
+                        <span className="font-extrabold text-sapphire-900 font-mono text-sm tracking-wide bg-morning-100 border border-morning-300 px-2.5 py-0.5 rounded-md inline-block">
+                          {v.numarInmatriculare}
+                        </span>
+                        <div className="text-[10px] text-sage-500 font-mono mt-1 flex items-center space-x-1">
+                          <span className="font-bold text-sage-400">VIN:</span>
+                          <span>{v.serieSasiu || v.vin || '-'}</span>
+                        </div>
+                      </td>
+
+                      {/* CATEGORIE & MODEL */}
+                      <td className="p-3.5">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sapphire-100 text-sapphire-900 border border-sapphire-200 inline-block">
+                          {v.categorieEnum || 'Nealocat'}
+                        </span>
+                        <div className="text-xs font-bold text-slate-800 mt-1">
+                          {v.marca} {v.model} <span className="text-sage-500 font-normal">({v.anFabricatie || '-'})</span>
+                        </div>
+                      </td>
+
+                      {/* CONTOR CURENT */}
+                      <td className="p-3.5 font-mono font-extrabold text-sapphire-900 text-sm">
+                        <div className="flex items-center space-x-1.5">
+                          <span>{Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')}</span>
+                          <span className="text-[10px] font-bold text-sage-500 bg-morning-200 px-1.5 py-0.5 rounded">
+                            {v.tipMasurare || 'KM'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* TARIF ORAR */}
+                      <td className="p-3.5 font-mono text-sage-700 font-bold">
+                        {v.tarifOrarManoperaAtelier || v.tarifOrarStandard ? (
+                          <span className="text-sapphire-900">{v.tarifOrarManoperaAtelier || v.tarifOrarStandard} RON/h</span>
+                        ) : (
+                          <span className="text-sage-400">-</span>
+                        )}
+                      </td>
+
+                      {/* ACȚIUNI */}
+                      <td className="p-3.5 text-right space-x-2 whitespace-nowrap min-w-[170px]">
+                        <button
+                          onClick={() => openEditVehicul(v)}
+                          className="px-3 py-1.5 rounded-xl bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold transition border border-sapphire-200 shadow-2xs inline-flex items-center space-x-1"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Editează</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteVehicul(v.id)}
+                          className="px-3 py-1.5 rounded-xl bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 font-bold transition shadow-2xs inline-flex items-center space-x-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Șterge</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1865,6 +1968,132 @@ function SetariContent() {
                 <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1.E: GESTIUNE CENTRALIZATĂ CATEGORII VEHICULE & UTILAJE */}
+      {/* ========================================================================= */}
+      {showCatManagerModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-periwinkle-100 flex items-center justify-center text-periwinkle-700 shadow-2xs">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-sapphire-900">Gestiune Categorii Flotă & Echipamente</h3>
+                  <p className="text-xs text-sage-600">Configurarea categoriilor pentru clasificarea parcului auto și utilajelor</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCatManagerModal(false)}
+                className="p-1.5 rounded-lg text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formular Adăugare Categorie Nouă */}
+            <form onSubmit={handleCreateVehiculCategorie} className="bg-morning-50 p-4 rounded-xl border border-morning-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-extrabold text-sapphire-900 uppercase tracking-wider">Adăugare Categorie Nouă</p>
+                <span className="text-[10px] font-bold text-sage-600">Total: {categoriiVehicul.length} categorii</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-sage-700 block mb-1">Nume Categorie: *</label>
+                  <input
+                    required
+                    value={numeCatVehiculNou}
+                    onChange={(e) => setNumeCatVehiculNou(e.target.value)}
+                    placeholder="ex: MACARA, CISTERNĂ, AUTOGREDER"
+                    className="w-full bg-white border border-morning-200 rounded-xl px-3 py-2 text-xs font-bold text-sapphire-900 focus:outline-none focus:border-sapphire-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-sage-700 block mb-1">Descriere (opțional):</label>
+                  <input
+                    value={descriereCatVehiculNou}
+                    onChange={(e) => setDescriereCatVehiculNou(e.target.value)}
+                    placeholder="ex: Utilaj greu pentru terasamente"
+                    className="w-full bg-white border border-morning-200 rounded-xl px-3 py-2 text-xs font-medium text-sapphire-900 focus:outline-none focus:border-sapphire-500 transition"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Salvează Categoria</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Listă Categorii Existente */}
+            <div className="space-y-2">
+              <p className="text-xs font-extrabold text-sage-700 uppercase tracking-wider">
+                Categorii Definite ({categoriiVehicul.length})
+              </p>
+              <div className="border border-morning-200 rounded-xl overflow-hidden divide-y divide-morning-200 max-h-64 overflow-y-auto">
+                {categoriiVehicul.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-sage-500">Nu este definită nicio categorie.</div>
+                ) : (
+                  categoriiVehicul.map((c) => {
+                    const count = vehicule.filter(v => (v.categorieEnum || '').toUpperCase() === c.nume.toUpperCase()).length;
+                    return (
+                      <div key={c.id || c.nume} className="p-3 bg-white hover:bg-morning-50 flex items-center justify-between transition">
+                        <div className="space-y-0.5 min-w-0 pr-3">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-extrabold text-sapphire-900 text-xs truncate">{c.nume}</span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sapphire-100 text-sapphire-900 border border-sapphire-200 shrink-0">
+                              {count} {count === 1 ? 'vehicul' : 'vehicule'}
+                            </span>
+                          </div>
+                          {c.descriere && (
+                            <p className="text-[11px] text-sage-600 truncate">{c.descriere}</p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditVehiculCat(c)}
+                            className="p-1.5 rounded-lg text-sapphire-600 hover:bg-sapphire-50 border border-transparent hover:border-sapphire-200 transition"
+                            title="Editare Categorie"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVehiculCat(c.id, c.nume)}
+                            className="p-1.5 rounded-lg text-terracotta-600 hover:bg-roseash-100 border border-transparent hover:border-roseash-200 transition"
+                            title="Ștergere Categorie"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-morning-200">
+              <button
+                type="button"
+                onClick={() => setShowCatManagerModal(false)}
+                className="px-5 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold text-xs hover:bg-morning-300 transition"
+              >
+                Închide
+              </button>
+            </div>
           </div>
         </div>
       )}
