@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   Clock, X, Plus, Edit3, Trash2, Search, Filter, Check, AlertCircle,
@@ -51,7 +53,7 @@ export default function VehicleOdometerModal({
     if (!vehiculId) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/istoric-contoare?vehiculId=${vehiculId}`);
+      const res = await fetch(`${API_BASE_URL}/vehicule/istoric-contoare?vehiculId=${vehiculId}`);
       if (res.ok) {
         setIstoric(await res.json());
       }
@@ -81,7 +83,7 @@ export default function VehicleOdometerModal({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('http://localhost:3001/vehicule/inregistrare-contor', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/inregistrare-contor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,7 +122,7 @@ export default function VehicleOdometerModal({
 
   const handleSaveEdit = async (entryId: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/istoric-contoare/${entryId}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/istoric-contoare/${entryId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +155,7 @@ export default function VehicleOdometerModal({
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/istoric-contoare/${entryId}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/istoric-contoare/${entryId}`, {
         method: 'DELETE',
       });
 

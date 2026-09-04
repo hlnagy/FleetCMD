@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -39,12 +41,12 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       const url = selectedCategorieFilter
-        ? `http://localhost:3001/vehicule?categorie=${selectedCategorieFilter}`
-        : 'http://localhost:3001/vehicule';
+        ? `${API_BASE_URL}/vehicule?categorie=${selectedCategorieFilter}`
+        : `${API_BASE_URL}/vehicule`;
       const resVeh = await fetch(url);
       if (resVeh.ok) setVehicule(await resVeh.json());
 
-      const resAlert = await fetch('http://localhost:3001/anomalii/alerte');
+      const resAlert = await fetch(`${API_BASE_URL}/anomalii/alerte`);
       if (resAlert.ok) setAlerteScurgeri(await resAlert.json());
 
       fetchMecanici();
@@ -58,7 +60,7 @@ export default function DashboardPage() {
 
   const fetchMecanici = async () => {
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (res.ok) setMecanici(await res.json());
     } catch (e) {
       console.log('Error fetching mecanici', e);
@@ -68,8 +70,8 @@ export default function DashboardPage() {
   const fetchIstoricServicii = async (mecNume?: string) => {
     try {
       const url = mecNume
-        ? `http://localhost:3001/mentenanta/istoric-servicii-mecanic?mecanic=${encodeURIComponent(mecNume)}`
-        : 'http://localhost:3001/mentenanta/istoric-servicii-mecanic';
+        ? `${API_BASE_URL}/mentenanta/istoric-servicii-mecanic?mecanic=${encodeURIComponent(mecNume)}`
+        : `${API_BASE_URL}/mentenanta/istoric-servicii-mecanic`;
       const res = await fetch(url);
       if (res.ok) setIstoricServicii(await res.json());
     } catch (e) {
@@ -89,7 +91,7 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!newMecanicNume) return;
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/mecanici', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +121,7 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!editingVehicul) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${editingVehicul.id}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/${editingVehicul.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingVehicul),
@@ -146,7 +148,7 @@ export default function DashboardPage() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) {
         fetchDashboard();
         alert('Vehicul șters din sistem.');
@@ -159,7 +161,7 @@ export default function DashboardPage() {
   const handleCreateCategorie = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/vehicule/categorii', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nume: numeCategorie, descriere: descriereCategorie }),
@@ -343,7 +345,7 @@ export default function DashboardPage() {
 
         {/* TABELA CENTRALIZATĂ ISTORIC SERVICII */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
             <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
               <tr>
                 <th className="p-3">Data Operare</th>
@@ -423,7 +425,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
             <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
               <tr>
                 <th className="p-3">Utilaj / Număr Intern</th>
@@ -431,7 +433,7 @@ export default function DashboardPage() {
                 <th className="p-3">Categorie & Configurație Axe</th>
                 <th className="p-3 font-mono">Contor Curent</th>
                 <th className="p-3 font-mono">Contor Inițial & Dată</th>
-                <th className="p-3 text-right">Acțiuni Management</th>
+                <th className="p-3 text-right whitespace-nowrap min-w-[180px]">Acțiuni Management</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-morning-200">
@@ -464,7 +466,7 @@ export default function DashboardPage() {
                       {v.dataInregistrareContor ? new Date(v.dataInregistrareContor).toLocaleDateString('ro-RO') : '-'}
                     </div>
                   </td>
-                  <td className="p-3 text-right space-x-2">
+                  <td className="p-3 text-right space-x-2 whitespace-nowrap min-w-[180px]">
                     <Link
                       href={`/fisa-tehnica?id=${v.id}`}
                       className="px-3 py-1.5 rounded-lg bg-sapphire-500 text-white text-xs font-bold transition hover:bg-sapphire-600 shadow-xs inline-block"

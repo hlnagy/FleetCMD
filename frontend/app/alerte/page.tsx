@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -23,7 +25,7 @@ export default function AlertePage() {
   const fetchAlerte = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:3001/anomalii/alerte-centralizate');
+      const res = await fetch(`${API_BASE_URL}/anomalii/alerte-centralizate`);
       if (res.ok) setAlerteCentralizate(await res.json());
     } catch (e) {
       console.log(e);
@@ -42,7 +44,7 @@ export default function AlertePage() {
 
     try {
       if (selectedAlerta.categorieAlert === 'SCURGERI_ULEI') {
-        const res = await fetch(`http://localhost:3001/anomalii/alerte/${selectedAlerta.dbId}/rezolva`, {
+        const res = await fetch(`${API_BASE_URL}/anomalii/alerte/${selectedAlerta.dbId}/rezolva`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ solutie }),

@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3, TrendingUp, DollarSign, PieChart, Layers, BarChart2,
@@ -39,9 +41,9 @@ export default function RapoartePage() {
     setLoading(true);
     try {
       const [resTco, resCasari, resVehicule] = await Promise.all([
-        fetch('http://localhost:3001/anvelope/comparatie-tco').then((r) => r.ok ? r.json() : []),
-        fetch('http://localhost:3001/anvelope/analitica-casari').then((r) => r.ok ? r.json() : null),
-        fetch('http://localhost:3001/vehicule').then((r) => r.ok ? r.json() : []),
+        fetch(`${API_BASE_URL}/anvelope/comparatie-tco`).then((r) => r.ok ? r.json() : []),
+        fetch(`${API_BASE_URL}/anvelope/analitica-casari`).then((r) => r.ok ? r.json() : null),
+        fetch(`${API_BASE_URL}/vehicule`).then((r) => r.ok ? r.json() : []),
       ]);
       setTcoBrands(resTco || []);
       setAnaliticaCasari(resCasari);
@@ -488,7 +490,7 @@ export default function RapoartePage() {
 
             {/* Tabelul propriu-zis */}
             <div className="overflow-x-auto border border-morning-200 rounded-xl">
-              <table className="w-full text-left text-xs text-slate-700">
+              <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
                 <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                   <tr>
                     <th className="p-3">Dată Casare</th>
@@ -621,7 +623,7 @@ export default function RapoartePage() {
           </div>
 
           <div className="overflow-x-auto border border-morning-200 rounded-xl">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Marcă Anvelopă</th>
@@ -730,7 +732,7 @@ export default function RapoartePage() {
           </div>
 
           <div className="overflow-x-auto border border-morning-200 rounded-xl">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Utilaj / Număr Intern</th>

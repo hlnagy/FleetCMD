@@ -6,8 +6,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X
 } from 'lucide-react';
+import { useSidebar } from '../lib/SidebarContext';
 
 interface SubNavItem {
   name: string;
@@ -27,6 +28,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
+  const { isOpen, close } = useSidebar();
 
   const navItems: NavItem[] = [
     { name: 'Dashboard Principal', href: '/', icon: LayoutDashboard },
@@ -81,8 +83,9 @@ export default function Sidebar() {
     '/efactura': false,
   });
 
-  // Deschidem automat secțiunea activă la schimbarea rutei
+  // Deschidem automat secțiunea activă la schimbarea rutei și închidem meniul pe mobil
   useEffect(() => {
+    close();
     if (pathname.startsWith('/stocuri')) {
       setOpenSections((prev) => ({ ...prev, '/stocuri': true }));
     } else if (pathname.startsWith('/fisa-tehnica') || pathname.startsWith('/ansambluri')) {
@@ -152,6 +155,7 @@ export default function Sidebar() {
                   <Link
                     key={sub.name}
                     href={sub.href}
+                    onClick={close}
                     className={`flex items-center space-x-2.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${
                       isSubActive
                         ? 'bg-sapphire-100 text-sapphire-900 border border-sapphire-300 font-extrabold shadow-2xs'
@@ -174,6 +178,7 @@ export default function Sidebar() {
       <div key={item.name}>
         <Link
           href={item.href}
+          onClick={close}
           className={`flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
             isActive
               ? 'bg-sapphire-500 text-white shadow-md shadow-sapphire-500/20'
@@ -188,37 +193,62 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-morning-200 flex flex-col h-screen sticky top-0 z-40 shadow-sm">
-      {/* Antet Brand */}
-      <div className="p-5 border-b border-morning-200 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-xl bg-sapphire-500 flex items-center justify-center shadow-md shadow-sapphire-500/20">
-            <Truck className="w-5 h-5 text-white" />
+    <>
+      {/* Backdrop pentru Mobile */}
+      {isOpen && (
+        <div
+          onClick={close}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          aria-label="Închide meniul lateral"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-morning-200 flex flex-col h-screen transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:z-auto shadow-2xl lg:shadow-none ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Antet Brand */}
+        <div className="p-5 border-b border-morning-200 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-sapphire-500 flex items-center justify-center shadow-md shadow-sapphire-500/20">
+              <Truck className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="font-extrabold text-base text-sapphire-900 tracking-tight flex items-center">
+                Fleet<span className="text-sapphire-500">CMD</span>
+              </h1>
+              <p className="text-[10px] text-sage-700 font-semibold uppercase tracking-wider">CMMS & FMS Enterprise RO</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-extrabold text-base text-sapphire-900 tracking-tight flex items-center">
-              Fleet<span className="text-sapphire-500">CMD</span>
-            </h1>
-            <p className="text-[10px] text-sage-700 font-semibold uppercase tracking-wider">CMMS & FMS Enterprise RO</p>
+
+          {/* Buton Închidere Drawer Mobil */}
+          <button
+            type="button"
+            onClick={close}
+            className="lg:hidden p-1.5 rounded-xl text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition"
+            title="Închide Meniul"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigație Principală */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navItems.map(renderNavItem)}
+        </nav>
+
+        {/* Subsol & Setări */}
+        <div className="p-3 border-t border-morning-200 space-y-2">
+          {renderNavItem(setariItem)}
+
+          <div className="px-3 py-1.5 bg-morning-100 rounded-xl text-[10px] text-sage-700 text-center font-medium">
+            <p className="font-bold text-sapphire-900">Sapphire Ash Morning</p>
+            <p className="text-slate-400">v2.5 Enterprise 100% Română</p>
           </div>
         </div>
-      </div>
-
-      {/* Navigație Principală */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map(renderNavItem)}
-      </nav>
-
-      {/* Subsol & Setări */}
-      <div className="p-3 border-t border-morning-200 space-y-2">
-        {renderNavItem(setariItem)}
-
-        <div className="px-3 py-1.5 bg-morning-100 rounded-xl text-[10px] text-sage-700 text-center font-medium">
-          <p className="font-bold text-sapphire-900">Sapphire Ash Morning</p>
-          <p className="text-slate-400">v2.5 Enterprise 100% Română</p>
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

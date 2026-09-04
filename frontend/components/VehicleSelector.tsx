@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Truck, Search, ChevronDown, Check, X } from 'lucide-react';
 
@@ -41,7 +43,7 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
   const fetchVehicule = useCallback(async () => {
     if (externalVehicule) return; // Don't fetch if parent supplies the list
     try {
-      const res = await fetch('http://localhost:3001/vehicule');
+      const res = await fetch(`${API_BASE_URL}/vehicule`);
       if (res.ok) {
         const data = await res.json();
         setInternalVehicule(data);

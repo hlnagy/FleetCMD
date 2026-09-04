@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
@@ -71,17 +73,17 @@ export default function FluidePage() {
 
   const fetchInitialData = async () => {
     try {
-      const resFlota = await fetch('http://localhost:3001/anomalii/flota-fluide');
+      const resFlota = await fetch(`${API_BASE_URL}/anomalii/flota-fluide`);
       if (resFlota.ok) setFlotaFluide(await resFlota.json());
 
-      const resMec = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const resMec = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (resMec.ok) {
         const dataMec = await resMec.json();
         setMecaniciList(dataMec);
         if (dataMec.length > 0) setIesireMecanic(dataMec[0].nume);
       }
 
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const dataVeh = await resVeh.json();
         setVehicule(dataVeh);
@@ -91,7 +93,7 @@ export default function FluidePage() {
         }
       }
 
-      const resStoc = await fetch('http://localhost:3001/stocuri-garantii/stocuri');
+      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
         const dataStoc = await resStoc.json();
         // Filtrăm STRICT doar articolele de tip ulei / lubrifiant / fluid (excludem categoric filtrele de ulei/aer!)
@@ -109,7 +111,7 @@ export default function FluidePage() {
         }
       }
 
-      const resAlert = await fetch('http://localhost:3001/anomalii/alerte');
+      const resAlert = await fetch(`${API_BASE_URL}/anomalii/alerte`);
       if (resAlert.ok) {
         const rawAlerts = await resAlert.json();
         const lubeAlerts = rawAlerts.filter((a: any) =>
@@ -129,7 +131,7 @@ export default function FluidePage() {
   const fetchStatusSchimburi = async (vId: string) => {
     if (!vId) return;
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/status-schimburi/${vId}`);
+      const res = await fetch(`${API_BASE_URL}/anomalii/status-schimburi/${vId}`);
       if (res.ok) setStatusSchimburi(await res.json());
     } catch (e) {
       console.log('Error fetching vehicle oil status', e);
@@ -160,7 +162,7 @@ export default function FluidePage() {
     if (!selectedVehiculId) return;
 
     try {
-      const res = await fetch('http://localhost:3001/anomalii/iesire-ulei', {
+      const res = await fetch(`${API_BASE_URL}/anomalii/iesire-ulei`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,7 +199,7 @@ export default function FluidePage() {
     if (!selectedVehiculId) return;
 
     try {
-      const res = await fetch('http://localhost:3001/anomalii/configurare-ulei', {
+      const res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,7 +229,7 @@ export default function FluidePage() {
     if (!solvingAlerta) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/alerte/${solvingAlerta.id}/rezolva`, {
+      const res = await fetch(`${API_BASE_URL}/anomalii/alerte/${solvingAlerta.id}/rezolva`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ solutie: solutieRezolvare }),
@@ -524,7 +526,7 @@ export default function FluidePage() {
 
           {/* TABEL CENTRALIZATOR STARE ULEIURI */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Utilaj / Vehicul</th>
@@ -771,7 +773,7 @@ export default function FluidePage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
+                <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
                   <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                     <tr>
                       <th className="p-3">Tip Lubrifiant</th>

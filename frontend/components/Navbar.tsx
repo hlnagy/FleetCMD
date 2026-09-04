@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
-  Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw
+  Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw, Menu
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
+import { useSidebar } from '../lib/SidebarContext';
 
 export default function Navbar() {
+  const { toggle } = useSidebar();
   const [searchQuery, setSearchQuery] = useState('');
   const [numAlerte, setNumAlerte] = useState(0);
   const [alerteList, setAlerteList] = useState<any[]>([]);
@@ -72,9 +74,19 @@ export default function Navbar() {
   const numDoc = alerteList.filter((a) => a.categorieAlert === 'DOCUMENTE_FLOTA' || a.categorieAlert === 'LICENTE_CUSTOM').length;
 
   return (
-    <header className="h-16 border-b border-morning-200 bg-white/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs">
-      {/* CĂUTARE GLOBALĂ CU AUTO-SUGESTII LIVE */}
-      <div className="relative w-full max-w-md">
+    <header className="h-16 border-b border-morning-200 bg-white/90 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 shadow-xs gap-3">
+      {/* HAMBURGER TOGGLE BUTTON & CĂUTARE GLOBALĂ */}
+      <div className="flex items-center space-x-3 w-full max-w-md">
+        <button
+          type="button"
+          onClick={toggle}
+          className="lg:hidden p-2 rounded-xl text-sage-600 hover:text-sapphire-900 hover:bg-morning-100 transition shrink-0"
+          title="Deschide Meniul Principal"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="relative w-full">
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-sage-500" />
           <input
@@ -127,6 +139,7 @@ export default function Navbar() {
             ))}
           </div>
         )}
+      </div>
       </div>
 
       {/* DREAPTA: HARANGOCSKÁ CU DROPDOWN & PROFIL USER */}

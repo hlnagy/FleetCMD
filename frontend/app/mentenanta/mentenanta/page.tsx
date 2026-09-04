@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import { Wrench, CheckCircle2, AlertTriangle, ArrowUpRight, Clock, PackageCheck, Plus, X, Trash2 } from 'lucide-react';
 
@@ -26,7 +28,7 @@ export default function MentenantaPage() {
 
   const fetchVehicule = async () => {
     try {
-      const res = await fetch('http://localhost:3001/vehicule');
+      const res = await fetch(`${API_BASE_URL}/vehicule`);
       if (res.ok) {
         const data = await res.json();
         setVehicule(data);
@@ -39,7 +41,7 @@ export default function MentenantaPage() {
 
   const fetchStocuri = async () => {
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/stocuri');
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (res.ok) {
         const data = await res.json();
         setStocuri(data);
@@ -54,7 +56,7 @@ export default function MentenantaPage() {
     if (!vId) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/vehicul/${vId}`);
+      const res = await fetch(`${API_BASE_URL}/mentenanta/vehicul/${vId}`);
       if (res.ok) {
         const data = await res.json();
         setSarcini(data);
@@ -80,7 +82,7 @@ export default function MentenantaPage() {
     if (!selectedSarcina) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/sarcina/${selectedSarcina.id}/escaladeaza`, {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/sarcina/${selectedSarcina.id}/escaladeaza`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -109,7 +111,7 @@ export default function MentenantaPage() {
     e.preventDefault();
     try {
       const selectedVeh = vehicule.find(v => v.id === selectedId);
-      const res = await fetch('http://localhost:3001/mentenanta/sarcina', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/sarcina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   CircleDot, AlertTriangle, RefreshCw, Ruler, BarChart2, Repeat, Layers, Search, Plus,
@@ -119,7 +121,7 @@ export default function AnvelopePage() {
 
   const fetchVehicule = async () => {
     try {
-      const res = await fetch('http://localhost:3001/vehicule');
+      const res = await fetch(`${API_BASE_URL}/vehicule`);
       if (res.ok) {
         const data = await res.json();
         setVehicule(data);
@@ -136,7 +138,7 @@ export default function AnvelopePage() {
   const fetchHartaAxe = async (vId: string) => {
     if (!vId) return;
     try {
-      const res = await fetch(`http://localhost:3001/anvelope/harta-axe/${vId}`);
+      const res = await fetch(`${API_BASE_URL}/anvelope/harta-axe/${vId}`);
       if (res.ok) setHartaAxe(await res.json());
     } catch (e) {
       console.log(e);
@@ -145,10 +147,10 @@ export default function AnvelopePage() {
 
   const fetchFlotaAnvelope = async () => {
     try {
-      const res = await fetch('http://localhost:3001/anvelope/flota-anvelope');
+      const res = await fetch(`${API_BASE_URL}/anvelope/flota-anvelope`);
       if (res.ok) setFlotaAnvelope(await res.json());
 
-      const resStoc = await fetch('http://localhost:3001/anvelope/stoc');
+      const resStoc = await fetch(`${API_BASE_URL}/anvelope/stoc`);
       if (resStoc.ok) setStocAnvelope(await resStoc.json());
     } catch (e) {
       console.log(e);
@@ -157,7 +159,7 @@ export default function AnvelopePage() {
 
   const fetchIstoricPermutari = async () => {
     try {
-      const res = await fetch('http://localhost:3001/anvelope/istoric-permutari');
+      const res = await fetch(`${API_BASE_URL}/anvelope/istoric-permutari`);
       if (res.ok) setIstoricPermutari(await res.json());
     } catch (e) {
       console.log(e);
@@ -166,7 +168,7 @@ export default function AnvelopePage() {
 
   const fetchTCO = async () => {
     try {
-      const res = await fetch('http://localhost:3001/anvelope/comparatie-tco');
+      const res = await fetch(`${API_BASE_URL}/anvelope/comparatie-tco`);
       if (res.ok) setTcoBrands(await res.json());
     } catch (e) {
       console.log(e);
@@ -175,7 +177,7 @@ export default function AnvelopePage() {
 
   const fetchMecanici = async () => {
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (res.ok) {
         const data = await res.json();
         setMecaniciList(data);
@@ -188,7 +190,7 @@ export default function AnvelopePage() {
 
   const fetchDepozite = async () => {
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/depozite');
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`);
       if (res.ok) {
         const data = await res.json();
         setDepoziteList(data);
@@ -229,7 +231,7 @@ export default function AnvelopePage() {
     if (!demountPozitie || !demountPozitie.anvelopa) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/anvelope/demonteaza-in-stoc/${demountPozitie.anvelopa.id}`, {
+      const res = await fetch(`${API_BASE_URL}/anvelope/demonteaza-in-stoc/${demountPozitie.anvelopa.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,7 +266,7 @@ export default function AnvelopePage() {
     setShowHistoryModal(true);
     setHistoryLoading(true);
     try {
-      const res = await fetch(`http://localhost:3001/anvelope/${anvelopaId}/istoric-complet`);
+      const res = await fetch(`${API_BASE_URL}/anvelope/${anvelopaId}/istoric-complet`);
       if (res.ok) {
         setHistoryTireData(await res.json());
       } else {
@@ -280,7 +282,7 @@ export default function AnvelopePage() {
   const handleExecutaPermutare = async () => {
     if (!pozitieA || !pozitieB) return;
     try {
-      const res = await fetch('http://localhost:3001/anvelope/permuta-doua-pozitii', {
+      const res = await fetch(`${API_BASE_URL}/anvelope/permuta-doua-pozitii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -341,7 +343,7 @@ export default function AnvelopePage() {
       : undefined;
 
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${selectedId}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/${selectedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -371,7 +373,7 @@ export default function AnvelopePage() {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/anvelope/inregistreaza-anvelopa', {
+      const res = await fetch(`${API_BASE_URL}/anvelope/inregistreaza-anvelopa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -425,7 +427,7 @@ export default function AnvelopePage() {
     const selectedItem = stocAnvelope.find((s) => s.id === selectedAnvelopaDinStocId);
 
     try {
-      const res = await fetch('http://localhost:3001/anvelope/monteaza', {
+      const res = await fetch(`${API_BASE_URL}/anvelope/monteaza`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -498,7 +500,7 @@ export default function AnvelopePage() {
 
   useEffect(() => {
     if (selectedVehiculForAdd) {
-      fetch(`http://localhost:3001/anvelope/harta-axe/${selectedVehiculForAdd}`)
+      fetch(`${API_BASE_URL}/anvelope/harta-axe/${selectedVehiculForAdd}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data) setModalHartaAxe(data);
@@ -858,7 +860,7 @@ export default function AnvelopePage() {
         <div className="pleasant-card rounded-2xl p-6 space-y-4">
           <h2 className="text-base font-bold text-sapphire-900">Registrul Centralizat al Anvelopelor din Flotă</h2>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[950px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                 <tr>
                   <th className="p-3">Serie Anvelopă</th>
@@ -922,7 +924,7 @@ export default function AnvelopePage() {
         <div className="pleasant-card rounded-2xl p-6 space-y-4">
           <h2 className="text-base font-bold text-sapphire-900">📜 Registru Audit Schimburi & Permutări Roți (Istoric Mutări)</h2>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                 <tr>
                   <th className="p-3">Dată Intervenție</th>
@@ -1681,8 +1683,8 @@ export default function AnvelopePage() {
                   </h5>
 
                   {historyTireData.istoric && historyTireData.istoric.length > 0 ? (
-                    <div className="border border-morning-200 rounded-xl overflow-hidden">
-                      <table className="w-full text-left text-xs text-slate-700">
+                    <div className="border border-morning-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-700 min-w-[750px]">
                         <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                           <tr>
                             <th className="p-2.5">Data</th>

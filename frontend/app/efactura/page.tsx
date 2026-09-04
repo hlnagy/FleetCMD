@@ -1164,8 +1164,8 @@ function EFacturaContent() {
         )}
 
         {/* TABEL FACTURI PRIMITE */}
-        <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
-          <table className="w-full text-left border-collapse text-xs">
+        <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+          <table className="w-full text-left border-collapse text-xs min-w-[1000px]">
             <thead>
               <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[11px] select-none">
                 <th className="p-3 w-10 text-center">
@@ -1851,7 +1851,7 @@ function EFacturaContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Data Recepției</th>

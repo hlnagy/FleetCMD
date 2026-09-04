@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -127,7 +129,7 @@ function StocuriGarantiiContent() {
   const fetchData = async () => {
     try {
       // Fetch Depozite
-      const resDep = await fetch('http://localhost:3001/stocuri-garantii/depozite');
+      const resDep = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`);
       if (resDep.ok) {
         const depData = await resDep.json();
         setDepozite(depData);
@@ -137,14 +139,14 @@ function StocuriGarantiiContent() {
       }
 
       // Fetch Categorii
-      const resCat = await fetch('http://localhost:3001/stocuri-garantii/categorii');
+      const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
       if (resCat.ok) {
         const catData = await resCat.json();
         setCategorii([...catData.categoriiImplicite, ...catData.categoriiCustom]);
       }
 
       // Fetch Stocuri Critice
-      const resCrit = await fetch('http://localhost:3001/stocuri-garantii/stocuri-critice');
+      const resCrit = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri-critice`);
       if (resCrit.ok) {
         const critData = await resCrit.json();
         setStocuriCritice(critData.articoleCritice || []);
@@ -158,30 +160,30 @@ function StocuriGarantiiContent() {
       if (selectedStatusFilter !== 'TOATE') queryParams.append('statusStoc', selectedStatusFilter);
       if (searchQuery) queryParams.append('cautare', searchQuery);
 
-      const resStoc = await fetch(`http://localhost:3001/stocuri-garantii/stocuri?${queryParams.toString()}`);
+      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri?${queryParams.toString()}`);
       if (resStoc.ok) setStocuri(await resStoc.json());
 
       // Fetch Istoric Intrări (Facturi)
-      const resIntrari = await fetch('http://localhost:3001/stocuri-garantii/intrare-stoc');
+      const resIntrari = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`);
       if (resIntrari.ok) setIntrariHistory(await resIntrari.json());
 
       // Fetch Istoric Transferuri
-      const resTrans = await fetch('http://localhost:3001/stocuri-garantii/istoric-transferuri');
+      const resTrans = await fetch(`${API_BASE_URL}/stocuri-garantii/istoric-transferuri`);
       if (resTrans.ok) setTransferuriHistory(await resTrans.json());
 
       // Fetch Componente Serializate în Garanție
-      const resComp = await fetch('http://localhost:3001/stocuri-garantii/componente-serializate');
+      const resComp = await fetch(`${API_BASE_URL}/stocuri-garantii/componente-serializate`);
       if (resComp.ok) setComponente(await resComp.json());
 
       // Fetch Mecanici Atelier
-      const resMecanici = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const resMecanici = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (resMecanici.ok) {
         const mecData = await resMecanici.json();
         setMecanici(mecData);
       }
 
       // Fetch Magazie Anvelope Serializate din Depozite
-      const resAnvStoc = await fetch('http://localhost:3001/anvelope/depozit-stoc');
+      const resAnvStoc = await fetch(`${API_BASE_URL}/anvelope/depozit-stoc`);
       if (resAnvStoc.ok) {
         setAnvelopeStocList(await resAnvStoc.json());
       }
@@ -203,7 +205,7 @@ function StocuriGarantiiContent() {
     e.preventDefault();
     if (!numeSubcatNoua || !targetCatForSubcat) return;
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/subcategorii', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/subcategorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -233,7 +235,7 @@ function StocuriGarantiiContent() {
     if (!transferArticol) return;
 
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/transfer-stoc', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/transfer-stoc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,7 +266,7 @@ function StocuriGarantiiContent() {
   const handleCreateCategorie = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/categorii', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -290,7 +292,7 @@ function StocuriGarantiiContent() {
   const handleCreateDepozit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/depozite', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -319,7 +321,7 @@ function StocuriGarantiiContent() {
     if (!editingDepozit) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${editingDepozit.id}`, {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite/${editingDepozit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingDepozit),
@@ -345,7 +347,7 @@ function StocuriGarantiiContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setEditingDepozit(null);
         fetchData();
@@ -360,7 +362,7 @@ function StocuriGarantiiContent() {
   const handleCreateArticol = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/stocuri', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -393,7 +395,7 @@ function StocuriGarantiiContent() {
   const handleBevetelez = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/stocuri-garantii/intrare-stoc', {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -446,7 +448,7 @@ function StocuriGarantiiContent() {
         stocCurent: Number(Number(editingArticol.stocCurent || 0).toFixed(2)),
         stocMinim: Number(Number(editingArticol.stocMinim || 0).toFixed(2)),
       };
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/stocuri/${editingArticol.id}`, {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingArticol.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -471,7 +473,7 @@ function StocuriGarantiiContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/stocuri/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setEditingArticol(null);
         fetchData();
@@ -498,7 +500,7 @@ function StocuriGarantiiContent() {
         pretAchizitie: Number(Number(editingAnvelopaStoc.pretAchizitie || 0).toFixed(2)),
         depozitId: editingAnvelopaStoc.depozitId,
       };
-      const res = await fetch(`http://localhost:3001/anvelope/${editingAnvelopaStoc.id}`, {
+      const res = await fetch(`${API_BASE_URL}/anvelope/${editingAnvelopaStoc.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -523,7 +525,7 @@ function StocuriGarantiiContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/anvelope/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/anvelope/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setEditingAnvelopaStoc(null);
         fetchData();
@@ -541,7 +543,7 @@ function StocuriGarantiiContent() {
       newBatchAnv.depozitId = depozite[0].id;
     }
     try {
-      const res = await fetch('http://localhost:3001/anvelope/adauga-stoc-serializat', {
+      const res = await fetch(`${API_BASE_URL}/anvelope/adauga-stoc-serializat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -565,7 +567,7 @@ function StocuriGarantiiContent() {
     e.preventDefault();
     if (!selectedComp) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/demonteaza-componenta`, {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/demonteaza-componenta`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -829,7 +831,7 @@ function StocuriGarantiiContent() {
 
           {/* Tabel Stocuri */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[1000px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Cod Articol</th>
@@ -838,7 +840,7 @@ function StocuriGarantiiContent() {
                   <th className="p-3">Depozit Curent</th>
                   <th className="p-3">Stoc Curent / Minim</th>
                   <th className="p-3 font-mono">Preț Unitar</th>
-                  <th className="p-3 text-right">Acțiuni Stoc & Transfer</th>
+                  <th className="p-3 text-right whitespace-nowrap min-w-[220px]">Acțiuni Stoc & Transfer</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200">
@@ -897,7 +899,7 @@ function StocuriGarantiiContent() {
                       <td className="p-3 font-mono font-bold text-sapphire-900">
                         {Number(s.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON / {s.unitateMasura}
                       </td>
-                      <td className="p-3 text-right space-x-1.5">
+                      <td className="p-3 text-right space-x-1.5 whitespace-nowrap min-w-[220px]">
                         <button
                           onClick={() => {
                             setTransferArticol(s);
@@ -1266,7 +1268,7 @@ function StocuriGarantiiContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
                   <th className="p-3">Componentă / Serie Unică (SN)</th>
@@ -1274,7 +1276,7 @@ function StocuriGarantiiContent() {
                   <th className="p-3">Utilaj Montat</th>
                   <th className="p-3">Durată Garanție (Luni / Rulaj)</th>
                   <th className="p-3">Stare Garanție</th>
-                  <th className="p-3 text-right">Acțiune Atelier</th>
+                  <th className="p-3 text-right whitespace-nowrap min-w-[160px]">Acțiune Atelier</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200">

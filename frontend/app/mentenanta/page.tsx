@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   Wrench, CheckCircle2, AlertTriangle, ArrowUpRight, Clock, PackageCheck, Plus, X, Trash2,
@@ -41,20 +43,20 @@ export default function MentenantaPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const resFlota = await fetch('http://localhost:3001/mentenanta/flota-sarcini');
+      const resFlota = await fetch(`${API_BASE_URL}/mentenanta/flota-sarcini`);
       if (resFlota.ok) {
         const flotaData = await resFlota.json();
         setToateSarcinile(flotaData);
       }
 
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const vehData = await resVeh.json();
         setVehicule(vehData);
         if (vehData.length > 0 && !targetVehiculId) setTargetVehiculId(vehData[0].id);
       }
 
-      const resStoc = await fetch('http://localhost:3001/stocuri-garantii/stocuri');
+      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
         const stData = await resStoc.json();
         setStocuri(stData);
@@ -64,7 +66,7 @@ export default function MentenantaPage() {
         }
       }
 
-      const resMec = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const resMec = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (resMec.ok) {
         const mecData = await resMec.json();
         setMecaniciList(mecData);
@@ -90,7 +92,7 @@ export default function MentenantaPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/sarcina/${sarcina.id}/finalizeaza-direct`, {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/sarcina/${sarcina.id}/finalizeaza-direct`, {
         method: 'PATCH',
       });
 
@@ -136,7 +138,7 @@ export default function MentenantaPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/sarcina/${selectedSarcina.id}/escaladeaza`, {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/sarcina/${selectedSarcina.id}/escaladeaza`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -168,7 +170,7 @@ export default function MentenantaPage() {
     e.preventDefault();
     try {
       const selectedVeh = vehicule.find((v) => v.id === targetVehiculId);
-      const res = await fetch('http://localhost:3001/mentenanta/sarcina', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/sarcina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

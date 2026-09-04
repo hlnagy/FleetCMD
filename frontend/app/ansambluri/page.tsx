@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   Link2, Unlink, Truck, Search, Activity, Clock, CheckCircle2,
@@ -25,7 +27,7 @@ export default function AnsambluriPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const dataVeh = await resVeh.json();
         setVehicule(dataVeh);
@@ -42,12 +44,12 @@ export default function AnsambluriPage() {
         }
       }
 
-      const resActive = await fetch('http://localhost:3001/vehicule/cuplari-active');
+      const resActive = await fetch(`${API_BASE_URL}/vehicule/cuplari-active`);
       if (resActive.ok) {
         setCuplariActive(await resActive.json());
       }
 
-      const resHist = await fetch('http://localhost:3001/vehicule/istoric-cuplari');
+      const resHist = await fetch(`${API_BASE_URL}/vehicule/istoric-cuplari`);
       if (resHist.ok) {
         setIstoricCuplari(await resHist.json());
       }
@@ -74,7 +76,7 @@ export default function AnsambluriPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('http://localhost:3001/vehicule/cuplare', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/cuplare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,7 +109,7 @@ export default function AnsambluriPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch('http://localhost:3001/vehicule/decuplare', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/decuplare`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cuplareId }),
@@ -393,7 +395,7 @@ export default function AnsambluriPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
             <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
               <tr>
                 <th className="p-3">Stare</th>

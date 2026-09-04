@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
@@ -65,7 +67,7 @@ export default function ComenziLucruPage() {
   const fetchData = async () => {
     try {
       // Fetch Vehicule & Comenzi
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const data = await resVeh.json();
         setVehicule(data);
@@ -97,7 +99,7 @@ export default function ComenziLucruPage() {
       }
 
       // Fetch Stocuri
-      const resStoc = await fetch('http://localhost:3001/stocuri-garantii/stocuri');
+      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
         const stData = await resStoc.json();
         setStocuri(stData);
@@ -109,7 +111,7 @@ export default function ComenziLucruPage() {
       }
 
       // Fetch Mecanici
-      const resMec = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const resMec = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (resMec.ok) {
         const mecData = await resMec.json();
         setMecaniciList(mecData);
@@ -167,7 +169,7 @@ export default function ComenziLucruPage() {
   const handleCreateMecanic = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/mecanici', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,7 +239,7 @@ export default function ComenziLucruPage() {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/comanda-lucru', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -253,7 +255,7 @@ export default function ComenziLucruPage() {
         const com = await res.json();
 
         if (autoFinalize) {
-          await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${com.id}/finalizeaza`, { method: 'PATCH' });
+          await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${com.id}/finalizeaza`, { method: 'PATCH' });
           alert(`Comandă de lucru ${com.numarComanda} creată și FINALIZATĂ direct!`);
         } else {
           alert(`Comandă de lucru ${com.numarComanda} deschisă în atelier pe starea ÎN LUCRU (Dată deschidere: ${new Date().toLocaleDateString('ro-RO')})! Puteți adăuga piese suplimentare mai jos.`);
@@ -280,7 +282,7 @@ export default function ComenziLucruPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${showAddElementModal.id}/adauga-element`, {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${showAddElementModal.id}/adauga-element`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,7 +315,7 @@ export default function ComenziLucruPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/finalizeaza`, { method: 'PATCH' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}/finalizeaza`, { method: 'PATCH' });
       if (res.ok) {
         fetchData();
         alert(`Comanda ${numarComanda} a fost FINALIZATĂ! Data finalizării a fost înregistrată, iar stocul a fost actualizat.`);
@@ -335,7 +337,7 @@ export default function ComenziLucruPage() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/anuleaza`, { method: 'PATCH' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}/anuleaza`, { method: 'PATCH' });
       if (res.ok) {
         fetchData();
         alert('Comandă anulată. Stocul a fost restaurat cu succes în gestiunea internă!');
@@ -356,7 +358,7 @@ export default function ComenziLucruPage() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${id}/devalideaza`, { method: 'PATCH' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}/devalideaza`, { method: 'PATCH' });
       if (res.ok) {
         fetchData();
         alert(`Comanda ${numarComanda} a fost DEVALIDATĂ cu succes!\n\nAcum sunt disponibile opțiunile "Editare" și "Anulare".`);
@@ -383,7 +385,7 @@ export default function ComenziLucruPage() {
     if (!showEditModal) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/comanda-lucru/${showEditModal.id}/update`, {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${showEditModal.id}/update`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -673,7 +675,7 @@ export default function ComenziLucruPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full text-left text-xs text-slate-700 min-w-[1100px]">
             <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
               <tr>
                 <th className="p-3">Număr Comandă</th>
@@ -683,7 +685,7 @@ export default function ComenziLucruPage() {
                 <th className="p-3">Elemente & Piese Consumate</th>
                 <th className="p-3">Stare Comandă</th>
                 <th className="p-3 font-mono text-right">Valoare Totală</th>
-                <th className="p-3 text-right">Acțiuni Management</th>
+                <th className="p-3 text-right whitespace-nowrap min-w-[280px]">Acțiuni Management</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-morning-200">
@@ -770,7 +772,7 @@ export default function ComenziLucruPage() {
                     </td>
 
                     {/* ─── ACȚIUNI MANAGEMENT (USER STRICT LOGIC) ─── */}
-                    <td className="p-3 text-right space-x-1 flex items-center justify-end">
+                    <td className="p-3 text-right space-x-1 flex items-center justify-end whitespace-nowrap min-w-[280px]">
                       {/* VIZUALIZARE (A4 Printable PDF Modal) */}
                       <button
                         onClick={() => setShowViewModal(cl)}

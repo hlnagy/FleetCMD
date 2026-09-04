@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -143,7 +145,7 @@ function SetariContent() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const resVeh = await fetch('http://localhost:3001/vehicule');
+      const resVeh = await fetch(`${API_BASE_URL}/vehicule`);
       if (resVeh.ok) {
         const vList = await resVeh.json();
         const arr = Array.isArray(vList) ? vList : (vList?.data || vList?.items || []);
@@ -151,7 +153,7 @@ function SetariContent() {
         if (arr.length > 0 && !docVehiculId) setDocVehiculId(arr[0].id);
       }
 
-      const resCatVeh = await fetch('http://localhost:3001/vehicule/categorii');
+      const resCatVeh = await fetch(`${API_BASE_URL}/vehicule/categorii`);
       if (resCatVeh.ok) {
         const cData = await resCatVeh.json();
         const merged = [
@@ -161,19 +163,19 @@ function SetariContent() {
         setCategoriiVehicul(merged);
       }
 
-      const resMec = await fetch('http://localhost:3001/mentenanta/mecanici');
+      const resMec = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
       if (resMec.ok) {
         const mList = await resMec.json();
         setMecanici(Array.isArray(mList) ? mList : []);
       }
 
-      const resDep = await fetch('http://localhost:3001/stocuri-garantii/depozite');
+      const resDep = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`);
       if (resDep.ok) {
         const dList = await resDep.json();
         setDepozite(Array.isArray(dList) ? dList : []);
       }
 
-      const resCat = await fetch('http://localhost:3001/stocuri-garantii/categorii');
+      const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
       if (resCat.ok) {
         const cData = await resCat.json();
         const cArr = [
@@ -183,19 +185,19 @@ function SetariContent() {
         setCategorii(cArr);
       }
 
-      const resReguli = await fetch('http://localhost:3001/anomalii/reguli-mentenanta');
+      const resReguli = await fetch(`${API_BASE_URL}/anomalii/reguli-mentenanta`);
       if (resReguli.ok) {
         const rList = await resReguli.json();
         setReguli(Array.isArray(rList) ? rList : []);
       }
 
-      const resDocs = await fetch('http://localhost:3001/anomalii/documente-vehicule');
+      const resDocs = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule`);
       if (resDocs.ok) {
         const docList = await resDocs.json();
         setDocumente(Array.isArray(docList) ? docList : []);
       }
 
-      const resCust = await fetch('http://localhost:3001/anomalii/alerte-personalizate');
+      const resCust = await fetch(`${API_BASE_URL}/anomalii/alerte-personalizate`);
       if (resCust.ok) {
         const custList = await resCust.json();
         setAlertePersonalizate(Array.isArray(custList) ? custList : []);
@@ -231,7 +233,7 @@ function SetariContent() {
       return;
     }
     try {
-      const res = await fetch('http://localhost:3001/vehicule', {
+      const res = await fetch(`${API_BASE_URL}/vehicule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -276,7 +278,7 @@ function SetariContent() {
     e.preventDefault();
     if (!editingVehicul) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${editingVehicul.id}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/${editingVehicul.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -313,7 +315,7 @@ function SetariContent() {
       return;
     }
     try {
-      const res = await fetch('http://localhost:3001/vehicule/categorii', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -346,7 +348,7 @@ function SetariContent() {
     e.preventDefault();
     if (!editingVehiculCat) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/categorii/${editingVehiculCat.id}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${editingVehiculCat.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -377,7 +379,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/categorii/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -401,7 +403,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) {
         alert('Vehicul șters din sistem.');
         fetchData();
@@ -418,7 +420,7 @@ function SetariContent() {
     e.preventDefault();
     if (!newMecanicNume) return;
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/mecanici', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -452,7 +454,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/mentenanta/mecanici/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici/${id}`, { method: 'DELETE' });
       if (res.ok) {
         const data = await res.json();
         alert(data.mesaj || 'Mecanic eliminat din lista activă.');
@@ -474,8 +476,8 @@ function SetariContent() {
     if (!numeDepozitNou) return;
     try {
       const url = editingDepozit
-        ? `http://localhost:3001/stocuri-garantii/depozite/${editingDepozit.id}`
-        : 'http://localhost:3001/stocuri-garantii/depozite';
+        ? `${API_BASE_URL}/stocuri-garantii/depozite/${editingDepozit.id}`
+        : `${API_BASE_URL}/stocuri-garantii/depozite`;
       const method = editingDepozit ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -530,7 +532,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite/${id}`, { method: 'DELETE' });
       if (res.ok) {
         alert('Depozit șters.');
         fetchData();
@@ -567,8 +569,8 @@ function SetariContent() {
     }
     try {
       const url = editingCat
-        ? `http://localhost:3001/stocuri-garantii/categorii/${editingCat.id}`
-        : 'http://localhost:3001/stocuri-garantii/categorii';
+        ? `${API_BASE_URL}/stocuri-garantii/categorii/${editingCat.id}`
+        : `${API_BASE_URL}/stocuri-garantii/categorii`;
       const method = editingCat ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -606,7 +608,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/categorii/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii/${id}`, { method: 'DELETE' });
       if (res.ok) {
         alert(`Categoria "${nume}" a fost ștearsă.`);
         fetchData();
@@ -643,8 +645,8 @@ function SetariContent() {
     }
     try {
       const url = editingSubcat
-        ? `http://localhost:3001/stocuri-garantii/subcategorii/${editingSubcat.id}`
-        : 'http://localhost:3001/stocuri-garantii/subcategorii';
+        ? `${API_BASE_URL}/stocuri-garantii/subcategorii/${editingSubcat.id}`
+        : `${API_BASE_URL}/stocuri-garantii/subcategorii`;
       const method = editingSubcat ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -682,7 +684,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/stocuri-garantii/subcategorii/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/subcategorii/${id}`, { method: 'DELETE' });
       if (res.ok) {
         alert(`Subcategoria "${nume}" a fost ștearsă.`);
         fetchData();
@@ -725,8 +727,8 @@ function SetariContent() {
     if (!regulaOperatiune) return;
     try {
       const url = editingRegula
-        ? `http://localhost:3001/anomalii/reguli-mentenanta/${editingRegula.id}`
-        : 'http://localhost:3001/anomalii/reguli-mentenanta';
+        ? `${API_BASE_URL}/anomalii/reguli-mentenanta/${editingRegula.id}`
+        : `${API_BASE_URL}/anomalii/reguli-mentenanta`;
       const method = editingRegula ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -761,7 +763,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/reguli-mentenanta/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/anomalii/reguli-mentenanta/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (e) {
       alert('Eroare la ștergere.');
@@ -783,8 +785,8 @@ function SetariContent() {
     if (!docVehiculId || !docDataExpirare) return;
     try {
       const url = editingDoc
-        ? `http://localhost:3001/anomalii/documente-vehicule/${editingDoc.id}`
-        : 'http://localhost:3001/anomalii/documente-vehicule';
+        ? `${API_BASE_URL}/anomalii/documente-vehicule/${editingDoc.id}`
+        : `${API_BASE_URL}/anomalii/documente-vehicule`;
       const method = editingDoc ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -819,7 +821,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/documente-vehicule/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (e) {
       alert('Eroare la ștergere.');
@@ -842,8 +844,8 @@ function SetariContent() {
     if (!customTitlu || !customDataExpirare) return;
     try {
       const url = editingCustom
-        ? `http://localhost:3001/anomalii/alerte-personalizate/${editingCustom.id}`
-        : 'http://localhost:3001/anomalii/alerte-personalizate';
+        ? `${API_BASE_URL}/anomalii/alerte-personalizate/${editingCustom.id}`
+        : `${API_BASE_URL}/anomalii/alerte-personalizate`;
       const method = editingCustom ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -878,7 +880,7 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/alerte-personalizate/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/anomalii/alerte-personalizate/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
     } catch (e) {
       alert('Eroare la ștergere.');
@@ -1107,8 +1109,8 @@ function SetariContent() {
             </div>
           )}
 
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[950px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider select-none">
                   {/* OSZLOP 1: COD INTERN (CLICK SORTS A-Z / Z-A) */}
@@ -1188,7 +1190,7 @@ function SetariContent() {
 
                   <th className="p-3">Contor Curent</th>
                   <th className="p-3">Tarif Orar Atelier</th>
-                  <th className="p-3 text-right">Acțiuni</th>
+                  <th className="p-3 text-right whitespace-nowrap min-w-[170px]">Acțiuni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
@@ -1219,7 +1221,7 @@ function SetariContent() {
                     <td className="p-3 font-mono text-sage-700">
                       {v.tarifOrarManoperaAtelier || v.tarifOrarStandard ? `${v.tarifOrarManoperaAtelier || v.tarifOrarStandard} RON/h` : '0 RON/h'}
                     </td>
-                    <td className="p-3 text-right space-x-2">
+                    <td className="p-3 text-right space-x-2 whitespace-nowrap min-w-[170px]">
                       <button
                         onClick={() => openEditVehicul(v)}
                         className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold transition border border-sapphire-200"
@@ -1474,8 +1476,8 @@ function SetariContent() {
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[850px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
                   <th className="p-3">Operatiune</th>
@@ -1537,8 +1539,8 @@ function SetariContent() {
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[850px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
                   <th className="p-3">Vehicul</th>
@@ -1593,8 +1595,8 @@ function SetariContent() {
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+            <table className="w-full text-left border-collapse text-xs min-w-[850px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
                   <th className="p-3">Titlu Alertă</th>

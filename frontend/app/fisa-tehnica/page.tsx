@@ -1,5 +1,7 @@
 "use client";
 
+import { API_BASE_URL } from '@/lib/api';
+
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -93,7 +95,7 @@ export default function FisaTehnicaPage() {
   const fetchVehicule = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:3001/vehicule');
+      const res = await fetch(`${API_BASE_URL}/vehicule`);
       if (res.ok) {
         const data = await res.json();
         setVehicule(data);
@@ -110,7 +112,7 @@ export default function FisaTehnicaPage() {
       }
 
       // Fetch active alerts count per vehicle
-      const resAlerte = await fetch('http://localhost:3001/anomalii/alerte-centralizate');
+      const resAlerte = await fetch(`${API_BASE_URL}/anomalii/alerte-centralizate`);
       if (resAlerte.ok) {
         const listAlerte = await resAlerte.json();
         const map: { [vehId: string]: number } = {};
@@ -131,7 +133,7 @@ export default function FisaTehnicaPage() {
   const fetchFisa = async (id: string) => {
     if (!id) return;
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${id}/fisa-tehnica`);
+      const res = await fetch(`${API_BASE_URL}/vehicule/${id}/fisa-tehnica`);
       if (res.ok) {
         const data = await res.json();
         setFisaData(data);
@@ -172,7 +174,7 @@ export default function FisaTehnicaPage() {
   const fetchBaselines = async (vehId: string) => {
     if (!vehId) return;
     try {
-      const res = await fetch(`http://localhost:3001/anomalii/baselines-vehicul/${vehId}`);
+      const res = await fetch(`${API_BASE_URL}/anomalii/baselines-vehicul/${vehId}`);
       if (res.ok) {
         setBaselinesList(await res.json());
       }
@@ -183,7 +185,7 @@ export default function FisaTehnicaPage() {
 
   const fetchIstoricContoare = async () => {
     try {
-      const res = await fetch('http://localhost:3001/vehicule/istoric-contoare');
+      const res = await fetch(`${API_BASE_URL}/vehicule/istoric-contoare`);
       if (res.ok) setIstoricContoare(await res.json());
     } catch (e) {
       console.log('Error fetching istoric contoare', e);
@@ -233,7 +235,7 @@ export default function FisaTehnicaPage() {
     if (!showBaselineModal || !selectedId) return;
 
     try {
-      const res = await fetch('http://localhost:3001/anomalii/setare-baseline-vehicul', {
+      const res = await fetch(`${API_BASE_URL}/anomalii/setare-baseline-vehicul`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -262,7 +264,7 @@ export default function FisaTehnicaPage() {
     if (!showRezolvatRapidModal || !selectedId) return;
 
     try {
-      const res = await fetch('http://localhost:3001/anomalii/setare-baseline-vehicul', {
+      const res = await fetch(`${API_BASE_URL}/anomalii/setare-baseline-vehicul`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -298,7 +300,7 @@ export default function FisaTehnicaPage() {
     if (!vehiculActiv) return;
 
     try {
-      const res = await fetch('http://localhost:3001/mentenanta/comenzi-lucru', {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comenzi-lucru`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -337,7 +339,7 @@ export default function FisaTehnicaPage() {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/vehicule/inregistrare-contor', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/inregistrare-contor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -382,7 +384,7 @@ export default function FisaTehnicaPage() {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/vehicule/inregistrare-contoare-batch', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/inregistrare-contoare-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entries }),
@@ -433,7 +435,7 @@ export default function FisaTehnicaPage() {
     }
 
     try {
-      const res = await fetch('http://localhost:3001/vehicule/import-gps', {
+      const res = await fetch(`${API_BASE_URL}/vehicule/import-gps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ records }),
@@ -456,7 +458,7 @@ export default function FisaTehnicaPage() {
   const handleAddVehicul = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/vehicule', {
+      const res = await fetch(`${API_BASE_URL}/vehicule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -495,7 +497,7 @@ export default function FisaTehnicaPage() {
     if (!selectedId) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/vehicule/${selectedId}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/${selectedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -684,7 +686,7 @@ export default function FisaTehnicaPage() {
 
           {/* TABEL CENTRALIZAT FLOTĂ */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[950px]">
               <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                 <tr>
                   <th className="p-3">Cod Intern Utilaj</th>
@@ -693,7 +695,7 @@ export default function FisaTehnicaPage() {
                   <th className="p-3 font-mono">Contor Curent</th>
                   <th className="p-3">Stare Operativă</th>
                   <th className="p-3 text-center">Status Alerte Active</th>
-                  <th className="p-3 text-right">Acțiuni</th>
+                  <th className="p-3 text-right whitespace-nowrap min-w-[180px]">Acțiuni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 font-medium">
@@ -735,7 +737,7 @@ export default function FisaTehnicaPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-3 text-right whitespace-nowrap min-w-[180px]">
                         <button
                           onClick={() => {
                             setSelectedId(v.id);
@@ -946,7 +948,7 @@ export default function FisaTehnicaPage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
+                <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
                   <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                     <tr>
                       <th className="p-3">Operațiune Mentenanță</th>
@@ -1050,7 +1052,7 @@ export default function FisaTehnicaPage() {
             <div className="pleasant-card rounded-2xl p-6 space-y-4">
               <h3 className="text-base font-bold text-sapphire-900">Istoric Comenzi de Lucru & Facturi Intervenții</h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-700">
+                <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
                   <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
                     <tr>
                       <th className="p-3">Număr Comandă</th>
