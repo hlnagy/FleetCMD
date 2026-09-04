@@ -1057,41 +1057,6 @@ function SetariContent() {
 
       {activeTab === 'vehicule' && (
         <div className="space-y-4">
-          {/* STATS HEADER CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
-              <div className="w-12 h-12 rounded-xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-center text-sapphire-600 shadow-xs shrink-0">
-                <Truck className="w-6 h-6" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Total Flotă Înregistrată</p>
-                <p className="text-xl font-black text-sapphire-900 truncate">{vehicule.length} Vehicule & Utilaje</p>
-              </div>
-            </div>
-
-            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
-              <div className="w-12 h-12 rounded-xl bg-periwinkle-50 border border-periwinkle-200 flex items-center justify-center text-periwinkle-700 shadow-xs shrink-0">
-                <Layers className="w-6 h-6" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Categorii Echipamente</p>
-                <p className="text-xl font-black text-sapphire-900 truncate">{categoriiVehicul.length} Categorii Active</p>
-              </div>
-            </div>
-
-            <div className="pleasant-card p-4 rounded-2xl border border-morning-200 bg-white flex items-center space-x-4 shadow-2xs">
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 shadow-xs shrink-0">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-sage-600 font-bold uppercase tracking-wider">Rulaj Total Înregistrat</p>
-                <p className="text-xl font-black text-sapphire-900 font-mono truncate">
-                  {vehicule.reduce((sum, v) => sum + (Number(v.valoareContorCurent) || 0), 0).toLocaleString('ro-RO')} <span className="text-xs font-bold text-sage-600">KM/mTH</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
           {/* SEARCH & ACTIONS BAR */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div className="relative flex-1 max-w-lg">

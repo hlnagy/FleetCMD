@@ -167,49 +167,6 @@ export default function AnsambluriPage() {
         </button>
       </div>
 
-      {/* DASHBOARD SUMMARY KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-sapphire-50 border border-sapphire-200 text-sapphire-700">
-            <Link2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Ansambluri Active</span>
-            <span className="text-xl font-black font-mono text-sapphire-900">{cuplariActive.length}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-morning-100 border border-morning-300 text-sapphire-900">
-            <Truck className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Capete Tractoare</span>
-            <span className="text-xl font-black font-mono text-slate-800">{capTractoare.length}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-morning-100 border border-morning-300 text-sapphire-900">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Semiremorci Flotă</span>
-            <span className="text-xl font-black font-mono text-slate-800">{semiremorci.length}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-sapphire-50 border border-sapphire-200 text-sapphire-700">
-            <Activity className="w-5 h-5 text-sapphire-600" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Total Cuplări Înregistrate</span>
-            <span className="text-xl font-black font-mono text-sapphire-900">{istoricCuplari.length}</span>
-          </div>
-        </div>
-      </div>
-
       {/* SECTOR 1: WIDGET CUPLARE RAPIDĂ */}
       <div className="pleasant-card rounded-2xl p-6 space-y-4 shadow-lg border border-morning-200">
         <div className="border-b border-morning-200 pb-3">

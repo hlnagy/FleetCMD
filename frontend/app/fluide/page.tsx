@@ -306,49 +306,6 @@ export default function FluidePage() {
         </div>
       </div>
 
-      {/* KPI DASHBOARD CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-sapphire-50 border border-sapphire-200 text-sapphire-700">
-            <Activity className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Puncte Fluide Active</span>
-            <span className="text-xl font-black font-mono text-sapphire-900">{totalPuncte}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-roseash-100 border border-roseash-300 text-terracotta-600">
-            <AlertTriangle className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Schimburi Depășite</span>
-            <span className="text-xl font-black font-mono text-terracotta-600">{numDepasite}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-morning-100 border border-morning-300 text-slate-800">
-            <Clock className="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">În Prag Avertizare</span>
-            <span className="text-xl font-black font-mono text-slate-800">{numAvertizari}</span>
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center space-x-3">
-          <div className="p-3 rounded-xl bg-terracotta-100 border border-terracotta-300 text-terracotta-700">
-            <ShieldAlert className="w-5 h-5 animate-bounce text-terracotta-600" />
-          </div>
-          <div>
-            <span className="text-xs text-sage-600 font-semibold block">Alerte Active Lubrifianți</span>
-            <span className="text-xl font-black font-mono text-terracotta-700">{alerte.length}</span>
-          </div>
-        </div>
-      </div>
-
       {/* BANNER ALERTE ACTIVE SCHIMB ULEI & FLUIDE */}
       {alerte.length > 0 && (
         <div className="p-4 rounded-2xl bg-roseash-100 border-2 border-roseash-300 space-y-3 shadow-xs transition-all">

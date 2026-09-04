@@ -246,37 +246,6 @@ export default function MentenantaPage() {
         </div>
       </div>
 
-      {/* BANNER KPIS & REGULĂ IERARHICĂ */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-periwinkle-100 border border-periwinkle-300 text-xs text-sapphire-900 md:col-span-2 flex items-start space-x-3 shadow-xs">
-          <Clock className="w-5 h-5 text-periwinkle-700 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-periwinkle-700">Regulă Ierarhică Activă (Superseding Logic):</p>
-            <p className="mt-0.5 text-slate-700 font-medium">
-              Inspecțiile simple se pot finaliza 1-Click. Sarcinile de tip <strong>SCHIMB_PIESA / ULEI</strong> necesită deschiderea unei <strong>Comenzi de Lucru</strong>. Piesa din dezmembrări nu modifică stocul principal!
-            </p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-roseash-100 border-2 border-roseash-300 flex items-center justify-between shadow-xs">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-terracotta-600 tracking-wider">Sarcini Depășite / Critice</p>
-            <p className="text-2xl font-extrabold text-terracotta-600 font-mono mt-0.5">{sarciniCriticeFlota}</p>
-            <p className="text-[10px] text-sage-600 font-medium">necesită atenție atelier</p>
-          </div>
-          <AlertTriangle className="w-8 h-8 text-terracotta-500 animate-pulse" />
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-morning-200 flex items-center justify-between shadow-xs">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-sage-700 tracking-wider">Utilaje cu Service Întârziat</p>
-            <p className="text-2xl font-extrabold text-sapphire-900 font-mono mt-0.5">{vehiculeCriticeCount} / {vehicule.length}</p>
-            <p className="text-[10px] text-sage-600 font-medium">din parcul total de utilaje</p>
-          </div>
-          <Truck className="w-8 h-8 text-sapphire-500" />
-        </div>
-      </div>
-
       {/* FILTRE CENTRALIZATE */}
       <div className="pleasant-card p-4 rounded-2xl space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
