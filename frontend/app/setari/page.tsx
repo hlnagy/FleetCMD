@@ -1074,11 +1074,11 @@ function SetariContent() {
             </div>
           </div>
 
-          {/* LISTĂ CATEGORII VEHICUL DISPONIBILE CU EDITARE & ȘTERGERE (CERUZĂ & ROȘU X) */}
+          {/* LISTĂ CATEGORII VEHICUL DISPONIBILE */}
           {categoriiVehicul.length > 0 && (
             <div className="bg-morning-50 p-4 rounded-2xl border border-morning-200 space-y-2">
               <span className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider block">
-                Categorii de Utilaje & Autovehicule Definite (click pe ceruză pentru Editare, X roșu pentru Ștergere):
+                Categorii de Utilaje & Autovehicule Definite:
               </span>
               <div className="flex flex-wrap gap-2">
                 {categoriiVehicul.map((c) => (

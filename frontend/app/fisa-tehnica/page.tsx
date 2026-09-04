@@ -971,7 +971,7 @@ export default function FisaTehnicaPage() {
                         {/* CLICKABLE baseline cell */}
                         <td
                           className="p-3 font-mono font-extrabold text-sapphire-900 bg-sapphire-50 cursor-pointer hover:bg-sapphire-100 transition group"
-                          title="Click pentru a seta valoarea de baza"
+                          title="Setare valoare de referință"
                           onClick={() => {
                             setShowBaselineModal(b);
                             setBaselineContor(b.ultimulSchimbContor || 0);

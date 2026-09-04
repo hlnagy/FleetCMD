@@ -356,9 +356,9 @@ function EFacturaContent() {
         setShowConfigModal(true);
         setUrlDiagnostic({
           type: 'success',
-          title: '🎉 Cod de Autorizare Capturat cu Succes!',
+          title: 'Cod de Autorizare Capturat',
           details: `Codul autorizare (${code.substring(0, 15)}...) a fost extras automat din URL și introdus în formular.`,
-          actionHint: 'Apăsați butonul verde "2. Schimbă pe Token-uri JWT" din fereastra deschisă pentru a finaliza!',
+          actionHint: 'Finalizați autorizarea prin schimbul codului pe token-uri JWT.',
         });
       }
     }
@@ -2475,7 +2475,7 @@ function EFacturaContent() {
                 <p className="pl-8 text-sage-700">
                   Accesați portalul oficial ANAF: <a href="https://www.anaf.ro/InregOauth/index.xhtml" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">https://www.anaf.ro/InregOauth/index.xhtml</a> cu token-ul conectat și înregistrați aplicația FleetCMD.<br />
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block my-1">
-                    💡 Notă: Dacă aveți deja un cont în SPV cu username și parolă, dați click pe link-ul <i>"click aici"</i> din susul paginii ANAF pentru conectare rapidă!
+                    💡 Notă: Pentru utilizatorii cu cont SPV existent (username/parolă), utilizați opțiunea dedicată de autentificare de pe portalul ANAF.
                   </span><br />
                   Setați <strong>Redirect URI</strong> la <code>http://localhost:3000/efactura</code> (sau adresa dvs. din browser).<br />
                   Veți primi un <strong>Client ID</strong> și un <strong>Client Secret</strong> pe care le introduceți în câmpurile din stânga.
@@ -2489,12 +2489,11 @@ function EFacturaContent() {
                   <h4 className="font-extrabold text-sapphire-900 text-xs">Autorizare în SPV și Copiere Cod</h4>
                 </div>
                 <p className="pl-8 text-sage-700">
-                  Apăsați butonul <strong>`1. Deschide URL Autorizare ANAF`</strong>. Se va deschide o pagină securizată ANAF unde veți confirma autentificarea cu token-ul fizic USB.<br />
-                  După autorizare, ANAF vă va retrimite pe pagina FleetCMD având la finalul adresei web un cod scurt:<br />
+                  Deschideți <strong>`1. Deschide URL Autorizare ANAF`</strong> pentru confirmarea autentificării pe pagina securizată ANAF cu certificatul digital calificat (token USB).<br />
+                  După autorizare, ANAF va redirecționa către FleetCMD generând codul de autorizare în URL:<br />
                   <code className="bg-white px-2 py-0.5 border border-morning-300 rounded font-mono text-[10px] text-sapphire-900 block mt-1">
                     http://localhost:3000/efactura?code=<b>XYZ123456789...</b>
                   </code>
-                  Copiați acel cod din bara de adrese a browser-ului.
                 </p>
               </div>
 
@@ -2502,11 +2501,11 @@ function EFacturaContent() {
               <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-1.5">
                 <div className="flex items-center space-x-2">
                   <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center">4</span>
-                  <h4 className="font-extrabold text-sapphire-900 text-xs">Schimbare Cod pe Token-uri JWT (Access & Refresh)</h4>
+                  <h4 className="font-extrabold text-sapphire-900 text-xs">Generare Token-uri JWT (Access & Refresh)</h4>
                 </div>
                 <p className="pl-8 text-sage-700">
-                  Lipiți codul copiat în caseta <code>Introduceți Codul de Autorizare (?code=XYZ...)</code> și apăsați butonul <strong>`2. Schimbă pe Token-uri JWT`</strong>.<br />
-                  Sistemul va genera automat un <strong>Access Token (valabil 90 zile)</strong> și un <strong>Refresh Token (valabil 365 zile)</strong> și le va salva în baza de date.
+                  Introduceți codul obținut în caseta <code>Introduceți Codul de Autorizare</code> și confirmați prin <strong>`2. Schimbă pe Token-uri JWT`</strong>.<br />
+                  Sistemul va genera și salva automat un <strong>Access Token (valabil 90 zile)</strong> și un <strong>Refresh Token (valabil 365 zile)</strong>.
                 </p>
               </div>
 

@@ -385,7 +385,7 @@ export default function MentenantaPage() {
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           esteSchimb ? 'bg-periwinkle-100 text-periwinkle-700 border border-periwinkle-300' : 'bg-sapphire-50 text-sapphire-600 border border-sapphire-100'
                         }`}>
-                          {esteSchimb ? 'SCHIMB PIESĂ / ULEI (Comandă de Lucru Obligatorie)' : 'INSPECȚIE / MANOPERĂ (1-Click Permis)'}
+                          {esteSchimb ? 'SCHIMB PIESĂ / ULEI (Comandă de Lucru)' : 'INSPECȚIE / MANOPERĂ (Înregistrare Directă)'}
                         </span>
                         <span className="text-[11px] text-sage-700 font-semibold">Interval: {s.intervalRulaj} {s.tipMasurare}</span>
                       </div>

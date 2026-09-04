@@ -142,14 +142,14 @@ export default function Navbar() {
       </div>
       </div>
 
-      {/* DREAPTA: HARANGOCSKÁ CU DROPDOWN & PROFIL USER */}
+      {/* DREAPTA: NOTIFICĂRI & PROFIL USER */}
       <div className="flex items-center space-x-3">
         {/* GLOBAL ANAF SYNC BADGE */}
         {globalSyncStatus?.inProgress && (
           <Link
             href="/efactura?tab=efactura"
             className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-sapphire-50 border border-sapphire-300 text-sapphire-800 hover:bg-sapphire-100 transition shadow-xs animate-pulse"
-            title="Sincronizare ANAF SPV în curs în fundal - Click pentru a deschide"
+            title="Sincronizare ANAF SPV în curs"
           >
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-sapphire-600 shrink-0" />
             <div className="text-left leading-none">

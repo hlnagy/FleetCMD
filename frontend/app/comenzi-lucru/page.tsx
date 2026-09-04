@@ -1033,7 +1033,7 @@ export default function ComenziLucruPage() {
                     ))
                   ) : (
                     <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl text-center text-xs text-sage-600 font-semibold">
-                      Nu există încă piese felszerelte pe această comandă. Apăsați "+ Felszerelés / Adaugă Piesă" mai sus!
+                      Nu există piese sau consumabile asociate acestei comenzi.
                     </div>
                   )}
                 </div>

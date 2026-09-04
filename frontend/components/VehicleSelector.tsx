@@ -140,7 +140,7 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
                 </span>
               </p>
             ) : (
-              <p className="text-xs text-sage-500 font-medium">Apăsați butonul pentru a alege un utilaj din flotă</p>
+              <p className="text-xs text-sage-500 font-medium">Selectați un utilaj din flotă</p>
             )}
           </div>
         </div>
@@ -150,7 +150,7 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
           className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-xs font-extrabold text-sapphire-900 shadow-xs transition flex-shrink-0"
         >
           <Search className="w-4 h-4 text-sapphire-500" />
-          <span>🔍 Schimbă Utilaj ({vehicule.length} în Flotă)</span>
+          <span>Schimbă Utilaj ({vehicule.length})</span>
           <ChevronDown className="w-4 h-4 text-sage-500 ml-1" />
         </button>
       </div>
