@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#1E3A8A" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#60A5FA" />
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#FBBF24" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bgGrad)" filter="url(#shadow)" stroke="#60A5FA" stroke-width="6" stroke-opacity="0.5" />
+
+  <!-- FleetCMD Truck / Command Icon (Stylized Vector) -->
+  <g transform="translate(68, 80)" filter="url(#shadow)">
+    <!-- Truck Trailer / Cargo Body -->
+    <rect x="24" y="80" width="190" height="150" rx="16" fill="url(#accentGrad)" opacity="0.95" />
+    <path d="M 44 110 L 194 110 M 44 145 L 194 145 M 44 180 L 194 180" stroke="#0F172A" stroke-width="4" stroke-linecap="round" opacity="0.3" />
+
+    <!-- Truck Cab -->
+    <path d="M 226 120 L 290 120 L 334 165 L 334 230 L 226 230 Z" fill="#FFFFFF" />
+    
+    <!-- Windshield -->
+    <path d="M 236 132 L 282 132 L 318 168 L 236 168 Z" fill="#0F172A" opacity="0.85" />
+    <!-- Windshield Reflection -->
+    <path d="M 246 136 L 274 136 L 264 164 L 238 164 Z" fill="#38BDF8" opacity="0.4" />
+
+    <!-- Headlight -->
+    <rect x="318" y="195" width="16" height="18" rx="4" fill="url(#amberGrad)" />
+
+    <!-- Wheels Base / Chassis -->
+    <rect x="34" y="222" width="290" height="16" rx="6" fill="#334155" />
+
+    <!-- Wheels -->
+    <!-- Wheel 1 -->
+    <circle cx="80" cy="240" r="32" fill="#0F172A" stroke="#94A3B8" stroke-width="6" />
+    <circle cx="80" cy="240" r="14" fill="#38BDF8" />
+
+    <!-- Wheel 2 -->
+    <circle cx="155" cy="240" r="32" fill="#0F172A" stroke="#94A3B8" stroke-width="6" />
+    <circle cx="155" cy="240" r="14" fill="#38BDF8" />
+
+    <!-- Wheel 3 (Cab) -->
+    <circle cx="285" cy="240" r="32" fill="#0F172A" stroke="#94A3B8" stroke-width="6" />
+    <circle cx="285" cy="240" r="14" fill="#38BDF8" />
+
+    <!-- Telemetry / Command Waves (Top Right) -->
+    <path d="M 280 65 A 40 40 0 0 1 330 100" fill="none" stroke="url(#amberGrad)" stroke-width="8" stroke-linecap="round" />
+    <path d="M 295 45 A 65 65 0 0 1 360 90" fill="none" stroke="url(#accentGrad)" stroke-width="8" stroke-linecap="round" />
+    <circle cx="260" cy="85" r="7" fill="#F59E0B" />
+  </g>
+
+  <!-- Small text 'CMD' bottom badge -->
+  <rect x="180" y="380" width="152" height="42" rx="12" fill="#0F172A" stroke="#38BDF8" stroke-width="2.5" opacity="0.95" />
+  <text x="256" y="410" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="900" fill="#38BDF8" text-anchor="middle" letter-spacing="4">FLEET</text>
+</svg>
