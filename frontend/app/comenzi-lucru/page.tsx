@@ -890,7 +890,7 @@ export default function ComenziLucruPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-sapphire-900 font-extrabold text-xs block">
-                       Felszerelés / Elemente & Piese pe Comandă ({editElemente.length}):
+                      Piese de Schimb & Elemente pe Comandă ({editElemente.length}):
                     </label>
                     <span className="text-[11px] text-sage-600 font-medium">
                       Puteți adăuga piese noi, alege pilonul de cost și conecta articole din stocul intern
@@ -1346,7 +1346,7 @@ export default function ComenziLucruPage() {
                 </select>
               </div>
 
-              {/* KM INDEX / MUNKAÓRA KÖTELEZŐ MEZŐ (CU SUPORT DEDICAT SEMIREMORCI) */}
+              {/* INDEX KM / ORE FUNCȚIONARE CÂMP OBLIGATORIU (CU SUPORT DEDICAT SEMIREMORCI) */}
               {(() => {
                 const selV = vehicule.find((v) => v.id === selectedVehiculId);
                 const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');

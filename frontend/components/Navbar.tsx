@@ -411,25 +411,13 @@ export default function Navbar() {
                 </div>
 
                 <div className="p-2 space-y-1 text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      setIsLoginModalOpen(true);
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2.5"
-                  >
-                    <Users className="w-4 h-4 text-sapphire-600" />
-                    <span>Schimbă Utilizatorul / Profilul</span>
-                  </button>
-
                   {user?.rol === 'ADMIN' && (
                     <Link
-                      href="/setari"
+                      href="/setari?tab=utilizatori"
                       onClick={() => setIsUserMenuOpen(false)}
                       className="w-full text-left px-3 py-2 rounded-xl text-sapphire-900 hover:bg-morning-100 transition flex items-center space-x-2.5"
                     >
-                      <Settings className="w-4 h-4 text-sapphire-600" />
+                      <Users className="w-4 h-4 text-sapphire-600" />
                       <span>Gestiune Utilizatori & Jurnal Audit</span>
                     </Link>
                   )}

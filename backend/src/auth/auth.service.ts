@@ -281,4 +281,38 @@ export class AuthService implements OnModuleInit {
 
     return { mesaj: `Utilizatorul "${user.nume}" a fost șters din sistem.` };
   }
+
+  async resetPassword(id: string, nouaParola: string, actorUserId?: string) {
+    if (!nouaParola || nouaParola.trim().length < 4) {
+      throw new BadRequestException('Noua parolă trebuie să aibă cel puțin 4 caractere.');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('Utilizatorul nu a fost găsit.');
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { parola: nouaParola.trim() },
+    });
+
+    let actorNume = 'Administrator';
+    if (actorUserId) {
+      const actor = await this.prisma.user.findUnique({ where: { id: actorUserId } });
+      if (actor) actorNume = actor.nume;
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actorUserId || null,
+        userNume: actorNume,
+        userRol: 'ADMIN',
+        actiune: 'RESETARE_PAROLA',
+        modul: 'UTILIZATORI',
+        entitateTip: 'User',
+        entitateId: id,
+        detalii: `Parola pentru contul "${user.username}" (${user.nume}) a fost resetată de către ${actorNume}.`,
+      },
+    });
+
+    return { mesaj: `Parola pentru utilizatorul "${user.nume}" a fost resetată cu succes!` };
+  }
 }

@@ -9,7 +9,7 @@ import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
-  ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, Lock, History, Filter, UserX, Check
+  ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 
@@ -22,12 +22,18 @@ function SetariContent() {
     'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit'
   >('vehicule');
 
-  // Ascultăm schimbarea tab-ului din URL / Sidebar
+  // Ascultăm schimbarea tab-ului din URL / Sidebar (cu protecție strictă Admin pentru utilizatori și audit)
   useEffect(() => {
     if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit'].includes(tabParam)) {
-      setActiveTab(tabParam as any);
+      if ((tabParam === 'utilizatori' || tabParam === 'audit') && !isAdmin) {
+        setActiveTab('vehicule');
+      } else {
+        setActiveTab(tabParam as any);
+        if (tabParam === 'utilizatori') fetchUsers();
+        if (tabParam === 'audit') fetchAuditLogs();
+      }
     }
-  }, [tabParam]);
+  }, [tabParam, isAdmin]);
   const [loading, setLoading] = useState(false);
 
   // DATA STATES
@@ -161,6 +167,17 @@ function SetariContent() {
   const [userFunctie, setUserFunctie] = useState('Operator Flotă');
   const [userTelefon, setUserTelefon] = useState('');
   const [userActiv, setUserActiv] = useState(true);
+  const [userConfirmParola, setUserConfirmParola] = useState('');
+  const [showUserPassword, setShowUserPassword] = useState(false);
+  const [showUserConfirmPassword, setShowUserConfirmPassword] = useState(false);
+
+  // Admin password reset
+  const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   // ==========================================
   // 9. STATE JURNAL AUDIT (AUDIT TRAIL)
@@ -967,6 +984,9 @@ function SetariContent() {
     setUserEmail('');
     setUserUsername('');
     setUserParola('');
+    setUserConfirmParola('');
+    setShowUserPassword(false);
+    setShowUserConfirmPassword(false);
     setUserRol('OPERATOR');
     setUserFunctie('Operator Flotă');
     setUserTelefon('');
@@ -980,6 +1000,9 @@ function SetariContent() {
     setUserEmail(u.email || '');
     setUserUsername(u.username || '');
     setUserParola('');
+    setUserConfirmParola('');
+    setShowUserPassword(false);
+    setShowUserConfirmPassword(false);
     setUserRol(u.rol || 'OPERATOR');
     setUserFunctie(u.functie || '');
     setUserTelefon(u.telefon || '');
@@ -987,15 +1010,89 @@ function SetariContent() {
     setShowAddUserModal(true);
   };
 
-  const handleSaveUser = async (e: React.FormEvent) => {
+  const openResetPasswordModal = (u: any) => {
+    setResetPasswordUser(u);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setShowResetPassword(false);
+    setShowResetConfirmPassword(false);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userNume || !userEmail) {
-      alert('Vă rugăm să completați numele și adresa de email.');
+    if (!resetPasswordUser) return;
+    if (!resetNewPassword) {
+      alert('Vă rugăm să introduceți o nouă parolă.');
       return;
     }
-    if (!editingUser && !userParola) {
-      alert('Vă rugăm să setați o parolă pentru noul utilizator.');
+    if (resetNewPassword !== resetConfirmPassword) {
+      alert('Parolele introduse nu coincid! Vă rugăm să rescrieți parola.');
       return;
+    }
+    if (resetNewPassword.length < 4) {
+      alert('Noua parolă trebuie să aibă minim 4 caractere!');
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      const res = await authFetch(`${API_BASE_URL}/auth/users/${resetPasswordUser.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nouaParola: resetNewPassword }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || `Parola pentru "${resetPasswordUser.nume}" a fost resetată cu succes!`);
+        setResetPasswordUser(null);
+        setResetNewPassword('');
+        setResetConfirmPassword('');
+        fetchUsers();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut reseta parola'}`);
+      }
+    } catch (err) {
+      alert('Eroare de conexiune la resetarea parolei.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userNume.trim()) {
+      alert('Vă rugăm să completați Numele și Prenumele.');
+      return;
+    }
+    if (!userUsername.trim()) {
+      alert('Vă rugăm să introduceți Numele de Utilizator (Username).');
+      return;
+    }
+
+    if (!editingUser) {
+      if (!userParola) {
+        alert('Vă rugăm să introduceți o parolă de acces.');
+        return;
+      }
+      if (userParola !== userConfirmParola) {
+        alert('Parolele introduse nu coincid! Vă rugăm să verificați câmpurile.');
+        return;
+      }
+      if (userParola.length < 4) {
+        alert('Parola trebuie să conțină minim 4 caractere!');
+        return;
+      }
+    } else if (userParola) {
+      if (userParola !== userConfirmParola) {
+        alert('Parolele introduse nu coincid! Vă rugăm să verificați câmpurile.');
+        return;
+      }
+      if (userParola.length < 4) {
+        alert('Noua parolă trebuie să conțină minim 4 caractere!');
+        return;
+      }
     }
 
     try {
@@ -1004,16 +1101,18 @@ function SetariContent() {
         : `${API_BASE_URL}/auth/users`;
       const method = editingUser ? 'PATCH' : 'POST';
 
+      const emailVal = userEmail.trim() || `${userUsername.trim().toLowerCase()}@fleetcmd.ro`;
+
       const payload: any = {
-        nume: userNume,
-        email: userEmail,
-        username: userUsername || userEmail.split('@')[0],
+        nume: userNume.trim(),
+        email: emailVal,
+        username: userUsername.trim(),
         rol: userRol,
         functie: userFunctie,
         telefon: userTelefon,
         activ: userActiv,
       };
-      if (userParola) payload.parola = userParola;
+      if (userParola) payload.parola = userParola.trim();
 
       const res = await authFetch(url, {
         method,
@@ -1254,31 +1353,35 @@ function SetariContent() {
           <span>Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
         </button>
 
-        <button
-          onClick={() => { setActiveTab('utilizatori'); fetchUsers(); }}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
-            activeTab === 'utilizatori'
-              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
-              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
-          }`}
-        >
-          <Users className="w-4 h-4 text-sapphire-600" />
-          <span>Utilizatori & Roluri ({usersList.length})</span>
-          {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
-        </button>
+        {isAdmin && (
+          <>
+            <button
+              onClick={() => { setActiveTab('utilizatori'); fetchUsers(); }}
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+                activeTab === 'utilizatori'
+                  ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+                  : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+              }`}
+            >
+              <Users className="w-4 h-4 text-sapphire-600" />
+              <span>Utilizatori & Roluri ({usersList.length})</span>
+              <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
+            </button>
 
-        <button
-          onClick={() => { setActiveTab('audit'); fetchAuditLogs(); }}
-          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
-            activeTab === 'audit'
-              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
-              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
-          }`}
-        >
-          <History className="w-4 h-4 text-periwinkle-700" />
-          <span>Jurnal Audit ({auditTotal})</span>
-          {isAdmin && <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>}
-        </button>
+            <button
+              onClick={() => { setActiveTab('audit'); fetchAuditLogs(); }}
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+                activeTab === 'audit'
+                  ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+                  : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+              }`}
+            >
+              <History className="w-4 h-4 text-periwinkle-700" />
+              <span>Jurnal Audit ({auditTotal})</span>
+              <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* BANNER INFORMARE ROL & JOGOSULTSÁG */}
@@ -1959,6 +2062,13 @@ function SetariContent() {
       {/* TAB 8: GESTIUNE UTILIZATORI & ROLURI (RBAC) */}
       {/* ========================================================================= */}
       {activeTab === 'utilizatori' && (
+        !isAdmin ? (
+          <div className="p-12 text-center bg-white border border-morning-200 rounded-3xl space-y-3 shadow-xs">
+            <ShieldAlert className="w-12 h-12 text-terracotta-500 mx-auto" />
+            <h3 className="text-base font-bold text-sapphire-900">Acces Restricționat</h3>
+            <p className="text-xs text-sage-600">Gestiunea utilizatorilor și a rolurilor este rezervată exclusiv administratorilor de sistem.</p>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div className="relative flex-1 max-w-md">
@@ -2043,6 +2153,13 @@ function SetariContent() {
                       {isAdmin && (
                         <div className="flex items-center space-x-1">
                           <button
+                            onClick={() => openResetPasswordModal(u)}
+                            className="p-1.5 rounded-lg text-sage-600 hover:text-amber-600 hover:bg-amber-50 transition"
+                            title="Resetează Parola"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => openEditUser(u)}
                             className="p-1.5 rounded-lg text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 transition"
                             title="Editare Utilizator & Rol"
@@ -2085,12 +2202,19 @@ function SetariContent() {
               })}
           </div>
         </div>
-      )}
+      ))}
 
       {/* ========================================================================= */}
       {/* TAB 9: JURNAL AUDIT & ISTORIC MODIFICĂRI (AUDIT TRAIL) */}
       {/* ========================================================================= */}
       {activeTab === 'audit' && (
+        !isAdmin ? (
+          <div className="p-12 text-center bg-white border border-morning-200 rounded-3xl space-y-3 shadow-xs">
+            <ShieldAlert className="w-12 h-12 text-terracotta-500 mx-auto" />
+            <h3 className="text-base font-bold text-sapphire-900">Acces Restricționat</h3>
+            <p className="text-xs text-sage-600">Jurnalul de audit este rezervat exclusiv administratorilor de sistem.</p>
+          </div>
+        ) : (
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div>
@@ -2242,7 +2366,7 @@ function SetariContent() {
             </table>
           </div>
         </div>
-      )}
+      ))}
 
       {/* ========================================================================= */}
       {/* MODAL 1: ADĂUGARE VEHICUL NOU */}
@@ -2849,7 +2973,7 @@ function SetariContent() {
       {/* ========================================================================= */}
       {showAddUserModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl animate-scale-up">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <Users className="w-5 h-5 text-sapphire-500" />
@@ -2866,18 +2990,17 @@ function SetariContent() {
                     required
                     value={userNume}
                     onChange={(e) => setUserNume(e.target.value)}
-                    placeholder="ex: Kovács István"
+                    placeholder="ex: Popescu Ion"
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Adresă Email: *</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Nume Utilizator (Username): *</label>
                   <input
                     required
-                    type="email"
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    placeholder="ex: istvan@fleetcmd.ro"
+                    value={userUsername}
+                    onChange={(e) => setUserUsername(e.target.value)}
+                    placeholder="ex: ion.popescu"
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   />
                 </div>
@@ -2885,26 +3008,71 @@ function SetariContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Nume Utilizator (Username):</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Adresă Email (Opțional):</label>
                   <input
-                    value={userUsername}
-                    onChange={(e) => setUserUsername(e.target.value)}
-                    placeholder="ex: istvan.k"
+                    type="email"
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                    placeholder="ex: ion.popescu@fleetcmd.ro"
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   />
                 </div>
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">
-                    {editingUser ? 'Schimbă Parola (lasă gol dacă nu schimbi):' : 'Parolă Acces: *'}
-                  </label>
+                  <label className="text-sage-700 block mb-1 font-bold">Funcție / Poziție:</label>
                   <input
-                    type="password"
-                    required={!editingUser}
-                    value={userParola}
-                    onChange={(e) => setUserParola(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                    value={userFunctie}
+                    onChange={(e) => setUserFunctie(e.target.value)}
+                    placeholder="ex: Dispecer Flotă, Șef Atelier"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    {editingUser ? 'Schimbă Parola (opțional):' : 'Parolă Acces: *'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showUserPassword ? 'text' : 'password'}
+                      required={!editingUser}
+                      value={userParola}
+                      onChange={(e) => setUserParola(e.target.value)}
+                      placeholder="Introduceți parola"
+                      className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 pr-10 text-sapphire-900 font-mono font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowUserPassword(!showUserPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900"
+                    >
+                      {showUserPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    {editingUser ? 'Confirmare Parolă Nouă:' : 'Confirmare Parolă: *'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showUserConfirmPassword ? 'text' : 'password'}
+                      required={!editingUser || !!userParola}
+                      value={userConfirmParola}
+                      onChange={(e) => setUserConfirmParola(e.target.value)}
+                      placeholder="Reintroduceți parola"
+                      className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 pr-10 text-sapphire-900 font-mono font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowUserConfirmPassword(!showUserConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900"
+                    >
+                      {showUserConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2916,23 +3084,11 @@ function SetariContent() {
                     onChange={(e) => setUserRol(e.target.value as any)}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
-                    <option value="ADMIN">ADMIN - Teljes körű administráció</option>
-                    <option value="OPERATOR">OPERATOR - Módosítások a programban (kivéve Setări)</option>
-                    <option value="VIEWER">VIEWER - Csak megtekintő (módosítás letiltva)</option>
+                    <option value="ADMIN">ADMIN - Administrare completă (Acces total)</option>
+                    <option value="OPERATOR">OPERATOR - Editare operațională (Fără acces Setări)</option>
+                    <option value="VIEWER">VIEWER - Numai citire (Modificări restricționate)</option>
                   </select>
                 </div>
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Funcție / Poziție:</label>
-                  <input
-                    value={userFunctie}
-                    onChange={(e) => setUserFunctie(e.target.value)}
-                    placeholder="ex: Dispecer Flotă, Mecanic Șef"
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Număr Telefon:</label>
                   <input
@@ -2942,7 +3098,10 @@ function SetariContent() {
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                   />
                 </div>
-                <div className="flex items-center space-x-2 pt-6">
+              </div>
+
+              <div className="pt-2">
+                <div className="flex items-center space-x-2">
                   <input
                     type="checkbox"
                     id="userActivCheck"
@@ -2951,7 +3110,7 @@ function SetariContent() {
                     className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500"
                   />
                   <label htmlFor="userActivCheck" className="text-sage-700 font-bold cursor-pointer">
-                    Cont Activ (permite autentificarea)
+                    Cont Activ (permite autentificarea în sistem)
                   </label>
                 </div>
               </div>
@@ -2960,15 +3119,100 @@ function SetariContent() {
                 <button
                   type="button"
                   onClick={() => { setShowAddUserModal(false); setEditingUser(null); }}
-                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold"
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold hover:bg-morning-300 transition"
                 >
                   Anulează
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20"
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20 transition"
                 >
                   {editingUser ? 'Salvează Modificările' : 'Creează Utilizator'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RESETARE PAROLĂ (DOAR ADMIN) */}
+      {resetPasswordUser && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl animate-scale-up">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Key className="w-5 h-5 text-amber-500" />
+                <span>Resetare Parolă: {resetPasswordUser.nume}</span>
+              </h3>
+              <button
+                onClick={() => setResetPasswordUser(null)}
+                className="text-sage-500 hover:text-sapphire-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-sage-600">
+              Setați o nouă parolă pentru contul <strong className="text-sapphire-900">@{resetPasswordUser.username}</strong> ({resetPasswordUser.email}).
+            </p>
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Noua Parolă: *</label>
+                <div className="relative">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    required
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="Introduceți noua parolă (min. 4 caractere)"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 pr-10 text-sapphire-900 font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900"
+                  >
+                    {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Confirmare Noua Parolă: *</label>
+                <div className="relative">
+                  <input
+                    type={showResetConfirmPassword ? 'text' : 'password'}
+                    required
+                    value={resetConfirmPassword}
+                    onChange={(e) => setResetConfirmPassword(e.target.value)}
+                    placeholder="Reintroduceți noua parolă"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 pr-10 text-sapphire-900 font-mono font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900"
+                  >
+                    {showResetConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordUser(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold hover:bg-morning-300 transition"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-md transition"
+                >
+                  {resetLoading ? 'Se resetează...' : 'Resetează Parola'}
                 </button>
               </div>
             </form>

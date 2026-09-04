@@ -67,4 +67,13 @@ export class AuthController {
   ) {
     return this.authService.deleteUser(id, actorUserId);
   }
+
+  @Post('users/:id/reset-password')
+  resetPassword(
+    @Param('id') id: string,
+    @Body() body: { nouaParola: string },
+    @Headers('x-user-id') actorUserId?: string,
+  ) {
+    return this.authService.resetPassword(id, body.nouaParola, actorUserId);
+  }
 }
