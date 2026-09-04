@@ -72,6 +72,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
+
+    // Silently resolve real admin ID from backend if needed
+    fetch(`${API_BASE_URL}/auth/users`)
+      .then((res) => res.json())
+      .then((users) => {
+        if (Array.isArray(users)) {
+          const dbAdmin = users.find((u) => u.username === 'admin' || u.rol === 'ADMIN');
+          if (dbAdmin) {
+            setUser((prev) => {
+              if (prev && (prev.id === 'default-admin-id' || prev.username === 'admin')) {
+                const updated = { ...prev, id: dbAdmin.id, nume: dbAdmin.nume || prev.nume };
+                localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
+                return updated;
+              }
+              return prev;
+            });
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const login = async (identifier: string, parola: string) => {

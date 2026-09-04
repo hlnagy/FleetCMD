@@ -18,8 +18,8 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const url = req.url || '';
-    // Skip noisy or internal polling routes if any
-    if (url.includes('/auth/login') || url.includes('/audit')) {
+    // Skip /auth routes (handled with custom audit details in AuthService) and /audit
+    if (url.includes('/auth') || url.includes('/audit')) {
       return next.handle();
     }
 

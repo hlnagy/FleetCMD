@@ -53,6 +53,36 @@ export class AuthService implements OnModuleInit {
     }
   }
 
+  private async getValidActor(actorUserId?: string) {
+    if (actorUserId) {
+      try {
+        const user = await this.prisma.user.findUnique({ where: { id: actorUserId } });
+        if (user) {
+          return {
+            userId: user.id,
+            userNume: user.nume,
+            userRol: user.rol,
+          };
+        }
+      } catch (e) {}
+    }
+    try {
+      const admin = await this.prisma.user.findFirst({ where: { rol: 'ADMIN' } });
+      if (admin) {
+        return {
+          userId: admin.id,
+          userNume: admin.nume,
+          userRol: admin.rol,
+        };
+      }
+    } catch (e) {}
+    return {
+      userId: null,
+      userNume: 'Administrator',
+      userRol: 'ADMIN',
+    };
+  }
+
   async login(data: { identifier: string; parola: string }) {
     const { identifier, parola } = data;
     if (!identifier || !parola) {
@@ -78,19 +108,23 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException('Acest cont de utilizator a fost dezactivat de un administrator.');
     }
 
-    // Log login in audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        userNume: user.nume,
-        userRol: user.rol,
-        actiune: 'LOGIN',
-        modul: 'AUTENTIFICARE',
-        entitateTip: 'User',
-        entitateId: user.id,
-        detalii: `Autentificare reușită pentru ${user.nume} (@${user.username}, ${user.rol})`,
-      },
-    });
+    // Log login in audit safely
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          userNume: user.nume,
+          userRol: user.rol,
+          actiune: 'LOGIN',
+          modul: 'AUTENTIFICARE',
+          entitateTip: 'User',
+          entitateId: user.id,
+          detalii: `Autentificare reușită pentru ${user.nume} (@${user.username}, ${user.rol})`,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log login audit:', e);
+    }
 
     const { parola: _, ...userWithoutPassword } = user;
     return {
@@ -181,19 +215,24 @@ export class AuthService implements OnModuleInit {
       },
     });
 
-    // Log in audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId: data.actorUserId || null,
-        userNume: 'Administrator',
-        userRol: 'ADMIN',
-        actiune: 'CREARE_UTILIZATOR',
-        modul: 'UTILIZATORI',
-        entitateTip: 'User',
-        entitateId: newUser.id,
-        detalii: `Creat utilizator nou: ${newUser.nume} (@${newUser.username}) cu rolul ${newUser.rol}`,
-      },
-    });
+    // Log in audit safely
+    const actor = await this.getValidActor(data.actorUserId);
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actor.userId,
+          userNume: actor.userNume,
+          userRol: actor.userRol,
+          actiune: 'CREARE_UTILIZATOR',
+          modul: 'UTILIZATORI',
+          entitateTip: 'User',
+          entitateId: newUser.id,
+          detalii: `Creat utilizator nou: ${newUser.nume} (@${newUser.username}) cu rolul ${newUser.rol} de către ${actor.userNume}`,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log user creation audit:', e);
+    }
 
     const { parola: _, ...result } = newUser;
     return result;
@@ -216,34 +255,70 @@ export class AuthService implements OnModuleInit {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Utilizatorul nu a fost găsit.');
 
+    // Protect administrator account from being deactivated
+    if ((user.rol === 'ADMIN' || user.username === 'admin') && data.activ === false) {
+      throw new BadRequestException('Contul de administrator este protejat și nu poate fi dezactivat.');
+    }
+
+    // Protect administrator account from being demoted
+    if (user.username === 'admin' && data.rol && data.rol !== 'ADMIN') {
+      throw new BadRequestException('Rolul contului principal de administrator nu poate fi modificat.');
+    }
+
     const updateData: any = {};
     if (data.nume) updateData.nume = data.nume.trim();
-    if (data.username) updateData.username = data.username.trim().toLowerCase();
+    if (data.username) {
+      const uClean = data.username.trim().toLowerCase();
+      if (uClean !== user.username) {
+        const existing = await this.prisma.user.findFirst({ where: { username: uClean } });
+        if (existing) {
+          throw new BadRequestException('Un utilizator cu acest nume de utilizator există deja.');
+        }
+      }
+      updateData.username = uClean;
+    }
     if (data.email !== undefined) updateData.email = data.email ? data.email.trim() : null;
     if (data.parola) updateData.parola = data.parola;
-    if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol)) updateData.rol = data.rol;
+    if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol)) {
+      if (user.username === 'admin') {
+        updateData.rol = 'ADMIN';
+      } else {
+        updateData.rol = data.rol;
+      }
+    }
     if (data.functie !== undefined) updateData.functie = data.functie;
     if (data.telefon !== undefined) updateData.telefon = data.telefon;
-    if (data.activ !== undefined) updateData.activ = data.activ;
+    if (data.activ !== undefined) {
+      if (user.rol === 'ADMIN' || user.username === 'admin') {
+        updateData.activ = true;
+      } else {
+        updateData.activ = data.activ;
+      }
+    }
 
     const updated = await this.prisma.user.update({
       where: { id },
       data: updateData,
     });
 
-    // Log in audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId: data.actorUserId || null,
-        userNume: 'Administrator',
-        userRol: 'ADMIN',
-        actiune: 'MODIFICARE_UTILIZATOR',
-        modul: 'UTILIZATORI',
-        entitateTip: 'User',
-        entitateId: updated.id,
-        detalii: `Actualizat utilizator: ${updated.nume} (@${updated.username}). Modificări: ${Object.keys(updateData).join(', ')}`,
-      },
-    });
+    // Log in audit safely
+    const actor = await this.getValidActor(data.actorUserId);
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actor.userId,
+          userNume: actor.userNume,
+          userRol: actor.userRol,
+          actiune: 'MODIFICARE_UTILIZATOR',
+          modul: 'UTILIZATORI',
+          entitateTip: 'User',
+          entitateId: updated.id,
+          detalii: `Actualizat utilizator: ${updated.nume} (@${updated.username}) de către ${actor.userNume}. Modificări: ${Object.keys(updateData).join(', ')}`,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log user update audit:', e);
+    }
 
     const { parola: _, ...result } = updated;
     return result;
@@ -253,29 +328,31 @@ export class AuthService implements OnModuleInit {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('Utilizatorul nu a fost găsit.');
 
-    // Count admins to prevent deleting the last admin
-    if (user.rol === 'ADMIN') {
-      const adminCount = await this.prisma.user.count({ where: { rol: 'ADMIN', activ: true } });
-      if (adminCount <= 1) {
-        throw new BadRequestException('Nu puteți șterge ultimul administrator activ al sistemului.');
-      }
+    // Contul de administrator nu poate fi sters
+    if (user.rol === 'ADMIN' || user.username === 'admin') {
+      throw new BadRequestException('Contul de administrator este protejat și nu poate fi șters din sistem.');
     }
 
     await this.prisma.user.delete({ where: { id } });
 
-    // Log in audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId: actorUserId || null,
-        userNume: 'Administrator',
-        userRol: 'ADMIN',
-        actiune: 'STERGERE_UTILIZATOR',
-        modul: 'UTILIZATORI',
-        entitateTip: 'User',
-        entitateId: id,
-        detalii: `Șters utilizator: ${user.nume} (@${user.username})`,
-      },
-    });
+    // Log in audit safely
+    const actor = await this.getValidActor(actorUserId);
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actor.userId,
+          userNume: actor.userNume,
+          userRol: actor.userRol,
+          actiune: 'STERGERE_UTILIZATOR',
+          modul: 'UTILIZATORI',
+          entitateTip: 'User',
+          entitateId: id,
+          detalii: `Șters utilizator: ${user.nume} (@${user.username}) de către ${actor.userNume}`,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log user delete audit:', e);
+    }
 
     return { mesaj: `Utilizatorul "${user.nume}" a fost șters din sistem.` };
   }
@@ -292,24 +369,23 @@ export class AuthService implements OnModuleInit {
       data: { parola: nouaParola.trim() },
     });
 
-    let actorNume = 'Administrator';
-    if (actorUserId) {
-      const actor = await this.prisma.user.findUnique({ where: { id: actorUserId } });
-      if (actor) actorNume = actor.nume;
+    const actor = await this.getValidActor(actorUserId);
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actor.userId,
+          userNume: actor.userNume,
+          userRol: actor.userRol,
+          actiune: 'RESETARE_PAROLA',
+          modul: 'UTILIZATORI',
+          entitateTip: 'User',
+          entitateId: id,
+          detalii: `Parola pentru contul "${user.username}" (${user.nume}) a fost resetată de către ${actor.userNume}.`,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log reset password audit:', e);
     }
-
-    await this.prisma.auditLog.create({
-      data: {
-        userId: actorUserId || null,
-        userNume: actorNume,
-        userRol: 'ADMIN',
-        actiune: 'RESETARE_PAROLA',
-        modul: 'UTILIZATORI',
-        entitateTip: 'User',
-        entitateId: id,
-        detalii: `Parola pentru contul "${user.username}" (${user.nume}) a fost resetată de către ${actorNume}.`,
-      },
-    });
 
     return { mesaj: `Parola pentru utilizatorul "${user.nume}" a fost resetată cu succes!` };
   }

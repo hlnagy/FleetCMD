@@ -1109,6 +1109,12 @@ function SetariContent() {
       };
       if (userParola) payload.parola = userParola.trim();
 
+      // Ensure admin cannot be demoted or deactivated
+      if (editingUser && (editingUser.rol === 'ADMIN' || editingUser.username === 'admin')) {
+        payload.rol = 'ADMIN';
+        payload.activ = true;
+      }
+
       const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -1130,6 +1136,11 @@ function SetariContent() {
   };
 
   const handleDeleteUser = async (u: any) => {
+    if (u.rol === 'ADMIN' || u.username === 'admin') {
+      alert('Contul de administrator este protejat și nu poate fi șters din sistem!');
+      return;
+    }
+
     const confirmed = await showConfirm(
       'Ștergere Utilizator',
       `Sigur doriți să ștergeți utilizatorul "${u.nume}" (@${u.username})? Această acțiune este ireversibilă.`,
@@ -1153,6 +1164,11 @@ function SetariContent() {
   };
 
   const handleToggleUserActive = async (u: any) => {
+    if ((u.rol === 'ADMIN' || u.username === 'admin') && u.activ) {
+      alert('Contul de administrator este permanent activ și nu poate fi dezactivat!');
+      return;
+    }
+
     try {
       const res = await authFetch(`${API_BASE_URL}/auth/users/${u.id}`, {
         method: 'PATCH',
@@ -1161,6 +1177,9 @@ function SetariContent() {
       });
       if (res.ok) {
         fetchUsers();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut schimba starea utilizatorului'}`);
       }
     } catch (e) {
       console.log('Eroare la schimbarea stării utilizatorului', e);
@@ -2161,24 +2180,35 @@ function SetariContent() {
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleToggleUserActive(u)}
-                            className={`p-1.5 rounded-lg transition ${
-                              u.activ
-                                ? 'text-sage-500 hover:text-amber-700 hover:bg-amber-50'
-                                : 'text-emerald-600 hover:bg-emerald-50'
-                            }`}
-                            title={u.activ ? 'Dezactivează Cont' : 'Activează Cont'}
-                          >
-                            {u.activ ? <UserX className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(u)}
-                            className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
-                            title="Ștergere Utilizator"
-                          >
-                            <Trash2 className="w-4 h-4 text-terracotta-500" />
-                          </button>
+                          {!isUserAdmin && u.username !== 'admin' ? (
+                            <>
+                              <button
+                                onClick={() => handleToggleUserActive(u)}
+                                className={`p-1.5 rounded-lg transition ${
+                                  u.activ
+                                    ? 'text-sage-500 hover:text-amber-700 hover:bg-amber-50'
+                                    : 'text-emerald-600 hover:bg-emerald-50'
+                                }`}
+                                title={u.activ ? 'Dezactivează Cont' : 'Activează Cont'}
+                              >
+                                {u.activ ? <UserX className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1.5 rounded-lg text-roseash-600 hover:bg-roseash-100 transition"
+                                title="Ștergere Utilizator"
+                              >
+                                <Trash2 className="w-4 h-4 text-terracotta-500" />
+                              </button>
+                            </>
+                          ) : (
+                            <span
+                              className="p-1.5 rounded-lg text-sapphire-600 bg-sapphire-50 flex items-center justify-center cursor-default"
+                              title="Cont de administrator protejat (nu poate fi șters sau dezactivat)"
+                            >
+                              <Shield className="w-4 h-4 text-sapphire-600" />
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3075,22 +3105,27 @@ function SetariContent() {
                   <label className="text-sage-700 block mb-1 font-bold">Rol & Nivel Drepturi: *</label>
                   <select
                     value={userRol}
+                    disabled={!!(editingUser && (editingUser.rol === 'ADMIN' || editingUser.username === 'admin'))}
                     onChange={(e) => setUserRol(e.target.value as any)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold disabled:opacity-60"
                   >
                     <option value="ADMIN">ADMIN - Administrare completă (Acces total)</option>
                     <option value="OPERATOR">OPERATOR - Editare operațională (Fără acces Setări)</option>
                     <option value="VIEWER">VIEWER - Numai citire (Modificări restricționate)</option>
                   </select>
+                  {editingUser && (editingUser.rol === 'ADMIN' || editingUser.username === 'admin') && (
+                    <p className="text-[10px] text-sapphire-700 font-bold mt-1">Cont de administrator permanent protejat.</p>
+                  )}
                 </div>
                 <div className="pt-6">
                   <div className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       id="userActivCheck"
+                      disabled={!!(editingUser && (editingUser.rol === 'ADMIN' || editingUser.username === 'admin'))}
                       checked={userActiv}
                       onChange={(e) => setUserActiv(e.target.checked)}
-                      className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500"
+                      className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500 disabled:opacity-60"
                     />
                     <label htmlFor="userActivCheck" className="text-sage-700 font-bold cursor-pointer">
                       Cont Activ (permite autentificarea în sistem)

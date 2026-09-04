@@ -18,9 +18,20 @@ export class AuditService {
     ipAdresa?: string;
   }) {
     try {
+      let validUserId: string | null = null;
+      if (data.userId) {
+        try {
+          const userExists = await this.prisma.user.findUnique({
+            where: { id: data.userId },
+            select: { id: true },
+          });
+          if (userExists) validUserId = userExists.id;
+        } catch (e) {}
+      }
+
       return await this.prisma.auditLog.create({
         data: {
-          userId: data.userId || null,
+          userId: validUserId,
           userEmail: data.userEmail || null,
           userNume: data.userNume || 'Anonim / Sistem',
           userRol: data.userRol || 'OPERATOR',
