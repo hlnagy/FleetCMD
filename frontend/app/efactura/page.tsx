@@ -240,6 +240,13 @@ function EFacturaContent() {
               console.error(e);
             }
           }, 2000);
+        } else if (config?.stareCronAuto && config?.accessToken) {
+          // AUTO-SYNC INTELIGENT: Dacă ultimul sync a fost acum mai mult de 60 de minute (sau după weekend/inactivitate), pornim automat sync în fundal!
+          const lastSyncTime = config?.ultimulSyncSucces ? new Date(config.ultimulSyncSucces).getTime() : 0;
+          const oneHourMs = 60 * 60 * 1000;
+          if (Date.now() - lastSyncTime > oneHourMs) {
+            handleForceSync();
+          }
         }
       }
     } catch (e) {
