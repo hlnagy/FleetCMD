@@ -112,7 +112,7 @@ export class EFacturaService {
   // -------------------------------------------------------------------------
   // CONFIG & OAUTH2 TOKEN MANAGEMENT
   // -------------------------------------------------------------------------
-  async getConfig() {
+  async getConfig(forAdmin: boolean = false) {
     let cfg = await this.prisma.eFacturaConfig.findUnique({ where: { id: 'default' } });
     if (!cfg) {
       cfg = await this.prisma.eFacturaConfig.create({
@@ -123,6 +123,14 @@ export class EFacturaService {
           intervalZileSyncAuto: 15,
         },
       });
+    }
+    if (!forAdmin) {
+      return {
+        ...cfg,
+        clientSecret: cfg.clientSecret ? '••••••••' : null,
+        accessToken: cfg.accessToken ? `${cfg.accessToken.substring(0, 8)}••••••••` : null,
+        refreshToken: cfg.refreshToken ? `${cfg.refreshToken.substring(0, 8)}••••••••` : null,
+      };
     }
     return cfg;
   }
@@ -139,17 +147,21 @@ export class EFacturaService {
     stareCronAuto?: boolean;
     intervalZileSyncAuto?: number;
   }) {
-    const existing = await this.getConfig();
+    const existing = await this.getConfig(true);
+
+    const isSecretMasked = data.clientSecret && data.clientSecret.includes('••••');
+    const isAccessMasked = data.accessToken && data.accessToken.includes('••••');
+    const isRefreshMasked = data.refreshToken && data.refreshToken.includes('••••');
 
     return this.prisma.eFacturaConfig.update({
       where: { id: 'default' },
       data: {
         ...(data.cifFirma ? { cifFirma: data.cifFirma.trim().toUpperCase() } : {}),
         ...(data.clientId !== undefined ? { clientId: data.clientId } : {}),
-        ...(data.clientSecret !== undefined ? { clientSecret: data.clientSecret } : {}),
+        ...(data.clientSecret !== undefined && !isSecretMasked ? { clientSecret: data.clientSecret } : {}),
         ...(data.redirectUri !== undefined ? { redirectUri: data.redirectUri } : {}),
-        ...(data.accessToken !== undefined ? { accessToken: data.accessToken } : {}),
-        ...(data.refreshToken !== undefined ? { refreshToken: data.refreshToken } : {}),
+        ...(data.accessToken !== undefined && !isAccessMasked ? { accessToken: data.accessToken } : {}),
+        ...(data.refreshToken !== undefined && !isRefreshMasked ? { refreshToken: data.refreshToken } : {}),
         ...(data.accessTokenExpiresAt ? { accessTokenExpiresAt: new Date(data.accessTokenExpiresAt) } : {}),
         ...(data.refreshTokenExpiresAt ? { refreshTokenExpiresAt: new Date(data.refreshTokenExpiresAt) } : {}),
         ...(data.stareCronAuto !== undefined ? { stareCronAuto: data.stareCronAuto } : {}),

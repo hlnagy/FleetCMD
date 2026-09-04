@@ -72,25 +72,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
 
-    // Silently resolve real admin ID from backend if needed
-    fetch(`${API_BASE_URL}/auth/users`)
-      .then((res) => res.json())
-      .then((users) => {
-        if (Array.isArray(users)) {
-          const dbAdmin = users.find((u) => u.username === 'admin' || u.rol === 'ADMIN');
-          if (dbAdmin) {
-            setUser((prev) => {
-              if (prev && (prev.id === 'default-admin-id' || prev.username === 'admin')) {
-                const updated = { ...prev, id: dbAdmin.id, nume: dbAdmin.nume || prev.nume };
-                localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
-                return updated;
-              }
-              return prev;
-            });
-          }
-        }
+    // Rezolvare ID admin doar dacă există deja o sesiune activă cu token valid
+    const currentToken = localStorage.getItem('fleetcmd_token');
+    if (currentToken) {
+      fetch(`${API_BASE_URL}/auth/users`, {
+        headers: { Authorization: `Bearer ${currentToken}` },
       })
-      .catch(() => {});
+        .then((res) => {
+          if (res.status === 401) {
+            logout();
+            return null;
+          }
+          return res.json();
+        })
+        .then((users) => {
+          if (Array.isArray(users)) {
+            const dbAdmin = users.find((u) => u.username === 'admin' || u.rol === 'ADMIN');
+            if (dbAdmin) {
+              setUser((prev) => {
+                if (prev && (prev.id === 'default-admin-id' || prev.username === 'admin')) {
+                  const updated = { ...prev, id: dbAdmin.id, nume: dbAdmin.nume || prev.nume };
+                  localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
+                  return updated;
+                }
+                return prev;
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const login = async (identifier: string, parola: string) => {
@@ -151,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const headers = new Headers(options.headers || {});
     if (user) {
       headers.set('x-user-id', user.id);
-      headers.set('x-user-email', user.email);
+      headers.set('x-user-email', user.email || '');
       headers.set('x-user-name', encodeURIComponent(user.nume));
       headers.set('x-user-role', user.rol);
     }
@@ -159,10 +170,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers.set('Authorization', `Bearer ${token}`);
     }
 
-    return fetch(url, {
+    const res = await fetch(url, {
       ...options,
       headers,
     });
+
+    if (res.status === 401 && user) {
+      // Sesiune invalidată pe server sau expirată
+      logout();
+    }
+
+    return res;
   };
 
   return (

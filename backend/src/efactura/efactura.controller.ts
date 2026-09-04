@@ -1,15 +1,18 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
 import { EFacturaService } from './efactura.service';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('efactura')
 export class EFacturaController {
   constructor(private readonly efacturaService: EFacturaService) {}
 
   @Get('config')
-  async getConfig() {
-    return this.efacturaService.getConfig();
+  async getConfig(@Headers('x-user-role') role?: string) {
+    const isAdmin = role === 'ADMIN';
+    return this.efacturaService.getConfig(isAdmin);
   }
 
+  @Roles('ADMIN')
   @Patch('config')
   async updateConfig(@Body() body: any, @Headers('x-user-role') role?: string) {
     if (role && role !== 'ADMIN') {
@@ -19,6 +22,7 @@ export class EFacturaController {
   }
 
   // GENERARE URL AUTORIZARE OAUTH2 ANAF (Pasul 2)
+  @Roles('ADMIN')
   @Get('oauth/authorize-url')
   async getAuthorizeUrl(@Headers('x-user-role') role?: string) {
     if (role && role !== 'ADMIN') {
@@ -28,6 +32,7 @@ export class EFacturaController {
   }
 
   // SCHIMB COD PENTRU TOKEN-URI JWT (Pasul 3)
+  @Roles('ADMIN')
   @Post('oauth/exchange-code')
   async exchangeCode(@Body() body: { code: string }, @Headers('x-user-role') role?: string) {
     if (role && role !== 'ADMIN') {

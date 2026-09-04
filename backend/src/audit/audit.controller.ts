@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Body, Query, Headers } from '@nestjs/common';
 import { AuditService } from './audit.service';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
+  @Roles('ADMIN')
   @Get('logs')
   getLogs(
     @Query('limit') limit?: number,

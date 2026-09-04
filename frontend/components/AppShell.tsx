@@ -14,6 +14,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
+    // Interceptor global pentru atașarea automată a token-ului de autorizare pe toate apelurile fetch
+    if (typeof window !== 'undefined' && !(window as any).__fleetFetchIntercepted) {
+      (window as any).__fleetFetchIntercepted = true;
+      const originalFetch = window.fetch;
+      window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+        const token = localStorage.getItem('fleetcmd_token');
+        if (token) {
+          init = init || {};
+          const headers = new Headers(init.headers || {});
+          if (!headers.has('Authorization')) {
+            headers.set('Authorization', `Bearer ${token}`);
+          }
+          init.headers = headers;
+        }
+        return originalFetch(input, init);
+      };
+    }
   }, []);
 
   if (!mounted || loading) {

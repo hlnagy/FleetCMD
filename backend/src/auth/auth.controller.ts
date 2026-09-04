@@ -1,13 +1,17 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, Ip, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { Public } from './public.decorator';
+import { Roles } from './roles.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
+  @HttpCode(HttpStatus.OK)
   @Post('login')
-  login(@Body() body: { identifier: string; parola: string }) {
-    return this.authService.login(body);
+  login(@Body() body: { identifier: string; parola: string }, @Ip() ip: string) {
+    return this.authService.login(body, ip);
   }
 
   @Get('users')
@@ -20,6 +24,7 @@ export class AuthController {
     return this.authService.getUserById(id);
   }
 
+  @Roles('ADMIN')
   @Post('users')
   createUser(
     @Body() body: {
@@ -39,6 +44,7 @@ export class AuthController {
     });
   }
 
+  @Roles('ADMIN')
   @Patch('users/:id')
   updateUser(
     @Param('id') id: string,
@@ -60,6 +66,7 @@ export class AuthController {
     });
   }
 
+  @Roles('ADMIN')
   @Delete('users/:id')
   deleteUser(
     @Param('id') id: string,
@@ -68,6 +75,7 @@ export class AuthController {
     return this.authService.deleteUser(id, actorUserId);
   }
 
+  @Roles('ADMIN')
   @Post('users/:id/reset-password')
   resetPassword(
     @Param('id') id: string,

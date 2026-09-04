@@ -1,5 +1,15 @@
-import { Injectable, OnModuleInit, BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { hashPassword, verifyPassword, needsRehash, generateJwt } from './crypto.util';
+import { checkRateLimit, recordFailedAttempt, clearFailedAttempts } from './login-limiter';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -7,18 +17,19 @@ export class AuthService implements OnModuleInit {
 
   async onModuleInit() {
     await this.seedInitialUsers();
+    await this.migrateLegacyPasswords();
   }
 
   async seedInitialUsers() {
     const userCount = await this.prisma.user.count();
     if (userCount === 0) {
-      console.log('Seeding initial FleetCMD users...');
+      console.log('Seeding initial FleetCMD users with PBKDF2 hashes...');
       const defaultUsers = [
         {
           nume: 'Administrator Principal',
           email: 'admin@fleetcmd.ro',
           username: 'admin',
-          parola: 'admin123',
+          parola: hashPassword('admin123'),
           rol: 'ADMIN',
           functie: 'Administrator Sistem',
           telefon: '0744111222',
@@ -28,7 +39,7 @@ export class AuthService implements OnModuleInit {
           nume: 'Brașoveanu Virgil',
           email: 'dispecer@fleetcmd.ro',
           username: 'dispecer',
-          parola: 'operator123',
+          parola: hashPassword('operator123'),
           rol: 'OPERATOR',
           functie: 'Șef Flotă & Atelier',
           telefon: '0744333444',
@@ -38,7 +49,7 @@ export class AuthService implements OnModuleInit {
           nume: 'Inspector Audit / Vizitator',
           email: 'vizitator@fleetcmd.ro',
           username: 'vizitator',
-          parola: 'viewer123',
+          parola: hashPassword('viewer123'),
           rol: 'VIEWER',
           functie: 'Vizitator / Numai Citire',
           telefon: '0722000111',
@@ -50,6 +61,23 @@ export class AuthService implements OnModuleInit {
         await this.prisma.user.create({ data: u });
       }
       console.log('Initial users seeded successfully.');
+    }
+  }
+
+  async migrateLegacyPasswords() {
+    try {
+      const users = await this.prisma.user.findMany();
+      for (const u of users) {
+        if (needsRehash(u.parola)) {
+          await this.prisma.user.update({
+            where: { id: u.id },
+            data: { parola: hashPassword(u.parola) },
+          });
+          console.log(`Securizat parola contului @${u.username} prin hash PBKDF2-SHA512.`);
+        }
+      }
+    } catch (e) {
+      console.warn('Avertisment la migrarea automată a parolelor:', e);
     }
   }
 
@@ -83,32 +111,70 @@ export class AuthService implements OnModuleInit {
     };
   }
 
-  async login(data: { identifier: string; parola: string }) {
+  async login(data: { identifier: string; parola: string }, clientIp?: string) {
     const { identifier, parola } = data;
     if (!identifier || !parola) {
       throw new BadRequestException('Numele de utilizator și parola sunt obligatorii.');
     }
 
-    const usernameClean = identifier.trim().toLowerCase();
+    const cleanIdentifier = identifier.trim().toLowerCase();
+    const rateLimitKey = `${clientIp || 'client'}:${cleanIdentifier}`;
+
+    // 1. Verificare protecție anti-forță brută (Rate Limiting)
+    const rateLimit = checkRateLimit(rateLimitKey);
+    if (!rateLimit.allowed) {
+      throw new HttpException(
+        `Prea multe încercări eșuate de conectare. Accesul este temporar restricționat din motive de securitate. Vă rugăm să reîncercați peste ${rateLimit.retryAfterSeconds} secunde.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         OR: [
-          { username: usernameClean },
+          { username: cleanIdentifier },
           { username: identifier.trim() },
-          { email: identifier.trim().toLowerCase() },
+          { email: cleanIdentifier },
         ],
       },
     });
 
-    if (!user || user.parola !== parola) {
-      throw new UnauthorizedException('Nume de utilizator sau parolă incorectă.');
+    // 2. Verificare credențiale cu hash criptografic
+    const isPasswordCorrect = user ? verifyPassword(parola, user.parola) : false;
+
+    if (!user || !isPasswordCorrect) {
+      const attempt = recordFailedAttempt(rateLimitKey);
+      if (attempt.blocked) {
+        throw new HttpException(
+          'Ați depășit limita de 5 încercări eșuate. Contul/IP-ul a fost blocat temporar pentru 5 minute.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      throw new UnauthorizedException(
+        `Nume de utilizator sau parolă incorectă. Încercări rămase: ${attempt.attemptsLeft}.`,
+      );
     }
 
     if (!user.activ) {
       throw new UnauthorizedException('Acest cont de utilizator a fost dezactivat de un administrator.');
     }
 
-    // Log login in audit safely
+    // Resetăm încercările eșuate la autentificare reușită
+    clearFailedAttempts(rateLimitKey);
+
+    // 3. Migrare transparentă dacă parola era încă în text clar
+    if (needsRehash(user.parola)) {
+      try {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { parola: hashPassword(parola) },
+        });
+      } catch (err) {
+        console.error('Failed to rehash password:', err);
+      }
+    }
+
+    // 4. Jurnalizare eveniment autentificare în jurnalul de audit
     try {
       await this.prisma.auditLog.create({
         data: {
@@ -120,15 +186,24 @@ export class AuthService implements OnModuleInit {
           entitateTip: 'User',
           entitateId: user.id,
           detalii: `Autentificare reușită pentru ${user.nume} (@${user.username}, ${user.rol})`,
+          ipAdresa: clientIp || null,
         },
       });
     } catch (e) {
       console.error('Failed to log login audit:', e);
     }
 
+    // 5. Generare token JWT autentic semnat criptografic HMAC-SHA256
+    const token = generateJwt({
+      sub: user.id,
+      username: user.username,
+      rol: user.rol,
+      nume: user.nume,
+    });
+
     const { parola: _, ...userWithoutPassword } = user;
     return {
-      token: `token-${user.id}-${Date.now()}`,
+      token,
       user: userWithoutPassword,
     };
   }
@@ -207,7 +282,7 @@ export class AuthService implements OnModuleInit {
         nume: data.nume.trim(),
         username: usernameClean,
         email: data.email?.trim() || null,
-        parola: data.parola,
+        parola: hashPassword(data.parola),
         rol,
         functie: data.functie || (rol === 'ADMIN' ? 'Administrator' : rol === 'OPERATOR' ? 'Operator Flotă' : 'Vizitator'),
         telefon: data.telefon || null,
@@ -278,7 +353,7 @@ export class AuthService implements OnModuleInit {
       updateData.username = uClean;
     }
     if (data.email !== undefined) updateData.email = data.email ? data.email.trim() : null;
-    if (data.parola) updateData.parola = data.parola;
+    if (data.parola) updateData.parola = hashPassword(data.parola);
     if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol)) {
       if (user.username === 'admin') {
         updateData.rol = 'ADMIN';
@@ -366,7 +441,7 @@ export class AuthService implements OnModuleInit {
 
     await this.prisma.user.update({
       where: { id },
-      data: { parola: nouaParola.trim() },
+      data: { parola: hashPassword(nouaParola.trim()) },
     });
 
     const actor = await this.getValidActor(actorUserId);
