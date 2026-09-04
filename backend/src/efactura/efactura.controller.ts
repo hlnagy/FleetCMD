@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
 import { EFacturaService } from './efactura.service';
 
 @Controller('efactura')
@@ -11,19 +11,28 @@ export class EFacturaController {
   }
 
   @Patch('config')
-  async updateConfig(@Body() body: any) {
+  async updateConfig(@Body() body: any, @Headers('x-user-role') role?: string) {
+    if (role && role !== 'ADMIN') {
+      throw new ForbiddenException('Doar administratorul are permisiunea de a modifica configurația OAuth2 ANAF.');
+    }
     return this.efacturaService.updateConfig(body);
   }
 
   // GENERARE URL AUTORIZARE OAUTH2 ANAF (Pasul 2)
   @Get('oauth/authorize-url')
-  async getAuthorizeUrl() {
+  async getAuthorizeUrl(@Headers('x-user-role') role?: string) {
+    if (role && role !== 'ADMIN') {
+      throw new ForbiddenException('Doar administratorul poate iniția autorizarea OAuth2 ANAF.');
+    }
     return this.efacturaService.generateAuthorizeUrl();
   }
 
-  // BEVÁLTÁS: EXCHANGE CODE FOR TOKENS (Pasul 3)
+  // SCHIMB COD PENTRU TOKEN-URI JWT (Pasul 3)
   @Post('oauth/exchange-code')
-  async exchangeCode(@Body() body: { code: string }) {
+  async exchangeCode(@Body() body: { code: string }, @Headers('x-user-role') role?: string) {
+    if (role && role !== 'ADMIN') {
+      throw new ForbiddenException('Doar administratorul poate schimba codul OAuth2 ANAF.');
+    }
     return this.efacturaService.exchangeCodeForToken(body.code);
   }
 

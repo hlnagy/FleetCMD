@@ -13,8 +13,10 @@ import {
 import { API_BASE_URL } from '@/lib/api';
 import { showConfirm } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
+import { useAuth } from '@/lib/AuthContext';
 
 function EFacturaContent() {
+  const { user: authUser, isAdmin, authFetch } = useAuth();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
 
@@ -366,22 +368,24 @@ function EFacturaContent() {
           actionHint: hintText,
         });
       } else if (code) {
-        setAuthCodeInput(code);
-        setShowConfigModal(true);
-        setUrlDiagnostic({
-          type: 'success',
-          title: 'Cod de Autorizare Capturat',
-          details: `Codul autorizare (${code.substring(0, 15)}...) a fost extras automat din URL și introdus în formular.`,
-          actionHint: 'Finalizați autorizarea prin schimbul codului pe token-uri JWT.',
-        });
+        if (isAdmin) {
+          setAuthCodeInput(code);
+          setShowConfigModal(true);
+          setUrlDiagnostic({
+            type: 'success',
+            title: 'Cod de Autorizare Capturat',
+            details: `Codul autorizare (${code.substring(0, 15)}...) a fost extras automat din URL și introdus în formular.`,
+            actionHint: 'Finalizați autorizarea prin schimbul codului pe token-uri JWT.',
+          });
+        }
       }
     }
-  }, []);
+  }, [isAdmin]);
 
   // HANDLER: OPEN AUTHORIZE URL (Pasul 2)
   const handleOpenAuthorizeUrl = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/oauth/authorize-url`);
+      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/authorize-url`);
       if (res.ok) {
         const data = await res.json();
         if (data.url) {
@@ -404,7 +408,7 @@ function EFacturaContent() {
     }
     try {
       setExchangingCode(true);
-      const res = await fetch(`${API_BASE_URL}/efactura/oauth/exchange-code`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/exchange-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: authCodeInput.trim() }),
@@ -412,7 +416,7 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(` ${data.mesaj}`);
+        alert(data.mesaj || 'Token-uri actualizate cu succes!');
         setAuthCodeInput('');
         fetchData();
       } else {
@@ -471,7 +475,7 @@ function EFacturaContent() {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/config`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/config`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -486,7 +490,7 @@ function EFacturaContent() {
       });
 
       if (res.ok) {
-        alert(' Configurația ANAF e-Factura a fost salvată cu succes!');
+        alert('Configurația ANAF e-Factura a fost salvată cu succes!');
         setShowConfigModal(false);
         fetchData();
       } else {
@@ -968,13 +972,15 @@ function EFacturaContent() {
             />
           </label>
 
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition"
-          >
-            <Settings className="w-4 h-4 text-sage-500" />
-            <span>Configurare Token OAuth2</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowConfigModal(true)}
+              className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-sage-500" />
+              <span>Configurare Token OAuth2</span>
+            </button>
+          )}
 
           <button
             onClick={fetchData}
@@ -2364,9 +2370,9 @@ function EFacturaContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: CONFIGURARE OAUTH2 & TOKEN ANAF (CU ICONIȚĂ DE AJUTOR ?) */}
+      {/* MODAL 3: CONFIGURARE OAUTH2 & TOKEN ANAF (DOAR PENTRU ADMINISTRATOR) */}
       {/* ========================================================================= */}
-      {showConfigModal && (
+      {showConfigModal && isAdmin && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
           <div className="pleasant-card bg-white border border-morning-200 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh] my-auto overflow-hidden animate-fade-in">
             {/* ANTET FIXAT (STICKY HEADER) */}
@@ -2528,9 +2534,9 @@ function EFacturaContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 4: GHID PAS CU PAS CONECTARE ANAF SPV (LÂNGĂ X ?) */}
+      {/* MODAL 4: GHID PAS CU PAS CONECTARE ANAF SPV (DOAR PENTRU ADMINISTRATOR) */}
       {/* ========================================================================= */}
-      {showHelpGuideModal && (
+      {showHelpGuideModal && isAdmin && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
