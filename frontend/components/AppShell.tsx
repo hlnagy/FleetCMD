@@ -10,8 +10,13 @@ import { ShieldCheck } from 'lucide-react';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const [mounted, setMounted] = useState(false);
 
-  if (loading) {
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#070b14] text-white space-y-4">
         <div className="relative">
@@ -25,7 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span>Fleet</span>
             <span className="text-cyan-400">CMD</span>
           </p>
-          <p className="text-xs font-mono text-slate-400">Se încarcă mediul securizat...</p>
+          <p className="text-xs font-mono text-slate-400">Se inițializează mediul securizat...</p>
         </div>
       </div>
     );
