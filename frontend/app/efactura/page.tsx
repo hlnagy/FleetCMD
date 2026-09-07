@@ -1077,18 +1077,76 @@ function EFacturaContent() {
           <AlertTriangle className="w-8 h-8 text-amber-500" />
         </div>
 
-        <div className="pleasant-card p-4 rounded-2xl border border-morning-200 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-sage-700 tracking-wider">Stare Cron Job Orar</p>
-            <div className="flex items-center space-x-1.5 mt-1">
-              <span className={`w-2.5 h-2.5 rounded-full ${config?.stareCronAuto ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-              <span className="text-xs font-bold text-sapphire-900">{config?.stareCronAuto ? 'ACTIV (Orar)' : 'DEZACTIVAT'}</span>
+        {/* ENHANCED LIVE CRON & SYNC STATUS CARD */}
+        <div className={`p-4 rounded-2xl border transition-all duration-300 flex items-center justify-between ${
+          syncing || syncStatusData?.inProgress
+            ? 'bg-gradient-to-br from-sapphire-500/10 via-sapphire-500/5 to-cyan-500/10 border-sapphire-300 shadow-md shadow-sapphire-500/10'
+            : config?.stareCronAuto
+            ? 'bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-teal-500/10 border-emerald-300/80 shadow-sm'
+            : 'pleasant-card border-morning-200'
+        }`}>
+          <div className="space-y-1.5">
+            <p className="text-[10px] uppercase font-extrabold text-sage-700 tracking-wider flex items-center space-x-1.5">
+              <span>Stare Cron Job Orar</span>
+              {config?.stareCronAuto && (
+                <span className="px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">
+                  24/7 Activ
+                </span>
+              )}
+            </p>
+
+            {/* FŐ AKTÍV JELZŐ GOMB / BADGE */}
+            <div className="flex items-center space-x-2">
+              {syncing || syncStatusData?.inProgress ? (
+                <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded-full bg-sapphire-100 border border-sapphire-300 text-sapphire-800">
+                  <RefreshCw className="w-3 h-3 animate-spin text-sapphire-600" />
+                  <span className="text-xs font-black tracking-wide uppercase text-sapphire-900">
+                    Sincronizare în curs...
+                  </span>
+                </div>
+              ) : config?.stareCronAuto ? (
+                <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded-full bg-emerald-100/90 border border-emerald-300 text-emerald-900 shadow-xs">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" />
+                  </span>
+                  <span className="text-xs font-black tracking-wide text-emerald-900">
+                    ACTIV (Sincronizare Automată)
+                  </span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                  <span className="text-xs font-bold text-slate-700">DEZACTIVAT</span>
+                </div>
+              )}
             </div>
-            <p className="text-[10px] text-sage-500 mt-0.5 font-mono">
-              {config?.ultimulSyncSucces ? `Ultimul sync: ${new Date(config.ultimulSyncSucces).toLocaleTimeString('ro-RO')}` : 'Fără sync înregistrat'}
+
+            <p className="text-[10px] text-sage-600 font-mono font-medium flex items-center space-x-1 pt-0.5">
+              <span className="text-slate-500 font-sans">Ultimul sync:</span>
+              <strong className="text-sapphire-900">
+                {config?.ultimulSyncSucces
+                  ? new Date(config.ultimulSyncSucces).toLocaleString('ro-RO', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : 'Fără sync înregistrat'}
+              </strong>
             </p>
           </div>
-          <Clock className="w-8 h-8 text-periwinkle-600" />
+
+          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all ${
+            syncing || syncStatusData?.inProgress
+              ? 'bg-sapphire-100 text-sapphire-600 ring-4 ring-sapphire-50'
+              : config?.stareCronAuto
+              ? 'bg-emerald-100 text-emerald-600 ring-4 ring-emerald-50'
+              : 'bg-morning-100 text-sage-400'
+          }`}>
+            <Clock className={`w-6 h-6 ${syncing ? 'animate-spin' : ''}`} />
+          </div>
         </div>
 
         {/* FORCE SYNC BOX */}
