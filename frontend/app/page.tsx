@@ -1,92 +1,419 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Truck, AlertTriangle, Droplets, AlertCircle, Plus, CheckCircle2, RefreshCw,
-  Filter, Edit3, Trash2, Clock, DollarSign, TrendingUp, ShieldAlert, ArrowUpRight, Wrench, X, Calendar, Layers, UserCheck, Users, Search, Phone, Settings
+  Filter, Edit3, Trash2, Clock, DollarSign, TrendingUp, ShieldAlert, ArrowUpRight,
+  Wrench, X, Calendar, Layers, UserCheck, Users, Search, Phone, Settings,
+  Sparkles, Sliders, Check, Eye, EyeOff, LayoutGrid, Zap, ShieldCheck,
+  Disc, Package, FileText, ArrowRight, Activity, ChevronRight, BarChart3,
+  Flame, Gauge, RefreshCcw, BellRing, ArrowDownRight, ExternalLink
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import { useAuth } from '@/lib/AuthContext';
 
-export default function DashboardPage() {
+// WIDGET CONFIGURATION INTERFACE
+interface WidgetConfig {
+  showKpiMetrics: boolean;
+  showQuickActions: boolean;
+  showAlertsCenter: boolean;
+  showWorkOrders: boolean;
+  showMaintenanceTimeline: boolean;
+  showFleetTelemetry: boolean;
+  showEFacturaStream: boolean;
+  showTireMatrix: boolean;
+  showInventoryWarranty: boolean;
+  showWorkshopTeam: boolean;
+  layoutMode: 'comfortable' | 'compact';
+}
+
+// DEFAULT PRESET CONFIGURATIONS
+const PRESETS: Record<string, { name: string; icon: string; desc: string; config: WidgetConfig }> = {
+  executive: {
+    name: 'Director Flotă / Executiv',
+    icon: '👑',
+    desc: 'Privire de ansamblu strategică: KPI-uri majore, costuri, telemetrie, alerte și e-Factura',
+    config: {
+      showKpiMetrics: true,
+      showQuickActions: true,
+      showAlertsCenter: true,
+      showWorkOrders: true,
+      showMaintenanceTimeline: true,
+      showFleetTelemetry: true,
+      showEFacturaStream: true,
+      showTireMatrix: false,
+      showInventoryWarranty: true,
+      showWorkshopTeam: false,
+      layoutMode: 'comfortable',
+    },
+  },
+  workshop: {
+    name: 'Șef Atelier & Dispecerat (CMMS)',
+    icon: '🔧',
+    desc: 'Focus operațional: Munkalapok, revizii preventive, mecanici, anomálii și completări fluide',
+    config: {
+      showKpiMetrics: true,
+      showQuickActions: true,
+      showAlertsCenter: true,
+      showWorkOrders: true,
+      showMaintenanceTimeline: true,
+      showFleetTelemetry: true,
+      showEFacturaStream: false,
+      showTireMatrix: true,
+      showInventoryWarranty: false,
+      showWorkshopTeam: true,
+      layoutMode: 'comfortable',
+    },
+  },
+  warehouse: {
+    name: 'Magazie, Piese & e-Factura',
+    icon: '📦',
+    desc: 'Supply Chain: Facturi ANAF, alerte stoc minim, piese serializate în garanție și recepții',
+    config: {
+      showKpiMetrics: true,
+      showQuickActions: true,
+      showAlertsCenter: true,
+      showWorkOrders: false,
+      showMaintenanceTimeline: false,
+      showFleetTelemetry: false,
+      showEFacturaStream: true,
+      showTireMatrix: false,
+      showInventoryWarranty: true,
+      showWorkshopTeam: false,
+      layoutMode: 'comfortable',
+    },
+  },
+  tires: {
+    name: 'Gestiune Anvelope & Siguranță',
+    icon: '🛞',
+    desc: 'Monitorizare tren rulare: Uzuri >30%, profile mm, permutări axe și alerte ITP/RCA',
+    config: {
+      showKpiMetrics: true,
+      showQuickActions: true,
+      showAlertsCenter: true,
+      showWorkOrders: false,
+      showMaintenanceTimeline: true,
+      showFleetTelemetry: true,
+      showEFacturaStream: false,
+      showTireMatrix: true,
+      showInventoryWarranty: false,
+      showWorkshopTeam: false,
+      layoutMode: 'comfortable',
+    },
+  },
+  custom: {
+    name: 'Personalizat (Saját nézet)',
+    icon: '⚙️',
+    desc: 'Aspect 100% individual configurat de tine',
+    config: {
+      showKpiMetrics: true,
+      showQuickActions: true,
+      showAlertsCenter: true,
+      showWorkOrders: true,
+      showMaintenanceTimeline: true,
+      showFleetTelemetry: true,
+      showEFacturaStream: true,
+      showTireMatrix: true,
+      showInventoryWarranty: true,
+      showWorkshopTeam: true,
+      layoutMode: 'comfortable',
+    },
+  },
+};
+
+export default function MasterDashboardPage() {
+  const { user: authUser } = useAuth();
+
+  // STATE: DATA
   const [vehicule, setVehicule] = useState<any[]>([]);
-  const [alerteScurgeri, setAlerteScurgeri] = useState<any[]>([]);
-  const [selectedCategorieFilter, setSelectedCategorieFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  // Stare Mecanici & Registru Servicii per Mecanic
+  const [alerteCentralizate, setAlerteCentralizate] = useState<any[]>([]);
+  const [comenziLucru, setComenziLucru] = useState<any[]>([]);
+  const [sarciniMentenanta, setSarciniMentenanta] = useState<any[]>([]);
   const [mecanici, setMecanici] = useState<any[]>([]);
   const [istoricServicii, setIstoricServicii] = useState<any[]>([]);
-  const [selectedMecanicFilter, setSelectedMecanicFilter] = useState('');
-  const [selectedTipServiciuFilter, setSelectedTipServiciuFilter] = useState('');
-  const [searchQueryServicii, setSearchQueryServicii] = useState('');
+  const [articoleStoc, setArticoleStoc] = useState<any[]>([]);
+  const [anvelope, setAnvelope] = useState<any[]>([]);
+  const [facturi, setFacturi] = useState<any[]>([]);
+  const [eFacturaConfig, setEFacturaConfig] = useState<any>(null);
 
-  // Modal Înregistrare Mecanic Nou
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // STATE: PERSONALIZATION & PRESETS
+  const [activePreset, setActivePreset] = useState<string>('executive');
+  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig>(PRESETS.executive.config);
+  const [showCustomizerModal, setShowCustomizerModal] = useState(false);
+
+  // STATE: FILTERS & SEARCH
+  const [searchVehicul, setSearchVehicul] = useState('');
+  const [selectedCategorieFilter, setSelectedCategorieFilter] = useState('');
+  const [searchQueryServicii, setSearchQueryServicii] = useState('');
+  const [selectedMecanicFilter, setSelectedMecanicFilter] = useState('');
+
+  // STATE: QUICK ACTION MODALS
+  const [showQuickComandaModal, setShowQuickComandaModal] = useState(false);
+  const [showQuickUleiModal, setShowQuickUleiModal] = useState(false);
   const [showAddMecanicModal, setShowAddMecanicModal] = useState(false);
+
+  // QUICK COMANDA STATE
+  const [quickVehiculId, setQuickVehiculId] = useState('');
+  const [quickNumarComanda, setQuickNumarComanda] = useState('');
+  const [quickMecanic, setQuickMecanic] = useState('');
+  const [quickObservatii, setQuickObservatii] = useState('');
+  const [quickContor, setQuickContor] = useState(0);
+
+  // QUICK ULEI STATE
+  const [quickUleiVehiculId, setQuickUleiVehiculId] = useState('');
+  const [quickUleiTip, setQuickUleiTip] = useState('ULEI_MOTOR');
+  const [quickUleiCantitate, setQuickUleiCantitate] = useState(5);
+  const [quickUleiMecanic, setQuickUleiMecanic] = useState('');
+  const [quickUleiObservatii, setQuickUleiObservatii] = useState('');
+
+  // QUICK MECANIC STATE
   const [newMecanicNume, setNewMecanicNume] = useState('');
   const [newMecanicFunctie, setNewMecanicFunctie] = useState('Mecanic Atelier');
   const [newMecanicTelefon, setNewMecanicTelefon] = useState('');
 
-  // Modal State Editare Vehicul
-  const [editingVehicul, setEditingVehicul] = useState<any>(null);
+  // QUICK SYNC STATE
+  const [quickSyncing, setQuickSyncing] = useState(false);
+  const [quickSyncMessage, setQuickSyncMessage] = useState<string | null>(null);
 
-  // Form State Categorie Noua
-  const [showAddCatModal, setShowAddCatModal] = useState(false);
-  const [numeCategorie, setNumeCategorie] = useState('');
-  const [descriereCategorie, setDescriereCategorie] = useState('');
-
-  const fetchDashboard = async () => {
+  // LOAD PERSONALIZATION FROM LOCALSTORAGE
+  useEffect(() => {
     try {
-      setLoading(true);
-      const url = selectedCategorieFilter
-        ? `${API_BASE_URL}/vehicule?categorie=${selectedCategorieFilter}`
-        : `${API_BASE_URL}/vehicule`;
-      const resVeh = await fetch(url);
-      if (resVeh.ok) setVehicule(await resVeh.json());
-
-      const resAlert = await fetch(`${API_BASE_URL}/anomalii/alerte`);
-      if (resAlert.ok) setAlerteScurgeri(await resAlert.json());
-
-      fetchMecanici();
-      fetchIstoricServicii();
+      const savedPreset = localStorage.getItem('fleetcmd_dashboard_preset');
+      const savedConfig = localStorage.getItem('fleetcmd_dashboard_config');
+      if (savedPreset && PRESETS[savedPreset]) {
+        setActivePreset(savedPreset);
+      }
+      if (savedConfig) {
+        setWidgetConfig(JSON.parse(savedConfig));
+      }
     } catch (e) {
-      console.log('Fără conexiune backend live. Afișare date demo.', e);
+      console.warn('Nu s-au putut încărca preferințele de dashboard din localStorage');
+    }
+  }, []);
+
+  // SAVE PERSONALIZATION
+  const updatePreset = (presetKey: string) => {
+    setActivePreset(presetKey);
+    const newConfig = PRESETS[presetKey].config;
+    setWidgetConfig(newConfig);
+    try {
+      localStorage.setItem('fleetcmd_dashboard_preset', presetKey);
+      localStorage.setItem('fleetcmd_dashboard_config', JSON.stringify(newConfig));
+    } catch (e) {}
+  };
+
+  const toggleWidget = (key: keyof WidgetConfig) => {
+    setActivePreset('custom');
+    setWidgetConfig((prev) => {
+      const updated = {
+        ...prev,
+        [key]: typeof prev[key] === 'boolean' ? !prev[key] : prev[key],
+      };
+      try {
+        localStorage.setItem('fleetcmd_dashboard_preset', 'custom');
+        localStorage.setItem('fleetcmd_dashboard_config', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const toggleLayoutMode = () => {
+    setWidgetConfig((prev) => {
+      const updated = {
+        ...prev,
+        layoutMode: (prev.layoutMode === 'comfortable' ? 'compact' : 'comfortable') as 'comfortable' | 'compact',
+      };
+      try {
+        localStorage.setItem('fleetcmd_dashboard_config', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  // FETCH ALL MASTER DATA
+  const fetchAllData = async () => {
+    try {
+      setRefreshing(true);
+      const [
+        resVeh, resAlerts, resComenzi, resSarcini, resMec,
+        resIstoric, resStoc, resAnvelope, resFact, resEfactConfig
+      ] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/vehicule`),
+        fetch(`${API_BASE_URL}/anomalii/alerte-centralizate`),
+        fetch(`${API_BASE_URL}/mentenanta/comenzi-lucru`),
+        fetch(`${API_BASE_URL}/mentenanta/sarcini`),
+        fetch(`${API_BASE_URL}/mentenanta/mecanici`),
+        fetch(`${API_BASE_URL}/mentenanta/istoric-servicii-mecanic`),
+        fetch(`${API_BASE_URL}/stocuri-garantii/articole`),
+        fetch(`${API_BASE_URL}/anvelope`),
+        fetch(`${API_BASE_URL}/efactura/facturi`),
+        fetch(`${API_BASE_URL}/efactura/config`),
+      ]);
+
+      if (resVeh.status === 'fulfilled' && resVeh.value.ok) setVehicule(await resVeh.value.json());
+      if (resAlerts.status === 'fulfilled' && resAlerts.value.ok) setAlerteCentralizate(await resAlerts.value.json());
+      if (resComenzi.status === 'fulfilled' && resComenzi.value.ok) setComenziLucru(await resComenzi.value.json());
+      if (resSarcini.status === 'fulfilled' && resSarcini.value.ok) setSarciniMentenanta(await resSarcini.value.json());
+      if (resMec.status === 'fulfilled' && resMec.value.ok) setMecanici(await resMec.value.json());
+      if (resIstoric.status === 'fulfilled' && resIstoric.value.ok) setIstoricServicii(await resIstoric.value.json());
+      if (resStoc.status === 'fulfilled' && resStoc.value.ok) setArticoleStoc(await resStoc.value.json());
+      if (resAnvelope.status === 'fulfilled' && resAnvelope.value.ok) setAnvelope(await resAnvelope.value.json());
+      if (resFact.status === 'fulfilled' && resFact.value.ok) setFacturi(await resFact.value.json());
+      if (resEfactConfig.status === 'fulfilled' && resEfactConfig.value.ok) setEFacturaConfig(await resEfactConfig.value.json());
+    } catch (err) {
+      console.warn('Eroare la încărcarea datelor master dashboard:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchMecanici = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
-      if (res.ok) setMecanici(await res.json());
-    } catch (e) {
-      console.log('Error fetching mecanici', e);
-    }
-  };
-
-  const fetchIstoricServicii = async (mecNume?: string) => {
-    try {
-      const url = mecNume
-        ? `${API_BASE_URL}/mentenanta/istoric-servicii-mecanic?mecanic=${encodeURIComponent(mecNume)}`
-        : `${API_BASE_URL}/mentenanta/istoric-servicii-mecanic`;
-      const res = await fetch(url);
-      if (res.ok) setIstoricServicii(await res.json());
-    } catch (e) {
-      console.log('Error fetching istoric servicii mecanic', e);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboard();
-  }, [selectedCategorieFilter]);
+    fetchAllData();
+  }, []);
 
-  useEffect(() => {
-    fetchIstoricServicii(selectedMecanicFilter);
-  }, [selectedMecanicFilter]);
+  // COMPUTED KPI METRICS
+  const kpis = useMemo(() => {
+    const totalVehicule = vehicule.length;
+    const vehiculeInReparatie = vehicule.filter((v) => v.stare === 'IN_REPARATIE').length;
+    const vehiculeActive = vehicule.filter((v) => v.stare === 'ACTIV' || !v.stare).length;
 
+    const alerteCritice = alerteCentralizate.filter((a) => a.urgenta === 'CRITIC').length;
+    const alerteAvertizari = alerteCentralizate.filter((a) => a.urgenta === 'AVERTIZARE').length;
+
+    const comenziInLucru = comenziLucru.filter((c) => c.stare === 'IN_LUCRU').length;
+    const valoareComenziInLucru = comenziLucru
+      .filter((c) => c.stare === 'IN_LUCRU')
+      .reduce((sum, c) => sum + (c.elementeComanda || []).reduce((subSum: number, el: any) => subSum + (el.costTotal || 0), 0), 0);
+
+    const facturiNeprocesate = facturi.filter(
+      (f) => f.stare === 'NEPROCESAT' || f.stare === 'IMPORTAT_PARȚIAL' || (f.articole && f.articole.some((a: any) => a.stare === 'NEPROCESAT'))
+    ).length;
+
+    const valoareTotalaFacturi = facturi.reduce((sum, f) => sum + (f.valoareTotala || 0), 0);
+
+    const stocuriCritice = articoleStoc.filter((a) => (a.stocCurent || 0) <= (a.stocMinim || 0)).length;
+
+    const anvelopeUzuraCritica = anvelope.filter((anv) => (anv.adancimeCurentaMm || 0) <= 4).length;
+
+    return {
+      totalVehicule,
+      vehiculeActive,
+      vehiculeInReparatie,
+      alerteCritice,
+      alerteAvertizari,
+      comenziInLucru,
+      valoareComenziInLucru,
+      facturiNeprocesate,
+      valoareTotalaFacturi,
+      stocuriCritice,
+      anvelopeUzuraCritica,
+    };
+  }, [vehicule, alerteCentralizate, comenziLucru, facturi, articoleStoc, anvelope]);
+
+  // QUICK FORCE SYNC ANAF
+  const handleTriggerQuickSync = async () => {
+    try {
+      setQuickSyncing(true);
+      setQuickSyncMessage('Inițiere sincronizare ANAF SPV...');
+      const res = await fetch(`${API_BASE_URL}/efactura/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zile: 60 }),
+      });
+      if (res.ok) {
+        setQuickSyncMessage('Sincronizare pornită în fundal! Se verifică...');
+        setTimeout(() => {
+          fetchAllData();
+          setQuickSyncing(false);
+          setQuickSyncMessage('Finalizat!');
+          setTimeout(() => setQuickSyncMessage(null), 3000);
+        }, 3000);
+      } else {
+        const err = await res.json();
+        setQuickSyncMessage(`Eroare: ${err.message || 'Eșuat'}`);
+        setQuickSyncing(false);
+      }
+    } catch (e) {
+      setQuickSyncMessage('Eroare de conexiune.');
+      setQuickSyncing(false);
+    }
+  };
+
+  // HANDLER: QUICK COMANDĂ CREATE
+  const handleQuickCreateComanda = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickVehiculId) return;
+    try {
+      const v = vehicule.find((item) => item.id === quickVehiculId);
+      const generatedNumar = quickNumarComanda || `CMD-${Date.now().toString().slice(-6)}`;
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comenzi-lucru`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numarComanda: generatedNumar,
+          vehiculId: quickVehiculId,
+          mecanicResponsabil: quickMecanic || (mecanici[0]?.nume || 'Mecanic Atelier'),
+          valoareContorLaExecutie: Number(quickContor) || (v?.valoareContorCurent || 0),
+          observatii: quickObservatii || 'Deschis rapid din Master Dashboard',
+          elemente: [],
+        }),
+      });
+
+      if (res.ok) {
+        alert(`Comanda de Lucru ${generatedNumar} a fost deschisă cu succes!`);
+        setShowQuickComandaModal(false);
+        setQuickNumarComanda('');
+        setQuickObservatii('');
+        fetchAllData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la crearea comenzii de lucru.');
+    }
+  };
+
+  // HANDLER: QUICK ULEI CREATE
+  const handleQuickAddUlei = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickUleiVehiculId) return;
+    try {
+      const v = vehicule.find((item) => item.id === quickUleiVehiculId);
+      const res = await fetch(`${API_BASE_URL}/anomalii/completare-ulei`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehiculId: quickUleiVehiculId,
+          tipLichid: quickUleiTip,
+          cantitateLitri: Number(quickUleiCantitate),
+          valoareContor: v?.valoareContorCurent || 0,
+          mecanic: quickUleiMecanic || (mecanici[0]?.nume || 'Mecanic Atelier'),
+          observatii: quickUleiObservatii || 'Completare înregistrată rapid din Dashboard',
+        }),
+      });
+
+      if (res.ok) {
+        alert('Completarea de lichid / ulei a fost salvată cu succes!');
+        setShowQuickUleiModal(false);
+        setQuickUleiObservatii('');
+        fetchAllData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la înregistrarea uleiului.');
+    }
+  };
+
+  // HANDLER: CREATE MECANIC
   const handleCreateMecanic = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMecanicNume) return;
@@ -102,417 +429,987 @@ export default function DashboardPage() {
       });
 
       if (res.ok) {
-        alert('Mecanic înregistrat cu succes în echipa atelierului!');
+        alert('Mecanic adăugat cu succes în echipă!');
         setShowAddMecanicModal(false);
         setNewMecanicNume('');
-        setNewMecanicFunctie('Mecanic Atelier');
-        setNewMecanicTelefon('');
-        fetchMecanici();
-      } else {
-        const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        fetchAllData();
       }
     } catch (e) {
-      alert('Eroare la înregistrarea mecanicui.');
+      alert('Eroare la salvare mecanic.');
     }
   };
 
-  const handleUpdateVehicul = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVehicul) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/${editingVehicul.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingVehicul),
-      });
-      if (res.ok) {
-        setEditingVehicul(null);
-        fetchDashboard();
-        alert('Vehicul actualizat cu succes!');
-      } else {
-        const err = await res.json();
-        alert(`Eroare la actualizare: ${err.message}`);
-      }
-    } catch (e) {
-      alert('Eroare la actualizarea vehiculului.');
-    }
-  };
-
-  const handleDeleteVehicul = async (id: string) => {
-    const confirmed = await showConfirm(
-      'Ștergere Vehicul',
-      'Sigur doriți să ștergeți acest vehicul din sistem?',
-      'Da, șterge vehiculul',
-      'Anulează'
-    );
-    if (!confirmed) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchDashboard();
-        alert('Vehicul șters din sistem.');
-      }
-    } catch (e) {
-      alert('Eroare la ștergerea vehiculului.');
-    }
-  };
-
-  const handleCreateCategorie = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/categorii`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nume: numeCategorie, descriere: descriereCategorie }),
-      });
-      if (res.ok) {
-        setShowAddCatModal(false);
-        setNumeCategorie('');
-        setDescriereCategorie('');
-        alert('Categorie nouă creată cu succes!');
-      }
-    } catch (e) {
-      alert('Eroare la crearea categoriei.');
-    }
-  };
-
-  // Filtrare Servicii Mecanic
-  const serviciiFiltrate = istoricServicii.filter((s) => {
-    const matchTip = selectedTipServiciuFilter ? s.tip === selectedTipServiciuFilter : true;
-    if (searchQueryServicii) {
-      const q = searchQueryServicii.toLowerCase();
-      const mMec = s.mecanic?.toLowerCase().includes(q);
-      const mTitlu = s.titlu?.toLowerCase().includes(q);
-      const mVeh = s.vehicul?.toLowerCase().includes(q);
-      const mDet = s.detalii?.toLowerCase().includes(q);
-      return matchTip && (mMec || mTitlu || mVeh || mDet);
-    }
-    return matchTip;
-  });
-
-  const totalVehicule = vehicule.length;
+  // FILTERED VEHICULES
+  const filteredVehicule = useMemo(() => {
+    return vehicule.filter((v) => {
+      const matchCat = selectedCategorieFilter ? v.categorieEnum === selectedCategorieFilter : true;
+      const q = searchVehicul.toLowerCase().trim();
+      const matchSearch =
+        !q ||
+        v.numarIntern?.toLowerCase().includes(q) ||
+        v.numarInmatriculare?.toLowerCase().includes(q) ||
+        v.marca?.toLowerCase().includes(q) ||
+        v.model?.toLowerCase().includes(q);
+      return matchCat && matchSearch;
+    });
+  }, [vehicule, selectedCategorieFilter, searchVehicul]);
 
   return (
-    <div className="space-y-6">
-      {/* Header Titlu & Acțiuni */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight">Dashboard Principal & Management Atelier</h1>
-          <p className="text-xs text-sage-700 font-medium">Sumar operațiuni, evidență mecanici și istoric servicii per mecanic | FleetCMD</p>
+    <div className="space-y-6 pb-12">
+      {/* ========================================================================= */}
+      {/* 1. TOP COMMAND HEADER: GREETING, PRESET SELECTOR & PERSONALIZATION BUTTON */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white/70 backdrop-blur-md p-5 rounded-3xl border border-morning-200 shadow-xs">
+        <div className="space-y-1">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-sapphire-50 border border-sapphire-200">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-sapphire-900">
+              FleetCMD Master Command Center • 24/7 Live
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-sapphire-900 tracking-tight flex items-center space-x-3">
+            <span>Panou de Control Central</span>
+            <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-extrabold font-mono uppercase">
+              {authUser?.rol || 'OPERATOR'}
+            </span>
+          </h1>
+          <p className="text-xs text-sage-700 font-medium">
+            Bună ziua, <strong className="text-sapphire-900">{authUser?.nume || 'Utilizator'}</strong>! Sistemul este operațional. Toate modulele sunt sincronizate în timp real.
+          </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Link
-            href="/setari"
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-semibold text-sapphire-900 shadow-xs transition"
+
+        {/* PRESET SWITCHER & CUSTOMIZE BUTTON */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Preset Buttons */}
+          <div className="flex items-center bg-morning-100 p-1 rounded-2xl border border-morning-200 overflow-x-auto max-w-full">
+            {Object.entries(PRESETS).map(([key, p]) => {
+              const isActive = activePreset === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => updatePreset(key)}
+                  title={p.desc}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-sapphire-600 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-white/60'
+                  }`}
+                >
+                  <span>{p.icon}</span>
+                  <span className="hidden sm:inline">{p.name.split(' ')[0]}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Refresh Button */}
+          <button
+            onClick={fetchAllData}
+            title="Reîmprospătează toate datele din baza de date"
+            className="p-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-sapphire-900 shadow-2xs transition cursor-pointer"
           >
-            <Settings className="w-4 h-4 text-sapphire-500" />
-            <span>Setări Sistem</span>
+            <RefreshCw className={`w-4 h-4 text-sapphire-600 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+
+          {/* Personalizează Modal Trigger */}
+          <button
+            onClick={() => setShowCustomizerModal(true)}
+            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-sapphire-600 to-indigo-600 hover:from-sapphire-500 hover:to-indigo-500 text-white text-xs font-extrabold shadow-md shadow-sapphire-500/20 transition cursor-pointer"
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Personalizează</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. QUICK ACTION LAUNCHPAD: FAST ACCESS BUTTONS */}
+      {/* ========================================================================= */}
+      {widgetConfig.showQuickActions && (
+        <div className="bg-gradient-to-r from-sapphire-900 via-indigo-900 to-slate-900 p-4 sm:p-5 rounded-3xl text-white shadow-xl shadow-sapphire-950/20 relative overflow-hidden">
+          <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-64 h-64 bg-sapphire-500/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-10">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center space-x-1.5">
+                <Zap className="w-3.5 h-3.5" />
+                <span>Lansator Rapid de Măsuri Operaționale</span>
+              </span>
+              <p className="text-sm font-extrabold text-white">Acțiuni Frecvente & Înregistrări Rapide</p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowQuickComandaModal(true)}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black shadow-md transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Comandă de Lucru</span>
+              </button>
+
+              <button
+                onClick={() => setShowQuickUleiModal(true)}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-md transition cursor-pointer"
+              >
+                <Droplets className="w-4 h-4" />
+                <span>Completare Ulei</span>
+              </button>
+
+              <button
+                onClick={handleTriggerQuickSync}
+                disabled={quickSyncing}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold backdrop-blur-md transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCcw className={`w-3.5 h-3.5 text-cyan-300 ${quickSyncing ? 'animate-spin' : ''}`} />
+                <span>{quickSyncMessage || 'Sync ANAF e-Factura'}</span>
+              </button>
+
+              <Link
+                href="/efactura?tab=manual"
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black shadow-md transition"
+              >
+                <Package className="w-4 h-4" />
+                <span>Recepție Marfă</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. KEY PERFORMANCE INDICATORS (KPI HERO STRIP) */}
+      {/* ========================================================================= */}
+      {widgetConfig.showKpiMetrics && (
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* KPI 1: VEHICULE */}
+          <Link href="/ansambluri" className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex flex-col justify-between group">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-sage-600">Parc Auto & Flotă</span>
+              <div className="w-9 h-9 rounded-xl bg-sapphire-50 border border-sapphire-200 text-sapphire-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Truck className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline space-x-2">
+                <span className="text-2xl sm:text-3xl font-black text-sapphire-900 font-mono">{kpis.totalVehicule}</span>
+                <span className="text-xs font-bold text-emerald-600 font-mono">({kpis.vehiculeActive} active)</span>
+              </div>
+              <p className="text-[11px] text-sage-600 font-medium mt-0.5">
+                {kpis.vehiculeInReparatie > 0 ? (
+                  <span className="text-terracotta-600 font-bold">{kpis.vehiculeInReparatie} utilaje în reparație</span>
+                ) : (
+                  'Flotă 100% disponibilă'
+                )}
+              </p>
+            </div>
+          </Link>
+
+          {/* KPI 2: COMENZI DE LUCRU CMMS */}
+          <Link href="/comenzi-lucru" className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex flex-col justify-between group border-l-4 border-l-sapphire-500">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-sapphire-700">Comenzi de Lucru Active</span>
+              <div className="w-9 h-9 rounded-xl bg-sapphire-100 text-sapphire-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Wrench className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline space-x-2">
+                <span className="text-2xl sm:text-3xl font-black text-sapphire-900 font-mono">{kpis.comenziInLucru}</span>
+                <span className="text-xs font-bold text-sage-600 font-mono">în lucru</span>
+              </div>
+              <p className="text-[11px] text-sage-600 font-medium mt-0.5 font-mono">
+                Valoare devize: <strong>{kpis.valoareComenziInLucru.toLocaleString('ro-RO')} RON</strong>
+              </p>
+            </div>
+          </Link>
+
+          {/* KPI 3: ALERTE ACTIVE & RISC */}
+          <Link href="/alerte" className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex flex-col justify-between group border-l-4 border-l-terracotta-500">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-terracotta-600">Alerte & Atenționări</span>
+              <div className="w-9 h-9 rounded-xl bg-roseash-100 border border-roseash-300 text-terracotta-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <ShieldAlert className="w-5 h-5 animate-pulse" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline space-x-2">
+                <span className="text-2xl sm:text-3xl font-black text-terracotta-600 font-mono">{alerteCentralizate.length}</span>
+                {kpis.alerteCritice > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-roseash-200 text-terracotta-700 font-black font-mono">
+                    {kpis.alerteCritice} CRITICE
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-sage-600 font-medium mt-0.5">
+                Expirări ITP/RCA, tahograf & scurgeri
+              </p>
+            </div>
+          </Link>
+
+          {/* KPI 4: E-FACTURA ANAF */}
+          <Link href="/efactura" className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex flex-col justify-between group">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-black tracking-wider text-sage-600">ANAF e-Factura</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <FileText className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="flex items-baseline space-x-2">
+                <span className="text-2xl sm:text-3xl font-black text-sapphire-900 font-mono">{facturi.length}</span>
+                <span className="text-xs font-bold text-amber-600 font-mono">({kpis.facturiNeprocesate} neprocesate)</span>
+              </div>
+              <p className="text-[11px] text-sage-600 font-medium mt-0.5 font-mono">
+                Total: <strong>{kpis.valoareTotalaFacturi.toLocaleString('ro-RO')} RON</strong>
+              </p>
+            </div>
           </Link>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. SMART ALERTS RADAR: CRITICAL WARNINGS & ACTIONS */}
+      {/* ========================================================================= */}
+      {widgetConfig.showAlertsCenter && alerteCentralizate.length > 0 && (
+        <div className="pleasant-card p-5 rounded-3xl border-2 border-roseash-300/80 bg-gradient-to-br from-roseash-50/50 to-white space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-terracotta-500 text-white flex items-center justify-center shadow-sm">
+                <BellRing className="w-4 h-4 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-sapphire-900 uppercase tracking-wide">
+                  Centru de Alertare & Risc Imediat ({alerteCentralizate.length})
+                </h3>
+                <p className="text-[11px] text-sage-600">Necesită atenția dispeceratului sau a atelierului</p>
+              </div>
+            </div>
+
+            <Link href="/alerte" className="text-xs font-bold text-terracotta-600 hover:text-terracotta-700 flex items-center space-x-1">
+              <span>Vezi toate alertele</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
+            {alerteCentralizate.slice(0, 3).map((a: any, idx: number) => {
+              const isCrit = a.urgenta === 'CRITIC';
+              return (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-2xl border flex items-start justify-between space-x-2 transition ${
+                    isCrit ? 'bg-roseash-100/90 border-roseash-300' : 'bg-amber-50/80 border-amber-200'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-1.5">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase font-mono ${
+                        isCrit ? 'bg-terracotta-600 text-white' : 'bg-amber-500 text-slate-950'
+                      }`}>
+                        {a.urgenta || 'AVERTIZARE'}
+                      </span>
+                      <strong className="text-xs font-bold text-sapphire-900">{a.vehiculNumar || 'Flotă'}</strong>
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-800 leading-tight">{a.titlu}</p>
+                    <p className="text-[10px] text-sage-600 leading-snug line-clamp-1">{a.mesaj}</p>
+                  </div>
+                  <Link
+                    href={a.linkHref || '/alerte'}
+                    className="shrink-0 p-1.5 rounded-lg bg-white shadow-2xs hover:bg-slate-100 text-sapphire-900 transition"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. DUAL COLUMN: WORK ORDERS IN PROGRESS & MAINTENANCE TIMELINE */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* LEFT COLUMN: ACTIVE WORK ORDERS */}
+        {widgetConfig.showWorkOrders && (
+          <div className={`${widgetConfig.showMaintenanceTimeline ? 'lg:col-span-7' : 'lg:col-span-12'} pleasant-card p-5 sm:p-6 rounded-3xl space-y-4`}>
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sapphire-100 text-sapphire-700 flex items-center justify-center">
+                  <Wrench className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-sapphire-900">Comenzi de Lucru & Szerviz Folyamatok</h3>
+                  <p className="text-[11px] text-sage-600">Munkalapok a műhelyben, felelős szerelőkkel</p>
+                </div>
+              </div>
+
+              <Link href="/comenzi-lucru" className="text-xs font-bold text-sapphire-600 hover:text-sapphire-700 flex items-center space-x-1">
+                <span>Toate Comenzile ({comenziLucru.length})</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            {comenziLucru.filter((c) => c.stare === 'IN_LUCRU').length === 0 ? (
+              <div className="p-8 text-center bg-morning-50 rounded-2xl border border-morning-200 text-sage-600 text-xs">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <p className="font-bold text-sapphire-900">Nu există comenzi de lucru deschise în acest moment.</p>
+                <p className="text-[11px] text-sage-500 mt-1">Toate utilajele sunt operaționale pe șantiere.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-morning-200">
+                {comenziLucru
+                  .filter((c) => c.stare === 'IN_LUCRU')
+                  .slice(0, 4)
+                  .map((c: any) => {
+                    const totalCost = (c.elementeComanda || []).reduce((acc: number, el: any) => acc + (el.costTotal || 0), 0);
+                    return (
+                      <div key={c.id} className="py-3 flex items-center justify-between hover:bg-morning-50/80 px-2 rounded-xl transition">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-black font-mono text-sapphire-900">{c.numarComanda}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-sapphire-100 text-sapphire-800 text-[10px] font-bold font-mono">
+                              {c.vehicul?.numarIntern || 'Utilaj'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-700 font-medium line-clamp-1">{c.observatii || 'Revizie / Reparație curentă'}</p>
+                          <p className="text-[10px] text-sage-500 flex items-center space-x-2">
+                            <span>Mecanic: <strong className="text-slate-700">{c.mecanicResponsabil}</strong></span>
+                            <span>•</span>
+                            <span>{new Date(c.dataDeschidere).toLocaleDateString('ro-RO')}</span>
+                          </p>
+                        </div>
+
+                        <div className="text-right space-y-1">
+                          <p className="text-xs font-mono font-black text-sapphire-900">{totalCost ? `${totalCost} RON` : 'Cost nefinalizat'}</p>
+                          <Link
+                            href={`/comenzi-lucru`}
+                            className="inline-block text-[11px] font-bold text-sapphire-600 hover:underline"
+                          >
+                            Deschide deviz →
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* RIGHT COLUMN: PREVENTIVE MAINTENANCE SCHEDULE */}
+        {widgetConfig.showMaintenanceTimeline && (
+          <div className={`${widgetConfig.showWorkOrders ? 'lg:col-span-5' : 'lg:col-span-12'} pleasant-card p-5 sm:p-6 rounded-3xl space-y-4`}>
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-periwinkle-100 text-periwinkle-700 flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-sapphire-900">Mentenanță Preventivă</h3>
+                  <p className="text-[11px] text-sage-600">Intervale MTH / KM & Revizii</p>
+                </div>
+              </div>
+
+              <Link href="/mentenanta" className="text-xs font-bold text-periwinkle-700 hover:underline">
+                Planuri ({sarciniMentenanta.length})
+              </Link>
+            </div>
+
+            <div className="space-y-2.5">
+              {sarciniMentenanta.slice(0, 4).map((s: any) => (
+                <div key={s.id} className="p-3 rounded-2xl bg-morning-100/70 border border-morning-200 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-sapphire-900">{s.nume}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-white text-[10px] font-mono font-extrabold text-slate-700 border">
+                      la {s.intervalRulaj} {s.tipMasurare}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-sage-600">
+                    <span>Tip: {s.tipSarcina?.replace(/_/g, ' ')}</span>
+                    <span className="font-mono">Ultimul: {s.ultimulRulajExecutie || 0} {s.tipMasurare}</span>
+                  </div>
+                </div>
+              ))}
+
+              {sarciniMentenanta.length === 0 && (
+                <p className="text-center text-xs text-sage-500 py-4">Nu există sarcini preventive configurate.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* KPI STATISTICI PRINCIPALE */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-sage-700 tracking-wider">Vehicule Active</p>
-            <p className="text-3xl font-black text-sapphire-900 font-mono mt-1">{totalVehicule}</p>
-            <p className="text-[11px] text-sage-600 font-semibold mt-0.5">în flota operativă</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-center text-sapphire-600 shadow-2xs">
-            <Truck className="w-6 h-6" />
-          </div>
-        </div>
+      {/* ========================================================================= */}
+      {/* 6. FLEET TELEMETRY & MASTER VEHICLE OVERVIEW TABLE */}
+      {/* ========================================================================= */}
+      {widgetConfig.showFleetTelemetry && (
+        <div className="pleasant-card p-6 rounded-3xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-morning-200 pb-4">
+            <div>
+              <h3 className="text-base font-black text-sapphire-900 flex items-center space-x-2">
+                <Truck className="w-5 h-5 text-sapphire-600" />
+                <span>Registru Flotă & Telemetrie Utilaje</span>
+              </h3>
+              <p className="text-xs text-sage-600">Monitorizare contor ore funcționare (MTH) și kilometri (KM)</p>
+            </div>
 
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-terracotta-500">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-terracotta-600 tracking-wider">Alerte Active</p>
-            <p className="text-3xl font-black text-terracotta-600 font-mono mt-1">{alerteScurgeri.length}</p>
-            <p className="text-[11px] text-sage-600 font-semibold mt-0.5">anomalii ulei / scurgeri</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-roseash-100 border border-roseash-300 flex items-center justify-center text-terracotta-600 shadow-2xs">
-            <AlertTriangle className="w-6 h-6 animate-pulse" />
-          </div>
-        </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
+                <input
+                  type="text"
+                  value={searchVehicul}
+                  onChange={(e) => setSearchVehicul(e.target.value)}
+                  placeholder="Caută utilaj, VIN, număr..."
+                  className="bg-morning-100 border border-morning-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-sapphire-900 font-bold focus:outline-none"
+                />
+              </div>
 
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-periwinkle-700 tracking-wider">Echipă Atelier</p>
-            <p className="text-3xl font-black text-periwinkle-700 font-mono mt-1">{mecanici.length}</p>
-            <p className="text-[11px] text-sage-600 font-semibold mt-0.5">mecanici & tehnicieni</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-periwinkle-100 border border-periwinkle-200 flex items-center justify-center text-periwinkle-700 shadow-2xs">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="pleasant-card pleasant-card-hover p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <p className="text-[10px] uppercase font-extrabold text-sage-700 tracking-wider">Total Servicii Executate</p>
-            <p className="text-3xl font-black text-sapphire-900 font-mono mt-1">{istoricServicii.length}</p>
-            <p className="text-[11px] text-sage-600 font-semibold mt-0.5">reparații, uleiuri, rotiri</p>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-morning-100 border border-morning-200 flex items-center justify-center text-sapphire-600 shadow-2xs">
-            <Wrench className="w-6 h-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* SECTIUNEA 1: ECHIPĂ ATELIER & MUNCĂ REGISTRATĂ PER MECANIC */}
-      <div className="pleasant-card p-6 rounded-2xl space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-morning-200 pb-4">
-          <div>
-            <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-              <UserCheck className="w-5 h-5 text-sapphire-500" />
-              <span>Echipa Atelier & Registru Servicii per Mecanic (Evidență Activitate Mecanici)</span>
-            </h2>
-            <p className="text-xs text-sage-700 font-medium">Toate lucrările (reparații, schimburi anvelope, dopări ulei) sunt asociate muncii efectuate de mecanic</p>
-          </div>
-        </div>
-
-        {/* GRID MECANICI REGISTRAȚI */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {mecanici.map((m: any) => {
-            const isSelected = selectedMecanicFilter === m.nume;
-            return (
-              <div
-                key={m.id}
-                onClick={() => setSelectedMecanicFilter(isSelected ? '' : m.nume)}
-                className={`p-3.5 rounded-2xl border transition cursor-pointer ${
-                  isSelected
-                    ? 'bg-sapphire-50 border-2 border-sapphire-500 shadow-md'
-                    : 'bg-white border-morning-200 hover:border-sapphire-300 hover:bg-morning-50'
-                }`}
+              <select
+                value={selectedCategorieFilter}
+                onChange={(e) => setSelectedCategorieFilter(e.target.value)}
+                className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-1.5 text-xs text-sapphire-900 font-bold focus:outline-none cursor-pointer"
               >
+                <option value="">Toate Categoriile ({vehicule.length})</option>
+                <option value="BASCULANTA">Basculantă</option>
+                <option value="EXCAVATOR">Excavator</option>
+                <option value="CAP_TRACTOR">Cap Tractor</option>
+                <option value="REMORCA">Remorcă</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700 min-w-[750px]">
+              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
+                <tr>
+                  <th className="p-3">Număr Intern & Model</th>
+                  <th className="p-3">Înmatriculare</th>
+                  <th className="p-3">Categorie</th>
+                  <th className="p-3 font-mono">Contor Curent</th>
+                  <th className="p-3">Stare</th>
+                  <th className="p-3 text-right">Fișă Tehnică</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-morning-200">
+                {filteredVehicule.slice(0, 6).map((v) => (
+                  <tr key={v.id} className="hover:bg-morning-50 transition">
+                    <td className="p-3 font-extrabold text-sapphire-900">
+                      <Link href={`/fisa-tehnica?id=${v.id}`} className="hover:text-sapphire-600 transition flex items-center space-x-1.5">
+                        <span>{v.numarIntern}</span>
+                        <ArrowUpRight className="w-3.5 h-3.5 text-sage-400" />
+                      </Link>
+                      <span className="text-[10px] text-sage-500 font-normal block">{v.marca} {v.model}</span>
+                    </td>
+                    <td className="p-3 font-mono font-bold text-slate-800">{v.numarInmatriculare}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-morning-200 text-sapphire-900 border border-morning-300">
+                        {v.categorieEnum}
+                      </span>
+                    </td>
+                    <td className="p-3 font-mono font-black text-sapphire-900">
+                      {v.valoareContorCurent} {v.tipMasurare}
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        v.stare === 'IN_REPARATIE'
+                          ? 'bg-roseash-200 text-terracotta-700 border border-roseash-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}>
+                        {v.stare || 'ACTIV'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">
+                      <Link
+                        href={`/fisa-tehnica?id=${v.id}`}
+                        className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs transition border border-sapphire-200 inline-block"
+                      >
+                        Deschide Fișă
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. DUAL COLUMN: ANAF E-FACTURA LIVE STREAM & INVENTORY/TIRE MATRIX */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* ANAF E-FACTURA LIVE STREAM */}
+        {widgetConfig.showEFacturaStream && (
+          <div className="lg:col-span-6 pleasant-card p-5 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-sapphire-900">ANAF e-Factura Stream</h3>
+                  <p className="text-[11px] text-sage-600">Cele mai recente facturi descărcate din SPV</p>
+                </div>
+              </div>
+
+              <Link href="/efactura" className="text-xs font-bold text-emerald-700 hover:underline">
+                Toate ({facturi.length})
+              </Link>
+            </div>
+
+            <div className="divide-y divide-morning-200">
+              {facturi.slice(0, 4).map((f: any) => (
+                <div key={f.id} className="py-2.5 flex items-center justify-between hover:bg-morning-50/80 px-2 rounded-xl transition">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-extrabold text-sapphire-900 line-clamp-1">{f.numeVanzator}</p>
+                    <p className="text-[10px] text-sage-500 font-mono">
+                      {f.numarFactura} • {new Date(f.dataFactura).toLocaleDateString('ro-RO')}
+                    </p>
+                  </div>
+                  <div className="text-right space-y-0.5">
+                    <p className="text-xs font-mono font-black text-sapphire-900">
+                      {Number(f.valoareTotala || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} {f.moneda || 'RON'}
+                    </p>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                      f.stare === 'NEPROCESAT' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {f.stare}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TIRE MATRIX OR INVENTORY/WARRANTY */}
+        {widgetConfig.showTireMatrix && (
+          <div className="lg:col-span-6 pleasant-card p-5 sm:p-6 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center">
+                  <Disc className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-sapphire-900">Gestiune Anvelope & Axe</h3>
+                  <p className="text-[11px] text-sage-600">Stare profil mm & alerte uzură</p>
+                </div>
+              </div>
+
+              <Link href="/anvelope" className="text-xs font-bold text-cyan-800 hover:underline">
+                Harta Axelor ({anvelope.length})
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3.5 rounded-2xl bg-cyan-50/70 border border-cyan-200 text-center">
+                <span className="text-[10px] uppercase font-bold text-cyan-900 block">Total Anvelope</span>
+                <span className="text-2xl font-black text-cyan-950 font-mono mt-1 block">{anvelope.length}</span>
+                <span className="text-[10px] text-cyan-800 font-medium">montate & pe stoc</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-roseash-100/70 border border-roseash-300 text-center">
+                <span className="text-[10px] uppercase font-bold text-terracotta-700 block">Profil Critic ≤4mm</span>
+                <span className="text-2xl font-black text-terracotta-700 font-mono mt-1 block">
+                  {kpis.anvelopeUzuraCritica}
+                </span>
+                <span className="text-[10px] text-terracotta-600 font-medium">necesită înlocuire</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              {anvelope.slice(0, 3).map((anv: any) => (
+                <div key={anv.id} className="p-2.5 rounded-xl bg-morning-100/70 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-sapphire-900">{anv.marca} {anv.dimensiune}</span>
+                    <span className="text-[10px] text-sage-500 block font-mono">{anv.codDot || 'DOT'}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className={`font-mono font-black ${
+                      (anv.adancimeCurentaMm || 0) <= 4 ? 'text-terracotta-600' : 'text-emerald-700'
+                    }`}>
+                      {anv.adancimeCurentaMm} mm
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 8. WORKSHOP TEAM & MECANICI ACTIVITY */}
+      {/* ========================================================================= */}
+      {widgetConfig.showWorkshopTeam && (
+        <div className="pleasant-card p-6 rounded-3xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-morning-200 pb-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-sapphire-100 text-sapphire-700 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-sapphire-900">Echipa Atelierului & Mecanici</h3>
+                <p className="text-xs text-sage-600">Lucrări finalizate și alocări curente</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowAddMecanicModal(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Adaugă Mecanic</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {mecanici.map((m: any) => (
+              <div key={m.id} className="p-3.5 rounded-2xl bg-white border border-morning-200 hover:border-sapphire-300 transition">
                 <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-sapphire-900 text-xs block">{m.nume}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-sapphire-100 text-sapphire-800 text-[10px] font-mono font-bold">
-                    {m.totalLucrari || 0} lucrări
+                  <span className="font-bold text-xs text-sapphire-900">{m.nume}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-sapphire-50 text-sapphire-800 text-[10px] font-mono font-bold">
+                    {m.totalLucrari || 0} servicii
                   </span>
                 </div>
-                <p className="text-[11px] text-sage-600 font-medium mt-1">{m.functie || 'Mecanic Atelier'}</p>
+                <p className="text-[11px] text-sage-600 mt-0.5">{m.functie || 'Mecanic Atelier'}</p>
                 {m.telefon && (
                   <p className="text-[10px] font-mono text-sage-500 mt-1 flex items-center space-x-1">
-                    <Phone className="w-3 h-3 text-sage-400 inline" />
+                    <Phone className="w-3 h-3 text-sage-400" />
                     <span>{m.telefon}</span>
                   </p>
                 )}
               </div>
-            );
-          })}
-        </div>
-
-        {/* FILTRE & CAUTARE ISTORIC MUNCĂ PER MECANIC */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 bg-morning-100 rounded-2xl border border-morning-200">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
-            <input
-              type="text"
-              value={searchQueryServicii}
-              onChange={(e) => setSearchQueryServicii(e.target.value)}
-              placeholder="Căutare după mecanic, utilaj, titlu lucrare sau filtru..."
-              className="w-full bg-white border border-morning-200 rounded-xl pl-9 pr-4 py-2 text-xs text-sapphire-900 font-bold focus:outline-none"
-            />
-          </div>
-
-          <div className="flex items-center space-x-2 text-xs">
-            <select
-              value={selectedMecanicFilter}
-              onChange={(e) => setSelectedMecanicFilter(e.target.value)}
-              className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="">Toți Mecanicii ({istoricServicii.length} servicii total)</option>
-              {mecanici.map((m) => (
-                <option key={m.id} value={m.nume}> {m.nume} ({m.totalLucrari || 0} lucrări)</option>
-              ))}
-            </select>
-
-            <select
-              value={selectedTipServiciuFilter}
-              onChange={(e) => setSelectedTipServiciuFilter(e.target.value)}
-              className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="">Toate Tipurile de Lucrări</option>
-              <option value="COMANDA_LUCRU"> Comenzi de Lucru / Reparații</option>
-              <option value="SCHIMB_ULEI"> Schimb Complet Ulei</option>
-              <option value="COMPLETARE_ULEI">Completare / Dopare Ulei</option>
-              <option value="ROTIRE_ANVELOPA">Rotiri & Permutări Anvelope</option>
-              <option value="MASURARE_PROFIL">Măsurători Profil Anvelope</option>
-            </select>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* TABELA CENTRALIZATĂ ISTORIC SERVICII */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
-            <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
-              <tr>
-                <th className="p-3">Data Operare</th>
-                <th className="p-3">Mecanic Executant</th>
-                <th className="p-3">Tip Serviciu & Titlu</th>
-                <th className="p-3">Utilaj / Vehicul</th>
-                <th className="p-3">Detalii Execuție / Odometer</th>
-                <th className="p-3 text-right">Cost Total (RON)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-morning-200">
-              {serviciiFiltrate.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-6 text-center text-sage-500 font-medium">
-                    Nu s-a găsit nicio lucrare pentru criteriile de căutare selectate.
-                  </td>
-                </tr>
-              ) : (
-                serviciiFiltrate.map((s: any) => (
-                  <tr key={s.id} className="hover:bg-morning-50 transition">
-                    <td className="p-3 font-mono text-sage-700">
-                      {new Date(s.data).toLocaleDateString('ro-RO')}
-                      <span className="text-[10px] text-sage-400 block">{new Date(s.data).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </td>
-                    <td className="p-3 font-extrabold text-sapphire-900">
-                      <span className="px-2.5 py-1 rounded-lg bg-sapphire-50 border border-sapphire-200 text-sapphire-800 text-[11px] inline-block">
-                         {s.mecanic}
-                      </span>
-                    </td>
-                    <td className="p-3 font-bold text-slate-800">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold mr-2 ${
-                        s.tip === 'COMANDA_LUCRU' ? 'bg-periwinkle-100 text-periwinkle-900 border border-periwinkle-300' :
-                        s.tip === 'SCHIMB_ULEI' ? 'bg-roseash-200 text-terracotta-800 border border-terracotta-300' :
-                        s.tip === 'COMPLETARE_ULEI' ? 'bg-morning-200 text-sapphire-900' :
-                        'bg-sage-100 text-sage-900 border border-sage-300'
-                      }`}>
-                        {s.tip?.replace(/_/g, ' ')}
-                      </span>
-                      {s.titlu}
-                    </td>
-                    <td className="p-3 font-bold text-sapphire-900">{s.vehicul}</td>
-                    <td className="p-3 text-sage-700 font-medium">{s.detalii}</td>
-                    <td className="p-3 font-mono font-extrabold text-right text-sapphire-900">
-                      {s.costTotal ? `${s.costTotal} RON` : '-'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ========================================================================= */}
+      {/* MODAL 1: PERSONALIZARE DASHBOARD & WIDGET CONFIGURATOR */}
+      {/* ========================================================================= */}
+      {showCustomizerModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-morning-200 shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-4">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-sapphire-600 text-white flex items-center justify-center shadow-md shadow-sapphire-500/20">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-sapphire-900">Personalizează Panoul de Control</h3>
+                  <p className="text-xs text-sage-600">Alege ce kártyák és szekciók jelenjenek meg a kezdőoldalon</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCustomizerModal(false)}
+                className="p-1.5 rounded-xl hover:bg-morning-100 text-sage-500 hover:text-sapphire-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {/* SECTIUNEA 2: REGISTRU VEHICULE */}
-      <div className="pleasant-card p-6 rounded-2xl space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-bold text-sapphire-900">Registrul Vehiculelor (Fișă Tehnică Dedicată per Utilaj)</h2>
-            <p className="text-xs text-sage-700">Gestionare de la preluare contor inițial până la istoricul complet al costurilor</p>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Filter className="w-4 h-4 text-sage-500" />
-            <select
-              value={selectedCategorieFilter}
-              onChange={(e) => setSelectedCategorieFilter(e.target.value)}
-              className="bg-morning-100 border border-morning-200 rounded-xl px-3 py-1.5 text-xs text-sapphire-900 font-bold focus:outline-none"
-            >
-              <option value="">Toate Categoriile</option>
-              <option value="CAP_TRACTOR">Cap Tractor</option>
-              <option value="REMORCA">Remorcă / Semiremorcă</option>
-              <option value="BASCULANTA">Basculantă</option>
-              <option value="EXCAVATOR">Excavator</option>
-              <option value="INCARCATOR_FRONTAL">Încărcător Frontal</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
-            <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
-              <tr>
-                <th className="p-3">Utilaj / Număr Intern</th>
-                <th className="p-3">Înmatriculare / VIN</th>
-                <th className="p-3">Categorie & Configurație Axe</th>
-                <th className="p-3 font-mono">Contor Curent</th>
-                <th className="p-3 font-mono">Contor Inițial & Dată</th>
-                <th className="p-3 text-right whitespace-nowrap min-w-[180px]">Acțiuni Management</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-morning-200">
-              {vehicule.map((v) => (
-                <tr key={v.id} className="hover:bg-morning-50 transition">
-                  <td className="p-3 font-extrabold text-sapphire-900">
-                    <Link href={`/fisa-tehnica?id=${v.id}`} className="hover:text-sapphire-500 transition">
-                      {v.numarIntern}
-                    </Link>
-                    <div className="text-[10px] text-sage-600 font-normal">{v.marca} {v.model} ({v.anFabricatie})</div>
-                  </td>
-                  <td className="p-3 font-semibold text-slate-800">
-                    {v.numarInmatriculare}
-                    <div className="text-[10px] font-mono text-sage-500">{v.serieSasiu || v.vin || '-'}</div>
-                  </td>
-                  <td className="p-3">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900 border border-morning-300">
-                      {v.categorieEnum}
-                    </span>
-                    <p className="text-[10px] text-sage-600 mt-1 font-semibold">
-                      {v.pozitiiAxe?.length || 4} Roți montate pe șasiu
-                    </p>
-                  </td>
-                  <td className="p-3 font-mono font-bold text-sapphire-900">
-                    {v.valoareContorCurent} {v.tipMasurare}
-                  </td>
-                  <td className="p-3 font-mono text-sage-700">
-                    {v.valoareContorInitial || 0} {v.tipMasurare}
-                    <div className="text-[10px] text-sage-500 font-normal">
-                      {v.dataInregistrareContor ? new Date(v.dataInregistrareContor).toLocaleDateString('ro-RO') : '-'}
-                    </div>
-                  </td>
-                  <td className="p-3 text-right space-x-2 whitespace-nowrap min-w-[180px]">
-                    <Link
-                      href={`/fisa-tehnica?id=${v.id}`}
-                      className="px-3 py-1.5 rounded-lg bg-sapphire-500 text-white text-xs font-bold transition hover:bg-sapphire-600 shadow-xs inline-block"
-                    >
-                      Fișă Tehnică
-                    </Link>
+            {/* PRESETS SELECTION */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase text-sapphire-900 tracking-wider block">
+                Nézet Profilok (Presets)
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(PRESETS).map(([key, p]) => {
+                  const isSelected = activePreset === key;
+                  return (
                     <button
-                      onClick={() => handleDeleteVehicul(v.id)}
-                      className="px-3 py-1.5 rounded-lg bg-roseash-200 hover:bg-roseash-300 text-terracotta-600 text-xs font-bold transition"
+                      key={key}
+                      onClick={() => updatePreset(key)}
+                      className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-sapphire-50 border-2 border-sapphire-600 shadow-xs'
+                          : 'bg-morning-50 border-morning-200 hover:bg-white'
+                      }`}
                     >
-                      Șterge
+                      <div className="flex items-center space-x-2">
+                        <span className="text-base">{p.icon}</span>
+                        <strong className="text-xs text-sapphire-900">{p.name}</strong>
+                      </div>
+                      <p className="text-[10px] text-sage-600 mt-1 line-clamp-2">{p.desc}</p>
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  );
+                })}
+              </div>
+            </div>
 
-      {/* MODAL ADĂUGARE MECANIC NOU */}
-      {showAddMecanicModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            {/* TOGGLE INDIVIDUAL WIDGETS */}
+            <div className="space-y-3 pt-2 border-t border-morning-200">
+              <label className="text-xs font-black uppercase text-sapphire-900 tracking-wider block">
+                Kártyák & Modulok Ki/Bekapcsolása
+              </label>
+
+              <div className="space-y-2">
+                {[
+                  { key: 'showKpiMetrics', label: 'Fő KPI Mutatók Szalag', desc: 'Flotta telemetria, szervizösszesítők, e-Factura és alerte' },
+                  { key: 'showQuickActions', label: 'Gyorsműveleti Lansator', desc: 'Egykattintásos indítógombok új munkalaphoz és olajhoz' },
+                  { key: 'showAlertsCenter', label: 'Centru de Alertare & Risc', desc: 'Kritikus ITP, RCA, Tahograf és olajszivárgás riasztások' },
+                  { key: 'showWorkOrders', label: 'Comenzi de Lucru în Desfășurare', desc: 'Folyamatban lévő szervizmunkák és költségek' },
+                  { key: 'showMaintenanceTimeline', label: 'Mentenanță Preventivă Schedule', desc: 'Közelgő revíziók KM és MTH szerint' },
+                  { key: 'showFleetTelemetry', label: 'Registru Flotă & Telemetrie', desc: 'Járművek listája és óraállás monitor' },
+                  { key: 'showEFacturaStream', label: 'ANAF e-Factura Live Stream', desc: 'Legfrissebb SPV számlák és pénzügyi bevételezés' },
+                  { key: 'showTireMatrix', label: 'Gestiune Anvelope & Axe', desc: 'Kopásvizsgálat és veszélyes tengelyek felügyelete' },
+                  { key: 'showWorkshopTeam', label: 'Echipa Atelier & Mecanici', desc: 'Szerelők terheltsége és elvégzett szervizei' },
+                ].map(({ key, label, desc }) => {
+                  const isChecked = !!widgetConfig[key as keyof WidgetConfig];
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => toggleWidget(key as keyof WidgetConfig)}
+                      className="p-3 rounded-2xl bg-morning-50 hover:bg-morning-100/80 border border-morning-200 flex items-center justify-between cursor-pointer transition"
+                    >
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-sapphire-900">{label}</p>
+                        <p className="text-[10px] text-sage-600">{desc}</p>
+                      </div>
+
+                      <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
+                        isChecked ? 'bg-sapphire-600' : 'bg-slate-300'
+                      }`}>
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                          isChecked ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-morning-200 flex justify-end">
+              <button
+                onClick={() => setShowCustomizerModal(false)}
+                className="px-6 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white text-xs font-bold shadow-md shadow-sapphire-600/20"
+              >
+                Kész & Mentés
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: QUICK CREATE COMANDĂ DE LUCRU */}
+      {/* ========================================================================= */}
+      {showQuickComandaModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-morning-200 shadow-2xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-                <Users className="w-5 h-5 text-sapphire-500" />
+              <h3 className="text-base font-black text-sapphire-900 flex items-center space-x-2">
+                <Wrench className="w-5 h-5 text-sapphire-600" />
+                <span>Deschidere Rapidă Comandă de Lucru</span>
+              </h3>
+              <button onClick={() => setShowQuickComandaModal(false)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickCreateComanda} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Alege Utilajul / Vehiculul: *</label>
+                <select
+                  required
+                  value={quickVehiculId}
+                  onChange={(e) => setQuickVehiculId(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  <option value="">Selectează Vehicul...</option>
+                  {vehicule.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.numarIntern} ({v.marca} {v.model}) - {v.valoareContorCurent} {v.tipMasurare}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Mecanic Responsabil:</label>
+                <select
+                  value={quickMecanic}
+                  onChange={(e) => setQuickMecanic(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  {mecanici.map((m) => (
+                    <option key={m.id} value={m.nume}>{m.nume} ({m.functie})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Descriere Lucrare / Observații:</label>
+                <textarea
+                  rows={2}
+                  value={quickObservatii}
+                  onChange={(e) => setQuickObservatii(e.target.value)}
+                  placeholder="ex: Schimb plăcuțe frână axă 1, verificare jocuri..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickComandaModal(false)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-black shadow-md shadow-sapphire-600/20"
+                >
+                  Deschide Comandă
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: QUICK ADD ULEI / FLUID */}
+      {/* ========================================================================= */}
+      {showQuickUleiModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-morning-200 shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-black text-sapphire-900 flex items-center space-x-2">
+                <Droplets className="w-5 h-5 text-amber-500" />
+                <span>Înregistrare Rapidă Completare Ulei</span>
+              </h3>
+              <button onClick={() => setShowQuickUleiModal(false)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAddUlei} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Vehicul: *</label>
+                <select
+                  required
+                  value={quickUleiVehiculId}
+                  onChange={(e) => setQuickUleiVehiculId(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  <option value="">Selectează Vehicul...</option>
+                  {vehicule.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.numarIntern} - {v.numarInmatriculare}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-sage-700 font-bold block mb-1">Tip Lichid:</label>
+                  <select
+                    value={quickUleiTip}
+                    onChange={(e) => setQuickUleiTip(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="ULEI_MOTOR">Ulei Motor (15W40 / 10W40)</option>
+                    <option value="ULEI_HIDRAULIC">Ulei Hidraulic (HLP 46)</option>
+                    <option value="ULEI_TRANSMISIE">Ulei Transmisie (80W90)</option>
+                    <option value="LICHID_RACIRE">Antigel / Răcire</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sage-700 font-bold block mb-1">Cantitate (Litri):</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={quickUleiCantitate}
+                    onChange={(e) => setQuickUleiCantitate(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Mecanic Executant:</label>
+                <select
+                  value={quickUleiMecanic}
+                  onChange={(e) => setQuickUleiMecanic(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  {mecanici.map((m) => (
+                    <option key={m.id} value={m.nume}>{m.nume}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sage-700 font-bold block mb-1">Observații / Șantier:</label>
+                <input
+                  type="text"
+                  value={quickUleiObservatii}
+                  onChange={(e) => setQuickUleiObservatii(e.target.value)}
+                  placeholder="ex: Completat pe șantier la pornire de dimineață"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-medium"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickUleiModal(false)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-md"
+                >
+                  Salvează Completare
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: ADD MECANIC */}
+      {/* ========================================================================= */}
+      {showAddMecanicModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-morning-200 shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-black text-sapphire-900 flex items-center space-x-2">
+                <Users className="w-5 h-5 text-sapphire-600" />
                 <span>Înregistrare Mecanic Nou în Atelier</span>
               </h3>
-              <button onClick={() => setShowAddMecanicModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowAddMecanicModal(false)} className="text-sage-500 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleCreateMecanic} className="space-y-3 text-xs">
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume Mecanic / Tehnician: *</label>
+                <label className="text-sage-700 font-bold block mb-1">Nume & Prenume: *</label>
                 <input
                   required
                   value={newMecanicNume}
                   onChange={(e) => setNewMecanicNume(e.target.value)}
-                  placeholder="ex: Alexandru Popa (Atelier)"
+                  placeholder="ex: Vasile Ionescu"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 />
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Funcție / Specialitate: *</label>
+                <label className="text-sage-700 font-bold block mb-1">Funcție / Specialitate:</label>
                 <select
                   value={newMecanicFunctie}
                   onChange={(e) => setNewMecanicFunctie(e.target.value)}
@@ -522,56 +1419,34 @@ export default function DashboardPage() {
                   <option value="Mecanic Atelier">Mecanic Atelier</option>
                   <option value="Mecanic Utilaje Grele">Mecanic Utilaje Grele</option>
                   <option value="Electrician Auto">Electrician Auto</option>
-                  <option value="Vulcanizator">Vulcanizator / Anvelope</option>
-                  <option value="Tinichigiu">Tinichigiu / Carosier</option>
+                  <option value="Vulcanizator">Vulcanizator</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Număr Telefon Contact:</label>
+                <label className="text-sage-700 font-bold block mb-1">Telefon Contact:</label>
                 <input
                   value={newMecanicTelefon}
                   onChange={(e) => setNewMecanicTelefon(e.target.value)}
-                  placeholder="ex: 0722111222"
+                  placeholder="0744..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                 />
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowAddMecanicModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EDITARE VEHICUL */}
-      {editingVehicul && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900">Editare Vehicul ({editingVehicul.numarIntern})</h3>
-              <button onClick={() => setEditingVehicul(null)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateVehicul} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sage-700 block mb-1 font-semibold">Număr Intern</label>
-                  <input required value={editingVehicul.numarIntern} onChange={(e) => setEditingVehicul({ ...editingVehicul, numarIntern: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold" />
-                </div>
-                <div>
-                  <label className="text-sage-700 block mb-1 font-semibold">Număr Înmatriculare</label>
-                  <input value={editingVehicul.numarInmatriculare || ''} onChange={(e) => setEditingVehicul({ ...editingVehicul, numarInmatriculare: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold" />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3">
-                <button type="button" onClick={() => setEditingVehicul(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificări</button>
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMecanicModal(false)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-black shadow-md shadow-sapphire-600/20"
+                >
+                  Salvează Mecanic
+                </button>
               </div>
             </form>
           </div>
