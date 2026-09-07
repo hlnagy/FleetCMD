@@ -52,7 +52,7 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   workshop: {
     name: 'Șef Atelier & Dispecerat (CMMS)',
     icon: '🔧',
-    desc: 'Focus operațional: Munkalapok, revizii preventive, mecanici, anomálii și completări fluide',
+    desc: 'Focus operațional: Comenzi de lucru, revizii preventive, mecanici, anomalii și completări fluide',
     config: {
       showKpiMetrics: true,
       showQuickActions: true,
@@ -70,7 +70,7 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   warehouse: {
     name: 'Magazie, Piese & e-Factura',
     icon: '📦',
-    desc: 'Supply Chain: Facturi ANAF, alerte stoc minim, piese serializate în garanție și recepții',
+    desc: 'Supply Chain: Facturi ANAF, alerte stoc minim, piese serializate în garanție și recepții marfă',
     config: {
       showKpiMetrics: true,
       showQuickActions: true,
@@ -104,9 +104,9 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
     },
   },
   custom: {
-    name: 'Personalizat (Saját nézet)',
+    name: 'Personalizat (Configurare Proprie)',
     icon: '⚙️',
-    desc: 'Aspect 100% individual configurat de tine',
+    desc: 'Aspect 100% individual configurat după preferințele tale',
     config: {
       showKpiMetrics: true,
       showQuickActions: true,
@@ -742,8 +742,8 @@ export default function MasterDashboardPage() {
                   <Wrench className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-sapphire-900">Comenzi de Lucru & Szerviz Folyamatok</h3>
-                  <p className="text-[11px] text-sage-600">Munkalapok a műhelyben, felelős szerelőkkel</p>
+                  <h3 className="text-sm font-black text-sapphire-900">Comenzi de Lucru & Procese Atelier</h3>
+                  <p className="text-[11px] text-sage-600">Comenzi active în atelier, cu mecanici responsabili</p>
                 </div>
               </div>
 
@@ -1103,7 +1103,7 @@ export default function MasterDashboardPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-black text-sapphire-900">Personalizează Panoul de Control</h3>
-                  <p className="text-xs text-sage-600">Alege ce kártyák és szekciók jelenjenek meg a kezdőoldalon</p>
+                  <p className="text-xs text-sage-600">Selectează ce carduri și secțiuni să apară pe panoul principal</p>
                 </div>
               </div>
               <button
@@ -1117,7 +1117,7 @@ export default function MasterDashboardPage() {
             {/* PRESETS SELECTION */}
             <div className="space-y-2">
               <label className="text-xs font-black uppercase text-sapphire-900 tracking-wider block">
-                Nézet Profilok (Presets)
+                Profiluri de Vizualizare (Preseturi)
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {Object.entries(PRESETS).map(([key, p]) => {
@@ -1146,20 +1146,20 @@ export default function MasterDashboardPage() {
             {/* TOGGLE INDIVIDUAL WIDGETS */}
             <div className="space-y-3 pt-2 border-t border-morning-200">
               <label className="text-xs font-black uppercase text-sapphire-900 tracking-wider block">
-                Kártyák & Modulok Ki/Bekapcsolása
+                Activare / Dezactivare Carduri & Module
               </label>
 
               <div className="space-y-2">
                 {[
-                  { key: 'showKpiMetrics', label: 'Fő KPI Mutatók Szalag', desc: 'Flotta telemetria, szervizösszesítők, e-Factura és alerte' },
-                  { key: 'showQuickActions', label: 'Gyorsműveleti Lansator', desc: 'Egykattintásos indítógombok új munkalaphoz és olajhoz' },
-                  { key: 'showAlertsCenter', label: 'Centru de Alertare & Risc', desc: 'Kritikus ITP, RCA, Tahograf és olajszivárgás riasztások' },
-                  { key: 'showWorkOrders', label: 'Comenzi de Lucru în Desfășurare', desc: 'Folyamatban lévő szervizmunkák és költségek' },
-                  { key: 'showMaintenanceTimeline', label: 'Mentenanță Preventivă Schedule', desc: 'Közelgő revíziók KM és MTH szerint' },
-                  { key: 'showFleetTelemetry', label: 'Registru Flotă & Telemetrie', desc: 'Járművek listája és óraállás monitor' },
-                  { key: 'showEFacturaStream', label: 'ANAF e-Factura Live Stream', desc: 'Legfrissebb SPV számlák és pénzügyi bevételezés' },
-                  { key: 'showTireMatrix', label: 'Gestiune Anvelope & Axe', desc: 'Kopásvizsgálat és veszélyes tengelyek felügyelete' },
-                  { key: 'showWorkshopTeam', label: 'Echipa Atelier & Mecanici', desc: 'Szerelők terheltsége és elvégzett szervizei' },
+                  { key: 'showKpiMetrics', label: 'Bandă Indicatori Cheie (KPI)', desc: 'Telemetrie flotă, sumare comenzi service, e-Factura și alerte' },
+                  { key: 'showQuickActions', label: 'Lansator Rapid de Măsuri', desc: 'Butoane de acces rapid pentru comenzi noi și completări fluide' },
+                  { key: 'showAlertsCenter', label: 'Centru de Alertare & Risc Imediat', desc: 'Alerte critice ITP, RCA, Tahograf și scurgeri de ulei' },
+                  { key: 'showWorkOrders', label: 'Comenzi de Lucru în Desfășurare', desc: 'Lucrări de service în derulare și costuri deviz' },
+                  { key: 'showMaintenanceTimeline', label: 'Planificare Mentenanță Preventivă', desc: 'Revizii periodice programate după KM și MTH' },
+                  { key: 'showFleetTelemetry', label: 'Registru Flotă & Telemetrie Utilaje', desc: 'Lista vehiculelor și monitorizarea contoarelor' },
+                  { key: 'showEFacturaStream', label: 'Flux Live ANAF e-Factura', desc: 'Cele mai recente facturi SPV și recepții stoc' },
+                  { key: 'showTireMatrix', label: 'Gestiune Anvelope & Axe', desc: 'Monitorizare uzură profil mm și diferențe între roți' },
+                  { key: 'showWorkshopTeam', label: 'Echipa Atelierului & Mecanici', desc: 'Încărcarea mecanicilor și evidența lucrărilor' },
                 ].map(({ key, label, desc }) => {
                   const isChecked = !!widgetConfig[key as keyof WidgetConfig];
                   return (
@@ -1191,7 +1191,7 @@ export default function MasterDashboardPage() {
                 onClick={() => setShowCustomizerModal(false)}
                 className="px-6 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white text-xs font-bold shadow-md shadow-sapphire-600/20"
               >
-                Kész & Mentés
+                Finalizează & Salvează
               </button>
             </div>
           </div>
