@@ -5,13 +5,19 @@ services:
     image: postgres:16-alpine
     container_name: cmms_postgres
     environment:
-      POSTGRES_DB: cmms_flota
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: ${POSTGRES_DB:-cmms_flota}
+      POSTGRES_USER: ${POSTGRES_USER:-fleet_app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Hiba: POSTGRES_PASSWORD kötelező a .env fájlban!}
     ports:
-      - "5432:5432"
+      # Csak a helyi gépről (127.0.0.1) érhető el, nem nyitott a külvilág felé
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fleet_app_user} -d ${POSTGRES_DB:-cmms_flota}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 volumes:

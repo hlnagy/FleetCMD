@@ -1,11 +1,31 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
 import { EFacturaService } from './efactura.service';
 import { Roles } from '../auth/roles.decorator';
+import { Public } from '../auth/public.decorator';
+import { verifyJwt } from '../auth/crypto.util';
 
 @Roles('ADMIN', 'OPERATOR')
 @Controller('efactura')
 export class EFacturaController {
   constructor(private readonly efacturaService: EFacturaService) {}
+
+  private validateCronAccess(key?: string, headerSecret?: string, authHeader?: string) {
+    const configuredSecret = process.env.CRON_SECRET;
+    if (configuredSecret && configuredSecret.trim().length > 0) {
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : null;
+      const providedKey = (key || headerSecret || bearerToken || '').trim();
+
+      if (providedKey !== configuredSecret.trim()) {
+        if (bearerToken) {
+          const jwtPayload = verifyJwt(bearerToken);
+          if (jwtPayload && ['ADMIN', 'OPERATOR'].includes(jwtPayload.rol)) {
+            return;
+          }
+        }
+        throw new ForbiddenException('CRON azonosítás sikertelen: érvénytelen vagy hiányzó titkos kulcs (CRON_SECRET).');
+      }
+    }
+  }
 
   @Get('config')
   async getConfig(@Headers('x-user-role') role?: string) {
@@ -45,9 +65,31 @@ export class EFacturaController {
     return this.efacturaService.exchangeCodeForToken(body.code);
   }
 
-  // SINCRONIZARE MANUALĂ (FORCE SYNC) - Max 60 zile
+  // SINCRONIZARE AUTOMATĂ CRON & MANUALĂ (GET + POST)
+  @Public()
+  @Get('sync')
+  async getSync(
+    @Query('zile') zileParam?: string,
+    @Query('key') keyParam?: string,
+    @Query('secret') secretParam?: string,
+    @Headers('x-cron-secret') cronHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    this.validateCronAccess(keyParam || secretParam, cronHeader, authHeader);
+    const zile = zileParam ? parseInt(zileParam, 10) : 15;
+    return this.efacturaService.syncFacturi(isNaN(zile) ? 15 : zile);
+  }
+
+  @Public()
   @Post('sync')
-  async forceSync(@Body() body: { zile?: number }) {
+  async postSync(
+    @Body() body?: { zile?: number; key?: string; secret?: string },
+    @Query('key') keyParam?: string,
+    @Query('secret') secretParam?: string,
+    @Headers('x-cron-secret') cronHeader?: string,
+    @Headers('authorization') authHeader?: string,
+  ) {
+    this.validateCronAccess(body?.key || body?.secret || keyParam || secretParam, cronHeader, authHeader);
     const zile = body?.zile || 15;
     return this.efacturaService.syncFacturi(zile);
   }
