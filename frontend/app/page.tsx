@@ -9,7 +9,7 @@ import {
   Wrench, X, Calendar, Layers, UserCheck, Users, Search, Phone, Settings,
   Sparkles, Sliders, Check, Eye, EyeOff, LayoutGrid, Zap, ShieldCheck,
   Disc, Package, FileText, ArrowRight, Activity, ChevronRight, BarChart3,
-  Flame, Gauge, RefreshCcw, BellRing, ArrowDownRight, ExternalLink
+  Flame, Gauge, RefreshCcw, BellRing, ArrowDownRight, ExternalLink, Crown
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useAuth } from '@/lib/AuthContext';
@@ -29,11 +29,27 @@ interface WidgetConfig {
   layoutMode: 'comfortable' | 'compact';
 }
 
+// HELPER PENTRU PICTOGROME VECTORIALE PROFESIONALE (SVG)
+const getPresetIcon = (key: string, isActive: boolean = false) => {
+  switch (key) {
+    case 'executive':
+      return <Crown className={`w-3.5 h-3.5 ${isActive ? 'text-amber-300' : 'text-amber-600'}`} />;
+    case 'workshop':
+      return <Wrench className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-300' : 'text-sapphire-600'}`} />;
+    case 'warehouse':
+      return <Package className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-300' : 'text-emerald-600'}`} />;
+    case 'tires':
+      return <Disc className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-300' : 'text-indigo-600'}`} />;
+    case 'custom':
+    default:
+      return <Sliders className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-600'}`} />;
+  }
+};
+
 // DEFAULT PRESET CONFIGURATIONS
-const PRESETS: Record<string, { name: string; icon: string; desc: string; config: WidgetConfig }> = {
+const PRESETS: Record<string, { name: string; desc: string; config: WidgetConfig }> = {
   executive: {
     name: 'Director Flotă / Executiv',
-    icon: '👑',
     desc: 'Privire de ansamblu strategică: KPI-uri majore, costuri, telemetrie, alerte și e-Factura',
     config: {
       showKpiMetrics: true,
@@ -51,7 +67,6 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   },
   workshop: {
     name: 'Șef Atelier & Dispecerat (CMMS)',
-    icon: '🔧',
     desc: 'Focus operațional: Comenzi de lucru, revizii preventive, mecanici, anomalii și completări fluide',
     config: {
       showKpiMetrics: true,
@@ -69,7 +84,6 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   },
   warehouse: {
     name: 'Magazie, Piese & e-Factura',
-    icon: '📦',
     desc: 'Supply Chain: Facturi ANAF, alerte stoc minim, piese serializate în garanție și recepții marfă',
     config: {
       showKpiMetrics: true,
@@ -87,7 +101,6 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   },
   tires: {
     name: 'Gestiune Anvelope & Siguranță',
-    icon: '🛞',
     desc: 'Monitorizare tren rulare: Uzuri >30%, profile mm, permutări axe și alerte ITP/RCA',
     config: {
       showKpiMetrics: true,
@@ -105,7 +118,6 @@ const PRESETS: Record<string, { name: string; icon: string; desc: string; config
   },
   custom: {
     name: 'Personalizat (Configurare Proprie)',
-    icon: '⚙️',
     desc: 'Aspect 100% individual configurat după preferințele tale',
     config: {
       showKpiMetrics: true,
@@ -498,7 +510,7 @@ export default function MasterDashboardPage() {
                       : 'text-sage-700 hover:text-sapphire-900 hover:bg-white/60'
                   }`}
                 >
-                  <span>{p.icon}</span>
+                  {getPresetIcon(key, isActive)}
                   <span className="hidden sm:inline">{p.name.split(' ')[0]}</span>
                 </button>
               );
@@ -1132,8 +1144,12 @@ export default function MasterDashboardPage() {
                           : 'bg-morning-50 border-morning-200 hover:bg-white'
                       }`}
                     >
-                      <div className="flex items-center space-x-2">
-                        <span className="text-base">{p.icon}</span>
+                      <div className="flex items-center space-x-2.5">
+                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-sapphire-600 text-white' : 'bg-white border border-morning-200'
+                        }`}>
+                          {getPresetIcon(key, isSelected)}
+                        </div>
                         <strong className="text-xs text-sapphire-900">{p.name}</strong>
                       </div>
                       <p className="text-[10px] text-sage-600 mt-1 line-clamp-2">{p.desc}</p>
