@@ -1,18 +1,26 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
 
 @Injectable()
 export class AnomaliiService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private stocuriGarantiiService: StocuriGarantiiService,
+  ) {}
 
   getTipuriUleiStandard() {
     return [
-      { id: 'ULEI_MOTOR', nume: 'Ulei motor' },
-      { id: 'ULEI_HIDRAULIC', nume: 'Ulei hidraulic' },
-      { id: 'ULEI_LIEBHERR_PUNTE', nume: 'Ulei - Liebherr Punte faţă + spate' },
+      { id: 'ULEI_MOTOR', nume: 'Ulei Motor (10W-40 / 15W-40 / 5W-30)' },
+      { id: 'ULEI_HIDRAULIC', nume: 'Ulei Hidraulic (HLP 46 / HVLP 46)' },
+      { id: 'ULEI_TRANSMISIE', nume: 'Ulei Transmisie & Diferențial (80W-90 / 75W-90)' },
+      { id: 'ANTIGEL_G12', nume: 'Antigel G12+ (Lichid Răcire Roz / Organic)' },
+      { id: 'ANTIGEL_G11', nume: 'Antigel G11 (Lichid Răcire Albastru / Clasic)' },
+      { id: 'ADBLUE', nume: 'AdBlue (Soluție Uree 32.5%)' },
+      { id: 'ULEI_LIEBHERR_PUNTE', nume: 'Ulei - Liebherr Punte față + spate' },
       { id: 'ULEI_LIEBHERR_CUTIE', nume: 'Ulei - Liebherr Cutie Viteze' },
-      { id: 'ULEI_CUTIE_MANUALA', nume: 'Ulei cutie manuală' },
-      { id: 'ULEI_CUTIE_AUTOMATA', nume: 'Ulei cutie automată' },
+      { id: 'ULEI_CUTIE_MANUALA', nume: 'Ulei Cutie Manuală' },
+      { id: 'ULEI_CUTIE_AUTOMATA', nume: 'Ulei Cutie Automată' },
     ];
   }
 
@@ -39,7 +47,7 @@ export class AnomaliiService {
       where: {
         OR: [
           { codArticol },
-          { AND: [{ categorie: 'Lubrifianți' }, { denumire: { contains: data.marcaUlei } }] },
+          { AND: [{ categorie: { contains: 'Ulei' } }, { denumire: { contains: data.marcaUlei } }] },
         ],
       },
     });
@@ -58,7 +66,7 @@ export class AnomaliiService {
         data: {
           codArticol,
           denumire,
-          categorie: 'Lubrifianți',
+          categorie: 'Ulei Motor',
           marcaUlei: data.marcaUlei,
           stocCurent: cantitate,
           stocMinim: 20,
@@ -77,6 +85,7 @@ export class AnomaliiService {
         numarFactura: data.numarFactura,
         dataFactura: data.dataFactura ? new Date(data.dataFactura) : new Date(),
         cantitateIntrata: cantitate,
+        cantitateRamasa: cantitate,
         pretUnitar: pretPerLitru,
         pretTotal: pretTotal,
         observatii: data.observatii,
@@ -91,7 +100,7 @@ export class AnomaliiService {
     };
   }
 
-  // 2. IESIRI ULEI (With automatic warehouse stock deduction)
+  // 2. IESIRI ULEI & FLUIDE (Consum FIFO din depozit)
   async adaugaIesireUlei(data: {
     vehiculId: string;
     tipLichid: string;
@@ -111,7 +120,8 @@ export class AnomaliiService {
     const valoareContor = Number(data.valoareContor);
     const dataOp = data.dataOperatiune ? new Date(data.dataOperatiune) : new Date();
 
-    const sursaOp = data.tipOperatiune === 'SCHIMB_ULEI' ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
+    const isSchimb = data.tipOperatiune.includes('SCHIMB');
+    const sursaOp = isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
 
     await this.prisma.istoricContorVehicul.create({
       data: {
@@ -159,39 +169,50 @@ export class AnomaliiService {
     }
 
     let pretPerLitru = 25;
+    let costTotal = cantitate * pretPerLitru;
     let articolUlei = null;
+    let fifoResult = null;
 
     if (data.articolStocId) {
       articolUlei = await this.prisma.articolStoc.findUnique({ where: { id: data.articolStocId } });
     } else {
+      // Căutare inteligentă articol în funcție de tipLichid
+      const tipLower = data.tipLichid.toLowerCase();
       articolUlei = await this.prisma.articolStoc.findFirst({
         where: {
           OR: [
-            { categorie: 'Lubrifianți' },
-            { denumire: { contains: 'Ulei' } },
+            { categorie: { contains: tipLower.includes('hidraulic') ? 'Hidraulic' : tipLower.includes('antigel') ? 'Antigel' : tipLower.includes('adblue') ? 'AdBlue' : 'Motor' } },
+            { denumire: { contains: data.marcaUlei || 'Ulei' } },
           ],
         },
       });
     }
 
     if (articolUlei) {
-      pretPerLitru = articolUlei.pretUnitar || 25;
-      if (articolUlei.stocCurent >= cantitate) {
-        await this.prisma.articolStoc.update({
-          where: { id: articolUlei.id },
-          data: { stocCurent: articolUlei.stocCurent - cantitate },
-        });
+      try {
+        fifoResult = await this.stocuriGarantiiService.consumaStocFIFO(articolUlei.id, cantitate);
+        costTotal = fifoResult.costTotal;
+        pretPerLitru = fifoResult.pretUnitarMediu;
+      } catch (err) {
+        // Fallback dacă stocul din loturi nu este complet
+        pretPerLitru = articolUlei.pretUnitar || 25;
+        costTotal = Number((cantitate * pretPerLitru).toFixed(2));
+        if (articolUlei.stocCurent >= cantitate) {
+          await this.prisma.articolStoc.update({
+            where: { id: articolUlei.id },
+            data: { stocCurent: Math.max(0, articolUlei.stocCurent - cantitate) },
+          });
+        }
       }
     }
-
-    const costTotal = cantitate * pretPerLitru;
 
     const completare = await this.prisma.completareLichid.create({
       data: {
         vehiculId: vehicul.id,
+        articolStocId: articolUlei ? articolUlei.id : null,
         tipLichid: data.tipLichid,
         tipOperatiune: data.tipOperatiune,
-        marcaUlei: data.marcaUlei || (articolUlei ? articolUlei.marcaUlei : 'Mobil'),
+        marcaUlei: data.marcaUlei || (articolUlei ? (articolUlei.marcaUlei || articolUlei.denumire) : 'Standard'),
         cantitateLitri: cantitate,
         pretPerLitru,
         costTotal,
@@ -203,7 +224,7 @@ export class AnomaliiService {
       },
     });
 
-    if (data.tipOperatiune === 'SCHIMB_ULEI') {
+    if (isSchimb) {
       await this.prisma.configurareUleiVehicul.upsert({
         where: { vehiculId_tipLichid: { vehiculId: vehicul.id, tipLichid: data.tipLichid } },
         update: {
@@ -223,7 +244,7 @@ export class AnomaliiService {
     }
 
     let verificareScurgere = null;
-    if (data.tipOperatiune === 'COMPLETARE_ULEI') {
+    if (!isSchimb) {
       verificareScurgere = await this.verificaAnomalieScurgere(vehicul.id, data.tipLichid);
       if (verificareScurgere.esteAnomalie) {
         await this.prisma.completareLichid.update({
@@ -233,12 +254,14 @@ export class AnomaliiService {
       }
     }
 
+    const operatiuneNume = isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE';
     return {
-      mesaj: data.tipOperatiune === 'SCHIMB_ULEI'
-        ? ` SCHIMB ULEI ÎNREGISTRAT! Contorul pentru ${data.tipLichid} a fost RESETAT la ${valoareContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Stoc scos: ${cantitate}L din ${articolUlei.denumire})` : ''}`
-        : `Completare ${cantitate}L ${data.tipLichid} înregistrată. Cost: ${costTotal} RON.${articolUlei ? ` (Stoc scos: ${cantitate}L din ${articolUlei.denumire})` : ''}`,
+      mesaj: isSchimb
+        ? ` ${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${data.tipLichid} a fost RESETAT la ${valoareContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Consumat FIFO: ${cantitate}L din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/L, Cost total: ${costTotal} RON)` : ''}`
+        : `Completare ${cantitate}L ${data.tipLichid} înregistrată. Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/L).${articolUlei ? ` (Stoc dedus din ${articolUlei.denumire})` : ''}`,
       completare,
       anomalie: verificareScurgere,
+      fifoResult,
     };
   }
 

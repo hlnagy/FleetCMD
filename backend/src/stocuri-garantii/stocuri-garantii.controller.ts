@@ -112,6 +112,11 @@ export class StocuriGarantiiController {
     return this.stocuriGarantiiService.deleteArticolStoc(id);
   }
 
+  @Get('stocuri/:id/loturi')
+  getLoturiArticol(@Param('id') id: string) {
+    return this.stocuriGarantiiService.getLoturiArticol(id);
+  }
+
   // Recepție Marfă pe Factură (Purchasing Invoices incl. Oils & Parts)
   @Post('intrare-stoc')
   adaugaIntrareStoc(@Body() body: any) {

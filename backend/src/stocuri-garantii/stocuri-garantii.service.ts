@@ -79,14 +79,175 @@ export class StocuriGarantiiService {
   }
 
   // ==========================================
-  // 2. CATEGORII STOC CU STOC MINIM IMPLICIT
+  // 2. CATEGORII STOC CU STOC MINIM IMPLICIT & FLUIDE
   // ==========================================
 
+  esteCategorieLichid(cat?: string, subcat?: string, um?: string): boolean {
+    const c = (cat || '').toLowerCase();
+    const s = (subcat || '').toLowerCase();
+    const u = (um || '').toLowerCase();
+    return (
+      c.includes('ulei') ||
+      c.includes('lubrifian') ||
+      c.includes('antigel') ||
+      c.includes('racire') ||
+      c.includes('adblue') ||
+      c.includes('lichid') ||
+      s.includes('10w') ||
+      s.includes('15w') ||
+      s.includes('5w') ||
+      s.includes('hlp') ||
+      s.includes('hvlp') ||
+      s.includes('g12') ||
+      s.includes('g11') ||
+      s.includes('adblue') ||
+      u === 'l' ||
+      u === 'litru' ||
+      u === 'litri'
+    );
+  }
+
+  async asiguraCategoriiStandard() {
+    const categoriiInit = [
+      {
+        nume: 'Ulei Motor',
+        descriere: 'Uleiuri de motor pentru camioane, utilaje și autoutilitare',
+        stocMinimImplicit: 20,
+        subcategorii: [
+          '10W-40 (Heavy Duty Low-SAPS)',
+          '15W-40 (Mineral Heavy Duty)',
+          '5W-30 (Synthetic Longlife)',
+          '5W-40 (Synthetic Universal)',
+          '10W-30 (Utilaje Grele & TRACTO)',
+        ],
+      },
+      {
+        nume: 'Ulei Hidraulic',
+        descriere: 'Fluide hidraulice pentru excavatoare, basculante și macarale',
+        stocMinimImplicit: 40,
+        subcategorii: [
+          'HLP 46 (Hidraulic Standard)',
+          'HVLP 46 (Hidraulic Presiune Înaltă)',
+          'HLP 32 (Hidraulic Vâscozitate Redusă)',
+          'HLP 68 (Hidraulic Sarcini Grele)',
+          'Bio-Hidraulic (HEES / Ecologic)',
+        ],
+      },
+      {
+        nume: 'Ulei Transmisie & Diferențial',
+        descriere: 'Uleiuri de transmisie manuală, punți și diferențiale',
+        stocMinimImplicit: 15,
+        subcategorii: [
+          '80W-90 (Transmisie & Diferențial)',
+          '75W-90 (Transmisie Sintetic)',
+          '85W-140 (Diferențial Sarcini Grele)',
+          'UTTO 10W-30 (Transmisie Universală Utilaj)',
+          'ATF Dexron III (Cutie Automată / Servodirecție)',
+        ],
+      },
+      {
+        nume: 'Lichide Răcire & Antigel',
+        descriere: 'Antigel concentrat și gata preparat pentru sistemul de răcire',
+        stocMinimImplicit: 25,
+        subcategorii: [
+          'Antigel G12+ (Roz / Organic Concentrat)',
+          'Antigel G12+ (Gata Preparat -35°C)',
+          'Antigel G11 (Albastru / Clasic)',
+          'Antigel G13 (Violet / Si-OAT)',
+          'Apă Demineralizată',
+        ],
+      },
+      {
+        nume: 'AdBlue & Fluide Speciale',
+        descriere: 'Soluție AdBlue, lichid de frână, lichid parbriz și unsori',
+        stocMinimImplicit: 50,
+        subcategorii: [
+          'AdBlue (Soluție Uree 32.5% ISO 22241)',
+          'Lichid Frână DOT 4',
+          'Lichid Spălare Parbriz (Iarnă / Vară)',
+          'Vaselină EP2 (Unsoare Mecanică)',
+        ],
+      },
+      {
+        nume: 'Filtre',
+        descriere: 'Filtre motor, combustibil, aer și hidraulice',
+        stocMinimImplicit: 5,
+        subcategorii: [
+          'Filtru Ulei Motor',
+          'Filtru Combustibil / Motorină',
+          'Filtru Aer Primar & Secundar',
+          'Filtru Hidraulic',
+          'Filtru Uscător Aer',
+          'Filtru Habitaclu',
+        ],
+      },
+      {
+        nume: 'Piese Mecanice & Direcție',
+        descriere: 'Componente mecanice, frânare și direcție',
+        stocMinimImplicit: 2,
+        subcategorii: [
+          'Plăcuțe & Discuri Frână',
+          'Bucșe, Pivoți & Capete Bară',
+          'Amortizoare & Perne Aer',
+          'Curele & Întinzătoare',
+          'Turbosuflante & Componente Motor',
+        ],
+      },
+      {
+        nume: 'Anvelope',
+        descriere: 'Anvelope camioane, semiremorci și utilaje grele',
+        stocMinimImplicit: 4,
+        subcategorii: [
+          '315/80 R22.5',
+          '385/65 R22.5',
+          '13 R22.5',
+          '29.5 R25',
+          '17.5 / 19.5',
+        ],
+      },
+    ];
+
+    for (const c of categoriiInit) {
+      let cat = await this.prisma.categorieStoc.findUnique({ where: { nume: c.nume } });
+      if (!cat) {
+        cat = await this.prisma.categorieStoc.create({
+          data: {
+            nume: c.nume,
+            descriere: c.descriere,
+            stocMinimImplicit: c.stocMinimImplicit,
+          },
+        });
+      }
+
+      for (const sub of c.subcategorii) {
+        const subExists = await this.prisma.subcategorieStoc.findFirst({
+          where: { categorieStocId: cat.id, nume: sub },
+        });
+        if (!subExists) {
+          await this.prisma.subcategorieStoc.create({
+            data: {
+              nume: sub,
+              categorieStocId: cat.id,
+            },
+          });
+        }
+      }
+    }
+  }
+
   async getCategorii() {
-    const categoriiCustom = await this.prisma.categorieStoc.findMany({
+    let categoriiCustom = await this.prisma.categorieStoc.findMany({
       include: { subcategorii: true },
       orderBy: { nume: 'asc' },
     });
+
+    if (categoriiCustom.length < 5) {
+      await this.asiguraCategoriiStandard();
+      categoriiCustom = await this.prisma.categorieStoc.findMany({
+        include: { subcategorii: true },
+        orderBy: { nume: 'asc' },
+      });
+    }
 
     const dbSubcats = await this.prisma.subcategorieStoc.findMany();
 
@@ -443,7 +604,7 @@ export class StocuriGarantiiService {
   }
 
   // ==========================================
-  // 5. RECEPȚIE MARFĂ PE FACTURĂ & GARANȚII
+  // 5. RECEPȚIE MARFĂ PE FACTURĂ, CONSOLIDARE STOC & GARANȚII
   // ==========================================
 
   async adaugaIntrareStoc(data: {
@@ -462,6 +623,7 @@ export class StocuriGarantiiService {
     tipLichid?: string;
     marcaUlei?: string;
     observatii?: string;
+    articolStocId?: string;
 
     areGarantie?: boolean;
     serieUnica?: string;
@@ -480,11 +642,46 @@ export class StocuriGarantiiService {
       depozitIdFinal = depozite[0]?.id;
     }
 
-    let articol = await this.prisma.articolStoc.findFirst({
-      where: { codArticol: data.codArticol, depozitId: depozitIdFinal },
-    });
+    const isLiquid = this.esteCategorieLichid(data.categorie, data.subcategorie, data.unitateMasura);
+
+    // 1. Căutare inteligentă articol master existent:
+    // a) După ID direct (dacă a fost selectat)
+    // b) După Cod Articol în depozit
+    // c) Pentru fluide/uleiuri/antigel: după Categorie + Subcategorie identice în depozit!
+    let articol: any = null;
+
+    if (data.articolStocId) {
+      articol = await this.prisma.articolStoc.findUnique({ where: { id: data.articolStocId } });
+    }
+
+    if (!articol && data.codArticol) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: { codArticol: data.codArticol, depozitId: depozitIdFinal },
+      });
+    }
+
+    if (!articol && isLiquid && data.categorie && data.subcategorie) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: {
+          depozitId: depozitIdFinal,
+          categorie: data.categorie,
+          subcategorie: data.subcategorie,
+        },
+      });
+    }
+
+    if (!articol && isLiquid && data.categorie && !data.subcategorie) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: {
+          depozitId: depozitIdFinal,
+          categorie: data.categorie,
+          denumire: data.denumire,
+        },
+      });
+    }
 
     if (articol) {
+      // CONSOLIDARE STOC PE CATEGORIE / SUBCATEGORIE
       articol = await this.prisma.articolStoc.update({
         where: { id: articol.id },
         data: {
@@ -497,7 +694,7 @@ export class StocuriGarantiiService {
       });
     } else {
       const catCustom = await this.prisma.categorieStoc.findUnique({ where: { nume: data.categorie } });
-      const stocMinimImplicit = catCustom ? catCustom.stocMinimImplicit : 5;
+      const stocMinimImplicit = catCustom ? catCustom.stocMinimImplicit : (isLiquid ? 20 : 5);
 
       articol = await this.prisma.articolStoc.create({
         data: {
@@ -508,7 +705,7 @@ export class StocuriGarantiiService {
           stocCurent: cantitate,
           stocMinim: stocMinimImplicit,
           pretUnitar,
-          unitateMasura: data.unitateMasura || 'buc',
+          unitateMasura: data.unitateMasura || (isLiquid ? 'L' : 'buc'),
           esteSerializat: !!data.areGarantie,
           depozitId: depozitIdFinal,
           marcaUlei: data.marcaUlei,
@@ -516,6 +713,7 @@ export class StocuriGarantiiService {
       });
     }
 
+    // Înregistrăm lotul FIFO în registrul de intrări
     const intrare = await this.prisma.intrareStoc.create({
       data: {
         articolStocId: articol.id,
@@ -526,6 +724,7 @@ export class StocuriGarantiiService {
         numarFactura: data.numarFactura,
         dataFactura: data.dataFactura ? new Date(data.dataFactura) : new Date(),
         cantitateIntrata: cantitate,
+        cantitateRamasa: cantitate,
         pretUnitar,
         pretTotal,
         observatii: data.observatii,
@@ -560,6 +759,115 @@ export class StocuriGarantiiService {
       pretUnitar,
       componentaGarantie,
     };
+  }
+
+  // ==========================================
+  // MOTOR DE CONSUM FIFO (FIRST-IN, FIRST-OUT)
+  // Consumă din cele mai vechi loturi de intrare și deduce stocul curent
+  // ==========================================
+  async consumaStocFIFO(articolStocId: string, cantitateDeConsumat: number) {
+    const cantitate = Number(cantitateDeConsumat);
+    if (cantitate <= 0) throw new BadRequestException('Cantitatea de consumat trebuie să fie mai mare ca 0.');
+
+    const articol = await this.prisma.articolStoc.findUnique({
+      where: { id: articolStocId },
+    });
+    if (!articol) throw new NotFoundException('Articolul din stoc nu a fost găsit.');
+
+    // 1. Căutăm toate loturile cu stoc disponibil pentru acest articol, ordonate FIFO (cele mai vechi primele)
+    const loturi = await this.prisma.intrareStoc.findMany({
+      where: {
+        articolStocId,
+        OR: [
+          { cantitateRamasa: { gt: 0 } },
+          { cantitateRamasa: null },
+        ],
+      },
+      orderBy: [
+        { dataFactura: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
+
+    let cantitateRamasaDeConsumat = cantitate;
+    let costTotalConsum = 0;
+    const loturiConsumate: Array<{
+      intrareId: string;
+      furnizor: string;
+      numarFactura: string;
+      dataFactura: Date;
+      cantitateLuata: number;
+      pretUnitar: number;
+      costLot: number;
+    }> = [];
+
+    for (const lot of loturi) {
+      if (cantitateRamasaDeConsumat <= 0) break;
+
+      const stocLot = lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+        ? Number(lot.cantitateRamasa)
+        : Number(lot.cantitateIntrata);
+
+      if (stocLot <= 0) continue;
+
+      const luamDinLot = Math.min(cantitateRamasaDeConsumat, stocLot);
+      const costLot = Number((luamDinLot * lot.pretUnitar).toFixed(2));
+
+      costTotalConsum += costLot;
+      cantitateRamasaDeConsumat -= luamDinLot;
+
+      const nouaCantitateRamasaLot = Number((stocLot - luamDinLot).toFixed(2));
+
+      await this.prisma.intrareStoc.update({
+        where: { id: lot.id },
+        data: { cantitateRamasa: Math.max(0, nouaCantitateRamasaLot) },
+      });
+
+      loturiConsumate.push({
+        intrareId: lot.id,
+        furnizor: lot.furnizor,
+        numarFactura: lot.numarFactura,
+        dataFactura: lot.dataFactura,
+        cantitateLuata: luamDinLot,
+        pretUnitar: lot.pretUnitar,
+        costLot,
+      });
+    }
+
+    if (cantitateRamasaDeConsumat > 0) {
+      const costExtra = Number((cantitateRamasaDeConsumat * (articol.pretUnitar || 0)).toFixed(2));
+      costTotalConsum += costExtra;
+    }
+
+    // 2. Scădem din stocul total al articolului
+    const noulStocCurent = Math.max(0, Number((articol.stocCurent - cantitate).toFixed(2)));
+    await this.prisma.articolStoc.update({
+      where: { id: articol.id },
+      data: { stocCurent: noulStocCurent },
+    });
+
+    const pretUnitarMediu = Number((costTotalConsum / cantitate).toFixed(2));
+
+    return {
+      articolId: articol.id,
+      denumire: articol.denumire,
+      cantitateConsumata: cantitate,
+      stocCurentRamas: noulStocCurent,
+      costTotal: Number(costTotalConsum.toFixed(2)),
+      pretUnitarMediu,
+      loturiConsumate,
+    };
+  }
+
+  // Obține loturile active FIFO pentru un articol de stoc
+  async getLoturiArticol(articolStocId: string) {
+    return this.prisma.intrareStoc.findMany({
+      where: { articolStocId },
+      orderBy: [
+        { dataFactura: 'asc' },
+        { createdAt: 'asc' },
+      ],
+    });
   }
 
   async getIstoricIntrari(cautare?: string) {

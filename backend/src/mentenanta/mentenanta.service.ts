@@ -1,9 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
 
 @Injectable()
 export class MentenantaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private stocuriGarantiiService: StocuriGarantiiService,
+  ) {}
 
   // ==========================================
   // REGISTRU MECANICI & ECHIPĂ ATELIER
@@ -508,10 +512,21 @@ export class MentenantaService {
           if (articol.stocCurent < elem.cantitate) {
             throw new BadRequestException(`Stoc insuficient pentru ${articol.denumire}. Disponibil: ${articol.stocCurent}`);
           }
-          await this.prisma.articolStoc.update({
-            where: { id: elem.articolStocId },
-            data: { stocCurent: articol.stocCurent - elem.cantitate },
-          });
+          try {
+            const fifoRes = await this.stocuriGarantiiService.consumaStocFIFO(elem.articolStocId, elem.cantitate);
+            await this.prisma.elementComandaLucru.update({
+              where: { id: elem.id },
+              data: {
+                costTotal: fifoRes.costTotal,
+                pretUnitar: fifoRes.pretUnitarMediu,
+              },
+            });
+          } catch (err) {
+            await this.prisma.articolStoc.update({
+              where: { id: elem.articolStocId },
+              data: { stocCurent: Math.max(0, articol.stocCurent - elem.cantitate) },
+            });
+          }
         }
       }
 

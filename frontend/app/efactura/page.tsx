@@ -34,6 +34,7 @@ function EFacturaContent() {
   const [config, setConfig] = useState<any>(null);
   const [depozite, setDepozite] = useState<any[]>([]);
   const [categoriiStoc, setCategoriiStoc] = useState<any[]>([]);
+  const [stocuriFlota, setStocuriFlota] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -232,6 +233,12 @@ function EFacturaContent() {
       if (resIntrari.ok) {
         const iList = await resIntrari.json();
         setIntrariHistory(Array.isArray(iList) ? iList : []);
+      }
+
+      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
+      if (resStoc.ok) {
+        const sList = await resStoc.json();
+        setStocuriFlota(Array.isArray(sList) ? sList : []);
       }
 
       // Verificăm dacă o sincronizare este deja în curs pe server la încărcarea paginii
@@ -531,13 +538,91 @@ function EFacturaContent() {
 
     setCodArticolCalculat(code);
 
+    const descLower = (item.descrierePiesa || '').toLowerCase();
     const isAnvelopaText = /anvelop|r22\.5|r17\.5|r20|r24|cauciuc/i.test(item.descrierePiesa) || (rawCode || '').toUpperCase().startsWith('ANV');
+
+    let detectedCat = '';
+    let detectedSubcat = '';
+
     if (isAnvelopaText) {
-      setTargetCategorie('ANVELOPE');
-    } else if (categoriiStoc.length > 0 && !targetCategorie) {
-      setTargetCategorie(categoriiStoc[0].nume);
+      detectedCat = 'Anvelope';
+    } else if (descLower.includes('antigel') || descLower.includes('coolant') || descLower.includes('g12') || descLower.includes('g11') || descLower.includes('g13')) {
+      detectedCat = 'Lichide Răcire & Antigel';
+      if (descLower.includes('g11') || descLower.includes('albastr') || descLower.includes('hibrid')) {
+        detectedSubcat = 'Antigel G11 (Albastru / Hibrid)';
+      } else {
+        detectedSubcat = 'Antigel G12+ (Roz / Organic Concentrat)';
+      }
+    } else if (descLower.includes('adblue') || descLower.includes('uree') || descLower.includes('nox')) {
+      detectedCat = 'AdBlue & Fluide Speciale';
+      detectedSubcat = 'AdBlue (Soluție Uree 32.5% ISO 22241)';
+    } else if (descLower.includes('hidraulic') || descLower.includes('hlp') || descLower.includes('hvlp')) {
+      detectedCat = 'Ulei Hidraulic';
+      if (descLower.includes('32')) {
+        detectedSubcat = 'HLP 32 (Hidraulic Vâscozitate Joasă)';
+      } else if (descLower.includes('hvlp')) {
+        detectedSubcat = 'HVLP 46 (Indice Ridicat de Vâscozitate)';
+      } else {
+        detectedSubcat = 'HLP 46 (Sisteme Hidraulice & Basculare)';
+      }
+    } else if (descLower.includes('transmisie') || descLower.includes('diferential') || descLower.includes('80w90') || descLower.includes('75w90') || descLower.includes('85w140') || descLower.includes('atf') || descLower.includes('gear')) {
+      detectedCat = 'Ulei Transmisie & Diferențial';
+      if (descLower.includes('75w90') || descLower.includes('75w-90')) {
+        detectedSubcat = '75W-90 (Sintetic Punte Heavy Duty)';
+      } else if (descLower.includes('85w140') || descLower.includes('85w-140')) {
+        detectedSubcat = '85W-140 (Diferențial & Reductor Mare)';
+      } else {
+        detectedSubcat = '80W-90 (Cutii Viteze & Diferențiale)';
+      }
+    } else if (descLower.includes('10w40') || descLower.includes('10w-40') || descLower.includes('15w40') || descLower.includes('15w-40') || descLower.includes('5w30') || descLower.includes('5w-30') || descLower.includes('5w40') || descLower.includes('5w-40') || descLower.includes('ulei motor') || descLower.includes('engine oil') || descLower.includes('lubrifiant')) {
+      detectedCat = 'Ulei Motor';
+      if (descLower.includes('15w40') || descLower.includes('15w-40')) {
+        detectedSubcat = '15W-40 (Heavy Duty Mineral)';
+      } else if (descLower.includes('5w30') || descLower.includes('5w-30')) {
+        detectedSubcat = '5W-30 (Ultra Synthetic Euro 6)';
+      } else if (descLower.includes('5w40') || descLower.includes('5w-40')) {
+        detectedSubcat = '5W-40 (Synthetic)';
+      } else {
+        detectedSubcat = '10W-40 (Heavy Duty Low-SAPS)';
+      }
+    } else if (descLower.includes('filtru') || descLower.includes('filter')) {
+      detectedCat = 'Filtre';
+      if (descLower.includes('ulei') || descLower.includes('oil')) detectedSubcat = 'Filtre Ulei';
+      else if (descLower.includes('aer') || descLower.includes('air')) detectedSubcat = 'Filtre Aer';
+      else if (descLower.includes('combustibil') || descLower.includes('motorina') || descLower.includes('fuel')) detectedSubcat = 'Filtre Combustibil / Motorină';
+      else if (descLower.includes('polen') || descLower.includes('habitaclu')) detectedSubcat = 'Filtre Polen / Habitaclu';
+      else if (descLower.includes('uscator') || descLower.includes('aer comprimat')) detectedSubcat = 'Filtre Uscător Aer Comprimat';
     }
-    setTargetSubcategorie('');
+
+    let finalCat = '';
+    let finalSubcat = '';
+
+    if (detectedCat) {
+      const match = categoriiStoc.find(c => c.nume?.toLowerCase() === detectedCat.toLowerCase() || c.nume?.toLowerCase().includes(detectedCat.toLowerCase()));
+      if (match) {
+        finalCat = match.nume;
+        if (detectedSubcat && Array.isArray(match.subcategorii)) {
+          const subMatch = match.subcategorii.find((s: any) => 
+            s.nume?.toLowerCase() === detectedSubcat.toLowerCase() || 
+            s.nume?.toLowerCase().includes(detectedSubcat.toLowerCase()) ||
+            detectedSubcat.toLowerCase().includes(s.nume?.toLowerCase())
+          );
+          if (subMatch) finalSubcat = subMatch.nume;
+        }
+      }
+    }
+
+    if (finalCat) {
+      setTargetCategorie(finalCat);
+      setTargetSubcategorie(finalSubcat);
+    } else if (categoriiStoc.length > 0) {
+      setTargetCategorie(categoriiStoc[0].nume);
+      setTargetSubcategorie('');
+    } else {
+      setTargetCategorie('PIESE_AUTO');
+      setTargetSubcategorie('');
+    }
+
     setIsAddingNewCat(false);
     setIsAddingNewSubcat(false);
     setNewCatNume('');
@@ -566,6 +651,27 @@ function EFacturaContent() {
     }
     setSeriiList(initialSerii);
   };
+
+  // Verificare Consolidare Stoc Existent pentru Fluide / Uleiuri / Antigel / AdBlue
+  const articolConsolidareExistent = useMemo(() => {
+    if (!targetCategorie || !targetDepozitId || !importingItem) return null;
+    const catLower = targetCategorie.toLowerCase();
+    const esteFluid = /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(catLower) || (importingItem.unitateMasura || '').toLowerCase() === 'l';
+    if (!esteFluid) return null;
+
+    return stocuriFlota.find((s) => {
+      if (s.depozitId !== targetDepozitId) return false;
+      const sCatLower = (s.categorie || '').toLowerCase();
+      const sameCat = sCatLower === catLower || sCatLower.includes(catLower) || catLower.includes(sCatLower);
+      if (!sameCat) return false;
+
+      // Dacă este aleasă o subcategorie, verificăm potrivirea strictă
+      if (targetSubcategorie && s.subcategorie) {
+        return s.subcategorie.toLowerCase() === targetSubcategorie.toLowerCase();
+      }
+      return true;
+    });
+  }, [targetCategorie, targetSubcategorie, targetDepozitId, importingItem, stocuriFlota]);
 
   // QUICK CREATE CATEGORY HANDLER
   const handleQuickCreateCategory = async () => {
@@ -2240,6 +2346,36 @@ function EFacturaContent() {
                   </select>
                 )}
               </div>
+
+              {/* NOTIFICARE CONSOLIDARE FLUIDE & LOTURI FIFO */}
+              {articolConsolidareExistent ? (
+                <div className="p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl space-y-1 text-xs animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-emerald-950 flex items-center space-x-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Se va consolida în stocul existent (Regulă FIFO)</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-300 font-mono">
+                      Stoc Actual: {articolConsolidareExistent.stocCurent} {articolConsolidareExistent.unitateMasura}
+                    </span>
+                  </div>
+                  <p className="text-emerald-800 text-[11px] leading-relaxed">
+                    În depozitul selectat există deja articolul <strong>&ldquo;{articolConsolidareExistent.denumire}&rdquo;</strong> cu aceeași categorie și subcategorie. Cantitatea din această factură (<strong>+{importingItem.cantitate} {importingItem.unitateMasura || 'L'}</strong> la {Number(importingItem.pretUnitar || 0).toFixed(2)} RON/{importingItem.unitateMasura || 'L'}) va fi adăugată ca <strong>lot nou FIFO</strong> fără a multiplica articolele din nomenclator.
+                  </p>
+                </div>
+              ) : (
+                /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) && (
+                  <div className="p-3 bg-sapphire-50/80 border border-sapphire-200 rounded-xl space-y-1 text-xs animate-fade-in">
+                    <span className="font-bold text-sapphire-900 flex items-center space-x-1.5">
+                      <Layers className="w-4 h-4 text-sapphire-600 shrink-0" />
+                      <span>Articol Nou de Fluid & Primul Lot FIFO</span>
+                    </span>
+                    <p className="text-sapphire-700 text-[11px] leading-relaxed">
+                      Se va genera un articol maestru pentru acest fluid în depozit, iar această intrare de <strong>{importingItem.cantitate} {importingItem.unitateMasura || 'L'}</strong> va constitui <strong>Lotul #1 FIFO</strong>.
+                    </p>
+                  </div>
+                )
+              )}
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Cod Articol în Stoc (Cod furnizor sau intern): *</label>

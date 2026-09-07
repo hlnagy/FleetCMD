@@ -237,8 +237,10 @@ model CompletareLichid {
   id                  String      @id @default(uuid())
   vehiculId           String
   vehicul             Vehicul     @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
-  tipLichid           String      // ULEI_MOTOR, ULEI_HIDRAULIC, etc.
-  tipOperatiune       String      @default("COMPLETARE_ULEI") // COMPLETARE_ULEI vs SCHIMB_ULEI
+  articolStocId       String?
+  articolStoc         ArticolStoc? @relation(fields: [articolStocId], references: [id], onDelete: SetNull)
+  tipLichid           String      // ULEI_MOTOR, ULEI_HIDRAULIC, ANTIGEL_G12, etc.
+  tipOperatiune       String      @default("COMPLETARE_ULEI") // COMPLETARE_ULEI vs SCHIMB_ULEI vs COMPLETARE_ANTIGEL vs SCHIMB_ANTIGEL
   marcaUlei           String?     
   cantitateLitri      Float
   pretPerLitru        Float       @default(0)
@@ -387,6 +389,7 @@ model ArticolStoc {
   elementeComanda    ElementComandaLucru[]
   componenteSerializate ComponentaSerializata[]
   intrariStoc        IntrareStoc[]
+  completariLichid   CompletareLichid[]
   transferuriStoc    TransferStoc[]
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
@@ -421,6 +424,7 @@ model IntrareStoc {
   numarFactura       String
   dataFactura        DateTime     @default(now())
   cantitateIntrata   Float
+  cantitateRamasa    Float?
   pretUnitar         Float
   pretTotal          Float
   observatii         String?

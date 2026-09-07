@@ -901,31 +901,67 @@ export class EFacturaService {
     }
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
-    const catName = data.categorieNume || 'PIESE_AUTO';
+    const catName = data.categorieNume || 'Piese Mecanice & Direcție';
     const rawPretUnitar = typeof data.pretUnitarCustom === 'number' ? data.pretUnitarCustom : item.pretUnitar;
     const effectivePretUnitar = Number(Number(rawPretUnitar || 0).toFixed(2));
     const effectivePretTotal = Number((effectivePretUnitar * item.cantitate).toFixed(2));
+    const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
 
-    // 2. Căutare sau Creare ArticolStoc în Depozit
-    let articol = await this.prisma.articolStoc.findFirst({
-      where: {
-        OR: [
-          { codArticol: codArticol },
-          { denumire: item.descrierePiesa, depozitId: targetDepozitId },
-        ],
-      },
-    });
+    const isFluid =
+      catName.toLowerCase().includes('ulei') ||
+      catName.toLowerCase().includes('lubrifian') ||
+      catName.toLowerCase().includes('antigel') ||
+      catName.toLowerCase().includes('racire') ||
+      catName.toLowerCase().includes('adblue') ||
+      normalizedUM === 'L';
+
+    // 2. Căutare Inteligentă sau Creare ArticolStoc în Depozit
+    // Pentru fluide: căutăm și după Depozit + Categorie + Subcategorie identice!
+    let articol: any = null;
+
+    if (codArticol) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: {
+          codArticol: codArticol,
+          depozitId: targetDepozitId,
+        },
+      });
+    }
+
+    if (!articol && isFluid && catName && data.subcategorieNume) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: {
+          depozitId: targetDepozitId,
+          categorie: catName,
+          subcategorie: data.subcategorieNume,
+        },
+      });
+    }
+
+    if (!articol) {
+      articol = await this.prisma.articolStoc.findFirst({
+        where: {
+          denumire: item.descrierePiesa,
+          depozitId: targetDepozitId,
+        },
+      });
+    }
 
     if (articol) {
+      // CONSOLIDARE STOC EXISTENT
       articol = await this.prisma.articolStoc.update({
         where: { id: articol.id },
         data: {
           stocCurent: articol.stocCurent + item.cantitate,
           pretUnitar: effectivePretUnitar > 0 ? effectivePretUnitar : articol.pretUnitar,
+          subcategorie: data.subcategorieNume || articol.subcategorie,
           esteSerializat: data.areGarantie ? true : articol.esteSerializat,
         },
       });
     } else {
+      const catCustom = await this.prisma.categorieStoc.findUnique({ where: { nume: catName } });
+      const defaultMin = catCustom ? catCustom.stocMinimImplicit : (isFluid ? 20 : 5);
+
       articol = await this.prisma.articolStoc.create({
         data: {
           codArticol,
@@ -933,16 +969,16 @@ export class EFacturaService {
           categorie: catName,
           subcategorie: data.subcategorieNume || null,
           stocCurent: item.cantitate,
-          stocMinim: 5,
+          stocMinim: defaultMin,
           pretUnitar: effectivePretUnitar,
-          unitateMasura: normalizeUnitateMasura(item.unitateMasura || 'buc'),
+          unitateMasura: isFluid ? 'L' : normalizedUM,
           esteSerializat: !!data.areGarantie,
           depozitId: targetDepozitId,
         },
       });
     }
 
-    // 3. Înregistrare Recepție IntrareStoc (Recepție e-Factura)
+    // 3. Înregistrare Recepție IntrareStoc cu cantitateRamasa pentru FIFO
     await this.prisma.intrareStoc.create({
       data: {
         articolStocId: articol.id,
@@ -951,6 +987,7 @@ export class EFacturaService {
         numarFactura: item.factura.numarFactura,
         dataFactura: item.factura.dataFactura,
         cantitateIntrata: item.cantitate,
+        cantitateRamasa: item.cantitate, // Initializăm lotul FIFO
         pretUnitar: effectivePretUnitar,
         pretTotal: effectivePretTotal,
         observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? '  Înregistrat în Garanții Componente' : ''}`,

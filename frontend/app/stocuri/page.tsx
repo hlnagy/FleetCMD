@@ -25,6 +25,11 @@ function StocuriGarantiiContent() {
   const [transferuriHistory, setTransferuriHistory] = useState<any[]>([]);
   const [mecanici, setMecanici] = useState<any[]>([]);
 
+  // Stare Vizualizare Loturi FIFO & Trasabilitate Facturi
+  const [viewingFifoArticol, setViewingFifoArticol] = useState<any>(null);
+  const [fifoLoturiList, setFifoLoturiList] = useState<any[]>([]);
+  const [loadingFifoLoturi, setLoadingFifoLoturi] = useState(false);
+
   // Stoc Anvelope Serializate pe Bucată (Magazie Anvelope)
   const [anvelopeStocList, setAnvelopeStocList] = useState<any[]>([]);
   const [anvelopeStocSearch, setAnvelopeStocSearch] = useState('');
@@ -241,6 +246,21 @@ function StocuriGarantiiContent() {
   const handleOpenDepozitStoc = (depId: string) => {
     setSelectedDepozitFilter(depId);
     setActiveTab('stoc');
+  };
+
+  const handleOpenFifoLoturi = async (articol: any) => {
+    setViewingFifoArticol(articol);
+    setLoadingFifoLoturi(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${articol.id}/loturi`);
+      if (res.ok) {
+        setFifoLoturiList(await res.json());
+      }
+    } catch (e) {
+      console.error('Eroare la încărcare loturi FIFO:', e);
+    } finally {
+      setLoadingFifoLoturi(false);
+    }
   };
 
   // Handler Execuție Transfer Parțial Între Depozite (Requested by User)
@@ -912,7 +932,18 @@ function StocuriGarantiiContent() {
                       <td className="p-3 font-mono font-bold text-sapphire-900">
                         {Number(s.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON / {s.unitateMasura}
                       </td>
-                      <td className="p-3 text-right space-x-1.5 whitespace-nowrap min-w-[220px]">
+                      <td className="p-3 text-right space-x-1.5 whitespace-nowrap min-w-[280px]">
+                        <button
+                          onClick={() => handleOpenFifoLoturi(s)}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300 transition shadow-2xs"
+                          title="Vezi trasabilitatea loturilor de intrare pe facturi (FIFO)"
+                        >
+                          <span className="flex items-center space-x-1">
+                            <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Loturi FIFO</span>
+                          </span>
+                        </button>
+
                         <button
                           onClick={() => {
                             setTransferArticol(s);
@@ -2185,6 +2216,185 @@ function StocuriGarantiiContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODÁL TRASABILITATE LOTURI FIFO */}
+      {viewingFifoArticol && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card p-6 rounded-2xl w-full max-w-4xl space-y-4 shadow-2xl max-h-[90vh] flex flex-col bg-white">
+            <div className="flex items-center justify-between pb-3 border-b border-morning-200">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <Layers className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-sapphire-900">
+                    Trasabilitate Loturi de Intrare (FIFO) — {viewingFifoArticol.denumire}
+                  </h3>
+                  <p className="text-xs text-sage-600 font-medium mt-0.5">
+                    Depozit: <strong>{viewingFifoArticol.depozit?.nume || 'Depozit Central'}</strong> | Categorie: <strong>{viewingFifoArticol.categorie}</strong> {viewingFifoArticol.subcategorie && <span>▸ <strong>{viewingFifoArticol.subcategorie}</strong></span>} | Stoc Total: <strong className="text-emerald-700 font-mono">{viewingFifoArticol.stocCurent} {viewingFifoArticol.unitateMasura}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingFifoArticol(null)}
+                className="p-1.5 rounded-lg text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Banner explicativ FIFO */}
+            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed flex items-start space-x-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold">Regula FIFO (First-In, First-Out) Activă:</p>
+                <p className="text-emerald-800 text-[11px] mt-0.5">
+                  Consumul la completări de fluide, revizii sau comenzi de lucru debitează automat lotul cel mai vechi cu cantitate rămasă. După epuizarea unui lot, sistemul trece instant la următorul lot recepționat, calculând prețul de cost ponderat corect și păstrând trasabilitatea completă a facturilor furnizorilor.
+                </p>
+              </div>
+            </div>
+
+            {/* Corp modal: tabel loturi sau stare gol */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {loadingFifoLoturi ? (
+                <div className="py-12 text-center text-xs font-bold text-slate-500 animate-pulse">
+                  Se încarcă istoricul loturilor FIFO...
+                </div>
+              ) : fifoLoturiList.length === 0 ? (
+                <div className="py-10 text-center space-y-2">
+                  <Layers className="w-8 h-8 text-sage-400 mx-auto" />
+                  <p className="text-xs font-bold text-slate-600">Nu există loturi de recepție pe factură înregistrate pentru acest articol.</p>
+                  <p className="text-[11px] text-sage-500">Stocul curent ({viewingFifoArticol.stocCurent} {viewingFifoArticol.unitateMasura}) provine din inițializarea stocului sau adăugare fără factură detaliată.</p>
+                </div>
+              ) : (
+                (() => {
+                  const firstActiveIdx = fifoLoturiList.findIndex(
+                    (l) => (l.cantitateRamasa ?? l.cantitateIntrata) > 0
+                  );
+                  const totalRamas = fifoLoturiList.reduce(
+                    (acc, l) => acc + (l.cantitateRamasa ?? l.cantitateIntrata),
+                    0
+                  );
+
+                  return (
+                    <div className="space-y-3">
+                      <table className="w-full text-left text-xs text-slate-700">
+                        <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200 sticky top-0">
+                          <tr>
+                            <th className="p-2.5">Ordine FIFO</th>
+                            <th className="p-2.5">Dată Factură</th>
+                            <th className="p-2.5">Nr. Factură & Furnizor</th>
+                            <th className="p-2.5 font-mono">Cantitate Intrată</th>
+                            <th className="p-2.5 font-mono">Cantitate Rămasă</th>
+                            <th className="p-2.5 font-mono">Preț Achiziție</th>
+                            <th className="p-2.5 text-center">Stare Consum</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-morning-200">
+                          {fifoLoturiList.map((lot, idx) => {
+                            const cantRamasa = lot.cantitateRamasa ?? lot.cantitateIntrata;
+                            const esteEpuizat = cantRamasa <= 0.001;
+                            const estePrioritar = idx === firstActiveIdx && !esteEpuizat;
+
+                            return (
+                              <tr
+                                key={lot.id}
+                                className={`transition ${
+                                  estePrioritar
+                                    ? 'bg-emerald-50/80 font-semibold'
+                                    : esteEpuizat
+                                    ? 'bg-slate-50/60 opacity-60'
+                                    : 'hover:bg-morning-50'
+                                }`}
+                              >
+                                <td className="p-2.5 font-mono font-bold text-sapphire-900 flex items-center space-x-1.5">
+                                  <span>#{idx + 1}</span>
+                                  {estePrioritar && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-600 text-white uppercase tracking-wider">
+                                      Activ
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-slate-700 font-medium">
+                                  {lot.dataFactura
+                                    ? new Date(lot.dataFactura).toLocaleDateString('ro-RO')
+                                    : new Date(lot.createdAt).toLocaleDateString('ro-RO')}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className="font-bold text-sapphire-900 block">{lot.numarFactura || 'Fără Număr'}</span>
+                                  <span className="text-[10px] text-sage-600">{lot.furnizor || 'Furnizor Nespecificat'}</span>
+                                </td>
+                                <td className="p-2.5 font-mono font-bold text-slate-700">
+                                  {lot.cantitateIntrata} {viewingFifoArticol.unitateMasura}
+                                </td>
+                                <td className="p-2.5 font-mono">
+                                  <span
+                                    className={`px-2 py-0.5 rounded font-extrabold text-xs ${
+                                      esteEpuizat
+                                        ? 'bg-slate-200 text-slate-600'
+                                        : estePrioritar
+                                        ? 'bg-emerald-200 text-emerald-950 border border-emerald-400'
+                                        : 'bg-morning-200 text-sapphire-900'
+                                    }`}
+                                  >
+                                    {cantRamasa.toFixed(2)} {viewingFifoArticol.unitateMasura}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 font-mono font-bold text-sapphire-900">
+                                  {Number(lot.pretUnitar || 0).toLocaleString('ro-RO', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}{' '}
+                                  RON / {viewingFifoArticol.unitateMasura}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  {esteEpuizat ? (
+                                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
+                                      <span>Consumat integral</span>
+                                    </span>
+                                  ) : estePrioritar ? (
+                                    <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping mr-1" />
+                                      <span>Următorul la consum</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sapphire-50 text-sapphire-700 border border-sapphire-200">
+                                      <span>În așteptare FIFO</span>
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      <div className="flex items-center justify-between p-3 bg-morning-100 rounded-xl text-xs">
+                        <span className="text-sage-700 font-medium">
+                          Total cantitate disponibilă în loturi contorizate FIFO:
+                        </span>
+                        <span className="font-mono font-extrabold text-sapphire-900">
+                          {totalRamas.toFixed(2)} {viewingFifoArticol.unitateMasura} (Stoc total înregistrat: {viewingFifoArticol.stocCurent} {viewingFifoArticol.unitateMasura})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-morning-200">
+              <button
+                type="button"
+                onClick={() => setViewingFifoArticol(null)}
+                className="px-5 py-2 rounded-xl bg-morning-200 hover:bg-morning-300 text-slate-800 font-bold text-xs transition"
+              >
+                Închide Fereastra
+              </button>
+            </div>
           </div>
         </div>
       )}

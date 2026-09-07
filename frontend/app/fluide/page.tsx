@@ -96,13 +96,27 @@ export default function FluidePage() {
       const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
         const dataStoc = await resStoc.json();
-        // Filtrăm STRICT doar articolele de tip ulei / lubrifiant / fluid (excludem categoric filtrele de ulei/aer!)
         const lubeStoc = dataStoc.filter((s: any) => {
           const cat = (s.categorie || '').toLowerCase();
           const den = (s.denumire || '').toLowerCase();
+          const sub = (s.subcategorie || '').toLowerCase();
           const isFilter = cat.includes('filtr') || den.includes('filtr') || cat === 'filtre';
-          const isLube = cat.includes('lubrifian') || cat.includes('ulei') || cat.includes('fluid') || s.unitateMasura === 'L' || s.unitateMasura === 'Litri' || den.startsWith('ulei');
-          return isLube && !isFilter;
+          const isFluid =
+            cat.includes('lubrifian') ||
+            cat.includes('ulei') ||
+            cat.includes('fluid') ||
+            cat.includes('antigel') ||
+            cat.includes('racire') ||
+            cat.includes('adblue') ||
+            sub.includes('antigel') ||
+            sub.includes('g12') ||
+            sub.includes('g11') ||
+            sub.includes('adblue') ||
+            s.unitateMasura === 'L' ||
+            s.unitateMasura === 'Litri' ||
+            den.includes('antigel') ||
+            den.includes('adblue');
+          return isFluid && !isFilter;
         });
         setStocUleiuri(lubeStoc);
         if (lubeStoc.length > 0 && !selectedArticolStocId) {
@@ -470,9 +484,13 @@ export default function FluidePage() {
                 onChange={(e) => setSelectedTipLichidFilter(e.target.value)}
                 className="bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
               >
-                <option value="">Toate Tipurile de Lubrifiant</option>
+                <option value="">Toate Tipurile de Fluide & Lubrifianți</option>
                 <option value="ULEI_MOTOR">Ulei Motor</option>
                 <option value="ULEI_HIDRAULIC">Ulei Hidraulic</option>
+                <option value="ULEI_TRANSMISIE">Ulei Transmisie & Diferențial</option>
+                <option value="ANTIGEL_G12">Antigel G12+ (Lichid Răcire Roz)</option>
+                <option value="ANTIGEL_G11">Antigel G11 (Lichid Răcire Albastru)</option>
+                <option value="ADBLUE">AdBlue (Uree 32.5%)</option>
                 <option value="ULEI_LIEBHERR_PUNTE">Ulei Punte Liebherr</option>
                 <option value="ULEI_LIEBHERR_CUTIE">Ulei Cutie Liebherr</option>
                 <option value="ULEI_CUTIE_MANUALA">Ulei Cutie Manuală</option>
@@ -643,6 +661,10 @@ export default function FluidePage() {
                   >
                     <option value="ULEI_MOTOR">Ulei Motor</option>
                     <option value="ULEI_HIDRAULIC">Ulei Hidraulic</option>
+                    <option value="ULEI_TRANSMISIE">Ulei Transmisie & Diferențial</option>
+                    <option value="ANTIGEL_G12">Antigel G12+ (Lichid Răcire Roz)</option>
+                    <option value="ANTIGEL_G11">Antigel G11 (Lichid Răcire Albastru)</option>
+                    <option value="ADBLUE">AdBlue (Uree 32.5%)</option>
                     <option value="ULEI_LIEBHERR_PUNTE">Ulei Punte Liebherr</option>
                     <option value="ULEI_LIEBHERR_CUTIE">Ulei Cutie Liebherr</option>
                     <option value="ULEI_CUTIE_MANUALA">Ulei Cutie Manuală</option>
@@ -895,7 +917,19 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Tip Lubrifiant / Fluid:</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Operațiune:</label>
+                  <select
+                    value={iesireOperatiune}
+                    onChange={(e) => setIesireOperatiune(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="COMPLETARE_ULEI">Completare Nivel (Top-up)</option>
+                    <option value="SCHIMB_ULEI">Schimb Complet (Înlocuire & Resetare Contor)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Tip Fluid / Lubrifiant:</label>
                   <select
                     value={iesireTipLichid}
                     onChange={(e) => setIesireTipLichid(e.target.value)}
@@ -903,6 +937,10 @@ export default function FluidePage() {
                   >
                     <option value="ULEI_MOTOR">Ulei Motor</option>
                     <option value="ULEI_HIDRAULIC">Ulei Hidraulic</option>
+                    <option value="ULEI_TRANSMISIE">Ulei Transmisie & Diferențial</option>
+                    <option value="ANTIGEL_G12">Antigel G12+ (Lichid Răcire Roz)</option>
+                    <option value="ANTIGEL_G11">Antigel G11 (Lichid Răcire Albastru)</option>
+                    <option value="ADBLUE">AdBlue (Uree 32.5%)</option>
                     <option value="ULEI_LIEBHERR_PUNTE">Ulei Punte Liebherr</option>
                     <option value="ULEI_LIEBHERR_CUTIE">Ulei Cutie Liebherr</option>
                     <option value="ULEI_CUTIE_MANUALA">Ulei Cutie Manuală</option>
@@ -911,7 +949,7 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Articol Ulei din Stoc:</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Articol Fluid / Ulei din Stoc:</label>
                   <select
                     value={selectedArticolStocId}
                     onChange={(e) => {
@@ -922,15 +960,22 @@ export default function FluidePage() {
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
                     {stocUleiuri.length === 0 ? (
-                      <option value="">Fără lubrifianți în stoc (Se introduce manual)</option>
+                      <option value="">Fără fluide în stoc (Se introduce manual)</option>
                     ) : (
                       stocUleiuri.map((s: any) => (
                         <option key={s.id} value={s.id}>
-                           {s.denumire} (Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L)
+                           {s.denumire} {s.subcategorie ? `(${s.subcategorie})` : ''} • Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L
                         </option>
                       ))
                     )}
                   </select>
+                </div>
+
+                <div className="md:col-span-2 p-2.5 bg-sapphire-50 border border-sapphire-200 rounded-xl text-[11px] text-sapphire-900 flex items-center space-x-2">
+                  <ShieldCheck className="w-4 h-4 text-sapphire-600 shrink-0" />
+                  <span>
+                    <b>Consum Automat FIFO:</b> Cantitatea consumată va fi dedusă automat din cele mai vechi loturi de intrare din depozit, la costul real ponderat de achiziție.
+                  </span>
                 </div>
 
                 <div>
