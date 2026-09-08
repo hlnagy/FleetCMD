@@ -1495,7 +1495,7 @@ function EFacturaContent() {
                 facturiFiltrate.map((f, index) => (
                   <tr
                     key={f.id}
-                    className={`${index % 2 === 1 ? 'bg-slate-50/90' : 'bg-white'} hover:bg-sapphire-50/80 transition ${selectedFacturaIds.includes(f.id) ? '!bg-amber-50/80' : ''}`}
+                    className={`${index % 2 === 1 ? 'bg-slate-50/90 dark:bg-[#142232]' : 'bg-white dark:bg-[#111D28]'} hover:bg-sapphire-50/80 dark:hover:bg-[#1A2D40] transition ${selectedFacturaIds.includes(f.id) ? '!bg-amber-50/80 dark:!bg-amber-950/40' : ''}`}
                   >
                     <td className="p-3 text-center">
                       {f.stare !== 'IMPORTAT_TOTAL' && f.stare !== 'ELIMINAT' ? (
@@ -1693,7 +1693,7 @@ function EFacturaContent() {
                     {selectedFactura.articole?.map((art: any, artIdx: number) => (
                       <tr
                         key={art.id}
-                        className={`${artIdx % 2 === 1 ? 'bg-slate-50/90' : 'bg-white'} hover:bg-sapphire-50/80 transition ${selectedItemIds.includes(art.id) ? '!bg-amber-50/80' : ''}`}
+                        className={`${artIdx % 2 === 1 ? 'bg-slate-50/90 dark:bg-[#142232]' : 'bg-white dark:bg-[#111D28]'} hover:bg-sapphire-50/80 dark:hover:bg-[#1A2D40] transition ${selectedItemIds.includes(art.id) ? '!bg-amber-50/80 dark:!bg-amber-950/40' : ''}`}
                       >
                         <td className="p-2.5 text-center">
                           {art.stare === 'NEPROCESAT' ? (

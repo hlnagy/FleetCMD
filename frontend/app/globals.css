@@ -11,6 +11,29 @@
   --terracotta: #B46258;
   --periwinkle: #A6A9D0;
   --sage: #8E9A98;
+
+  /* RGB Definitions for Tailwind */
+  --color-morning-50: 255 255 255;
+  --color-morning-100: 245 245 245;
+  --color-morning-200: 234 234 234;
+  --color-morning-300: 224 224 224;
+
+  --color-sapphire-50: 240 245 248;
+  --color-sapphire-100: 217 229 237;
+  --color-sapphire-300: 92 135 161;
+  --color-sapphire-500: 53 98 122;
+  --color-sapphire-600: 42 80 101;
+  --color-sapphire-700: 32 62 79;
+  --color-sapphire-900: 20 39 51;
+
+  --color-roseash-100: 252 243 242;
+  --color-roseash-300: 229 174 169;
+  --color-roseash-500: 212 141 135;
+
+  --color-terracotta-100: 247 235 233;
+  --color-sage-100: 240 243 243;
+  --color-sage-500: 142 154 152;
+  --color-sage-700: 104 116 114;
 }
 
 body {
@@ -80,6 +103,29 @@ html.dark {
   --periwinkle: #7D81B3;
   --sage: #94A3B8;
   color-scheme: dark;
+
+  /* RGB Definitions in Dark Mode */
+  --color-morning-50: 20 34 50;         /* #142232 - elevated surface */
+  --color-morning-100: 14 24 35;        /* #0E1823 - dark container / input */
+  --color-morning-200: 24 40 56;        /* #182838 - subtle border/divider */
+  --color-morning-300: 34 55 77;        /* #22374D - active border */
+
+  --color-sapphire-50: 20 38 56;        /* #142638 - subtle sapphire tint */
+  --color-sapphire-100: 26 48 71;       /* #1A3047 */
+  --color-sapphire-300: 80 148 185;     /* #5094B9 */
+  --color-sapphire-500: 74 139 168;     /* #4A8BA8 - active accent */
+  --color-sapphire-600: 125 186 217;    /* #7DBAD9 - cyan-sapphire for links/icons */
+  --color-sapphire-700: 147 197 253;    /* #93C5FD - light sapphire, perfect for numbers/KM in tables! */
+  --color-sapphire-900: 241 245 249;    /* #F1F5F9 - clean crisp white for titles! */
+
+  --color-roseash-100: 45 20 24;        /* #2D1418 - deep dark crimson alert surface */
+  --color-roseash-300: 160 50 60;       /* #A0323C - dark red border */
+  --color-roseash-500: 224 109 96;
+
+  --color-terracotta-100: 48 22 24;
+  --color-sage-100: 22 36 50;
+  --color-sage-500: 148 163 184;        /* #94A3B8 */
+  --color-sage-700: 203 213 225;        /* #CBD5E1 */
 }
 
 html.dark body {
@@ -111,20 +157,52 @@ html.dark .bg-white\/60 {
   background-color: rgba(17, 29, 40, 0.92) !important;
 }
 
-html.dark .bg-morning-50 {
+/* Fix for alternating table rows (e.g. e-Factura) */
+html.dark .bg-slate-50,
+html.dark .bg-slate-50\/90,
+html.dark .bg-slate-50\/80,
+html.dark .bg-slate-100 {
   background-color: #142232 !important;
 }
 
-html.dark .bg-morning-100 {
-  background-color: #0E1823 !important;
+/* Fix for truck chassis & grey accents */
+html.dark .bg-slate-200,
+html.dark .bg-slate-300 {
+  background-color: #1E3145 !important;
+  color: #E2E8F0 !important;
 }
 
-html.dark .bg-morning-200 {
-  background-color: #182838 !important;
+/* Fix for amber alert pills & selection */
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/80,
+html.dark .\!bg-amber-50\/80 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
 }
 
-html.dark .bg-morning-300 {
-  background-color: #22374D !important;
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #FCD34D !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+/* Status Badge Overrides */
+html.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+  color: #93C5FD !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+html.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+  color: #6EE7B7 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+  color: #D8B4FE !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
 }
 
 /* Borders & Dividers */
@@ -140,12 +218,24 @@ html.dark .divide-morning-200 > :not([hidden]) ~ :not([hidden]) {
   border-color: #1E3145 !important;
 }
 
-/* Text Colors */
+/* Text Colors - High Contrast in Dark Mode */
 html.dark .text-sapphire-900 {
   color: #F1F5F9 !important;
 }
 
-html.dark .text-slate-900,
+html.dark .text-sapphire-700 {
+  color: #93C5FD !important;
+}
+
+html.dark .text-sapphire-600 {
+  color: #7DD3FC !important;
+}
+
+html.dark .text-slate-950,
+html.dark .text-slate-900 {
+  color: #F8FAFC !important;
+}
+
 html.dark .text-slate-800,
 html.dark .text-slate-700 {
   color: #CBD5E1 !important;
@@ -158,7 +248,12 @@ html.dark .text-sage-600 {
 }
 
 html.dark .text-sage-500 {
-  color: #64748B !important;
+  color: #94A3B8 !important;
+}
+
+html.dark .text-terracotta-700,
+html.dark .text-terracotta-600 {
+  color: #F87171 !important;
 }
 
 /* Form Controls: Inputs, Textareas, Selects */
@@ -184,7 +279,9 @@ html.dark select option {
 
 /* Table Hovers */
 html.dark .hover\:bg-morning-50:hover,
-html.dark .hover\:bg-morning-100:hover {
+html.dark .hover\:bg-morning-100:hover,
+html.dark .hover\:bg-sapphire-50\/80:hover,
+html.dark .hover\:bg-sapphire-50:hover {
   background-color: #162637 !important;
 }
 
@@ -194,8 +291,9 @@ html.dark .hover\:bg-morning-200:hover {
 
 /* Subtle Badge Overrides in Dark Mode */
 html.dark .bg-sapphire-50 {
-  background-color: rgba(53, 98, 122, 0.25) !important;
+  background-color: rgba(53, 98, 122, 0.3) !important;
   color: #93C5FD !important;
+  border-color: rgba(53, 98, 122, 0.45) !important;
 }
 
 html.dark .bg-emerald-50 {
