@@ -354,16 +354,16 @@ export default function FluidePage() {
                   className="p-3.5 rounded-xl bg-white border border-roseash-300 flex flex-col justify-between text-xs shadow-2xs space-y-2 hover:border-roseash-400 transition"
                 >
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="px-2.5 py-0.5 rounded-lg bg-sapphire-100 border border-sapphire-200 text-sapphire-900 font-black text-[11px] font-mono">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <span className="px-2.5 py-0.5 rounded-lg bg-sapphire-100 border border-sapphire-200 text-sapphire-900 font-black text-[11px] font-mono shrink-0">
                            {a.vehiculNumar || 'Utilaj'}
                         </span>
-                        <span className="font-extrabold text-slate-900 text-xs truncate max-w-[200px]" title={a.titlu}>
+                        <span className="font-extrabold text-slate-900 text-xs leading-snug break-words">
                           {a.titlu}
                         </span>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0 whitespace-nowrap ${
                         a.urgenta === 'CRITIC' ? 'bg-roseash-200 text-terracotta-700' : 'bg-amber-100 text-amber-800'
                       }`}>
                         {a.urgenta || 'CRITIC'}
