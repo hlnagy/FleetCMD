@@ -130,11 +130,17 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     } else if (isHydraulicOil) {
       matchedSub = subcats.find(s => /hidraulic/i.test(s.nume))?.nume || '';
     } else if (isTransmisieOil) {
-      matchedSub = subcats.find(s => /transmis/i.test(s.nume))?.nume || '';
+      if (/punte.*liebherr|liebherr.*punte/i.test(desc)) matchedSub = subcats.find(s => /punte.*liebherr/i.test(s.nume))?.nume || '';
+      else if (/cutie.*liebherr|liebherr.*cutie/i.test(desc)) matchedSub = subcats.find(s => /cutie.*liebherr/i.test(s.nume))?.nume || '';
+      else if (/cutie.*manual/i.test(desc)) matchedSub = subcats.find(s => /manual/i.test(s.nume))?.nume || '';
+      else if (/cutie.*automat|atf/i.test(desc)) matchedSub = subcats.find(s => /automat/i.test(s.nume))?.nume || '';
+      if (!matchedSub) matchedSub = subcats.find(s => /transmis/i.test(s.nume))?.nume || '';
     } else if (isVaselina) {
       matchedSub = subcats.find(s => /vaselin|unsoare|greas/i.test(s.nume))?.nume || '';
     } else if (isAntigel) {
-      matchedSub = subcats.find(s => /antigel|racire/i.test(s.nume))?.nume || '';
+      if (/g11|albastr/i.test(desc)) matchedSub = subcats.find(s => /g11|albastr/i.test(s.nume))?.nume || '';
+      else if (/g12|roz/i.test(desc)) matchedSub = subcats.find(s => /g12|roz/i.test(s.nume))?.nume || '';
+      if (!matchedSub) matchedSub = subcats.find(s => /antigel|racire/i.test(s.nume))?.nume || '';
     } else if (isAdblue) {
       matchedSub = subcats.find(s => /adblue|uree/i.test(s.nume))?.nume || '';
     } else {
