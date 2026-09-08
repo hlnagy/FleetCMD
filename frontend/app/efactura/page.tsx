@@ -8,13 +8,62 @@ import {
   Settings, Clock, Building2, Layers, Check, X, ShieldCheck, ArrowRight,
   PackageCheck, Trash2, ChevronRight, Eye, Code, ExternalLink, Calendar, Zap,
   HelpCircle, BookOpen, Key, CheckCircle, Shield, ArrowUpDown, ArrowUp, ArrowDown,
-  ShoppingCart, History, Tag, ShieldAlert
+  ShoppingCart, History, Tag, ShieldAlert, Droplets, Sparkles
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
 import { showConfirm } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
 import { useAuth } from '@/lib/AuthContext';
+
+function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
+  isPackagedFluid: boolean;
+  detectedVolume: number | null;
+  detectedUnit: 'L' | 'kg';
+  rawMatch?: string;
+} {
+  if (!descriere) return { isPackagedFluid: false, detectedVolume: null, detectedUnit: 'L' };
+  const text = String(descriere).trim();
+  const rawUm = (unitateMasura || 'buc').trim().toLowerCase();
+  const isAlreadyDirectUnit = ['l', 'ltr', 'litru', 'litri', 'kg', 'kgm'].includes(rawUm);
+
+  // 1. Căutare volum în Litri: ex: 60 ltr, 60ltr, 60 l, 60l, 60 litri, 208 L, 20 L, 5 L, 1000 L, 0.5 L
+  const literRegex = /(?:^|[\s(\[_\-\/,])(\d+(?:[.,]\d+)?)\s*(ltr|lt|litri|litru|l)(?=$|[\s)\]_\-\/,;.])/i;
+  // 2. Căutare greutate în KG (ex: pentru vaselină, unsori): ex: 18 kg, 18kg, 180 kg
+  const kgRegex = /(?:^|[\s(\[_\-\/,])(\d+(?:[.,]\d+)?)\s*(kg|kgm|kilograme|kilogram)(?=$|[\s)\]_\-\/,;.])/i;
+
+  const literMatch = text.match(literRegex);
+  if (literMatch) {
+    const val = parseFloat(literMatch[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) {
+      return {
+        isPackagedFluid: !isAlreadyDirectUnit,
+        detectedVolume: val,
+        detectedUnit: 'L',
+        rawMatch: literMatch[0].trim(),
+      };
+    }
+  }
+
+  const kgMatch = text.match(kgRegex);
+  if (kgMatch) {
+    const val = parseFloat(kgMatch[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) {
+      return {
+        isPackagedFluid: !isAlreadyDirectUnit,
+        detectedVolume: val,
+        detectedUnit: 'kg',
+        rawMatch: kgMatch[0].trim(),
+      };
+    }
+  }
+
+  return {
+    isPackagedFluid: false,
+    detectedVolume: null,
+    detectedUnit: 'L',
+  };
+}
 
 function EFacturaContent() {
   const { user: authUser, isAdmin, authFetch } = useAuth();
@@ -121,6 +170,35 @@ function EFacturaContent() {
   const [isAddingNewSubcat, setIsAddingNewSubcat] = useState(false);
   const [newSubcatNume, setNewSubcatNume] = useState('');
   const [savingNewSubcat, setSavingNewSubcat] = useState(false);
+
+  // FLUID PACKAGING CONVERSION STATE (ex: 1 buc = 60 ltr la 1200 RON -> 60 L la 20 RON/L)
+  const [esteConversieVolum, setEsteConversieVolum] = useState(false);
+  const [volumAmbalaj, setVolumAmbalaj] = useState<number | string>(1);
+  const [umConversie, setUmConversie] = useState<'L' | 'kg'>('L');
+
+  // Modificare manuală a volumului per ambalaj cu recalculare dinamică preț unitar
+  const handleVolumAmbalajChange = (newVal: string | number) => {
+    setVolumAmbalaj(newVal);
+    const volNum = parseFloat(String(newVal));
+    if (esteConversieVolum && !isGarantieGratuita && !isNaN(volNum) && volNum > 0 && importingItem) {
+      const rawPret = Number(importingItem.pretUnitar || 0);
+      setPretUnitarImport(Number((rawPret / volNum).toFixed(2)));
+    }
+  };
+
+  // Activare / Dezactivare conversie volum din ambalaj în litri/kg
+  const handleToggleConversieVolum = (active: boolean) => {
+    setEsteConversieVolum(active);
+    if (!isGarantieGratuita && importingItem) {
+      if (active) {
+        const volNum = parseFloat(String(volumAmbalaj)) || 1;
+        const rawPret = Number(importingItem.pretUnitar || 0);
+        setPretUnitarImport(Number((rawPret / volNum).toFixed(2)));
+      } else {
+        setPretUnitarImport(Number(importingItem.pretUnitar || 0));
+      }
+    }
+  };
 
   // CONFIG FORM STATE
   const [cifFirma, setCifFirma] = useState('');
@@ -728,13 +806,31 @@ function EFacturaContent() {
 
     const isZeroFactura = (selectedFactura?.valoareTotala || 0) === 0 || (selectedFactura?.articole || []).some((a: any) => isReducereSauFinanciar(a));
     setIsGarantieGratuita(isZeroFactura);
-    setPretUnitarImport(isZeroFactura ? 0 : (item.pretUnitar || 0));
     setAreGarantieProducator(isZeroFactura || isSerializat);
     setDurataGarantieLuni(24);
     setDurataGarantieKm(2000);
     setSerieUnicaCustom('');
 
     setIsImportSerializat(isSerializat || isAnvelopaText);
+
+    // Detecție Inteligentă Ambalaj Fluid (ex: Ulei motor 60 ltr facturat la 1 buc)
+    const pkg = detectFluidPackaging(item.descrierePiesa, item.unitateMasura);
+    const catIsFluid = /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(finalCat || detectedCat || '');
+    const enableConversion = pkg.isPackagedFluid || (catIsFluid && pkg.detectedVolume !== null && pkg.detectedVolume > 0);
+
+    setEsteConversieVolum(enableConversion);
+    const initVol = pkg.detectedVolume || (catIsFluid ? 20 : 1);
+    setVolumAmbalaj(initVol);
+    setUmConversie(pkg.detectedUnit || 'L');
+
+    if (isZeroFactura) {
+      setPretUnitarImport(0);
+    } else if (enableConversion && initVol > 0) {
+      const unitPretLitri = Number((Number(item.pretUnitar || 0) / initVol).toFixed(2));
+      setPretUnitarImport(unitPretLitri);
+    } else {
+      setPretUnitarImport(item.pretUnitar || 0);
+    }
     
     // Inițializare listă de serii per bucată
     const count = Math.max(1, Math.ceil(item.cantitate || 1));
@@ -837,6 +933,11 @@ function EFacturaContent() {
     if (!importingItem) return;
 
     try {
+      const isConversie = esteConversieVolum && Number(volumAmbalaj) > 0;
+      const cantitateReala = isConversie
+        ? Number((Number(importingItem.cantitate || 1) * Number(volumAmbalaj)).toFixed(2))
+        : Number(importingItem.cantitate || 1);
+
       const res = await fetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/importa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -846,6 +947,10 @@ function EFacturaContent() {
           subcategorieNume: targetSubcategorie,
           codArticolCalculat,
           pretUnitarCustom: isGarantieGratuita ? 0 : Number(pretUnitarImport),
+          conversieAmbalaj: isConversie,
+          volumAmbalaj: isConversie ? Number(volumAmbalaj) : undefined,
+          cantitateRealaStoc: isConversie ? cantitateReala : undefined,
+          unitateMasuraCustom: isConversie ? umConversie : undefined,
           areGarantie: areGarantieProducator || isImportSerializat,
           luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
           kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
@@ -1851,18 +1956,43 @@ function EFacturaContent() {
                         </td>
                         <td className="p-2.5 font-mono text-sage-500">{art.numarLinie || artIdx + 1}</td>
                         <td className="p-2.5 font-bold text-sapphire-900">
-                          <div className="flex items-center space-x-1.5 flex-wrap">
-                            <span>{art.descrierePiesa}</span>
-                            {isReducereSauFinanciar(art) && (
-                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
-                                 Reducere / Garanție
-                              </span>
-                            )}
+                          <div className="flex flex-col space-y-1">
+                            <div className="flex items-center space-x-1.5 flex-wrap">
+                              <span>{art.descrierePiesa}</span>
+                              {isReducereSauFinanciar(art) && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
+                                   Reducere / Garanție
+                                </span>
+                              )}
+                            </div>
+                            {(() => {
+                              const pkg = detectFluidPackaging(art.descrierePiesa, art.unitateMasura);
+                              if (pkg.isPackagedFluid && pkg.detectedVolume && art.stare === 'NEPROCESAT') {
+                                return (
+                                  <div className="flex items-center space-x-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md w-fit">
+                                    <Droplets className="w-3 h-3 text-amber-600" />
+                                    <span>Ambalaj detectat: <b>{pkg.detectedVolume} {pkg.detectedUnit}/buc</b> (conversie în litri la import)</span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </td>
                         <td className="p-2.5 font-mono text-sage-600">{art.codArticolFurnizor || '-'}</td>
                         <td className={`p-2.5 font-mono font-bold ${art.cantitate < 0 ? 'text-purple-700 font-extrabold' : 'text-sapphire-900'}`}>
-                          {art.cantitate} {art.unitateMasura}
+                          <div>{art.cantitate} {art.unitateMasura}</div>
+                          {(() => {
+                            const pkg = detectFluidPackaging(art.descrierePiesa, art.unitateMasura);
+                            if (pkg.isPackagedFluid && pkg.detectedVolume && art.stare === 'NEPROCESAT') {
+                              return (
+                                <div className="text-[10px] text-amber-700 font-bold">
+                                  ({(art.cantitate * pkg.detectedVolume).toFixed(1).replace(/\.0$/, '')} {pkg.detectedUnit} real)
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </td>
                         <td className="p-2.5 font-mono text-slate-800">{art.pretUnitar?.toLocaleString('ro-RO')} RON</td>
                         <td className={`p-2.5 font-mono font-extrabold ${(art.valoareFaraTVA || 0) < 0 ? 'text-purple-700' : 'text-sapphire-900'}`}>
@@ -2489,35 +2619,186 @@ function EFacturaContent() {
                 )}
               </div>
 
-              {/* NOTIFICARE CONSOLIDARE FLUIDE & LOTURI FIFO */}
-              {articolConsolidareExistent ? (
-                <div className="p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl space-y-1 text-xs animate-fade-in">
-                  <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-emerald-950 flex items-center space-x-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Se va consolida în stocul existent (Regulă FIFO)</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-300 font-mono">
-                      Stoc Actual: {articolConsolidareExistent.stocCurent} {articolConsolidareExistent.unitateMasura}
-                    </span>
+              {/* SECȚIUNE CONVERSIE AMBALAJ ÎN LITRI / KG (PENTRU ULEIURI, ANTIGEL, LUBRIFIANȚI) */}
+              {(/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) || detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura).detectedVolume !== null) && (
+                <div className="p-3.5 bg-gradient-to-br from-amber-500/10 via-emerald-500/5 to-white border-2 border-amber-300 rounded-2xl space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                        <Droplets className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-slate-900 text-xs flex items-center space-x-1.5">
+                          <span>Conversie Ambalaj în Volum Real</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-200 text-amber-900 font-bold">Smart Fluid</span>
+                        </h4>
+                        <p className="text-[11px] text-sage-600">
+                          Recepție la litru/kg cu recalculare automată a prețului unitar pentru consum corect la utilaje.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="flex items-center space-x-1.5 cursor-pointer text-[11px] font-extrabold text-amber-950 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg border border-amber-300 transition select-none">
+                      <input
+                        type="checkbox"
+                        checked={esteConversieVolum}
+                        onChange={(e) => handleToggleConversieVolum(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer accent-amber-600"
+                      />
+                      <span>Activează Conversia</span>
+                    </label>
                   </div>
-                  <p className="text-emerald-800 text-[11px] leading-relaxed">
-                    În depozitul selectat există deja articolul <strong>&ldquo;{articolConsolidareExistent.denumire}&rdquo;</strong> cu aceeași categorie și subcategorie. Cantitatea din această factură (<strong>+{importingItem.cantitate} {importingItem.unitateMasura || 'L'}</strong> la {Number(importingItem.pretUnitar || 0).toFixed(2)} RON/{importingItem.unitateMasura || 'L'}) va fi adăugată ca <strong>lot nou FIFO</strong> fără a multiplica articolele din nomenclator.
-                  </p>
+
+                  {esteConversieVolum && (
+                    <div className="pt-2 border-t border-amber-200 space-y-2.5 animate-fade-in">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div className="p-2 bg-white/80 border border-morning-200 rounded-xl space-y-1">
+                          <span className="text-[10px] text-sage-500 font-bold block uppercase tracking-wider">Factură Furnizor</span>
+                          <div className="flex items-baseline space-x-1 font-mono">
+                            <span className="text-sm font-black text-slate-900">{importingItem.cantitate}</span>
+                            <span className="text-xs font-bold text-slate-600">{importingItem.unitateMasura || 'buc'}</span>
+                            <span className="text-xs text-sage-500 ml-1">× {Number(importingItem.pretUnitar || 0).toFixed(2)} RON</span>
+                          </div>
+                          <div className="text-[10px] text-slate-600">
+                            Total linie factură: <b>{(importingItem.valoareFaraTVA || (importingItem.cantitate * (importingItem.pretUnitar || 0))).toFixed(2)} RON</b>
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-white/80 border border-morning-200 rounded-xl space-y-1">
+                          <label className="text-[10px] text-sage-700 font-bold block uppercase tracking-wider">
+                            Volum per Ambalaj / Unitate: *
+                          </label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="any"
+                              required
+                              value={volumAmbalaj}
+                              onChange={(e) => handleVolumAmbalajChange(e.target.value)}
+                              className="w-24 bg-white border border-amber-300 rounded-lg p-1.5 font-mono font-black text-amber-950 text-xs focus:ring-2 focus:ring-amber-500/20"
+                            />
+                            <select
+                              value={umConversie}
+                              onChange={(e) => setUmConversie(e.target.value as any)}
+                              className="bg-white border border-morning-200 rounded-lg p-1.5 font-bold text-slate-800 text-xs"
+                            >
+                              <option value="L">Litri (L)</option>
+                              <option value="kg">Kilograme (kg)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BUTOANE RAPIDE PRESETĂRI AMBALAJE */}
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1 text-[10px]">
+                        <span className="text-sage-500 font-semibold">Presetări rapide:</span>
+                        {[
+                          { label: '5 L', vol: 5, unit: 'L' },
+                          { label: '20 L (Canistră)', vol: 20, unit: 'L' },
+                          { label: '60 L (Butoiaș)', vol: 60, unit: 'L' },
+                          { label: '208 L (Butoi)', vol: 208, unit: 'L' },
+                          { label: '1000 L (IBC)', vol: 1000, unit: 'L' },
+                          { label: '18 kg (Vaselină)', vol: 18, unit: 'kg' },
+                        ].map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              setUmConversie(preset.unit as any);
+                              handleVolumAmbalajChange(preset.vol);
+                            }}
+                            className={`px-2 py-0.5 rounded-lg border font-bold transition cursor-pointer ${
+                              Number(volumAmbalaj) === preset.vol && umConversie === preset.unit
+                                ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
+                                : 'bg-white text-slate-700 border-morning-200 hover:bg-amber-50 hover:border-amber-300'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* REZULTAT FINAL RECALCULAT PENTRU STOC & FIFO */}
+                      {(() => {
+                        const cFact = Number(importingItem.cantitate || 1);
+                        const vNum = parseFloat(String(volumAmbalaj)) || 1;
+                        const cantReal = Number((cFact * vNum).toFixed(2));
+                        const totVal = Number(importingItem.valoareFaraTVA > 0 ? importingItem.valoareFaraTVA : (cFact * Number(importingItem.pretUnitar || 0)));
+                        const pretUnitCalculat = cantReal > 0 ? Number((totVal / cantReal).toFixed(2)) : 0;
+
+                        return (
+                          <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center space-x-2">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                              <div>
+                                <div className="font-extrabold text-emerald-950">
+                                  Recepție în Stoc: <span className="font-mono text-emerald-700 text-sm">+{cantReal} {umConversie}</span>
+                                </div>
+                                <div className="text-[11px] text-emerald-800">
+                                  Calculat: {cFact} {importingItem.unitateMasura || 'buc'} × {vNum} {umConversie}/buc
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <div className="font-extrabold text-emerald-950 font-mono text-sm">
+                                {pretUnitCalculat.toFixed(2)} RON / {umConversie}
+                              </div>
+                              <div className="text-[10px] text-emerald-700 font-semibold">
+                                (Preț recalculat pe {umConversie})
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) && (
-                  <div className="p-3 bg-sapphire-50/80 border border-sapphire-200 rounded-xl space-y-1 text-xs animate-fade-in">
-                    <span className="font-bold text-sapphire-900 flex items-center space-x-1.5">
-                      <Layers className="w-4 h-4 text-sapphire-600 shrink-0" />
-                      <span>Articol Nou de Fluid & Primul Lot FIFO</span>
-                    </span>
-                    <p className="text-sapphire-700 text-[11px] leading-relaxed">
-                      Se va genera un articol maestru pentru acest fluid în depozit, iar această intrare de <strong>{importingItem.cantitate} {importingItem.unitateMasura || 'L'}</strong> va constitui <strong>Lotul #1 FIFO</strong>.
-                    </p>
-                  </div>
-                )
               )}
+
+              {/* NOTIFICARE CONSOLIDARE FLUIDE & LOTURI FIFO */}
+              {(() => {
+                const cFact = Number(importingItem.cantitate || 1);
+                const vNum = parseFloat(String(volumAmbalaj)) || 1;
+                const cantIntrare = esteConversieVolum ? Number((cFact * vNum).toFixed(2)) : cFact;
+                const umIntrare = esteConversieVolum ? umConversie : (importingItem.unitateMasura || 'L');
+                const pretIntrare = Number(pretUnitarImport || 0).toFixed(2);
+
+                if (articolConsolidareExistent) {
+                  return (
+                    <div className="p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl space-y-1 text-xs animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-emerald-950 flex items-center space-x-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Se va consolida în stocul existent (Regulă FIFO)</span>
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-300 font-mono">
+                          Stoc Actual: {articolConsolidareExistent.stocCurent} {articolConsolidareExistent.unitateMasura}
+                        </span>
+                      </div>
+                      <p className="text-emerald-800 text-[11px] leading-relaxed">
+                        În depozitul selectat există deja articolul <strong>&ldquo;{articolConsolidareExistent.denumire}&rdquo;</strong> cu aceeași categorie și subcategorie. Cantitatea din această factură (<strong>+{cantIntrare} {umIntrare}</strong> la {pretIntrare} RON/{umIntrare}) va fi adăugată ca <strong>lot nou FIFO</strong> fără a multiplica articolele din nomenclator.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie)) {
+                  return (
+                    <div className="p-3 bg-sapphire-50/80 border border-sapphire-200 rounded-xl space-y-1 text-xs animate-fade-in">
+                      <span className="font-bold text-sapphire-900 flex items-center space-x-1.5">
+                        <Layers className="w-4 h-4 text-sapphire-600 shrink-0" />
+                        <span>Articol Nou de Fluid & Primul Lot FIFO</span>
+                      </span>
+                      <p className="text-sapphire-700 text-[11px] leading-relaxed">
+                        Se va genera un articol maestru pentru acest fluid în depozit, iar această intrare de <strong>+{cantIntrare} {umIntrare}</strong> (la {pretIntrare} RON/{umIntrare}) va constitui <strong>Lotul #1 FIFO</strong>.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Cod Articol în Stoc (Cod furnizor sau intern): *</label>
@@ -2671,7 +2952,16 @@ function EFacturaContent() {
               {/* PREȚ UNITAR DE INTRARE ÎN STOC & OPȚIUNE GARANȚIE GRATUITĂ */}
               <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sage-700 font-bold text-xs">Preț Unitar de Intrare în Stoc (RON):</label>
+                  <div className="flex items-center space-x-1.5 flex-wrap">
+                    <label className="text-sage-700 font-bold text-xs">
+                      Preț Unitar de Intrare în Stoc (RON / {esteConversieVolum ? umConversie : (importingItem.unitateMasura || 'buc')}):
+                    </label>
+                    {esteConversieVolum && (
+                      <span className="text-[10px] text-amber-700 font-bold bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                        Recalculat pe {umConversie}
+                      </span>
+                    )}
+                  </div>
                   <label className="flex items-center space-x-1.5 cursor-pointer text-[11px] font-extrabold text-purple-900 bg-purple-100 hover:bg-purple-200 px-2.5 py-1 rounded-lg border border-purple-300 transition select-none">
                     <input
                       type="checkbox"

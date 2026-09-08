@@ -126,7 +126,7 @@ export class EFacturaController {
   @Post('items/:itemId/importa')
   async importaItemInStoc(
     @Param('itemId') itemId: string,
-    @Body() body: { depozitId?: string; categorieNume?: string; subcategorieNume?: string; codArticolCalculat?: string }
+    @Body() body: any
   ) {
     return this.efacturaService.importaItemInStoc(itemId, body);
   }

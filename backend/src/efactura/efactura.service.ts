@@ -53,6 +53,60 @@ export function normalizeUnitateMasura(rawUnit?: string): string {
   }
 }
 
+export function parseFluidPackaging(descriere?: string, unitateMasura?: string): {
+  isPackagedFluid: boolean;
+  detectedVolume: number | null;
+  detectedUnit: 'L' | 'kg';
+  rawMatch?: string;
+} {
+  if (!descriere) return { isPackagedFluid: false, detectedVolume: null, detectedUnit: 'L' };
+  
+  const text = String(descriere).trim();
+  const normalizedUM = normalizeUnitateMasura(unitateMasura || 'buc').toLowerCase();
+  
+  // Dacă unitatea de măsură pe factură este deja litri pur sau kg, cantitatea facturată este deja în unitate directă
+  const isAlreadyDirectUnit = ['l', 'kg'].includes(normalizedUM);
+
+  // 1. Căutare volum în Litri: ex: 60 ltr, 60ltr, 60 l, 60l, 60 litri, 208 L, 20 L, 5 L, 1000 L, 0.5 L
+  // Evităm confuzia cu coduri de viscozitate precum 10W40 (unde W nu este litru)
+  const literRegex = /(?:^|[\s(\[_\-\/,])(\d+(?:[.,]\d+)?)\s*(ltr|lt|litri|litru|l)(?=$|[\s)\]_\-\/,;.])/i;
+  
+  // 2. Căutare greutate în KG (ex: pentru vaselină, unsori): ex: 18 kg, 18kg, 180 kg
+  const kgRegex = /(?:^|[\s(\[_\-\/,])(\d+(?:[.,]\d+)?)\s*(kg|kgm|kilograme|kilogram)(?=$|[\s)\]_\-\/,;.])/i;
+
+  const literMatch = text.match(literRegex);
+  if (literMatch) {
+    const val = parseFloat(literMatch[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) {
+      return {
+        isPackagedFluid: !isAlreadyDirectUnit,
+        detectedVolume: val,
+        detectedUnit: 'L',
+        rawMatch: literMatch[0].trim(),
+      };
+    }
+  }
+
+  const kgMatch = text.match(kgRegex);
+  if (kgMatch) {
+    const val = parseFloat(kgMatch[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) {
+      return {
+        isPackagedFluid: !isAlreadyDirectUnit,
+        detectedVolume: val,
+        detectedUnit: 'kg',
+        rawMatch: kgMatch[0].trim(),
+      };
+    }
+  }
+
+  return {
+    isPackagedFluid: false,
+    detectedVolume: null,
+    detectedUnit: 'L',
+  };
+}
+
 export function parseAnafDataCreare(raw: string | number | undefined): Date {
   if (!raw) return new Date();
   const s = String(raw).trim();
@@ -898,6 +952,10 @@ export class EFacturaService {
     subcategorieNume?: string;
     codArticolCalculat?: string;
     pretUnitarCustom?: number;
+    conversieAmbalaj?: boolean;
+    volumAmbalaj?: number;
+    cantitateRealaStoc?: number;
+    unitateMasuraCustom?: string;
     areGarantie?: boolean;
     luniGarantie?: number;
     kilometriGarantie?: number;
@@ -937,9 +995,6 @@ export class EFacturaService {
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'Piese Mecanice & Direcție';
-    const rawPretUnitar = typeof data.pretUnitarCustom === 'number' ? data.pretUnitarCustom : item.pretUnitar;
-    const effectivePretUnitar = Number(Number(rawPretUnitar || 0).toFixed(2));
-    const effectivePretTotal = Number((effectivePretUnitar * item.cantitate).toFixed(2));
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
 
     const isFluid =
@@ -949,6 +1004,27 @@ export class EFacturaService {
       catName.toLowerCase().includes('racire') ||
       catName.toLowerCase().includes('adblue') ||
       normalizedUM === 'L';
+
+    // Suport Conversie Ambalaj în Volum Real (ex: Ulei motor 60 ltr facturat ca 1 buc la 1200 RON -> 60 L la 20 RON/L)
+    const isConversie = !!(data.conversieAmbalaj && data.cantitateRealaStoc && Number(data.cantitateRealaStoc) > 0);
+    const effectiveCantitate = isConversie ? Number(data.cantitateRealaStoc) : item.cantitate;
+
+    // Calcul valoare totală linie factură pentru a asigura exactitatea contabilă
+    const effectivePretTotal = item.valoareFaraTVA > 0 
+      ? Number(item.valoareFaraTVA.toFixed(2)) 
+      : Number((item.pretUnitar * item.cantitate).toFixed(2));
+
+    // Preț unitar în stoc:
+    let effectivePretUnitar = 0;
+    if (typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom >= 0) {
+      effectivePretUnitar = Number(Number(data.pretUnitarCustom).toFixed(4));
+    } else if (isConversie) {
+      effectivePretUnitar = effectiveCantitate > 0 ? Number((effectivePretTotal / effectiveCantitate).toFixed(4)) : 0;
+    } else {
+      effectivePretUnitar = Number(Number(item.pretUnitar || 0).toFixed(2));
+    }
+
+    const effectiveUM = data.unitateMasuraCustom || (isFluid ? 'L' : normalizedUM);
 
     // 2. Căutare Inteligentă sau Creare ArticolStoc în Depozit
     // Pentru fluide: căutăm și după Depozit + Categorie + Subcategorie identice!
@@ -987,8 +1063,9 @@ export class EFacturaService {
       articol = await this.prisma.articolStoc.update({
         where: { id: articol.id },
         data: {
-          stocCurent: articol.stocCurent + item.cantitate,
+          stocCurent: articol.stocCurent + effectiveCantitate,
           pretUnitar: effectivePretUnitar > 0 ? effectivePretUnitar : articol.pretUnitar,
+          unitateMasura: effectiveUM,
           subcategorie: data.subcategorieNume || articol.subcategorie,
           esteSerializat: data.areGarantie ? true : articol.esteSerializat,
         },
@@ -1003,10 +1080,10 @@ export class EFacturaService {
           denumire: item.descrierePiesa,
           categorie: catName,
           subcategorie: data.subcategorieNume || null,
-          stocCurent: item.cantitate,
+          stocCurent: effectiveCantitate,
           stocMinim: defaultMin,
           pretUnitar: effectivePretUnitar,
-          unitateMasura: isFluid ? 'L' : normalizedUM,
+          unitateMasura: effectiveUM,
           esteSerializat: !!data.areGarantie,
           depozitId: targetDepozitId,
         },
@@ -1014,6 +1091,10 @@ export class EFacturaService {
     }
 
     // 3. Înregistrare Recepție IntrareStoc cu cantitateRamasa pentru FIFO
+    const observatiiReceptie = isConversie
+      ? `Importat din e-Factura. Despachetat: ${item.cantitate} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / item.cantitate)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}`
+      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}`;
+
     await this.prisma.intrareStoc.create({
       data: {
         articolStocId: articol.id,
@@ -1021,11 +1102,11 @@ export class EFacturaService {
         furnizor: item.factura.numeVanzator,
         numarFactura: item.factura.numarFactura,
         dataFactura: item.factura.dataFactura,
-        cantitateIntrata: item.cantitate,
-        cantitateRamasa: item.cantitate, // Initializăm lotul FIFO
+        cantitateIntrata: effectiveCantitate,
+        cantitateRamasa: effectiveCantitate, // Initializăm lotul FIFO
         pretUnitar: effectivePretUnitar,
         pretTotal: effectivePretTotal,
-        observatii: `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? '  Înregistrat în Garanții Componente' : ''}`,
+        observatii: observatiiReceptie,
       },
     });
 
@@ -1142,10 +1223,12 @@ export class EFacturaService {
       }
     }
 
-    await this.recalculeazaStareFactura(item.facturaId);
+    const mesajSucces = isConversie
+      ? `Articolul "${item.descrierePiesa}" a fost recepționat cu succes în stoc: ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM} (despachetat din ${item.cantitate} ${item.unitateMasura || 'buc'})!`
+      : `Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
 
     return {
-      mesaj: ` Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? '  Înregistrat în Garanții Componente!' : ''}`,
+      mesaj: mesajSucces,
       item: updatedItem,
       articolStoc: articol,
     };
