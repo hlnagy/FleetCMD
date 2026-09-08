@@ -1478,93 +1478,6 @@ export default function ComenziLucruPage() {
                 </div>
               </div>
 
-              {/* OPCIONAL: ADĂUGARE PIESĂ INIȚIALĂ SAU DOAR DESCRIERE */}
-              <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-2">
-                <label className="flex items-center space-x-2 font-bold text-sapphire-900 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasInitialPart}
-                    onChange={(e) => setHasInitialPart(e.target.checked)}
-                    className="w-4 h-4 text-sapphire-500 rounded"
-                  />
-                  <span>Adaugă o piesă inițială acum (Opțional)</span>
-                </label>
-
-                {hasInitialPart && (
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <label className="text-sage-700 block mb-1 font-bold">Tip Pilon Cost:</label>
-                      <select
-                        value={pilonCost}
-                        onChange={(e) => setPilonCost(e.target.value)}
-                        className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
-                      >
-                        <option value="PIESA_STOC">1. PIESĂ STOC INTERN (Scade din stoc FIFO)</option>
-                        <option value="PIESA_DEZMEMBRATA">1b. PIESĂ DEZMEMBRĂRI (0 RON / 0 stoc scăzut)</option>
-                        <option value="PIESA_DIRECTA">2. ACHIZIȚIE DIRECTĂ PIESĂ</option>
-                        <option value="MANOPERA_INTERNA">3. MANOPERĂ INTERNĂ ATELIER</option>
-                      </select>
-                    </div>
-
-                    {pilonCost === 'PIESA_STOC' && (
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">Selectează Articol din Stoc:</label>
-                        <select
-                          value={selectedArticolStocId}
-                          onChange={(e) => handleSelectArticolStoc(e.target.value)}
-                          className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
-                        >
-                          {stocuri.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        {(() => {
-                          const currentStockItem = stocuri.find((st) => st.id === selectedArticolStocId);
-                          const isExceeded = pilonCost === 'PIESA_STOC' && currentStockItem && cantitate > currentStockItem.stocCurent;
-                          return (
-                            <>
-                              <label className="text-sage-700 block mb-1 font-bold">Cantitate:</label>
-                              <input
-                                type="number"
-                                min="1"
-                                max={pilonCost === 'PIESA_STOC' && currentStockItem ? currentStockItem.stocCurent : undefined}
-                                value={cantitate}
-                                onChange={(e) => setCantitate(Number(e.target.value))}
-                                className={`w-full border rounded-xl p-2 text-sapphire-900 font-mono font-bold ${
-                                  isExceeded ? 'bg-rose-50 border-rose-500 text-rose-900' : 'bg-white border-morning-200'
-                                }`}
-                              />
-                              {isExceeded && (
-                                <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center space-x-1">
-                                  <span>Stoc insuficient! Disponibil: {currentStockItem.stocCurent} {currentStockItem.unitateMasura || 'buc'}</span>
-                                </p>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">Preț Unitar (RON):</label>
-                        <input
-                          type="number"
-                          value={pretUnitar}
-                          onChange={(e) => setPretUnitar(Number(e.target.value))}
-                          className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Observații / Descriere Intervenție:</label>
                 <textarea
@@ -1576,21 +1489,10 @@ export default function ComenziLucruPage() {
                 />
               </div>
 
-              <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl flex items-center justify-between">
-                <label className="flex items-center space-x-2 text-xs font-bold text-sapphire-900 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoFinalize}
-                    onChange={(e) => setAutoFinalize(e.target.checked)}
-                    className="w-4 h-4 text-sapphire-500 rounded"
-                  />
-                  <span>Finalizează direct comanda la salvare (Scade stocul acum)</span>
-                </label>
-              </div>
 
               <div className="flex justify-end space-x-3 pt-3">
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Comandă de Lucru</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Deschide comanda de lucru</button>
               </div>
             </form>
           </div>
