@@ -69,7 +69,6 @@ interface CategoryResolution {
   categorie: string;
   subcategorie: string;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-  sugestiiRapide: Array<{ categorie: string; subcategorie: string; label: string }>;
 }
 
 function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []): CategoryResolution {
@@ -78,7 +77,6 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
       categorie: categorii[0]?.nume || 'Alte',
       subcategorie: '',
       confidence: 'LOW',
-      sugestiiRapide: []
     };
   }
 
@@ -161,38 +159,10 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     else matchedSub = subcats[0]?.nume || '';
   }
 
-  // Preseturi rapide dinamice din categoriile existente
-  const sugestiiRapide: Array<{ categorie: string; subcategorie: string; label: string }> = [];
-  if (fluidCat) {
-    const subcats: any[] = fluidCat.subcategorii || [];
-    const sMotor = subcats.find(s => /motor/i.test(s.nume));
-    const sHidro = subcats.find(s => /hidraulic/i.test(s.nume));
-    const sTrans = subcats.find(s => /transmis/i.test(s.nume));
-    const sVas = subcats.find(s => /vaselin/i.test(s.nume));
-    const sAntigel = subcats.find(s => /antigel/i.test(s.nume));
-
-    if (sMotor) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sMotor.nume, label: '🛢️ Ulei Motor' });
-    if (sHidro) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sHidro.nume, label: '🚜 Ulei Hidraulic' });
-    if (sTrans) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sTrans.nume, label: '⚙️ Ulei Transmisie' });
-    if (sVas) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sVas.nume, label: '🧴 Vaselină' });
-    if (sAntigel) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sAntigel.nume, label: '❄️ Antigel' });
-  }
-  if (filtruCat) {
-    const subcats: any[] = filtruCat.subcategorii || [];
-    const sFiltruUlei = subcats.find(s => /ulei/i.test(s.nume));
-    const sFiltruAer = subcats.find(s => /aer/i.test(s.nume));
-    const sFiltruComb = subcats.find(s => /combustibil|motorin/i.test(s.nume));
-
-    if (sFiltruUlei) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruUlei.nume, label: '🔧 Filtru Ulei' });
-    if (sFiltruAer) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruAer.nume, label: '💨 Filtru Aer' });
-    if (sFiltruComb) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruComb.nume, label: '⛽ Filtru Motorină' });
-  }
-
   return {
     categorie: matchedCat?.nume || categorii[0]?.nume || 'Alte',
     subcategorie: matchedSub,
     confidence,
-    sugestiiRapide,
   };
 }
 
@@ -302,17 +272,12 @@ function EFacturaContent() {
   const [newSubcatNume, setNewSubcatNume] = useState('');
   const [savingNewSubcat, setSavingNewSubcat] = useState(false);
 
-  // SMART CATEGORY DETECTED SUGGESTION & QUICK PRESETS
+  // SMART CATEGORY DETECTED SUGGESTION
   const [sugestieDetectata, setSugestieDetectata] = useState<{
     categorie: string;
     subcategorie: string;
     confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   } | null>(null);
-  const [sugestiiRapide, setSugestiiRapide] = useState<Array<{
-    categorie: string;
-    subcategorie: string;
-    label: string;
-  }>>([]);
 
   // FLUID PACKAGING CONVERSION STATE (ex: 1 buc = 60 ltr la 1200 RON -> 60 L la 20 RON/L)
   const [esteConversieVolum, setEsteConversieVolum] = useState(false);
@@ -871,7 +836,6 @@ function EFacturaContent() {
     } else {
       setSugestieDetectata(null);
     }
-    setSugestiiRapide(resCat.sugestiiRapide);
 
     // Pre-completare automată categorie & subcategorie
     setTargetCategorie(resCat.categorie);
@@ -917,33 +881,53 @@ function EFacturaContent() {
     for (let i = 1; i <= count; i++) {
       initialSerii.push({
         id: i,
-        serie: `${code}-${timestampSuffix}-${String(i).padStart(2, '0')}`,
-        dot: 'DOT-2026',
+        serie: count === 1 && item.codArticolFurnizor ? item.codArticolFurnizor : `SN-${timestampSuffix}-${i.toString().padStart(2, '0')}`,
+        dot: '',
       });
     }
     setSeriiList(initialSerii);
   };
 
-  // Verificare Consolidare Stoc Existent pentru Fluide / Uleiuri / Antigel / AdBlue
+  // Verificare Consolidare Stoc Existent (doar dacă e într-adevăr același articol/cod/vâscozitate)
   const articolConsolidareExistent = useMemo(() => {
     if (!targetCategorie || !targetDepozitId || !importingItem) return null;
     const catLower = targetCategorie.toLowerCase();
     const esteFluid = /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(catLower) || (importingItem.unitateMasura || '').toLowerCase() === 'l';
     if (!esteFluid) return null;
 
+    const rawCode = (codArticolCalculat || importingItem.codArticolFurnizor || '').trim().toLowerCase();
+    const descLower = (importingItem.descrierePiesa || '').toLowerCase().trim();
+
     return stocuriFlota.find((s) => {
       if (s.depozitId !== targetDepozitId) return false;
-      const sCatLower = (s.categorie || '').toLowerCase();
-      const sameCat = sCatLower === catLower || sCatLower.includes(catLower) || catLower.includes(sCatLower);
-      if (!sameCat) return false;
 
-      // Dacă este aleasă o subcategorie, verificăm potrivirea strictă
-      if (targetSubcategorie && s.subcategorie) {
-        return s.subcategorie.toLowerCase() === targetSubcategorie.toLowerCase();
+      // 1. Potrivire exactă după cod articol
+      const sCod = (s.codPiesa || s.codFurnizor || '').trim().toLowerCase();
+      if (rawCode && sCod && rawCode === sCod) return true;
+
+      // 2. Potrivire strictă după denumire articol în cadrul aceleiași categorii
+      const sDenumire = (s.denumire || '').toLowerCase().trim();
+      if (sDenumire && descLower) {
+        if (sDenumire === descLower) return true;
+
+        // Vâscozitățile diferite (ex: 10w40 vs 15w40) NU se consolidează niciodată
+        const extractVisc = (str: string) => str.match(/\b\d+w[- ]?\d+\b/i)?.[0]?.replace(/[\s-]/g, '').toLowerCase();
+        const v1 = extractVisc(descLower);
+        const v2 = extractVisc(sDenumire);
+        if (v1 && v2 && v1 !== v2) return false;
+
+        // Dacă au aceeași marcă și aceeași vâscozitate specifică
+        if (v1 && v2 && v1 === v2) {
+          const m1 = descLower.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(w => w.length >= 4);
+          const m2 = new Set(sDenumire.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(w => w.length >= 4));
+          const common = m1.filter(w => m2.has(w));
+          if (common.length >= 2) return true;
+        }
       }
-      return true;
+
+      return false;
     });
-  }, [targetCategorie, targetSubcategorie, targetDepozitId, importingItem, stocuriFlota]);
+  }, [targetCategorie, targetDepozitId, importingItem, codArticolCalculat, stocuriFlota]);
 
   // QUICK CREATE CATEGORY HANDLER
   const handleQuickCreateCategory = async () => {
@@ -2569,96 +2553,41 @@ function EFacturaContent() {
                 </select>
               </div>
 
-              {/* SUGESTIE INTELIGENTĂ DIN FACTURĂ & PRESETURI RAPIDE (1-CLICK) */}
-              {sugestieDetectata && (
-                <div className="p-3 bg-gradient-to-r from-sapphire-50/80 via-morning-50 to-emerald-50/70 border border-sapphire-200 rounded-xl space-y-2 shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Sparkles className="w-4 h-4 text-sapphire-600 animate-pulse" />
-                      <span className="text-[11px] font-extrabold text-sapphire-900">
-                        Sugestie Inteligentă Identificată:
+              {/* CATEGORIE STOC CU BUTON CREARE NOUĂ */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sage-700 font-bold">Categorie Stoc: *</label>
+                    {sugestieDetectata && targetCategorie === sugestieDetectata.categorie && (
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Detectat automat
                       </span>
-                    </div>
-                    {targetCategorie === sugestieDetectata.categorie &&
-                     (targetSubcategorie === sugestieDetectata.subcategorie || (!targetSubcategorie && !sugestieDetectata.subcategorie)) ? (
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold flex items-center space-x-1 border border-emerald-300">
-                        <Check className="w-3 h-3" />
-                        <span>Selectat Automat</span>
-                      </span>
-                    ) : (
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {sugestieDetectata && targetCategorie !== sugestieDetectata.categorie && (
                       <button
                         type="button"
                         onClick={() => {
                           setTargetCategorie(sugestieDetectata.categorie);
                           setTargetSubcategorie(sugestieDetectata.subcategorie);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white text-[11px] font-bold shadow-xs flex items-center space-x-1 cursor-pointer transition"
-                        title="Apasă pentru a aplica automat categoria și subcategoria recomandată"
+                        className="text-sapphire-600 hover:text-sapphire-800 font-semibold text-[11px] underline cursor-pointer"
                       >
-                        <Sparkles className="w-3 h-3" />
-                        <span>Aplică Sugestia</span>
+                        Resetare la sugestie ({sugestieDetectata.categorie})
+                      </button>
+                    )}
+                    {!isAddingNewCat && (
+                      <button
+                        type="button"
+                        onClick={() => { setIsAddingNewCat(true); setNewCatNume(''); }}
+                        className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Categorie Nouă</span>
                       </button>
                     )}
                   </div>
-
-                  <div className="flex items-center space-x-2 text-xs font-bold text-sapphire-900 bg-white/90 p-2 rounded-lg border border-sapphire-200/70">
-                    <span className="text-sapphire-950 font-black">{sugestieDetectata.categorie}</span>
-                    {sugestieDetectata.subcategorie && (
-                      <>
-                        <span className="text-sage-400">▸</span>
-                        <span className="text-sapphire-700">{sugestieDetectata.subcategorie}</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* PRESETURI RAPIDE 1-CLICK */}
-                  {sugestiiRapide.length > 0 && (
-                    <div className="pt-1 border-t border-morning-200/60">
-                      <p className="text-[10px] text-sage-600 font-bold mb-1.5 uppercase tracking-wider">
-                        Schimbă Rapid în 1-Click:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {sugestiiRapide.map((chip, idx) => {
-                          const isSelected = targetCategorie === chip.categorie && targetSubcategorie === chip.subcategorie;
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                setTargetCategorie(chip.categorie);
-                                setTargetSubcategorie(chip.subcategorie);
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer border ${
-                                isSelected
-                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
-                                  : 'bg-white hover:bg-morning-100 text-slate-700 border-morning-300 hover:border-morning-400'
-                              }`}
-                            >
-                              <span>{chip.label}</span>
-                              {isSelected && <Check className="w-3 h-3 ml-0.5" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* CATEGORIE STOC CU BUTON CREARE NOUĂ */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sage-700 font-bold">Categorie Stoc: *</label>
-                  {!isAddingNewCat && (
-                    <button
-                      type="button"
-                      onClick={() => { setIsAddingNewCat(true); setNewCatNume(''); }}
-                      className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>+ Categorie Nouă</span>
-                    </button>
-                  )}
                 </div>
 
                 {isAddingNewCat ? (
@@ -2920,33 +2849,16 @@ function EFacturaContent() {
 
                 if (articolConsolidareExistent) {
                   return (
-                    <div className="p-3 bg-emerald-50/90 border border-emerald-300 rounded-xl space-y-1 text-xs animate-fade-in">
-                      <div className="flex items-center justify-between">
-                        <span className="font-extrabold text-emerald-950 flex items-center space-x-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Se va consolida în stocul existent (Regulă FIFO)</span>
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 border border-emerald-300 font-mono">
-                          Stoc Actual: {articolConsolidareExistent.stocCurent} {articolConsolidareExistent.unitateMasura}
+                    <div className="px-3 py-2 bg-emerald-50/90 border border-emerald-300 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+                      <div className="flex items-center space-x-2 truncate">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="truncate">
+                          Consolidare în stoc existent: <strong>{articolConsolidareExistent.denumire}</strong>
                         </span>
                       </div>
-                      <p className="text-emerald-800 text-[11px] leading-relaxed">
-                        În depozitul selectat există deja articolul <strong>&ldquo;{articolConsolidareExistent.denumire}&rdquo;</strong> cu aceeași categorie și subcategorie. Cantitatea din această factură (<strong>+{cantIntrare} {umIntrare}</strong> la {pretIntrare} RON/{umIntrare}) va fi adăugată ca <strong>lot nou FIFO</strong> fără a multiplica articolele din nomenclator.
-                      </p>
-                    </div>
-                  );
-                }
-
-                if (/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie)) {
-                  return (
-                    <div className="p-3 bg-sapphire-50/80 border border-sapphire-200 rounded-xl space-y-1 text-xs animate-fade-in">
-                      <span className="font-bold text-sapphire-900 flex items-center space-x-1.5">
-                        <Layers className="w-4 h-4 text-sapphire-600 shrink-0" />
-                        <span>Articol Nou de Fluid & Primul Lot FIFO</span>
+                      <span className="text-[11px] font-mono font-bold text-emerald-800 shrink-0 ml-2">
+                        Stoc: {articolConsolidareExistent.stocCurent} {articolConsolidareExistent.unitateMasura}
                       </span>
-                      <p className="text-sapphire-700 text-[11px] leading-relaxed">
-                        Se va genera un articol maestru pentru acest fluid în depozit, iar această intrare de <strong>+{cantIntrare} {umIntrare}</strong> (la {pretIntrare} RON/{umIntrare}) va constitui <strong>Lotul #1 FIFO</strong>.
-                      </p>
                     </div>
                   );
                 }
