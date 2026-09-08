@@ -443,11 +443,18 @@ export class EFacturaService {
       });
       const existingIdSet = new Set(existingDbFacturi.map((f) => String(f.idDescarcare)));
 
+      // Preîncărcăm furnizorii excluși automat (telecom, utilități, catering/protocol etc.)
+      const activeExclusi = await this.prisma.eFacturaFurnizorExclus.findMany({
+        where: { activ: true },
+        select: { cif: true },
+      });
+      const furnizoriExclusiSet = new Set(activeExclusi.map((f) => f.cif));
+
       // Sortăm descrescător după data_creare: facturile cele mai recente (azi, ieri) se descarcă primele!
       mesajeList.sort((a, b) => (Number(b.data_creare) || 0) - (Number(a.data_creare) || 0));
 
       this.syncStatus.totalMessages = mesajeList.length;
-      this.logger.log(`Total facturi primite găsite în ANAF SPV pe ${safeZile} zile: ${mesajeList.length}`);
+      this.logger.log(`Total facturi primite găsite în ANAF SPV pe ${safeZile} zile: ${mesajeList.length} (${furnizoriExclusiSet.size} reguli excludere activă)`);
 
       for (const msg of mesajeList) {
         this.syncStatus.processed++;
@@ -515,6 +522,11 @@ export class EFacturaService {
             }
 
             // 4. PERSISTENȚĂ ÎN BAZA DE DATE PRISMA
+            // Dacă furnizorul este în lista de excludere automată (telecom, utilități, chirie etc.), intră direct ca ELIMINAT
+            const isExclusAutomat = furnizoriExclusiSet.has(cifVanzatorClean);
+            const stareFacturaInitiala = isExclusAutomat ? 'ELIMINAT' : 'NEPROCESAT';
+            const stareArticolInitiala = isExclusAutomat ? 'ELIMINAT' : 'NEPROCESAT';
+
             await this.prisma.eFacturaFactura.create({
               data: {
                 idDescarcare: String(idDescarcare),
@@ -528,6 +540,7 @@ export class EFacturaService {
                 valoareTotala: parsedInvoice.valoareTotala || Number(msg.valoare || 0),
                 moneda: parsedInvoice.moneda || 'RON',
                 tipFactura: parsedInvoice.tipFactura || 'FACTURA',
+                stare: stareFacturaInitiala,
                 xmlRawContent: xmlRawContent,
                 articole: {
                   create: parsedInvoice.items.map((item, idx) => ({
@@ -540,7 +553,7 @@ export class EFacturaService {
                     valoareFaraTVA: item.valoareFaraTVA,
                     valoareTVA: item.valoareTVA,
                     cotaTVA: item.cotaTVA,
-                    stare: 'NEPROCESAT',
+                    stare: stareArticolInitiala,
                   })),
                 },
               },
@@ -729,6 +742,12 @@ export class EFacturaService {
     const facturiSalvate: any[] = [];
     const seenInBatch = new Set<string>();
 
+    const activeExclusi = await this.prisma.eFacturaFurnizorExclus.findMany({
+      where: { activ: true },
+      select: { cif: true },
+    });
+    const furnizoriExclusiSet = new Set(activeExclusi.map((f) => f.cif));
+
     for (const f of files) {
       try {
         const buffer = Buffer.from(f.continutBase64, 'base64');
@@ -787,6 +806,10 @@ export class EFacturaService {
             continue;
           }
 
+          const isExclusAutomat = furnizoriExclusiSet.has(cleanCif);
+          const stareFacturaInitiala = isExclusAutomat ? 'ELIMINAT' : 'NEPROCESAT';
+          const stareArticolInitiala = isExclusAutomat ? 'ELIMINAT' : 'NEPROCESAT';
+
           const savedFactura = await this.prisma.eFacturaFactura.create({
             data: {
               idDescarcare,
@@ -800,6 +823,7 @@ export class EFacturaService {
               valoareTotala: parsed.valoareTotala,
               moneda: parsed.moneda,
               tipFactura: parsed.tipFactura,
+              stare: stareFacturaInitiala,
               xmlRawContent: item.xml,
               articole: {
                 create: parsed.items.map((it, idx) => ({
@@ -812,7 +836,7 @@ export class EFacturaService {
                   valoareFaraTVA: it.valoareFaraTVA,
                   valoareTVA: it.valoareTVA,
                   cotaTVA: it.cotaTVA,
-                  stare: 'NEPROCESAT',
+                  stare: stareArticolInitiala,
                 })),
               },
             },
@@ -1244,5 +1268,118 @@ export class EFacturaService {
       where: { id: facturaId },
       data: { stare: stareFinala },
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // GESTIUNE FURNIZORI EXCLUȘI AUTOMAT (TELECOM, UTILITĂȚI, PROTOCOL/BĂUTURI)
+  // -------------------------------------------------------------------------
+  async getFurnizoriExclusi() {
+    const furnizori = await this.prisma.eFacturaFurnizorExclus.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const toateFacturile = await this.prisma.eFacturaFactura.findMany({
+      select: { id: true, cifVanzator: true, stare: true, dataFactura: true },
+    });
+
+    return furnizori.map((f) => {
+      const facturiAsociate = toateFacturile.filter((fact) => {
+        const cleanFactCif = (fact.cifVanzator || '').replace(/[^0-9]/g, '');
+        return cleanFactCif && (cleanFactCif === f.cif || cleanFactCif.includes(f.cif) || f.cif.includes(cleanFactCif));
+      });
+
+      const totalFacturi = facturiAsociate.length;
+      const facturiExcluse = facturiAsociate.filter((fact) => fact.stare === 'ELIMINAT').length;
+      const ultimaFactura = facturiAsociate.length > 0
+        ? facturiAsociate.reduce((max, curr) => curr.dataFactura > max ? curr.dataFactura : max, facturiAsociate[0].dataFactura)
+        : null;
+
+      return {
+        ...f,
+        totalFacturi,
+        facturiExcluse,
+        ultimaFactura,
+      };
+    });
+  }
+
+  async adaugaFurnizorExclus(data: { cif: string; nume: string; motiv?: string; aplicaRetroactiv?: boolean }) {
+    if (!data.cif || !data.nume) {
+      throw new BadRequestException('CUI și Denumirea furnizorului sunt obligatorii.');
+    }
+
+    const cleanCif = data.cif.replace(/[^0-9]/g, '');
+    if (!cleanCif) {
+      throw new BadRequestException('Codul fiscal furnizat este invalid.');
+    }
+
+    const existent = await this.prisma.eFacturaFurnizorExclus.upsert({
+      where: { cif: cleanCif },
+      update: {
+        cifOriginal: data.cif.trim().toUpperCase(),
+        nume: data.nume.trim(),
+        motiv: data.motiv?.trim() || 'Servicii / Utilități',
+        activ: true,
+      },
+      create: {
+        cif: cleanCif,
+        cifOriginal: data.cif.trim().toUpperCase(),
+        nume: data.nume.trim(),
+        motiv: data.motiv?.trim() || 'Servicii / Utilități',
+        activ: true,
+      },
+    });
+
+    let facturiAfectate = 0;
+    if (data.aplicaRetroactiv !== false) {
+      const facturiNeprocesate = await this.prisma.eFacturaFactura.findMany({
+        where: {
+          stare: { not: 'IMPORTAT_TOTAL' },
+        },
+        select: { id: true, cifVanzator: true },
+      });
+
+      const matching = facturiNeprocesate.filter((f) => {
+        const c = (f.cifVanzator || '').replace(/[^0-9]/g, '');
+        return c && (c === cleanCif || c.includes(cleanCif) || cleanCif.includes(c));
+      });
+
+      for (const f of matching) {
+        await this.eliminaToataFactura(f.id);
+        facturiAfectate++;
+      }
+    }
+
+    return {
+      mesaj: `Furnizorul "${data.nume}" (CUI: ${cleanCif}) a fost adăugat în lista de excludere automată.${facturiAfectate > 0 ? ` S-au exclus retroactiv ${facturiAfectate} facturi existente.` : ''}`,
+      furnizor: existent,
+      facturiAfectate,
+    };
+  }
+
+  async eliminaFurnizorExclus(id: string) {
+    const existent = await this.prisma.eFacturaFurnizorExclus.findUnique({ where: { id } });
+    if (!existent) throw new NotFoundException('Regula de excludere nu a fost găsită.');
+
+    await this.prisma.eFacturaFurnizorExclus.delete({ where: { id } });
+
+    return {
+      mesaj: `Furnizorul "${existent.nume}" a fost eliminat din lista de excludere automată. Facturile viitoare vor fi procesate normal.`,
+    };
+  }
+
+  async toggleFurnizorExclus(id: string) {
+    const existent = await this.prisma.eFacturaFurnizorExclus.findUnique({ where: { id } });
+    if (!existent) throw new NotFoundException('Regula de excludere nu a fost găsită.');
+
+    const updated = await this.prisma.eFacturaFurnizorExclus.update({
+      where: { id },
+      data: { activ: !existent.activ },
+    });
+
+    return {
+      mesaj: `Regula pentru "${updated.nume}" a fost ${updated.activ ? 'ACTIVATĂ' : 'DEZACTIVATĂ'}.`,
+      furnizor: updated,
+    };
   }
 }

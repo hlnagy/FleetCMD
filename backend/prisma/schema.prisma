@@ -551,6 +551,17 @@ model EFacturaItem {
   createdAt          DateTime        @default(now())
 }
 
+model EFacturaFurnizorExclus {
+  id          String   @id @default(uuid())
+  cif         String   @unique // CUI curățat (doar cifre, ex: 12345678)
+  cifOriginal String?  // ex: RO12345678
+  nume        String   // Denumire furnizor (ex: Vodafone Romania SA)
+  motiv       String?  // Categorie / Motiv (ex: "Telecomunicații", "Utilități / Apă", "Energie & Gaz", "Protocol / Băuturi", "Chirie", "Servicii Curățenie")
+  activ       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // ==========================================
 // UTILIZATORI, ROLURI (RBAC) & JURNAL AUDIT
 // ==========================================

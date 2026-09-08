@@ -87,8 +87,19 @@ function EFacturaContent() {
   // MODALS
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showHelpGuideModal, setShowHelpGuideModal] = useState(false);
+  const [showFurnizoriExclusiModal, setShowFurnizoriExclusiModal] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState<any>(null);
   const [showRawXml, setShowRawXml] = useState(false);
+
+  // GESTIUNE FURNIZORI EXCLUȘI AUTOMAT
+  const [furnizoriExclusiList, setFurnizoriExclusiList] = useState<any[]>([]);
+  const [loadingFurnizoriExclusi, setLoadingFurnizoriExclusi] = useState(false);
+  const [newExclusCif, setNewExclusCif] = useState('');
+  const [newExclusNume, setNewExclusNume] = useState('');
+  const [newExclusMotiv, setNewExclusMotiv] = useState('Telecomunicații & IT');
+  const [newExclusAplicaRetroactiv, setNewExclusAplicaRetroactiv] = useState(true);
+  const [savingExclus, setSavingExclus] = useState(false);
+  const [searchExclus, setSearchExclus] = useState('');
 
   // IMPORT ITEM TO STOCK MODAL
   const [importingItem, setImportingItem] = useState<any>(null);
@@ -273,10 +284,97 @@ function EFacturaContent() {
           }
         }
       }
+      // Încărcăm și lista furnizorilor excluși automat
+      fetchFurnizoriExclusi();
     } catch (e) {
       console.log('Eroare la încărcarea datelor e-Factura:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFurnizoriExclusi = async () => {
+    try {
+      setLoadingFurnizoriExclusi(true);
+      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`);
+      if (res.ok) {
+        const data = await res.json();
+        setFurnizoriExclusiList(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Eroare la încărcarea furnizorilor excluși:', e);
+    } finally {
+      setLoadingFurnizoriExclusi(false);
+    }
+  };
+
+  const handleAddFurnizorExclus = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newExclusCif.trim() || !newExclusNume.trim()) {
+      alert('Vă rugăm să introduceți CUI-ul și Denumirea furnizorului.');
+      return;
+    }
+
+    setSavingExclus(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cif: newExclusCif.trim(),
+          nume: newExclusNume.trim(),
+          motiv: newExclusMotiv.trim(),
+          aplicaRetroactiv: newExclusAplicaRetroactiv,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || 'Furnizorul a fost adăugat cu succes!');
+        setNewExclusCif('');
+        setNewExclusNume('');
+        fetchFurnizoriExclusi();
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare de comunicare cu serverul.');
+    } finally {
+      setSavingExclus(false);
+    }
+  };
+
+  const handleDeleteFurnizorExclus = async (id: string, nume: string) => {
+    if (!confirm(`Sunteți sigur că doriți să eliminați regula de excludere automată pentru "${nume}"? Facturile viitoare vor fi afișate pentru recepție.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || 'Regula a fost ștearsă.');
+        fetchFurnizoriExclusi();
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea regulii.');
+    }
+  };
+
+  const handleToggleFurnizorExclus = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}/toggle`, {
+        method: 'PATCH',
+      });
+      if (res.ok) {
+        fetchFurnizoriExclusi();
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -831,6 +929,36 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
+
+        // Găsim CUI-ul furnizorului pentru opțiunea de excludere automată permanentă
+        const fact = facturi.find((f) => f.id === facturaId);
+        const cifVanzator = fact?.cifVanzator || '';
+        const cleanCif = cifVanzator.replace(/[^0-9]/g, '');
+        const dejaExclus = cleanCif && furnizoriExclusiList.some((fe) => fe.cif === cleanCif && fe.activ);
+
+        if (cleanCif && !dejaExclus) {
+          const autoExclusConfirm = await showConfirm(
+            'Excludere Automată pe Viitor?',
+            `Doriți să adăugați furnizorul "${furnizor}" (CUI: ${cleanCif}) în lista de EXCLUDERE AUTOMATĂ?\n\nToate facturile viitoare (apă, telefonie, protocol, chirii etc.) vor fi direcționate automat în secțiunea Excluse!`,
+            'Da, exclude automat pe viitor',
+            'Nu, doar această factură'
+          );
+
+          if (autoExclusConfirm) {
+            await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                cif: cleanCif,
+                nume: furnizor,
+                motiv: 'Servicii / Utilități',
+                aplicaRetroactiv: true,
+              }),
+            });
+            fetchFurnizoriExclusi();
+          }
+        }
+
         alert(data.mesaj || `Factura ${numar} a fost exclusă complet.`);
         fetchData();
         if (selectedFactura?.id === facturaId) {
@@ -1108,6 +1236,20 @@ function EFacturaContent() {
               <span>Configurare Token OAuth2</span>
             </button>
           )}
+
+          <button
+            onClick={() => { setShowFurnizoriExclusiModal(true); fetchFurnizoriExclusi(); }}
+            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-roseash-100 border border-terracotta-300 text-xs font-bold text-terracotta-700 shadow-xs transition cursor-pointer"
+            title="Gestiune reguli de excludere automată pentru furnizori de utilități, telecom, protocol etc."
+          >
+            <ShieldAlert className="w-4 h-4 text-terracotta-600" />
+            <span>Filtru Excludere Automată</span>
+            {furnizoriExclusiList.filter((f) => f.activ).length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-mono bg-terracotta-100 text-terracotta-800 rounded-full font-extrabold border border-terracotta-200">
+                {furnizoriExclusiList.filter((f) => f.activ).length}
+              </span>
+            )}
+          </button>
 
           <button
             onClick={fetchData}
@@ -2744,6 +2886,280 @@ function EFacturaContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL NOU: REGULI EXCLUDERE AUTOMATĂ FURNIZORI (SERVICII, UTILITĂȚI, ETC.) */}
+      {/* ========================================================================= */}
+      {showFurnizoriExclusiModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="pleasant-card bg-white dark:bg-[#111D28] border border-morning-200 dark:border-morning-300 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] my-auto overflow-hidden animate-fade-in">
+            {/* ANTET FIXAT */}
+            <div className="flex items-center justify-between border-b border-morning-200 dark:border-morning-300 px-6 py-4 bg-white dark:bg-[#111D28] shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-terracotta-100 dark:bg-terracotta-900/40 text-terracotta-600 flex items-center justify-center">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-sapphire-900 dark:text-white flex items-center space-x-2">
+                    <span>Filtru Excludere Automată Furnizori (Servicii & Utilități)</span>
+                    <span className="text-[10px] bg-terracotta-100 dark:bg-terracotta-900/40 text-terracotta-700 dark:text-terracotta-300 font-mono px-2 py-0.5 rounded-full font-bold">
+                      {furnizoriExclusiList.filter((f) => f.activ).length} active
+                    </span>
+                  </h3>
+                  <p className="text-xs text-sage-600 dark:text-slate-400 font-medium">
+                    Facturile de la acești furnizori (telefonie, apă-canal, energie, catering/protocol, chirii) sunt direcționate automat în secțiunea <strong>Excluse / Servicii</strong> fără a mai aglomera recepția de stoc.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFurnizoriExclusiModal(false)}
+                className="w-8 h-8 rounded-xl bg-morning-100 dark:bg-morning-200 text-sage-600 dark:text-slate-300 hover:text-sapphire-900 flex items-center justify-center transition cursor-pointer"
+                title="Închide"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* CORP MODAL DERULABIL */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-130px)]">
+              {/* FORMULAR ADĂUGARE REGULĂ */}
+              <div className="p-4 rounded-2xl bg-morning-50 dark:bg-morning-100/40 border border-morning-200 dark:border-morning-300 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold text-sapphire-900 dark:text-white uppercase tracking-wider flex items-center space-x-1.5">
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    <span>Adaugă Furnizor în Lista de Excludere Permanentă</span>
+                  </h4>
+
+                  {/* SELECTARE RAPIDĂ DIN FACTURI EXISTENTE */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] text-sage-600 dark:text-slate-400 font-medium">Preia rapid:</span>
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) return;
+                        const [cifVal, ...rest] = val.split('___');
+                        const numeVal = rest.join('___');
+                        setNewExclusCif(cifVal);
+                        setNewExclusNume(numeVal);
+                      }}
+                      className="bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl px-2.5 py-1 text-xs text-sapphire-900 dark:text-white font-bold"
+                    >
+                      <option value="">-- Alege furnizor din facturile existente --</option>
+                      {Array.from(new Set(facturi.map((f) => `${f.cifVanzator}___${f.numeVanzator}`)))
+                        .filter((key) => {
+                          const [c] = key.split('___');
+                          const clean = c.replace(/[^0-9]/g, '');
+                          return !furnizoriExclusiList.some((fe) => fe.cif === clean);
+                        })
+                        .slice(0, 50)
+                        .map((key) => {
+                          const [c, n] = key.split('___');
+                          return (
+                            <option key={key} value={key}>
+                              {n} (CUI: {c})
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
+                </div>
+
+                <form onSubmit={handleAddFurnizorExclus} className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-sage-700 dark:text-slate-300 block mb-1">
+                      CUI Furnizor:
+                    </label>
+                    <input
+                      required
+                      value={newExclusCif}
+                      onChange={(e) => setNewExclusCif(e.target.value)}
+                      placeholder="ex: RO14827769 sau 14827769"
+                      className="w-full bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 dark:text-white font-mono font-bold"
+                    />
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <label className="text-[11px] font-bold text-sage-700 dark:text-slate-300 block mb-1">
+                      Denumire Furnizor:
+                    </label>
+                    <input
+                      required
+                      value={newExclusNume}
+                      onChange={(e) => setNewExclusNume(e.target.value)}
+                      placeholder="ex: Vodafone Romania SA / Compania de Apă"
+                      className="w-full bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 dark:text-white font-bold"
+                    />
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <label className="text-[11px] font-bold text-sage-700 dark:text-slate-300 block mb-1">
+                      Categorie / Motiv Excludere:
+                    </label>
+                    <select
+                      value={newExclusMotiv}
+                      onChange={(e) => setNewExclusMotiv(e.target.value)}
+                      className="w-full bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 dark:text-white font-bold"
+                    >
+                      <option value="Telecomunicații & IT">Telecomunicații & IT</option>
+                      <option value="Utilități Apă & Salubritate">Utilități Apă & Salubritate</option>
+                      <option value="Energie Electrică & Gaze">Energie Electrică & Gaze</option>
+                      <option value="Protocol, Catering & Băuturi">Protocol, Catering & Băuturi</option>
+                      <option value="Chirii & Spații / Sediu">Chirii & Spații / Sediu</option>
+                      <option value="Servicii Juridice & Contabilitate">Servicii Juridice & Contabilitate</option>
+                      <option value="Servicii Diverse & Operaționale">Servicii Diverse & Operaționale</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2 flex items-end">
+                    <button
+                      type="submit"
+                      disabled={savingExclus}
+                      className="w-full py-2.5 px-3 rounded-xl bg-terracotta-600 hover:bg-terracotta-700 text-white font-bold text-xs shadow-md shadow-terracotta-600/20 transition cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{savingExclus ? 'Se salvează...' : 'Adaugă'}</span>
+                    </button>
+                  </div>
+
+                  <div className="md:col-span-12 pt-1">
+                    <label className="flex items-center space-x-2 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newExclusAplicaRetroactiv}
+                        onChange={(e) => setNewExclusAplicaRetroactiv(e.target.checked)}
+                        className="w-4 h-4 rounded text-terracotta-600 focus:ring-terracotta-500 accent-terracotta-600"
+                      />
+                      <span>Aplică retroactiv: mută automat toate facturile neprocesate existente de la acest furnizor în secțiunea Excluse / Servicii</span>
+                    </label>
+                  </div>
+                </form>
+              </div>
+
+              {/* BARA DE CĂUTARE ȘI STATISTICI */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    value={searchExclus}
+                    onChange={(e) => setSearchExclus(e.target.value)}
+                    placeholder="Căutare furnizor exclus după nume sau CUI..."
+                    className="w-full bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl pl-9 pr-3 py-2 text-xs text-sapphire-900 dark:text-white font-bold"
+                  />
+                </div>
+
+                <div className="text-xs text-sage-600 dark:text-slate-400 font-medium">
+                  Afișate: <strong>{furnizoriExclusiList.filter((f) => !searchExclus || f.nume.toLowerCase().includes(searchExclus.toLowerCase()) || f.cif.includes(searchExclus)).length}</strong> reguli de excludere
+                </div>
+              </div>
+
+              {/* TABEL REGULI FURNIZORI EXCLUȘI */}
+              <div className="border border-morning-200 dark:border-morning-300 rounded-2xl overflow-hidden bg-white dark:bg-[#111D28]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-morning-100 dark:bg-morning-200/50 text-sapphire-900 dark:text-slate-200 font-extrabold border-b border-morning-200 dark:border-morning-300 uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="p-3">Furnizor & CUI</th>
+                      <th className="p-3">Categorie / Motiv</th>
+                      <th className="p-3 text-center">Facturi Excluse</th>
+                      <th className="p-3 text-center">Ultima Factură</th>
+                      <th className="p-3 text-center">Stare Regulă</th>
+                      <th className="p-3 text-right pr-4">Acțiuni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 dark:divide-morning-300">
+                    {loadingFurnizoriExclusi ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-sage-500 font-bold">
+                          Se încarcă lista regulilor de excludere...
+                        </td>
+                      </tr>
+                    ) : furnizoriExclusiList.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-sage-500">
+                          <p className="font-bold text-sm text-slate-700 dark:text-slate-300">Nu aveți încă reguli de excludere automată configurate.</p>
+                          <p className="text-xs pt-1">Adăugați mai sus furnizorii de utilități, telecomunicații sau protocol pe care doriți să-i excludeți automat din recepția de stoc.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      furnizoriExclusiList
+                        .filter((f) => !searchExclus || f.nume.toLowerCase().includes(searchExclus.toLowerCase()) || f.cif.includes(searchExclus))
+                        .map((fe) => (
+                          <tr key={fe.id} className="hover:bg-morning-50 dark:hover:bg-[#162637] transition">
+                            <td className="p-3 font-extrabold text-sapphire-900 dark:text-white">
+                              <div>{fe.nume}</div>
+                              <div className="text-[10px] font-mono text-sage-500 font-normal">CUI: {fe.cifOriginal || `RO${fe.cif}`}</div>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                fe.motiv?.includes('Telecom')
+                                  ? 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                                  : fe.motiv?.includes('Apă')
+                                  ? 'bg-cyan-100 text-cyan-900 border-cyan-300 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800'
+                                  : fe.motiv?.includes('Energie')
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                                  : fe.motiv?.includes('Protocol') || fe.motiv?.includes('Băuturi')
+                                  ? 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
+                                  : 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200'
+                              }`}>
+                                {fe.motiv || 'Servicii / Utilități'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center font-mono font-extrabold text-terracotta-700 dark:text-terracotta-400">
+                              {fe.facturiExcluse} / {fe.totalFacturi}
+                            </td>
+                            <td className="p-3 text-center text-[11px] font-mono text-sage-600 dark:text-slate-400">
+                              {fe.ultimaFactura ? new Date(fe.ultimaFactura).toLocaleDateString('ro-RO') : '-'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleFurnizorExclus(fe.id)}
+                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase transition cursor-pointer ${
+                                  fe.activ
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                                }`}
+                                title="Click pentru activare / dezactivare regulă"
+                              >
+                                {fe.activ ? 'ACTIV' : 'INACTIV'}
+                              </button>
+                            </td>
+                            <td className="p-3 text-right pr-4">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFurnizorExclus(fe.id, fe.nume)}
+                                className="p-1.5 rounded-lg bg-morning-100 dark:bg-morning-200 hover:bg-roseash-200 dark:hover:bg-roseash-900 text-slate-600 hover:text-rose-700 transition cursor-pointer"
+                                title="Șterge regula de excludere"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* BARA BUTOANE FIXATĂ LA BAZĂ */}
+            <div className="flex items-center justify-between px-6 py-3.5 border-t border-morning-200 dark:border-morning-300 bg-morning-50/90 dark:bg-[#142232] shrink-0">
+              <div className="text-xs text-sage-600 dark:text-slate-400 font-medium">
+                Regulile active se aplică automat la sincronizarea orară ANAF SPV și la încărcările manuale XML.
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFurnizoriExclusiModal(false)}
+                className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition cursor-pointer"
+              >
+                Gata / Închide Fereastra
+              </button>
+            </div>
           </div>
         </div>
       )}

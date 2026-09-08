@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
 import { EFacturaService } from './efactura.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -153,5 +153,43 @@ export class EFacturaController {
   @Post('items/bulk-elimina')
   async bulkEliminaItems(@Body() body: { itemIds: string[] }) {
     return this.efacturaService.bulkEliminaItems(body.itemIds || []);
+  }
+
+  // -------------------------------------------------------------------------
+  // FURNIZORI EXCLUȘI AUTOMAT (TELECOM, UTILITĂȚI, PROTOCOL/BĂUTURI)
+  // -------------------------------------------------------------------------
+  @Get('furnizori-exclusi')
+  async getFurnizoriExclusi(@Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat pentru vizitatori.');
+    }
+    return this.efacturaService.getFurnizoriExclusi();
+  }
+
+  @Post('furnizori-exclusi')
+  async adaugaFurnizorExclus(
+    @Body() body: { cif: string; nume: string; motiv?: string; aplicaRetroactiv?: boolean },
+    @Headers('x-user-role') role?: string
+  ) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat pentru vizitatori.');
+    }
+    return this.efacturaService.adaugaFurnizorExclus(body);
+  }
+
+  @Delete('furnizori-exclusi/:id')
+  async eliminaFurnizorExclus(@Param('id') id: string, @Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat pentru vizitatori.');
+    }
+    return this.efacturaService.eliminaFurnizorExclus(id);
+  }
+
+  @Patch('furnizori-exclusi/:id/toggle')
+  async toggleFurnizorExclus(@Param('id') id: string, @Headers('x-user-role') role?: string) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat pentru vizitatori.');
+    }
+    return this.efacturaService.toggleFurnizorExclus(id);
   }
 }
