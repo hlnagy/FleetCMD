@@ -5,15 +5,17 @@ import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
   Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw, Menu,
-  Users, Settings, LogOut, Package
+  Users, Settings, LogOut, Package, Sun, Moon
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
+import { useTheme } from '../lib/ThemeContext';
 
 export default function Navbar() {
   const { toggle } = useSidebar();
   const { user, logout, setIsLoginModalOpen } = useAuth();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [numAlerte, setNumAlerte] = useState(0);
   const [alerteList, setAlerteList] = useState<any[]>([]);
@@ -164,6 +166,21 @@ export default function Navbar() {
             </div>
           </Link>
         )}
+
+        {/* COMUTATOR RAPID MOD ÎNTUNECAT / LUMINOS */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="p-2 rounded-xl text-sage-600 hover:text-sapphire-900 hover:bg-morning-100 transition relative flex items-center justify-center cursor-pointer"
+          title={resolvedTheme === 'dark' ? 'Comută pe Mod Luminos (Light Mode)' : 'Comută pe Mod Întunecat (Dark Mode)'}
+          aria-label="Comutator Temă"
+        >
+          {resolvedTheme === 'dark' ? (
+            <Sun className="w-5 h-5 text-amber-400 hover:text-amber-300 transition-transform duration-300 hover:rotate-90" />
+          ) : (
+            <Moon className="w-5 h-5 text-sapphire-700 hover:text-sapphire-900 transition-transform duration-300 hover:-rotate-12" />
+          )}
+        </button>
 
         {/* CLOPOȚEL DE NOTIFICĂRI FACEBOOK-STYLE */}
         <div className="relative">

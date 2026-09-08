@@ -6,10 +6,11 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
+import { useTheme } from '../lib/ThemeContext';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
 
 interface SubNavItem {
@@ -32,6 +33,7 @@ export default function Sidebar() {
   const currentTab = searchParams.get('tab');
   const { isOpen, close } = useSidebar();
   const { user } = useAuth();
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   const navItems: NavItem[] = [
     { name: 'Dashboard Principal', href: '/', icon: LayoutDashboard },
@@ -245,7 +247,24 @@ export default function Sidebar() {
 
         {/* Subsol & Setări */}
         <div className="p-3 border-t border-morning-200 space-y-2">
-          {renderNavItem(setariItem)}
+          <div className="flex items-center space-x-1.5">
+            <div className="flex-1 min-w-0">
+              {renderNavItem(setariItem)}
+            </div>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2.5 rounded-xl border border-morning-200 bg-morning-50 hover:bg-morning-100 text-sage-600 hover:text-sapphire-900 transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+              title={resolvedTheme === 'dark' ? 'Comută pe Mod Luminos (Light Mode)' : 'Comută pe Mod Întunecat (Dark Mode)'}
+              aria-label="Comutator Temă"
+            >
+              {resolvedTheme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-sapphire-700" />
+              )}
+            </button>
+          </div>
           <OptiBaseFooter variant="sidebar" />
         </div>
       </aside>

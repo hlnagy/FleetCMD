@@ -9,22 +9,25 @@ import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
-  ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check
+  ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
+  Sun, Moon, Monitor, Palette
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import { useTheme } from '@/lib/ThemeContext';
 
 function SetariContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
   const { user: authUser, isAdmin, isOperator, isViewer, canEdit, authFetch } = useAuth();
+  const { theme, resolvedTheme, setTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
-    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit'
+    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect'
   >('vehicule');
 
   // Ascultăm schimbarea tab-ului din URL / Sidebar (cu protecție strictă Admin pentru utilizatori și audit)
   useEffect(() => {
-    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit'].includes(tabParam)) {
+    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit', 'aspect'].includes(tabParam)) {
       if ((tabParam === 'utilizatori' || tabParam === 'audit') && !isAdmin) {
         setActiveTab('vehicule');
       } else {
@@ -1378,6 +1381,18 @@ function SetariContent() {
           <span>Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
         </button>
 
+        <button
+          onClick={() => setActiveTab('aspect')}
+          className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+            activeTab === 'aspect'
+              ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+              : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+          }`}
+        >
+          <Palette className="w-4 h-4 text-sapphire-500" />
+          <span>Aspect & Temă Vizuală</span>
+        </button>
+
         {isAdmin && (
           <>
             <button
@@ -2403,6 +2418,275 @@ function SetariContent() {
           </div>
         </div>
       ))}
+
+      {/* ========================================================================= */}
+      {/* TAB 10: ASPECT & TEMĂ VIZUALĂ (DARK / LIGHT / SISTEM) */}
+      {/* ========================================================================= */}
+      {activeTab === 'aspect' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Header Card */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center space-x-4">
+              <div className="p-3.5 bg-sapphire-100 text-sapphire-800 rounded-2xl shrink-0">
+                <Palette className="w-7 h-7 text-sapphire-700" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-extrabold text-sapphire-900 text-lg">Personalizare Aspect & Temă Vizuală</h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-sapphire-50 border border-sapphire-300 text-sapphire-800">
+                    Theme Engine
+                  </span>
+                </div>
+                <p className="text-xs text-sage-600 mt-1">
+                  Alegeți modul de afișare preferat pentru FleetCMD. Preferința dumneavoastră este salvată local și aplicată instantaneu pe toate paginile și modulele.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 bg-morning-100 p-2 rounded-2xl border border-morning-200 shrink-0">
+              <span className="text-[11px] font-bold text-sage-600 pl-2">Stare Curentă:</span>
+              <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase flex items-center space-x-1.5 ${
+                resolvedTheme === 'dark'
+                  ? 'bg-sapphire-600 text-white shadow-xs'
+                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+              }`}>
+                {resolvedTheme === 'dark' ? (
+                  <>
+                    <Moon className="w-3.5 h-3.5 mr-1" />
+                    <span>Mod Întunecat (Activ)</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                    <span>Mod Luminos (Activ)</span>
+                  </>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {/* Selector 3 Teme Principale */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* 1. MOD LUMINOS */}
+            <div
+              onClick={() => setTheme('light')}
+              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+                theme === 'light'
+                  ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
+                  : 'border-morning-200 hover:border-sapphire-300 bg-white'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
+                    <Sun className="w-6 h-6" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                    theme === 'light'
+                      ? 'bg-sapphire-500 text-white'
+                      : 'bg-morning-200 text-sage-600'
+                  }`}>
+                    {theme === 'light' ? 'Activ' : 'Standard'}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="font-extrabold text-base text-sapphire-900">Mod Luminos (Zi)</h4>
+                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
+                    Fundal aerisit, deschis, cu contrast ridicat pentru lizibilitate maximă a tabelelor și rapoartelor în spații puternic iluminate natural.
+                  </p>
+                </div>
+
+                {/* Previzualizare miniatură */}
+                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 space-y-1.5 pointer-events-none">
+                  <div className="h-2 w-20 bg-slate-300 rounded" />
+                  <div className="h-4 w-full bg-white rounded shadow-2xs border border-slate-200" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setTheme('light'); }}
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                  theme === 'light'
+                    ? 'bg-sapphire-600 text-white shadow-xs'
+                    : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
+                }`}
+              >
+                {theme === 'light' ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>Temă Selectată</span>
+                  </>
+                ) : (
+                  <span>Selectează Mod Luminos</span>
+                )}
+              </button>
+            </div>
+
+            {/* 2. MOD ÎNTUNECAT */}
+            <div
+              onClick={() => setTheme('dark')}
+              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+                theme === 'dark'
+                  ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
+                  : 'border-morning-200 hover:border-sapphire-300 bg-white'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-950 text-indigo-400 border border-indigo-800/40 flex items-center justify-center shadow-xs">
+                    <Moon className="w-6 h-6" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                    theme === 'dark'
+                      ? 'bg-sapphire-500 text-white'
+                      : 'bg-indigo-100 text-indigo-900'
+                  }`}>
+                    {theme === 'dark' ? 'Activ' : 'Recomandat Atelier'}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="font-extrabold text-base text-sapphire-900">Mod Întunecat (Noapte)</h4>
+                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
+                    Paletă sofisticată Midnight Sapphire & Obsidian. Reduce semnificativ oboseala ochilor, fiind optim pentru dispecerat, atelier și utilizare nocturnă.
+                  </p>
+                </div>
+
+                {/* Previzualizare miniatură */}
+                <div className="p-3 rounded-xl bg-[#0B131B] border border-[#1E3145] space-y-1.5 pointer-events-none">
+                  <div className="h-2 w-20 bg-[#1E3145] rounded" />
+                  <div className="h-4 w-full bg-[#111D28] rounded border border-[#1E3145]" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setTheme('dark'); }}
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                  theme === 'dark'
+                    ? 'bg-sapphire-600 text-white shadow-xs'
+                    : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
+                }`}
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>Temă Selectată</span>
+                  </>
+                ) : (
+                  <span>Selectează Mod Întunecat</span>
+                )}
+              </button>
+            </div>
+
+            {/* 3. SINCRONIZARE SISTEM */}
+            <div
+              onClick={() => setTheme('system')}
+              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+                theme === 'system'
+                  ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
+                  : 'border-morning-200 hover:border-sapphire-300 bg-white'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center shadow-xs">
+                    <Monitor className="w-6 h-6" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                    theme === 'system'
+                      ? 'bg-sapphire-500 text-white'
+                      : 'bg-morning-200 text-sage-600'
+                  }`}>
+                    {theme === 'system' ? 'Activ' : 'Automat'}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 className="font-extrabold text-base text-sapphire-900">Automat (Sistem OS)</h4>
+                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
+                    Aplicația preia automat preferințele sistemului tău de operare (Windows / macOS / Android / iOS). Se comută automat odată cu tema dispozitivului.
+                  </p>
+                </div>
+
+                {/* Previzualizare miniatură split */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-slate-200 to-[#0B131B] border border-slate-300 space-y-1.5 pointer-events-none">
+                  <div className="h-2 w-20 bg-slate-400 rounded" />
+                  <div className="h-4 w-full bg-gradient-to-r from-white to-[#111D28] rounded border border-slate-300" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setTheme('system'); }}
+                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                  theme === 'system'
+                    ? 'bg-sapphire-600 text-white shadow-xs'
+                    : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
+                }`}
+              >
+                {theme === 'system' ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>Sincronizare Activă</span>
+                  </>
+                ) : (
+                  <span>Activează Sincronizare Sistem</span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Live Preview Box & Beneficii */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Palette className="w-5 h-5 text-sapphire-600" />
+                <h4 className="font-extrabold text-sm text-sapphire-900">Previzualizare Elemente Interfață</h4>
+              </div>
+              <span className="text-[11px] text-sage-500 font-mono">Randat în timp real</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="p-4 rounded-2xl bg-morning-100 border border-morning-200 space-y-1">
+                <span className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Flotă Activă</span>
+                <p className="text-xl font-black text-sapphire-900 font-mono">100% (14/14)</p>
+                <span className="text-[10px] text-emerald-700 font-semibold">Toate vehiculele operaționale</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-morning-100 border border-morning-200 space-y-1">
+                <span className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Comenzi Deschise</span>
+                <p className="text-xl font-black text-sapphire-900 font-mono">3 Munkalap</p>
+                <span className="text-[10px] text-sapphire-700 font-semibold">2 mecanici alocați</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-morning-100 border border-morning-200 space-y-1">
+                <span className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Stoc Fluide</span>
+                <p className="text-xl font-black text-sapphire-900 font-mono">Consolidat FIFO</p>
+                <span className="text-[10px] text-emerald-700 font-semibold">0 duplicate detectate</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-morning-100 border border-morning-200 space-y-1">
+                <span className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Alerte Critice</span>
+                <p className="text-xl font-black text-sapphire-900 font-mono">0 Alerte</p>
+                <span className="text-[10px] text-emerald-700 font-semibold">Sistem în parametri optimi</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-sapphire-50/70 border border-sapphire-200 text-xs text-sapphire-900 leading-relaxed flex items-start space-x-3">
+              <CheckCircle2 className="w-5 h-5 text-sapphire-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-extrabold">Tehnologie Zero-Flicker & Persistență Locală:</p>
+                <p className="text-[11px] text-sapphire-800 mt-0.5">
+                  Tema selectată se aplică instantaneu în browser și este stocată în memoria locală. La fiecare reîncărcare a paginii, scriptul anti-flash aplică tema întunecată înainte de randarea conținutului, eliminând orice pâlpâire luminoasă deranjantă.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1: ADĂUGARE VEHICUL NOU */}

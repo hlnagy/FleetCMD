@@ -67,3 +67,169 @@ body {
 .animate-pulse-glow {
   animation: pulseGlow 8s ease-in-out infinite;
 }
+
+/* ========================================================================= */
+/* DARK MODE THEME SYSTEM (Midnight Sapphire & Obsidian)                     */
+/* ========================================================================= */
+html.dark {
+  --background: #0B131B;
+  --foreground: #F1F5F9;
+  --primary: #4A8BA8;
+  --rose-ash: #E5AEA9;
+  --terracotta: #C55347;
+  --periwinkle: #7D81B3;
+  --sage: #94A3B8;
+  color-scheme: dark;
+}
+
+html.dark body {
+  color: #F1F5F9 !important;
+  background: #0B131B !important;
+}
+
+/* Cards & Surfaces */
+html.dark .pleasant-card {
+  background-color: #111D28 !important;
+  border-color: #1E3145 !important;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.45) !important;
+}
+
+html.dark .pleasant-card-hover:hover {
+  border-color: #4A8BA8 !important;
+  box-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Common Backgrounds */
+html.dark .bg-white {
+  background-color: #111D28 !important;
+}
+
+html.dark .bg-white\/90,
+html.dark .bg-white\/80,
+html.dark .bg-white\/70,
+html.dark .bg-white\/60 {
+  background-color: rgba(17, 29, 40, 0.92) !important;
+}
+
+html.dark .bg-morning-50 {
+  background-color: #142232 !important;
+}
+
+html.dark .bg-morning-100 {
+  background-color: #0E1823 !important;
+}
+
+html.dark .bg-morning-200 {
+  background-color: #182838 !important;
+}
+
+html.dark .bg-morning-300 {
+  background-color: #22374D !important;
+}
+
+/* Borders & Dividers */
+html.dark .border-morning-100,
+html.dark .border-morning-200,
+html.dark .border-morning-300 {
+  border-color: #1E3145 !important;
+}
+
+html.dark .divide-morning-50 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-morning-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-morning-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1E3145 !important;
+}
+
+/* Text Colors */
+html.dark .text-sapphire-900 {
+  color: #F1F5F9 !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
+  color: #CBD5E1 !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-sage-700,
+html.dark .text-sage-600 {
+  color: #94A3B8 !important;
+}
+
+html.dark .text-sage-500 {
+  color: #64748B !important;
+}
+
+/* Form Controls: Inputs, Textareas, Selects */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #0E1823 !important;
+  border-color: #1E3145 !important;
+  color: #F1F5F9 !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #4A8BA8 !important;
+  background-color: #13202E !important;
+}
+
+html.dark select option {
+  background-color: #111D28 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Table Hovers */
+html.dark .hover\:bg-morning-50:hover,
+html.dark .hover\:bg-morning-100:hover {
+  background-color: #162637 !important;
+}
+
+html.dark .hover\:bg-morning-200:hover {
+  background-color: #1E3145 !important;
+}
+
+/* Subtle Badge Overrides in Dark Mode */
+html.dark .bg-sapphire-50 {
+  background-color: rgba(53, 98, 122, 0.25) !important;
+  color: #93C5FD !important;
+}
+
+html.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+html.dark .bg-terracotta-50,
+html.dark .bg-roseash-50 {
+  background-color: rgba(197, 83, 71, 0.2) !important;
+}
+
+/* Scrollbars in Dark Mode */
+html.dark ::-webkit-scrollbar-track {
+  background: #0B131B;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #1E3145;
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #35627A;
+}
+
+/* SweetAlert2 Dialogs in Dark Mode */
+html.dark .swal2-popup {
+  background: #111D28 !important;
+  color: #F1F5F9 !important;
+  border: 1px solid #1E3145 !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7) !important;
+}
+
+html.dark .swal2-title,
+html.dark .swal2-html-container {
+  color: #F1F5F9 !important;
+}

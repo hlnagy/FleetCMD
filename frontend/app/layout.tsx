@@ -2,6 +2,7 @@ import './globals.css';
 import SweetAlertProvider from '../components/SweetAlertProvider';
 import AppShell from '../components/AppShell';
 import { AuthProvider } from '../lib/AuthContext';
+import { ThemeProvider } from '../lib/ThemeContext';
 
 export const metadata = {
   title: 'FleetCMD',
@@ -25,14 +26,37 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ro">
-      <body className="bg-morning-100 text-sapphire-900 flex min-h-screen">
+    <html lang="ro" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var t = localStorage.getItem('fleetcmd_theme');
+                  var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (t === 'dark' || (!t && d) || (t === 'system' && d)) {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="bg-morning-100 text-sapphire-900 flex min-h-screen transition-colors duration-200">
         <SweetAlertProvider />
-        <AuthProvider>
-          <AppShell>
-            {children}
-          </AppShell>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppShell>
+              {children}
+            </AppShell>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
