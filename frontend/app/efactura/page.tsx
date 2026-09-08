@@ -71,6 +71,47 @@ interface CategoryResolution {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
+function findDynamicSubcat(desc: string, subcats: any[]): string {
+  if (!desc || !Array.isArray(subcats) || subcats.length === 0) return '';
+  const cleanDesc = desc.toLowerCase();
+  const stopWords = new Set(['ulei', 'oil', 'filtru', 'filter', 'pentru', 'si', '&', 'cu', 'de', 'la', 'in', 'pt', 'buc', 'ltr', 'litri']);
+
+  // 1. Direct core name match (ex: dacă descrierea conține nucleul numelui subcategoriei)
+  for (const sub of subcats) {
+    const sName = (sub.nume || '').toLowerCase();
+    const coreName = sName.replace(/^(ulei|filtru|lichid)\s+/i, '').replace(/\(.*?\)/g, '').trim();
+    if (coreName.length >= 3 && cleanDesc.includes(coreName)) {
+      return sub.nume;
+    }
+  }
+
+  // 2. Potrivire pe bază de suprapunere de cuvinte cheie semnificative
+  let bestSub = '';
+  let highestScore = 0;
+
+  for (const sub of subcats) {
+    const sName = (sub.nume || '').toLowerCase();
+    const keywords = sName
+      .replace(/[^a-z0-9]/gi, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !stopWords.has(w));
+
+    let score = 0;
+    for (const kw of keywords) {
+      if (cleanDesc.includes(kw)) {
+        score += kw.length;
+      }
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestSub = sub.nume;
+    }
+  }
+
+  return highestScore >= 3 ? bestSub : '';
+}
+
 function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []): CategoryResolution {
   if (!descriere || !Array.isArray(categorii) || categorii.length === 0) {
     return {
@@ -113,7 +154,9 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     matchedCat = filtruCat;
     confidence = 'HIGH';
     const subcats: any[] = filtruCat.subcategorii || [];
-    if (/ulei|oil/i.test(desc)) matchedSub = subcats.find(s => /ulei/i.test(s.nume))?.nume || '';
+    const dynMatch = findDynamicSubcat(desc, subcats);
+    if (dynMatch) matchedSub = dynMatch;
+    else if (/ulei|oil/i.test(desc)) matchedSub = subcats.find(s => /ulei/i.test(s.nume))?.nume || '';
     else if (/aer|air/i.test(desc)) matchedSub = subcats.find(s => /aer/i.test(s.nume))?.nume || '';
     else if (/combustibil|motorina|fuel/i.test(desc)) matchedSub = subcats.find(s => /combustibil|motorin/i.test(s.nume))?.nume || '';
     else if (/hidraulic/i.test(desc)) matchedSub = subcats.find(s => /hidraulic/i.test(s.nume))?.nume || '';
@@ -124,8 +167,10 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     matchedCat = fluidCat;
     confidence = 'HIGH';
     const subcats: any[] = fluidCat.subcategorii || [];
-
-    if (isMotorOil) {
+    const dynMatch = findDynamicSubcat(desc, subcats);
+    if (dynMatch) {
+      matchedSub = dynMatch;
+    } else if (isMotorOil) {
       matchedSub = subcats.find(s => /motor/i.test(s.nume))?.nume || '';
     } else if (isHydraulicOil) {
       matchedSub = subcats.find(s => /hidraulic/i.test(s.nume))?.nume || '';
@@ -150,7 +195,9 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     matchedCat = anvelopaCat;
     confidence = 'HIGH';
     const subcats: any[] = anvelopaCat.subcategorii || [];
-    if (/385\/65|remorc/i.test(desc)) matchedSub = subcats.find(s => /remorc/i.test(s.nume))?.nume || '';
+    const dynMatch = findDynamicSubcat(desc, subcats);
+    if (dynMatch) matchedSub = dynMatch;
+    else if (/385\/65|remorc/i.test(desc)) matchedSub = subcats.find(s => /remorc/i.test(s.nume))?.nume || '';
     else if (/315\/80|tract/i.test(desc)) matchedSub = subcats.find(s => /tract/i.test(s.nume))?.nume || '';
     else if (/directie/i.test(desc)) matchedSub = subcats.find(s => /direct/i.test(s.nume))?.nume || '';
     else if (/komatsu|vola/i.test(desc)) matchedSub = subcats.find(s => /komatsu|vola/i.test(s.nume))?.nume || '';
@@ -159,10 +206,24 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     matchedCat = franaCat;
     confidence = 'MEDIUM';
     const subcats: any[] = franaCat.subcategorii || [];
-    if (/placut/i.test(desc)) matchedSub = subcats.find(s => /placut/i.test(s.nume))?.nume || '';
+    const dynMatch = findDynamicSubcat(desc, subcats);
+    if (dynMatch) matchedSub = dynMatch;
+    else if (/placut/i.test(desc)) matchedSub = subcats.find(s => /placut/i.test(s.nume))?.nume || '';
     else if (/disc|tambur/i.test(desc)) matchedSub = subcats.find(s => /disc|tambur/i.test(s.nume))?.nume || '';
     else if (/perna|bucsa|bucse/i.test(desc)) matchedSub = subcats.find(s => /buc|pern/i.test(s.nume))?.nume || '';
     else matchedSub = subcats[0]?.nume || '';
+  } else {
+    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE
+    for (const c of categorii) {
+      const cSubcats = c.subcategorii || [];
+      const dynSub = findDynamicSubcat(desc, cSubcats);
+      if (dynSub) {
+        matchedCat = c;
+        matchedSub = dynSub;
+        confidence = 'HIGH';
+        break;
+      }
+    }
   }
 
   return {
