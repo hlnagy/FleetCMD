@@ -20,6 +20,7 @@ export function normalizeUnitateMasura(rawUnit?: string): string {
     case 'BUCATI':
     case 'BUCĂȚI':
       return 'buc';
+    case 'K62': // UN/ECE Rec 20: litre per litre (folosit frecvent de ERP-uri românești pentru Litri)
     case 'LTR':
     case 'L':
     case 'LITRU':

@@ -25,7 +25,7 @@ function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
   if (!descriere) return { isPackagedFluid: false, detectedVolume: null, detectedUnit: 'L' };
   const text = String(descriere).trim();
   const rawUm = (unitateMasura || 'buc').trim().toLowerCase();
-  const isAlreadyDirectUnit = ['l', 'ltr', 'litru', 'litri', 'kg', 'kgm'].includes(rawUm);
+  const isAlreadyDirectUnit = ['l', 'ltr', 'litru', 'litri', 'k62', 'kg', 'kgm'].includes(rawUm);
 
   // 1. Căutare volum în Litri: ex: 60 ltr, 60ltr, 60 l, 60l, 60 litri, 208 L, 20 L, 5 L, 1000 L, 0.5 L
   const literRegex = /(?:^|[\s(\[_\-\/,])(\d+(?:[.,]\d+)?)\s*(ltr|lt|litri|litru|l)(?=$|[\s)\]_\-\/,;.])/i;
