@@ -1829,28 +1829,6 @@ function SetariContent() {
       {/* ========================================================================= */}
       {activeTab === 'categorii' && (
         <div className="space-y-4">
-          {/* BANNER GESTIUNE DEDICATĂ FLUIDE */}
-          <div className="pleasant-card p-4 rounded-2xl bg-sapphire-50/80 border border-sapphire-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 rounded-xl bg-sapphire-100 text-sapphire-700 shrink-0">
-                <Droplets className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-extrabold text-sapphire-900 text-sm">Gestiune Separată & Detaliată: Uleiuri & Fluide</h4>
-                <p className="text-xs text-sage-600">
-                  Categoriile, subtipurile și stocurile de lubrifianți, uleiuri, antigel și AdBlue sunt gestionate dedicat în modulul Uleiuri & Fluide cu praguri minime de alertă.
-                </p>
-              </div>
-            </div>
-            <a
-              href="/fluide?tab=stocuri"
-              className="px-4 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5 shrink-0 self-start sm:self-auto"
-            >
-              <span>Deschide Gestiune Fluide</span>
-              <ArrowUpRight className="w-4 h-4" />
-            </a>
-          </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div>
               <h3 className="font-extrabold text-sapphire-900 text-base">Structură Categorii & Subcategorii Piese</h3>
@@ -1951,6 +1929,28 @@ function SetariContent() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* BANNER GESTIUNE DEDICATĂ FLUIDE (PLASAT LA BAZA PAGINII) */}
+          <div className="pleasant-card p-4 rounded-2xl bg-sapphire-50/80 border border-sapphire-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs mt-2">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-sapphire-100 text-sapphire-700 shrink-0">
+                <Droplets className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sapphire-900 text-sm">Gestiune Separată & Detaliată: Uleiuri & Fluide</h4>
+                <p className="text-xs text-sage-600">
+                  Categoriile, subtipurile și stocurile de lubrifianți, uleiuri, antigel și AdBlue sunt gestionate dedicat în modulul Uleiuri & Fluide cu praguri minime de alertă.
+                </p>
+              </div>
+            </div>
+            <a
+              href="/fluide?tab=stocuri"
+              className="px-4 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5 shrink-0 self-start sm:self-auto"
+            >
+              <span>Deschide Gestiune Fluide</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </a>
           </div>
         </div>
       )}
