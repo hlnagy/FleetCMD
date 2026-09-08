@@ -10,7 +10,7 @@ import {
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
-  Sun, Moon, Monitor, Palette
+  Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -118,6 +118,14 @@ function SetariContent() {
   const [targetCatForSubcat, setTargetCatForSubcat] = useState('');
   const [numeSubcatNoua, setNumeSubcatNoua] = useState('');
   const [descriereSubcatNoua, setDescriereSubcatNoua] = useState('');
+
+  // Categoriile de fluide & lubrifianți sunt gestionate dedicat în modulul /fluide
+  const isFluidCategory = (c: any) => {
+    if (c?.esteFluid) return true;
+    const name = (c?.nume || '').toLowerCase();
+    return /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(name);
+  };
+  const categoriiPiese = categorii.filter((c: any) => !isFluidCategory(c));
 
   // ==========================================
   // 5. STATE REGULI MENTENANȚĂ
@@ -708,7 +716,7 @@ function SetariContent() {
 
   const openAddSubcat = (catNume?: string) => {
     setEditingSubcat(null);
-    setTargetCatForSubcat(catNume || (categorii[0]?.nume || ''));
+    setTargetCatForSubcat(catNume || (categoriiPiese[0]?.nume || categorii[0]?.nume || ''));
     setNumeSubcatNoua('');
     setDescriereSubcatNoua('');
     setShowAddSubcatModal(true);
@@ -1342,7 +1350,7 @@ function SetariContent() {
           }`}
         >
           <Layers className="w-4 h-4 text-periwinkle-700" />
-          <span>Categorii Stoc Piese ({categorii.length})</span>
+          <span>Categorii Stoc Piese ({categoriiPiese.length})</span>
         </button>
 
         <button
@@ -1821,6 +1829,28 @@ function SetariContent() {
       {/* ========================================================================= */}
       {activeTab === 'categorii' && (
         <div className="space-y-4">
+          {/* BANNER GESTIUNE DEDICATĂ FLUIDE */}
+          <div className="pleasant-card p-4 rounded-2xl bg-sapphire-50/80 border border-sapphire-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-sapphire-100 text-sapphire-700 shrink-0">
+                <Droplets className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sapphire-900 text-sm">Gestiune Separată & Detaliată: Uleiuri & Fluide</h4>
+                <p className="text-xs text-sage-600">
+                  Categoriile, subtipurile și stocurile de lubrifianți, uleiuri, antigel și AdBlue sunt gestionate dedicat în modulul Uleiuri & Fluide cu praguri minime de alertă.
+                </p>
+              </div>
+            </div>
+            <a
+              href="/fluide?tab=stocuri"
+              className="px-4 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5 shrink-0 self-start sm:self-auto"
+            >
+              <span>Deschide Gestiune Fluide</span>
+              <ArrowUpRight className="w-4 h-4" />
+            </a>
+          </div>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
             <div>
               <h3 className="font-extrabold text-sapphire-900 text-base">Structură Categorii & Subcategorii Piese</h3>
@@ -1845,7 +1875,7 @@ function SetariContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {categorii.map((c: any) => (
+            {categoriiPiese.map((c: any) => (
               <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3 shadow-2xs hover:shadow-xs transition">
                 <div className="flex items-center justify-between border-b border-morning-200 pb-2">
                   <div className="flex items-center space-x-2">
@@ -3199,7 +3229,7 @@ function SetariContent() {
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Categoria Părinte: *</label>
                 <select value={targetCatForSubcat} onChange={(e) => setTargetCatForSubcat(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
-                  {categorii.map((c) => (
+                  {categoriiPiese.map((c) => (
                     <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                   ))}
                 </select>

@@ -44,14 +44,14 @@ export class StocuriGarantiiController {
   }
 
   @Post('categorii')
-  createCategorie(@Body() body: { nume: string; descriere?: string; stocMinimImplicit?: number }) {
+  createCategorie(@Body() body: { nume: string; descriere?: string; stocMinimImplicit?: number; esteFluid?: boolean }) {
     return this.stocuriGarantiiService.createCategorie(body);
   }
 
   @Patch('categorii/:id')
   updateCategorie(
     @Param('id') id: string,
-    @Body() body: { nume?: string; descriere?: string; stocMinimImplicit?: number }
+    @Body() body: { nume?: string; descriere?: string; stocMinimImplicit?: number; esteFluid?: boolean }
   ) {
     return this.stocuriGarantiiService.updateCategorie(id, body);
   }

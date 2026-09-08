@@ -1525,11 +1525,21 @@ function StocuriGarantiiContent() {
               </button>
             </div>
 
+            {/* BANNER FLUIDE */}
+            <div className="p-2.5 rounded-xl bg-sapphire-50 border border-sapphire-200 text-xs text-sapphire-900 flex items-center justify-between">
+              <span className="text-[11px] font-medium">Uleiurile, fluidele și lubrifianții se gestionează dedicat:</span>
+              <a href="/fluide?tab=stocuri" className="font-bold text-[11px] text-sapphire-700 underline hover:text-sapphire-900">
+                Gestiune Fluide &rarr;
+              </a>
+            </div>
+
             {/* LISTĂ CATEGORII EXISTENTE CU SUBCATEGORII */}
             <div className="space-y-3">
-              <h4 className="text-xs font-extrabold text-sapphire-900 uppercase tracking-wider">Categorii Existente ({categorii.length}):</h4>
+              <h4 className="text-xs font-extrabold text-sapphire-900 uppercase tracking-wider">
+                Categorii Piese ({categorii.filter((c: any) => !c.esteFluid && !/lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(c.nume || '')).length}):
+              </h4>
               <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-morning-100/50 rounded-xl border border-morning-200">
-                {categorii.map((c, idx) => (
+                {categorii.filter((c: any) => !c.esteFluid && !/lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(c.nume || '')).map((c, idx) => (
                   <div key={idx} className="p-2.5 rounded-xl bg-white border border-morning-200 text-xs space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-extrabold text-sapphire-900">{c.nume}</span>

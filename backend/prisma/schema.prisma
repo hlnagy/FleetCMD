@@ -355,6 +355,7 @@ model CategorieStoc {
   nume               String             @unique
   descriere          String?
   stocMinimImplicit  Float              @default(5) 
+  esteFluid          Boolean            @default(false)
   subcategorii       SubcategorieStoc[]
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt

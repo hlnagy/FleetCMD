@@ -254,19 +254,24 @@ export class StocuriGarantiiService {
     return { categoriiImplicite: [], categoriiCustom, subcategoriiExistente: dbSubcats };
   }
 
-  async createCategorie(data: { nume: string; descriere?: string; stocMinimImplicit?: number }) {
+  async createCategorie(data: { nume: string; descriere?: string; stocMinimImplicit?: number; esteFluid?: boolean }) {
     if (!data.nume) throw new BadRequestException('Numele categoriei este obligatoriu.');
+    const isFluid = data.esteFluid !== undefined 
+      ? Boolean(data.esteFluid) 
+      : /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(data.nume);
+
     return this.prisma.categorieStoc.create({
       data: {
         nume: data.nume.trim(),
         descriere: data.descriere?.trim() || null,
-        stocMinimImplicit: data.stocMinimImplicit ? Number(data.stocMinimImplicit) : 5,
+        stocMinimImplicit: data.stocMinimImplicit ? Number(data.stocMinimImplicit) : (isFluid ? 20 : 5),
+        esteFluid: isFluid,
       },
       include: { subcategorii: true },
     });
   }
 
-  async updateCategorie(id: string, data: { nume?: string; descriere?: string; stocMinimImplicit?: number }) {
+  async updateCategorie(id: string, data: { nume?: string; descriere?: string; stocMinimImplicit?: number; esteFluid?: boolean }) {
     const existing = await this.prisma.categorieStoc.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Categoria nu a fost găsită.');
 
@@ -276,6 +281,7 @@ export class StocuriGarantiiService {
         nume: data.nume ? data.nume.trim() : undefined,
         descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
         stocMinimImplicit: data.stocMinimImplicit !== undefined ? Number(data.stocMinimImplicit) : undefined,
+        esteFluid: data.esteFluid !== undefined ? Boolean(data.esteFluid) : undefined,
       },
       include: { subcategorii: true },
     });
