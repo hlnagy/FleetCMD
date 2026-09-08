@@ -65,6 +65,137 @@ function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
   };
 }
 
+interface CategoryResolution {
+  categorie: string;
+  subcategorie: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  sugestiiRapide: Array<{ categorie: string; subcategorie: string; label: string }>;
+}
+
+function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []): CategoryResolution {
+  if (!descriere || !Array.isArray(categorii) || categorii.length === 0) {
+    return {
+      categorie: categorii[0]?.nume || 'Alte',
+      subcategorie: '',
+      confidence: 'LOW',
+      sugestiiRapide: []
+    };
+  }
+
+  const desc = String(descriere).toLowerCase();
+  let matchedCat: any = null;
+  let matchedSub = '';
+  let confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
+
+  // 1. FILTRE (prioritizat înainte de fluide dacă descrierea include filtru / filter)
+  const isFiltru = /filtru|filter/i.test(desc);
+
+  // 2. FLUIDE / ULEIURI / LUBRIFIANȚI
+  const isMotorOil = /10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|0w[- ]?30|0w[- ]?20|super 2000|super 3000|delvac|rubia|urania|rimula|ulei motor|engine oil/i.test(desc);
+  const isHydraulicOil = /hidraulic|hlp|hvlp|tellus|dte\s*25|renolin/i.test(desc);
+  const isTransmisieOil = /transmisie|diferential|80w[- ]?90|75w[- ]?90|85w[- ]?140|atf|gear|spirax|ls90/i.test(desc);
+  const isVaselina = /vaselina|unsoare|grease|greasa|ep2|li-ca/i.test(desc);
+  const isAntigel = /antigel|coolant|g12|g11|g13|glacelf/i.test(desc);
+  const isAdblue = /adblue|uree|nox/i.test(desc);
+  const isFluidGeneral = isMotorOil || isHydraulicOil || isTransmisieOil || isVaselina || isAntigel || isAdblue || /ulei|oil|lubrifian/i.test(desc);
+
+  // 3. ANVELOPE
+  const isAnvelopa = /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(desc);
+
+  // 4. FRÂNE & SUSPENSIE
+  const isFrana = /placut|placute|disc frana|etrier|tambur|sabot|frana|cama frana|perna aer|bucsa|bucse/i.test(desc);
+
+  // Găsim categoriile țintă din DB
+  const fluidCat = categorii.find(c => c.esteFluid === true || /lubrifian|ulei|fluid/i.test(c.nume));
+  const filtruCat = categorii.find(c => /filtr/i.test(c.nume));
+  const anvelopaCat = categorii.find(c => /anvelop/i.test(c.nume));
+  const franaCat = categorii.find(c => /frân|fran|suspens/i.test(c.nume));
+
+  if (isFiltru && filtruCat) {
+    matchedCat = filtruCat;
+    confidence = 'HIGH';
+    const subcats: any[] = filtruCat.subcategorii || [];
+    if (/ulei|oil/i.test(desc)) matchedSub = subcats.find(s => /ulei/i.test(s.nume))?.nume || '';
+    else if (/aer|air/i.test(desc)) matchedSub = subcats.find(s => /aer/i.test(s.nume))?.nume || '';
+    else if (/combustibil|motorina|fuel/i.test(desc)) matchedSub = subcats.find(s => /combustibil|motorin/i.test(s.nume))?.nume || '';
+    else if (/hidraulic/i.test(desc)) matchedSub = subcats.find(s => /hidraulic/i.test(s.nume))?.nume || '';
+    else if (/polen|habitaclu/i.test(desc)) matchedSub = subcats.find(s => /polen|habitaclu/i.test(s.nume))?.nume || '';
+    else if (/uscator|aer comprimat/i.test(desc)) matchedSub = subcats.find(s => /uscator|aer comprimat/i.test(s.nume))?.nume || '';
+    else matchedSub = subcats[0]?.nume || '';
+  } else if (isFluidGeneral && fluidCat) {
+    matchedCat = fluidCat;
+    confidence = 'HIGH';
+    const subcats: any[] = fluidCat.subcategorii || [];
+
+    if (isMotorOil) {
+      matchedSub = subcats.find(s => /motor/i.test(s.nume))?.nume || '';
+    } else if (isHydraulicOil) {
+      matchedSub = subcats.find(s => /hidraulic/i.test(s.nume))?.nume || '';
+    } else if (isTransmisieOil) {
+      matchedSub = subcats.find(s => /transmis/i.test(s.nume))?.nume || '';
+    } else if (isVaselina) {
+      matchedSub = subcats.find(s => /vaselin|unsoare|greas/i.test(s.nume))?.nume || '';
+    } else if (isAntigel) {
+      matchedSub = subcats.find(s => /antigel|racire/i.test(s.nume))?.nume || '';
+    } else if (isAdblue) {
+      matchedSub = subcats.find(s => /adblue|uree/i.test(s.nume))?.nume || '';
+    } else {
+      matchedSub = subcats[0]?.nume || '';
+    }
+  } else if (isAnvelopa && anvelopaCat) {
+    matchedCat = anvelopaCat;
+    confidence = 'HIGH';
+    const subcats: any[] = anvelopaCat.subcategorii || [];
+    if (/385\/65|remorc/i.test(desc)) matchedSub = subcats.find(s => /remorc/i.test(s.nume))?.nume || '';
+    else if (/315\/80|tract/i.test(desc)) matchedSub = subcats.find(s => /tract/i.test(s.nume))?.nume || '';
+    else if (/directie/i.test(desc)) matchedSub = subcats.find(s => /direct/i.test(s.nume))?.nume || '';
+    else if (/komatsu|vola/i.test(desc)) matchedSub = subcats.find(s => /komatsu|vola/i.test(s.nume))?.nume || '';
+    else matchedSub = subcats[0]?.nume || '';
+  } else if (isFrana && franaCat) {
+    matchedCat = franaCat;
+    confidence = 'MEDIUM';
+    const subcats: any[] = franaCat.subcategorii || [];
+    if (/placut/i.test(desc)) matchedSub = subcats.find(s => /placut/i.test(s.nume))?.nume || '';
+    else if (/disc|tambur/i.test(desc)) matchedSub = subcats.find(s => /disc|tambur/i.test(s.nume))?.nume || '';
+    else if (/perna|bucsa|bucse/i.test(desc)) matchedSub = subcats.find(s => /buc|pern/i.test(s.nume))?.nume || '';
+    else matchedSub = subcats[0]?.nume || '';
+  }
+
+  // Preseturi rapide dinamice din categoriile existente
+  const sugestiiRapide: Array<{ categorie: string; subcategorie: string; label: string }> = [];
+  if (fluidCat) {
+    const subcats: any[] = fluidCat.subcategorii || [];
+    const sMotor = subcats.find(s => /motor/i.test(s.nume));
+    const sHidro = subcats.find(s => /hidraulic/i.test(s.nume));
+    const sTrans = subcats.find(s => /transmis/i.test(s.nume));
+    const sVas = subcats.find(s => /vaselin/i.test(s.nume));
+    const sAntigel = subcats.find(s => /antigel/i.test(s.nume));
+
+    if (sMotor) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sMotor.nume, label: '🛢️ Ulei Motor' });
+    if (sHidro) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sHidro.nume, label: '🚜 Ulei Hidraulic' });
+    if (sTrans) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sTrans.nume, label: '⚙️ Ulei Transmisie' });
+    if (sVas) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sVas.nume, label: '🧴 Vaselină' });
+    if (sAntigel) sugestiiRapide.push({ categorie: fluidCat.nume, subcategorie: sAntigel.nume, label: '❄️ Antigel' });
+  }
+  if (filtruCat) {
+    const subcats: any[] = filtruCat.subcategorii || [];
+    const sFiltruUlei = subcats.find(s => /ulei/i.test(s.nume));
+    const sFiltruAer = subcats.find(s => /aer/i.test(s.nume));
+    const sFiltruComb = subcats.find(s => /combustibil|motorin/i.test(s.nume));
+
+    if (sFiltruUlei) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruUlei.nume, label: '🔧 Filtru Ulei' });
+    if (sFiltruAer) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruAer.nume, label: '💨 Filtru Aer' });
+    if (sFiltruComb) sugestiiRapide.push({ categorie: filtruCat.nume, subcategorie: sFiltruComb.nume, label: '⛽ Filtru Motorină' });
+  }
+
+  return {
+    categorie: matchedCat?.nume || categorii[0]?.nume || 'Alte',
+    subcategorie: matchedSub,
+    confidence,
+    sugestiiRapide,
+  };
+}
+
 function EFacturaContent() {
   const { user: authUser, isAdmin, authFetch } = useAuth();
   const searchParams = useSearchParams();
@@ -170,6 +301,18 @@ function EFacturaContent() {
   const [isAddingNewSubcat, setIsAddingNewSubcat] = useState(false);
   const [newSubcatNume, setNewSubcatNume] = useState('');
   const [savingNewSubcat, setSavingNewSubcat] = useState(false);
+
+  // SMART CATEGORY DETECTED SUGGESTION & QUICK PRESETS
+  const [sugestieDetectata, setSugestieDetectata] = useState<{
+    categorie: string;
+    subcategorie: string;
+    confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  } | null>(null);
+  const [sugestiiRapide, setSugestiiRapide] = useState<Array<{
+    categorie: string;
+    subcategorie: string;
+    label: string;
+  }>>([]);
 
   // FLUID PACKAGING CONVERSION STATE (ex: 1 buc = 60 ltr la 1200 RON -> 60 L la 20 RON/L)
   const [esteConversieVolum, setEsteConversieVolum] = useState(false);
@@ -714,90 +857,25 @@ function EFacturaContent() {
 
     setCodArticolCalculat(code);
 
-    const descLower = (item.descrierePiesa || '').toLowerCase();
     const isAnvelopaText = /anvelop|r22\.5|r17\.5|r20|r24|cauciuc/i.test(item.descrierePiesa) || (rawCode || '').toUpperCase().startsWith('ANV');
 
-    let detectedCat = '';
-    let detectedSubcat = '';
+    // Rezolvare inteligentă Categorie & Subcategorie din baza de date
+    const resCat = resolveCategoryAndSubcategory(item.descrierePiesa, categoriiStoc);
 
-    if (isAnvelopaText) {
-      detectedCat = 'Anvelope';
-    } else if (descLower.includes('antigel') || descLower.includes('coolant') || descLower.includes('g12') || descLower.includes('g11') || descLower.includes('g13')) {
-      detectedCat = 'Lichide Răcire & Antigel';
-      if (descLower.includes('g11') || descLower.includes('albastr') || descLower.includes('hibrid')) {
-        detectedSubcat = 'Antigel G11 (Albastru / Hibrid)';
-      } else {
-        detectedSubcat = 'Antigel G12+ (Roz / Organic Concentrat)';
-      }
-    } else if (descLower.includes('adblue') || descLower.includes('uree') || descLower.includes('nox')) {
-      detectedCat = 'AdBlue & Fluide Speciale';
-      detectedSubcat = 'AdBlue (Soluție Uree 32.5% ISO 22241)';
-    } else if (descLower.includes('hidraulic') || descLower.includes('hlp') || descLower.includes('hvlp')) {
-      detectedCat = 'Ulei Hidraulic';
-      if (descLower.includes('32')) {
-        detectedSubcat = 'HLP 32 (Hidraulic Vâscozitate Joasă)';
-      } else if (descLower.includes('hvlp')) {
-        detectedSubcat = 'HVLP 46 (Indice Ridicat de Vâscozitate)';
-      } else {
-        detectedSubcat = 'HLP 46 (Sisteme Hidraulice & Basculare)';
-      }
-    } else if (descLower.includes('transmisie') || descLower.includes('diferential') || descLower.includes('80w90') || descLower.includes('75w90') || descLower.includes('85w140') || descLower.includes('atf') || descLower.includes('gear')) {
-      detectedCat = 'Ulei Transmisie & Diferențial';
-      if (descLower.includes('75w90') || descLower.includes('75w-90')) {
-        detectedSubcat = '75W-90 (Sintetic Punte Heavy Duty)';
-      } else if (descLower.includes('85w140') || descLower.includes('85w-140')) {
-        detectedSubcat = '85W-140 (Diferențial & Reductor Mare)';
-      } else {
-        detectedSubcat = '80W-90 (Cutii Viteze & Diferențiale)';
-      }
-    } else if (descLower.includes('10w40') || descLower.includes('10w-40') || descLower.includes('15w40') || descLower.includes('15w-40') || descLower.includes('5w30') || descLower.includes('5w-30') || descLower.includes('5w40') || descLower.includes('5w-40') || descLower.includes('ulei motor') || descLower.includes('engine oil') || descLower.includes('lubrifiant')) {
-      detectedCat = 'Ulei Motor';
-      if (descLower.includes('15w40') || descLower.includes('15w-40')) {
-        detectedSubcat = '15W-40 (Heavy Duty Mineral)';
-      } else if (descLower.includes('5w30') || descLower.includes('5w-30')) {
-        detectedSubcat = '5W-30 (Ultra Synthetic Euro 6)';
-      } else if (descLower.includes('5w40') || descLower.includes('5w-40')) {
-        detectedSubcat = '5W-40 (Synthetic)';
-      } else {
-        detectedSubcat = '10W-40 (Heavy Duty Low-SAPS)';
-      }
-    } else if (descLower.includes('filtru') || descLower.includes('filter')) {
-      detectedCat = 'Filtre';
-      if (descLower.includes('ulei') || descLower.includes('oil')) detectedSubcat = 'Filtre Ulei';
-      else if (descLower.includes('aer') || descLower.includes('air')) detectedSubcat = 'Filtre Aer';
-      else if (descLower.includes('combustibil') || descLower.includes('motorina') || descLower.includes('fuel')) detectedSubcat = 'Filtre Combustibil / Motorină';
-      else if (descLower.includes('polen') || descLower.includes('habitaclu')) detectedSubcat = 'Filtre Polen / Habitaclu';
-      else if (descLower.includes('uscator') || descLower.includes('aer comprimat')) detectedSubcat = 'Filtre Uscător Aer Comprimat';
-    }
-
-    let finalCat = '';
-    let finalSubcat = '';
-
-    if (detectedCat) {
-      const match = categoriiStoc.find(c => c.nume?.toLowerCase() === detectedCat.toLowerCase() || c.nume?.toLowerCase().includes(detectedCat.toLowerCase()));
-      if (match) {
-        finalCat = match.nume;
-        if (detectedSubcat && Array.isArray(match.subcategorii)) {
-          const subMatch = match.subcategorii.find((s: any) => 
-            s.nume?.toLowerCase() === detectedSubcat.toLowerCase() || 
-            s.nume?.toLowerCase().includes(detectedSubcat.toLowerCase()) ||
-            detectedSubcat.toLowerCase().includes(s.nume?.toLowerCase())
-          );
-          if (subMatch) finalSubcat = subMatch.nume;
-        }
-      }
-    }
-
-    if (finalCat) {
-      setTargetCategorie(finalCat);
-      setTargetSubcategorie(finalSubcat);
-    } else if (categoriiStoc.length > 0) {
-      setTargetCategorie(categoriiStoc[0].nume);
-      setTargetSubcategorie('');
+    if (resCat.confidence !== 'LOW') {
+      setSugestieDetectata({
+        categorie: resCat.categorie,
+        subcategorie: resCat.subcategorie,
+        confidence: resCat.confidence,
+      });
     } else {
-      setTargetCategorie('PIESE_AUTO');
-      setTargetSubcategorie('');
+      setSugestieDetectata(null);
     }
+    setSugestiiRapide(resCat.sugestiiRapide);
+
+    // Pre-completare automată categorie & subcategorie
+    setTargetCategorie(resCat.categorie);
+    setTargetSubcategorie(resCat.subcategorie);
 
     setIsAddingNewCat(false);
     setIsAddingNewSubcat(false);
@@ -815,7 +893,7 @@ function EFacturaContent() {
 
     // Detecție Inteligentă Ambalaj Fluid (ex: Ulei motor 60 ltr facturat la 1 buc)
     const pkg = detectFluidPackaging(item.descrierePiesa, item.unitateMasura);
-    const catIsFluid = /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(finalCat || detectedCat || '');
+    const catIsFluid = /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(resCat.categorie || '');
     const enableConversion = pkg.isPackagedFluid || (catIsFluid && pkg.detectedVolume !== null && pkg.detectedVolume > 0);
 
     setEsteConversieVolum(enableConversion);
@@ -2490,6 +2568,82 @@ function EFacturaContent() {
                   ))}
                 </select>
               </div>
+
+              {/* SUGESTIE INTELIGENTĂ DIN FACTURĂ & PRESETURI RAPIDE (1-CLICK) */}
+              {sugestieDetectata && (
+                <div className="p-3 bg-gradient-to-r from-sapphire-50/80 via-morning-50 to-emerald-50/70 border border-sapphire-200 rounded-xl space-y-2 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-4 h-4 text-sapphire-600 animate-pulse" />
+                      <span className="text-[11px] font-extrabold text-sapphire-900">
+                        Sugestie Inteligentă Identificată:
+                      </span>
+                    </div>
+                    {targetCategorie === sugestieDetectata.categorie &&
+                     (targetSubcategorie === sugestieDetectata.subcategorie || (!targetSubcategorie && !sugestieDetectata.subcategorie)) ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold flex items-center space-x-1 border border-emerald-300">
+                        <Check className="w-3 h-3" />
+                        <span>Selectat Automat</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetCategorie(sugestieDetectata.categorie);
+                          setTargetSubcategorie(sugestieDetectata.subcategorie);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white text-[11px] font-bold shadow-xs flex items-center space-x-1 cursor-pointer transition"
+                        title="Apasă pentru a aplica automat categoria și subcategoria recomandată"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>Aplică Sugestia</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2 text-xs font-bold text-sapphire-900 bg-white/90 p-2 rounded-lg border border-sapphire-200/70">
+                    <span className="text-sapphire-950 font-black">{sugestieDetectata.categorie}</span>
+                    {sugestieDetectata.subcategorie && (
+                      <>
+                        <span className="text-sage-400">▸</span>
+                        <span className="text-sapphire-700">{sugestieDetectata.subcategorie}</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* PRESETURI RAPIDE 1-CLICK */}
+                  {sugestiiRapide.length > 0 && (
+                    <div className="pt-1 border-t border-morning-200/60">
+                      <p className="text-[10px] text-sage-600 font-bold mb-1.5 uppercase tracking-wider">
+                        Schimbă Rapid în 1-Click:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sugestiiRapide.map((chip, idx) => {
+                          const isSelected = targetCategorie === chip.categorie && targetSubcategorie === chip.subcategorie;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setTargetCategorie(chip.categorie);
+                                setTargetSubcategorie(chip.subcategorie);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                                  : 'bg-white hover:bg-morning-100 text-slate-700 border-morning-300 hover:border-morning-400'
+                              }`}
+                            >
+                              <span>{chip.label}</span>
+                              {isSelected && <Check className="w-3 h-3 ml-0.5" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* CATEGORIE STOC CU BUTON CREARE NOUĂ */}
               <div>
