@@ -1315,7 +1315,7 @@ export default function FluidePage() {
                   <span>Categorii Principale & Subtipuri Specifice de Fluide</span>
                 </h3>
                 <p className="text-xs text-sage-600 font-medium mt-0.5">
-                  Definiți categoriile și subtipurile dedicate exclusiv lubrifianților, uleiurilor și fluidelor tehnice cu praguri minime implicite
+                  Definiți categoriile și subtipurile dedicate gestiunii lubrifianților, uleiurilor și fluidelor tehnice
                 </p>
               </div>
 
@@ -1354,9 +1354,6 @@ export default function FluidePage() {
                     </div>
 
                     <div className="flex items-center space-x-1.5">
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900 font-mono">
-                        Stoc Min: {c.stocMinimImplicit || 20} L
-                      </span>
                       <button
                         onClick={() => openEditCat(c)}
                         title="Editare Categorie Fluid"
@@ -1995,17 +1992,6 @@ export default function FluidePage() {
                 />
               </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Stoc Minim Implicit de Alertă (Litri):</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={catStocMinim}
-                  onChange={(e) => setCatStocMinim(Number(e.target.value))}
-                  placeholder="ex: 50"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
-                />
-              </div>
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie Fluid:</label>
