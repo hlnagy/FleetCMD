@@ -417,7 +417,7 @@ export class EFacturaService {
       let totalPages = 1;
 
       while (currentPage <= totalPages) {
-        const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?startTime=${startMs}&endTime=${nowMs}&cif=${cif}&pagina=${currentPage}`;
+        const url = `https://api.anaf.ro/prod/FCTEL/rest/listaMesajePaginatieFactura?startTime=${startMs}&endTime=${nowMs}&cif=${cif}&pagina=${currentPage}&filtru=P`;
         try {
           const response = await this.executeWithRetry(() =>
             axios.get(url, {
@@ -437,16 +437,30 @@ export class EFacturaService {
         }
       }
 
+      // Preîncărcăm toate ID-urile existente în DB pentru verificare O(1) instantanee
+      const existingDbFacturi = await this.prisma.eFacturaFactura.findMany({
+        select: { idDescarcare: true },
+      });
+      const existingIdSet = new Set(existingDbFacturi.map((f) => String(f.idDescarcare)));
+
+      // Sortăm descrescător după data_creare: facturile cele mai recente (azi, ieri) se descarcă primele!
+      mesajeList.sort((a, b) => (Number(b.data_creare) || 0) - (Number(a.data_creare) || 0));
+
       this.syncStatus.totalMessages = mesajeList.length;
-      this.logger.log(`Total mesaje găsite în ANAF SPV pe ${safeZile} zile: ${mesajeList.length}`);
+      this.logger.log(`Total facturi primite găsite în ANAF SPV pe ${safeZile} zile: ${mesajeList.length}`);
 
       for (const msg of mesajeList) {
         this.syncStatus.processed++;
-        const idDescarcare = msg.id_descarcare || msg.id;
+        const idDescarcare = String(msg.id_descarcare || msg.id || '');
         if (!idDescarcare) continue;
 
-        // Ignorăm mesajele de sistem / erori de validare transmise de ANAF (nu sunt facturi reale de furnizor)
+        // Ignorăm mesajele care nu sunt facturi primite de la furnizori
         const tipMesaj = (msg.tip || '').toUpperCase();
+        if (tipMesaj && !tipMesaj.includes('PRIMITA')) {
+          continue;
+        }
+
+        // Ignorăm mesajele de sistem / erori de validare transmise de ANAF
         const detaliiMesaj = (msg.detalii || '').toLowerCase();
         if (
           tipMesaj.includes('EROARE') ||
@@ -458,12 +472,8 @@ export class EFacturaService {
           continue;
         }
 
-        // 1. DEDUPLICARE STRICTĂ: Verificare dacă idDescarcare există deja în DB
-        const exist = await this.prisma.eFacturaFactura.findUnique({
-          where: { idDescarcare: String(idDescarcare) },
-        });
-
-        if (exist) {
+        // 1. DEDUPLICARE INSTANTANEE ÎN MEMORIE
+        if (existingIdSet.has(idDescarcare)) {
           this.syncStatus.duplicates++;
           continue;
         }
@@ -536,6 +546,7 @@ export class EFacturaService {
               },
             });
             this.syncStatus.downloaded++;
+            existingIdSet.add(idDescarcare);
           }
         } catch (err: any) {
           this.logger.error(`Eroare la descărcarea/parsarea facturii idDescarcare ${idDescarcare}: ${err?.message}`);
