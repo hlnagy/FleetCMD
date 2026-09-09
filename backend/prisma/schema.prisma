@@ -437,17 +437,23 @@ model IntrareStoc {
 // ==========================================
 
 model DocumentVehicul {
-  id                    String   @id @default(uuid())
+  id                    String    @id @default(uuid())
   vehiculId             String
-  vehicul               Vehicul  @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
-  tipDocument           String   // "ITP" | "RCA" | "ROVINIETA" | "COPIE_CONFORMA" | "VERIFICARE_TAHOGRAF"
+  vehicul               Vehicul   @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  tipDocument           String    // "ITP" | "RCA" | "ROVINIETA" | "COPIE_CONFORMA" | "VERIFICARE_TAHOGRAF" | "CASCO" | custom
+  dataEmitere           DateTime?
   dataExpirare          DateTime
-  zileAvertizareInainte Int      @default(30)
+  zileAvertizareInainte Int       @default(30)
   serieDocument         String?
   emitent               String?
+  cost                  Float?
   observatii            String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  fisierUrl             String?   // Cale fișier încărcat / poză scanată
+  fisierNume            String?   // Nume original fișier
+  fisierMarime          Int?      // Mărime în bytes
+  stare                 String    @default("ACTIV") // ACTIV | EXPIRAT | ARHIVAT
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@unique([vehiculId, tipDocument])
 }

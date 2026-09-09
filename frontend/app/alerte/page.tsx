@@ -275,6 +275,7 @@ export default function AlertePage() {
           {alerteFiltrate.map((a) => {
             const esteCritic = a.urgenta === 'CRITIC';
             const esteStoc = a.categorieAlert === 'STOC_CRITIC';
+            const esteDocument = a.categorieAlert === 'DOCUMENTE_FLOTA';
             const catCfg = CAT_CONFIG[a.categorieAlert] || CAT_CONFIG['MENTENANTA_CONSUMABIL'];
 
             return (
@@ -325,6 +326,14 @@ export default function AlertePage() {
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5 whitespace-nowrap"
                     >
                       <span>Vezi Stoc & Comandă</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  ) : esteDocument ? (
+                    <Link
+                      href={`/documente?search=${encodeURIComponent(a.vehiculNumar || '')}`}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center space-x-1.5 whitespace-nowrap"
+                    >
+                      <span>Vezi & Reînnoiește Act</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                   ) : (

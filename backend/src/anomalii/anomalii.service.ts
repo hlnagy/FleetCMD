@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
+import * as fs from 'fs';
+import * as path from 'path';
+const AdmZip = require('adm-zip');
+const { XMLParser } = require('fast-xml-parser');
 
 @Injectable()
 export class AnomaliiService {
@@ -650,56 +654,380 @@ export class AnomaliiService {
   }
 
   // ==========================================
-  // DOCUMENTE VEHICULE (ITP, RCA, ROVINIETA, TAHOGRAF, COPIE CONFORMA)
+  // DOCUMENTE VEHICULE (ITP, RCA, ROVINIETA, TAHOGRAF, COPIE CONFORMA, CASCO)
   // ==========================================
 
-  async getDocumenteVehicule(vehiculId?: string) {
+  async getDocumenteVehicule(query?: {
+    vehiculId?: string;
+    tipDocument?: string;
+    stare?: string;
+    expirareStatus?: string; // 'EXPIRAT' | 'CRITIC' | 'AVERTIZARE' | 'OPTIM'
+    search?: string;
+  }) {
     const where: any = {};
-    if (vehiculId) where.vehiculId = vehiculId;
-    return this.prisma.documentVehicul.findMany({
+    if (query?.vehiculId) where.vehiculId = query.vehiculId;
+    if (query?.tipDocument && query.tipDocument !== 'TOATE') where.tipDocument = query.tipDocument;
+    if (query?.stare && query.stare !== 'TOATE') where.stare = query.stare;
+
+    let docs = await this.prisma.documentVehicul.findMany({
       where,
       include: { vehicul: true },
       orderBy: { dataExpirare: 'asc' },
     });
+
+    const acum = new Date();
+
+    // Map remaining days and dynamic status
+    let mapped = docs.map((doc) => {
+      const dataExp = new Date(doc.dataExpirare);
+      const diffMs = dataExp.getTime() - acum.getTime();
+      const zileRamase = Math.ceil(diffMs / (1000 * 3600 * 24));
+      const esteExpirat = zileRamase <= 0;
+      const esteInAvertizare = !esteExpirat && zileRamase <= doc.zileAvertizareInainte;
+
+      let statusCalculat: 'EXPIRAT' | 'CRITIC' | 'AVERTIZARE' | 'OPTIM' = 'OPTIM';
+      if (esteExpirat) statusCalculat = 'EXPIRAT';
+      else if (zileRamase <= 7) statusCalculat = 'CRITIC';
+      else if (esteInAvertizare) statusCalculat = 'AVERTIZARE';
+
+      return {
+        ...doc,
+        zileRamase,
+        statusCalculat,
+        esteExpirat,
+        esteInAvertizare,
+      };
+    });
+
+    if (query?.expirareStatus && query.expirareStatus !== 'TOATE') {
+      if (query.expirareStatus === 'EXPIRATE') {
+        mapped = mapped.filter((d) => d.esteExpirat);
+      } else if (query.expirareStatus === 'AVERTIZARE') {
+        mapped = mapped.filter((d) => d.esteInAvertizare || d.statusCalculat === 'CRITIC');
+      } else if (query.expirareStatus === 'OPTIM') {
+        mapped = mapped.filter((d) => d.statusCalculat === 'OPTIM');
+      }
+    }
+
+    if (query?.search?.trim()) {
+      const s = query.search.toLowerCase().trim();
+      mapped = mapped.filter((d) => {
+        const vNum = (d.vehicul?.numarIntern || '').toLowerCase();
+        const vInm = (d.vehicul?.numarInmatriculare || '').toLowerCase();
+        const tip = (d.tipDocument || '').toLowerCase();
+        const serie = (d.serieDocument || '').toLowerCase();
+        const emit = (d.emitent || '').toLowerCase();
+        const obs = (d.observatii || '').toLowerCase();
+        return vNum.includes(s) || vInm.includes(s) || tip.includes(s) || serie.includes(s) || emit.includes(s) || obs.includes(s);
+      });
+    }
+
+    return mapped;
   }
 
   async upsertDocumentVehicul(data: {
     vehiculId: string;
     tipDocument: string;
+    dataEmitere?: string | Date;
     dataExpirare: string | Date;
     zileAvertizareInainte?: number;
     serieDocument?: string;
     emitent?: string;
+    cost?: number;
     observatii?: string;
+    fisierUrl?: string;
+    fisierNume?: string;
+    fisierMarime?: number;
+    stare?: string;
   }) {
     if (!data.vehiculId || !data.tipDocument) throw new BadRequestException('Vehiculul și tipul documentului sunt obligatorii.');
 
     const dataExp = new Date(data.dataExpirare);
+    const dataEm = data.dataEmitere ? new Date(data.dataEmitere) : null;
     const zile = data.zileAvertizareInainte !== undefined ? Number(data.zileAvertizareInainte) : 30;
+    const cost = data.cost !== undefined ? Number(data.cost) : null;
+    const stare = data.stare || (dataExp < new Date() ? 'EXPIRAT' : 'ACTIV');
 
     return this.prisma.documentVehicul.upsert({
       where: { vehiculId_tipDocument: { vehiculId: data.vehiculId, tipDocument: data.tipDocument } },
       update: {
+        dataEmitere: dataEm,
         dataExpirare: dataExp,
         zileAvertizareInainte: zile,
         serieDocument: data.serieDocument || null,
         emitent: data.emitent || null,
+        cost,
         observatii: data.observatii || null,
+        fisierUrl: data.fisierUrl !== undefined ? data.fisierUrl : undefined,
+        fisierNume: data.fisierNume !== undefined ? data.fisierNume : undefined,
+        fisierMarime: data.fisierMarime !== undefined ? data.fisierMarime : undefined,
+        stare,
       },
       create: {
         vehiculId: data.vehiculId,
         tipDocument: data.tipDocument,
+        dataEmitere: dataEm,
         dataExpirare: dataExp,
         zileAvertizareInainte: zile,
         serieDocument: data.serieDocument || null,
         emitent: data.emitent || null,
+        cost,
         observatii: data.observatii || null,
+        fisierUrl: data.fisierUrl || null,
+        fisierNume: data.fisierNume || null,
+        fisierMarime: data.fisierMarime || null,
+        stare,
       },
+    });
+  }
+
+  async updateDocumentVehicul(id: string, data: any) {
+    const updateData: any = {};
+    if (data.tipDocument) updateData.tipDocument = data.tipDocument;
+    if (data.dataExpirare) updateData.dataExpirare = new Date(data.dataExpirare);
+    if (data.dataEmitere !== undefined) updateData.dataEmitere = data.dataEmitere ? new Date(data.dataEmitere) : null;
+    if (data.zileAvertizareInainte !== undefined) updateData.zileAvertizareInainte = Number(data.zileAvertizareInainte);
+    if (data.serieDocument !== undefined) updateData.serieDocument = data.serieDocument || null;
+    if (data.emitent !== undefined) updateData.emitent = data.emitent || null;
+    if (data.cost !== undefined) updateData.cost = data.cost ? Number(data.cost) : null;
+    if (data.observatii !== undefined) updateData.observatii = data.observatii || null;
+    if (data.fisierUrl !== undefined) updateData.fisierUrl = data.fisierUrl || null;
+    if (data.fisierNume !== undefined) updateData.fisierNume = data.fisierNume || null;
+    if (data.fisierMarime !== undefined) updateData.fisierMarime = data.fisierMarime ? Number(data.fisierMarime) : null;
+    if (data.stare) updateData.stare = data.stare;
+
+    return this.prisma.documentVehicul.update({
+      where: { id },
+      data: updateData,
     });
   }
 
   async deleteDocumentVehicul(id: string) {
     return this.prisma.documentVehicul.delete({ where: { id } });
+  }
+
+  // ==========================================
+  // IMPORT AUTOMAT DIN VALABILITATE ACTE MASINI (ODS)
+  // ==========================================
+
+  async importOdsDocumente(customPath?: string) {
+    const defaultPath = path.resolve(process.env.USERPROFILE || 'C:\\Users\\user', 'Downloads', 'Valabilitate acte masini 2025.ods');
+    const targetFile = customPath || defaultPath;
+
+    if (!fs.existsSync(targetFile)) {
+      throw new NotFoundException(`Fișierul ODS nu a fost găsit la calea: ${targetFile}`);
+    }
+
+    return this.processOdsFile(targetFile);
+  }
+
+  async processOdsFile(filePathOrBuffer: string | Buffer) {
+    const zip = new AdmZip(filePathOrBuffer);
+    const contentXml = zip.readAsText('content.xml');
+
+    const parser = new XMLParser({
+      ignoreAttributes: false,
+      attributeNamePrefix: '@_',
+    });
+    const parsed = parser.parse(contentXml);
+
+    const spreadsheet = parsed['office:document-content']?.['office:body']?.['office:spreadsheet'];
+    if (!spreadsheet) {
+      throw new BadRequestException('Structură fișier ODS invalidă.');
+    }
+
+    const tables = Array.isArray(spreadsheet['table:table']) ? spreadsheet['table:table'] : [spreadsheet['table:table']];
+
+    // Pre-încărcăm vehiculele existente și categoriile
+    const vehiculeExistente = await this.prisma.vehicul.findMany();
+    const vehiculeMap = new Map<string, any>();
+    for (const v of vehiculeExistente) {
+      vehiculeMap.set(this.normalizeReg(v.numarInmatriculare), v);
+      vehiculeMap.set(this.normalizeReg(v.numarIntern), v);
+    }
+
+    const categories = await this.prisma.categorieVehicul.findMany();
+    const validCats = new Set(categories.map((c) => c.nume));
+
+    let createdVehicles = 0;
+    let importedDocs = 0;
+    let updatedDocs = 0;
+    const errors: string[] = [];
+
+    for (const table of tables) {
+      const sheetName = table['@_table:name'] || '';
+      if (sheetName === 'HOME') continue;
+
+      const rows = Array.isArray(table['table:table-row']) ? table['table:table-row'] : [table['table:table-row']];
+
+      for (const row of rows) {
+        if (!row || !row['table:table-cell']) continue;
+        const cells = Array.isArray(row['table:table-cell']) ? row['table:table-cell'] : [row['table:table-cell']];
+
+        const rowValues: string[] = [];
+        for (const cell of cells) {
+          const repeated = parseInt(cell['@_table:number-columns-repeated'] || '1', 10);
+          let text = '';
+          if (cell['text:p']) {
+            if (Array.isArray(cell['text:p'])) {
+              text = cell['text:p'].map((p: any) => (typeof p === 'object' ? (p['#text'] || '') : String(p))).join(' ');
+            } else if (typeof cell['text:p'] === 'object') {
+              text = cell['text:p']['#text'] || '';
+            } else {
+              text = String(cell['text:p']);
+            }
+          }
+          text = text.trim();
+          if (repeated > 20 && !text) continue;
+          const count = Math.min(repeated, 50);
+          for (let i = 0; i < count; i++) {
+            rowValues.push(text);
+          }
+        }
+
+        if (rowValues.length >= 3) {
+          const rawVeh = (rowValues[0] || '').trim();
+          const rawDoc = (rowValues[1] || '').trim();
+          const rawExp = (rowValues[2] || '').trim();
+          const rawObs = (rowValues[5] || '').trim();
+
+          if (!rawVeh || !rawDoc || !rawExp) continue;
+          if (['CAMION', 'SEMIREMORCA', 'DENUMIRE DOCUMENT', 'SCHIMBATI DATA', 'MENIU'].includes(rawVeh)) continue;
+          if (['DENUMIRE DOCUMENT'].includes(rawDoc)) continue;
+
+          // Parsare dată expirare
+          const dateExp = this.parseDateRo(rawExp);
+          if (!dateExp) {
+            errors.push(`Dată invalidă pentru ${rawVeh} - ${rawDoc}: ${rawExp}`);
+            continue;
+          }
+
+          // Mapare tip document
+          const tipDoc = this.mapTipDocument(rawDoc);
+
+          // Căutare sau creare vehicul
+          const normReg = this.normalizeReg(rawVeh);
+          let vehicul = vehiculeMap.get(normReg);
+
+          if (!vehicul) {
+            let cat = 'CAP_TRACTOR';
+            if (sheetName.includes('SEMIREMORCI') || rawObs.toUpperCase().includes('SEMIREMORCA')) {
+              cat = 'SEMIREMORCA';
+            } else if (rawObs.toUpperCase().includes('BASCULA')) {
+              cat = 'BASCULANTA';
+            }
+            if (!validCats.has(cat)) {
+              cat = categories[0]?.nume || 'CAP_TRACTOR';
+            }
+
+            try {
+              vehicul = await this.prisma.vehicul.create({
+                data: {
+                  numarIntern: rawVeh,
+                  numarInmatriculare: rawVeh,
+                  marca: 'Auto',
+                  model: rawObs || (cat === 'SEMIREMORCA' ? 'Semiremorcă Flotă' : 'Cap Tractor'),
+                  anFabricatie: 2020,
+                  categorieEnum: cat,
+                  tipMasurare: 'KM',
+                  stare: 'ACTIV',
+                },
+              });
+              vehiculeMap.set(normReg, vehicul);
+              createdVehicles++;
+            } catch (e: any) {
+              const existing = await this.prisma.vehicul.findFirst({
+                where: { OR: [{ numarIntern: rawVeh }, { numarInmatriculare: rawVeh }] },
+              });
+              if (existing) {
+                vehicul = existing;
+                vehiculeMap.set(normReg, vehicul);
+              } else {
+                errors.push(`Eroare creare vehicul ${rawVeh}: ${e.message}`);
+                continue;
+              }
+            }
+          }
+
+          // Upsert DocumentVehicul
+          try {
+            const existingDoc = await this.prisma.documentVehicul.findUnique({
+              where: {
+                vehiculId_tipDocument: {
+                  vehiculId: vehicul.id,
+                  tipDocument: tipDoc,
+                },
+              },
+            });
+
+            if (existingDoc) {
+              await this.prisma.documentVehicul.update({
+                where: { id: existingDoc.id },
+                data: {
+                  dataExpirare: dateExp,
+                  observatii: rawObs || existingDoc.observatii,
+                  stare: dateExp < new Date() ? 'EXPIRAT' : 'ACTIV',
+                },
+              });
+              updatedDocs++;
+            } else {
+              await this.prisma.documentVehicul.create({
+                data: {
+                  vehiculId: vehicul.id,
+                  tipDocument: tipDoc,
+                  dataExpirare: dateExp,
+                  zileAvertizareInainte: 30,
+                  observatii: rawObs || null,
+                  stare: dateExp < new Date() ? 'EXPIRAT' : 'ACTIV',
+                },
+              });
+              importedDocs++;
+            }
+          } catch (e: any) {
+            errors.push(`Eroare salvare document ${rawVeh} ${tipDoc}: ${e.message}`);
+          }
+        }
+      }
+    }
+
+    return {
+      succes: true,
+      vehiculeNoiCreate: createdVehicles,
+      documenteNoiImportate: importedDocs,
+      documenteActualizate: updatedDocs,
+      totalProcesate: importedDocs + updatedDocs,
+      erori: errors,
+    };
+  }
+
+  private normalizeReg(reg: string): string {
+    return (reg || '').toUpperCase().replace(/[\s\-_.]/g, '');
+  }
+
+  private parseDateRo(dateStr: string): Date | null {
+    if (!dateStr) return null;
+    const parts = dateStr.trim().split('.');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year) && year >= 1990 && year <= 2100) {
+        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+      }
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private mapTipDocument(docStr: string): string {
+    const d = docStr.toUpperCase().trim();
+    if (d.includes('I.T.P') || d.includes('ITP')) return 'ITP';
+    if (d.includes('ASIG') || d.includes('RCA')) return 'RCA';
+    if (d.includes('ROVIN')) return 'ROVINIETA';
+    if (d.includes('COPIE') || d.includes('CONF')) return 'COPIE_CONFORMA';
+    if (d.includes('TAHO')) return 'VERIFICARE_TAHOGRAF';
+    if (d.includes('CASCO')) return 'CASCO';
+    return d.replace(/[\s\.]/g, '_');
   }
 
   // ==========================================
@@ -951,10 +1279,19 @@ export class AnomaliiService {
       });
     });
 
-    // 3. Alerte Documente Legale Flotă (ITP, RCA, Rovinietă, Tahograf, Copie Conformă)
+    // 3. Alerte Documente Legale Flotă (ITP, RCA, Rovinietă, Tahograf, Copie Conformă, CASCO)
     const documente = await this.prisma.documentVehicul.findMany({
       include: { vehicul: true },
     });
+
+    const docLabels: Record<string, string> = {
+      ITP: 'I.T.P.',
+      RCA: 'Asigurare RCA',
+      ROVINIETA: 'Rovinietă',
+      COPIE_CONFORMA: 'Copie Conformă',
+      VERIFICARE_TAHOGRAF: 'Verificare Tahograf',
+      CASCO: 'Poliță CASCO',
+    };
 
     documente.forEach((doc) => {
       const dataExp = new Date(doc.dataExpirare);
@@ -963,18 +1300,19 @@ export class AnomaliiService {
 
       if (zileRamase <= doc.zileAvertizareInainte) {
         const esteExpirat = zileRamase <= 0;
+        const docLabel = docLabels[doc.tipDocument] || doc.tipDocument;
         listaAlerte.push({
           id: `doc-${doc.id}`,
           dbId: doc.id,
           categorieAlert: 'DOCUMENTE_FLOTA',
           categorieText: 'Documente Legale Flotă',
-          titlu: `Document ${doc.tipDocument} - ${doc.vehicul?.numarIntern} (${doc.vehicul?.numarInmatriculare})`,
+          titlu: `${docLabel} - ${doc.vehicul?.numarIntern} (${doc.vehicul?.numarInmatriculare})`,
           vehiculId: doc.vehiculId,
           vehiculNumar: doc.vehicul?.numarIntern,
-          urgenta: esteExpirat ? 'CRITIC' : 'AVERTIZARE',
+          urgenta: (esteExpirat || zileRamase <= 7) ? 'CRITIC' : 'AVERTIZARE',
           mesaj: esteExpirat
-            ? `EXPIRAT! Documentul ${doc.tipDocument} a expirat pe data de ${dataExp.toLocaleDateString('ro-RO')}`
-            : `Atenție: Documentul ${doc.tipDocument} expiră în ${zileRamase} zile (Dată expirare: ${dataExp.toLocaleDateString('ro-RO')})`,
+            ? `EXPIRAT! ${docLabel} a expirat pe data de ${dataExp.toLocaleDateString('ro-RO')} (depășit cu ${Math.abs(zileRamase)} zile)`
+            : `Atenție: ${docLabel} expiră în ${zileRamase} zile (Dată expirare: ${dataExp.toLocaleDateString('ro-RO')})`,
           dataReferinta: dataExp,
           modCalcul: `Notificare setată cu ${doc.zileAvertizareInainte} zile înainte`,
         });

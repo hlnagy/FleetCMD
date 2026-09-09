@@ -1,4 +1,23 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Patch,
+  Delete,
+  Query,
+  UseInterceptors,
+  UploadedFile,
+  Res,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { Response } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AnomaliiService } from './anomalii.service';
 
 @Controller('anomalii')
@@ -84,10 +103,10 @@ export class AnomaliiController {
     return this.anomaliiService.deleteRegulaMentenanta(id);
   }
 
-  // Documente Vehicule (ITP, RCA, Rovinietă, Tahograf, Copie Conformă)
+  // Documente Vehicule (ITP, RCA, Rovinietă, Tahograf, Copie Conformă, CASCO)
   @Get('documente-vehicule')
-  getDocumenteVehicule() {
-    return this.anomaliiService.getDocumenteVehicule();
+  getDocumenteVehicule(@Query() query: any) {
+    return this.anomaliiService.getDocumenteVehicule(query);
   }
 
   @Post('documente-vehicule')
@@ -95,9 +114,71 @@ export class AnomaliiController {
     return this.anomaliiService.upsertDocumentVehicul(body);
   }
 
+  @Patch('documente-vehicule/:id')
+  updateDocumentVehicul(@Param('id') id: string, @Body() body: any) {
+    return this.anomaliiService.updateDocumentVehicul(id, body);
+  }
+
   @Delete('documente-vehicule/:id')
   deleteDocumentVehicul(@Param('id') id: string) {
     return this.anomaliiService.deleteDocumentVehicul(id);
+  }
+
+  // Upload fișier scanat / poză document
+  @Post('documente-vehicule/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadPath = path.resolve(process.cwd(), 'uploads', 'documente');
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+          cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = path.extname(file.originalname).toLowerCase();
+          const cleanName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+          cb(null, `${cleanName}-${uniqueSuffix}${ext}`);
+        },
+      }),
+      limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
+    }),
+  )
+  uploadDocumentFisier(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Niciun fișier nu a fost încărcat.');
+    return {
+      fisierUrl: `/anomalii/documente-vehicule/fisier/${file.filename}`,
+      fisierNume: file.originalname,
+      fisierMarime: file.size,
+      mimetype: file.mimetype,
+    };
+  }
+
+  // Descărcare / Afișare fișier scanat atașat
+  @Get('documente-vehicule/fisier/:filename')
+  descarcaFisierDocument(@Param('filename') filename: string, @Res() res: Response) {
+    const cleanFilename = path.basename(filename);
+    const filePath = path.resolve(process.cwd(), 'uploads', 'documente', cleanFilename);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException('Fișierul căutat nu există pe server.');
+    }
+    return res.sendFile(filePath);
+  }
+
+  // Import automat din ODS local sau cale specificată
+  @Post('documente-vehicule/import-ods')
+  importOdsDocumente(@Body() body: { filepath?: string }) {
+    return this.anomaliiService.importOdsDocumente(body?.filepath);
+  }
+
+  // Upload fișier ODS și import direct
+  @Post('documente-vehicule/upload-ods')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadSiImportOds(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Vă rugăm să selectați fișierul ODS.');
+    return this.anomaliiService.processOdsFile(file.buffer);
   }
 
   // Alerte Personalizate & Licențe Firmă
