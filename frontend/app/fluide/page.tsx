@@ -103,9 +103,7 @@ export default function FluidePage() {
   const [cfgPragKm, setCfgPragKm] = useState(1000);
   const [cfgPragLuni, setCfgPragLuni] = useState(1);
 
-  // Modal Rezolvare Alertă
-  const [solvingAlerta, setSolvingAlerta] = useState<any>(null);
-  const [solutieRezolvare, setSolutieRezolvare] = useState('Constatare și reparație scurgere în atelier');
+
 
   const fetchInitialData = async () => {
     try {
@@ -523,25 +521,6 @@ export default function FluidePage() {
     }
   };
 
-  const handleRezolvaAlerta = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!solvingAlerta) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/alerte/${solvingAlerta.id}/rezolva`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ solutie: solutieRezolvare }),
-      });
-      if (res.ok) {
-        alert('Alertă marcată ca REZOLVATĂ!');
-        setSolvingAlerta(null);
-        fetchInitialData();
-      }
-    } catch (e) {
-      alert('Eroare la rezolvarea alertei.');
-    }
-  };
 
   // Calcul Statistici Flotă Fluide
   const totalPuncte = flotaFluide.length;
@@ -636,7 +615,7 @@ export default function FluidePage() {
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Înregistrează Completare Ulei</span>
+            <span>+ Înregistrează Intervenție</span>
           </button>
         </div>
       </div>
@@ -702,18 +681,10 @@ export default function FluidePage() {
                     <button
                       type="button"
                       onClick={() => handleOpenCompletare(a.vehiculId, a.tipLichid)}
-                      className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-[11px] font-bold transition flex items-center space-x-1"
+                      className="px-2.5 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white text-[11px] font-bold shadow-xs transition flex items-center space-x-1"
                     >
-                      <Droplets className="w-3 h-3 text-sapphire-600" />
-                      <span>Completare Nivel</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSolvingAlerta(a)}
-                      className="px-3 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white text-[11px] font-bold shadow-xs transition"
-                    >
-                      Rezolvă Alertă
+                      <Droplets className="w-3 h-3" />
+                      <span>Înregistrează Intervenție</span>
                     </button>
                   </div>
                 </div>
@@ -1641,17 +1612,10 @@ export default function FluidePage() {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => handleOpenCompletare(a.vehiculId, a.tipLichid)}
-                      className="px-3 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition flex items-center space-x-1"
+                      className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1"
                     >
-                      <Droplets className="w-3.5 h-3.5 text-sapphire-600" />
-                      <span>Completare Nivel</span>
-                    </button>
-
-                    <button
-                      onClick={() => setSolvingAlerta(a)}
-                      className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 whitespace-nowrap"
-                    >
-                      Rezolvă Alertă
+                      <Droplets className="w-3.5 h-3.5" />
+                      <span>Înregistrează Intervenție</span>
                     </button>
                   </div>
                 </div>
@@ -1671,8 +1635,8 @@ export default function FluidePage() {
                   <Droplets className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-sapphire-900">Înregistrare Completare Ulei (Top-up)</h3>
-                  <p className="text-[11px] text-sage-600 font-medium">Scădere automată din stocul de lubrifianți</p>
+                  <h3 className="text-base font-extrabold text-sapphire-900">Înregistrare Intervenție Fluid</h3>
+                  <p className="text-[11px] text-sage-600 font-medium">Completare nivel sau schimb complet — scădere automată din stoc</p>
                 </div>
               </div>
               <button
@@ -1844,42 +1808,6 @@ export default function FluidePage() {
         </div>
       )}
 
-      {/* MODAL REZOLVARE ALERTĂ */}
-      {solvingAlerta && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <h3 className="text-lg font-bold text-sapphire-900">Remediere Alertă ({solvingAlerta.vehiculNumar || solvingAlerta.titlu})</h3>
-              <button onClick={() => setSolvingAlerta(null)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleRezolvaAlerta} className="space-y-3 text-xs">
-              <div className="p-3 bg-roseash-50 border border-roseash-200 rounded-xl space-y-1">
-                <p className="font-extrabold text-terracotta-700">{solvingAlerta.mesaj}</p>
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Soluție Rezolvare / Constatare Atelier: *</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={solutieRezolvare}
-                  onChange={(e) => setSolutieRezolvare(e.target.value)}
-                  placeholder="ex: Schimbat garnitură baie ulei, efectuat revizie completă"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setSolvingAlerta(null)} className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2 rounded-lg bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Confirmă Remedierea Alertei</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1: AJUSTARE PRAG ALERTĂ STOC MINIM */}
