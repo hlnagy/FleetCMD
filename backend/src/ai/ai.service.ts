@@ -225,6 +225,8 @@ export class AiService {
         const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot, lang);
         return {
           answer: geminiResponse.answer,
+          reply: geminiResponse.answer,
+          text: geminiResponse.answer,
           mood: geminiResponse.mood || mood,
           source: 'gemini',
           fleetKpi: {
@@ -243,6 +245,8 @@ export class AiService {
     const ruleResponse = this.processRuleEngine(userMessage, snapshot, lang);
     return {
       answer: ruleResponse.answer,
+      reply: ruleResponse.answer,
+      text: ruleResponse.answer,
       mood: ruleResponse.mood,
       source: 'builtin-engine',
       fleetKpi: {
@@ -320,28 +324,44 @@ Date reale din baza de date a flotei în acest moment:
       },
     ];
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const res = await axios.post(url, { contents }, { timeout: 12000 });
+    const modelsToTry = [
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+      'gemini-2.5-pro',
+      'gemini-1.5-flash',
+    ];
 
-    const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Răspuns gol de la Gemini API');
-
-    let mood: RobotMood = 'happy';
-    const lower = text.toLowerCase();
-    if (
-      lower.includes('expirat') || lower.includes('lejárt') ||
-      lower.includes('critic') || lower.includes('kritikus') ||
-      lower.includes('atenție') || lower.includes('figyelem')
-    ) {
-      mood = 'alert';
-    } else if (
-      lower.includes('statistici') || lower.includes('statisztika') ||
-      lower.includes('raport') || lower.includes('riport')
-    ) {
-      mood = 'analyzing';
+    let lastError: any = null;
+    for (const modelName of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const res = await axios.post(url, { contents }, { timeout: 12000 });
+        const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text && text.trim()) {
+          let mood: RobotMood = 'happy';
+          const lower = text.toLowerCase();
+          if (
+            lower.includes('expirat') || lower.includes('lejárt') ||
+            lower.includes('critic') || lower.includes('kritikus') ||
+            lower.includes('atenție') || lower.includes('figyelem')
+          ) {
+            mood = 'alert';
+          } else if (
+            lower.includes('statistici') || lower.includes('statisztika') ||
+            lower.includes('raport') || lower.includes('riport')
+          ) {
+            mood = 'analyzing';
+          }
+          return { answer: text, mood };
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Modelul ${modelName} a eșuat (${err.message}), încerc următorul...`);
+      }
     }
 
-    return { answer: text, mood };
+    throw lastError || new Error('Niciun model Gemini nu a răspuns cu succes');
   }
 
   /**

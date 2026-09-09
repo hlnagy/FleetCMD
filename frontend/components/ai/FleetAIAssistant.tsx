@@ -144,10 +144,20 @@ Conectez în timp real întreaga flotă de vehicule, documentele, stocurile de p
       }
 
       const data = await res.json();
-      const aiReply = data.reply || 'Elnézést, jelenleg nem tudtam feldolgozni a választ.';
+      const aiReply =
+        data.reply ||
+        data.answer ||
+        data.text ||
+        data.message ||
+        'Nu am putut procesa răspunsul în acest moment.';
 
-      // Reaction based on content
-      if (aiReply.includes('[LEJÁRT]') || aiReply.includes('[KRITIKUS]')) {
+      // Reaction based on content (supports both RO & HU tags)
+      if (
+        aiReply.includes('[LEJÁRT]') ||
+        aiReply.includes('[KRITIKUS]') ||
+        aiReply.includes('[EXPIRAT]') ||
+        aiReply.includes('[CRITIC]')
+      ) {
         setMood('alert');
         setTimeout(() => setMood('speaking'), 1800);
         setTimeout(() => setMood('idle'), 4500);
