@@ -685,3 +685,50 @@ html.gray .swal2-html-container {
 .animate-soundwave-4 { animation: soundwaveAnim 0.5s ease-in-out infinite 0.1s; }
 .animate-soundwave-5 { animation: soundwaveAnim 0.65s ease-in-out infinite 0.25s; }
 
+/* Transformers Shockwave & Jet Thrusters */
+@keyframes shockwaveExpand {
+  0% { transform: scale(0.3); opacity: 0.9; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+@keyframes thrusterFlameAnim {
+  0%, 100% { height: 16px; opacity: 0.85; filter: drop-shadow(0 0 8px #06b6d4); }
+  50% { height: 26px; opacity: 1; filter: drop-shadow(0 0 16px #38bdf8); }
+}
+
+@keyframes speechBubbleIn {
+  0% { transform: scale(0.7) translateY(20px); opacity: 0; }
+  70% { transform: scale(1.02) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes arcReactorPulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.6)); }
+  50% { transform: scale(1.15); filter: drop-shadow(0 0 18px rgba(6, 182, 212, 0.95)); }
+}
+
+@keyframes mechanicalArmSway {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(4deg); }
+}
+
+.animate-shockwave {
+  animation: shockwaveExpand 0.75s ease-out forwards;
+}
+
+.animate-thruster-flame {
+  animation: thrusterFlameAnim 0.12s ease-in-out infinite alternate;
+}
+
+.animate-speech-bubble-in {
+  animation: speechBubbleIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-arc-reactor {
+  animation: arcReactorPulse 2.2s ease-in-out infinite;
+}
+
+.animate-arm-sway {
+  animation: mechanicalArmSway 3.5s ease-in-out infinite;
+}
+

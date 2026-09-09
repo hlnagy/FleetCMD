@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import FleetRobotOrb, { RobotMood } from './FleetRobotOrb';
-import FleetAIChatHUD, { ChatMessage, FleetQuickKpi } from './FleetAIChatHUD';
+import TransformerRobi from './TransformerRobi';
+import RobiSpeechBubble from './RobiSpeechBubble';
+import { RobotMood } from './FleetRobotOrb';
+import { ChatMessage, FleetQuickKpi } from './FleetAIChatHUD';
 import { API_BASE_URL } from '@/lib/api';
 
 export default function FleetAIAssistant() {
@@ -199,20 +201,10 @@ Valós időben kapcsolom össze a cég teljes flottáját, aktáit, raktárát �
 
   return (
     <>
-      {/* Floating Robot Drone / Sphere in bottom right */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center justify-center">
-        <FleetRobotOrb
-          isOpen={isOpen}
-          mood={mood}
-          onToggle={handleToggle}
-          unreadCount={unreadCount}
-        />
-      </div>
-
-      {/* Titanium Glassmorphic Chat HUD (Opens anchored above/beside the robot) */}
+      {/* Robi's Transformers Speech Bubble Dialogue Window */}
       {isOpen && (
-        <div className="fixed bottom-28 right-6 z-50">
-          <FleetAIChatHUD
+        <div className="fixed bottom-36 right-3 sm:bottom-8 sm:right-40 z-50">
+          <RobiSpeechBubble
             messages={messages}
             mood={mood}
             isLoading={isLoading}
@@ -223,6 +215,16 @@ Valós időben kapcsolom össze a cég teljes flottáját, aktáit, raktárát �
           />
         </div>
       )}
+
+      {/* Floating Transformers Robi (Sphere <-> Full Robot) in bottom-right */}
+      <div className="fixed bottom-6 right-3 sm:right-6 z-50 flex items-center justify-center">
+        <TransformerRobi
+          isOpen={isOpen}
+          mood={mood}
+          onToggle={handleToggle}
+          unreadCount={unreadCount}
+        />
+      </div>
     </>
   );
 }
