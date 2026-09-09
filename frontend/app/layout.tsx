@@ -35,13 +35,22 @@ export default function RootLayout({
                 try {
                   var t = localStorage.getItem('fleetcmd_theme');
                   var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (t === 'dark' || (!t && d) || (t === 'system' && d)) {
+                  var resolved = t;
+                  if (t === 'system' || !t) resolved = d ? 'dark' : 'light';
+                  
+                  document.documentElement.classList.remove('dark', 'gray');
+                  if (resolved === 'dark') {
                     document.documentElement.classList.add('dark');
                     document.documentElement.setAttribute('data-theme', 'dark');
+                  } else if (resolved === 'gray') {
+                    document.documentElement.classList.add('gray');
+                    document.documentElement.setAttribute('data-theme', 'gray');
                   } else {
-                    document.documentElement.classList.remove('dark');
                     document.documentElement.setAttribute('data-theme', 'light');
                   }
+
+                  var fs = localStorage.getItem('fleetcmd_font_size') || 'standard';
+                  document.documentElement.setAttribute('data-font-size', fs);
                 } catch (e) {}
               })();
             `,

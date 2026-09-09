@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
@@ -256,11 +256,19 @@ export default function Sidebar() {
               type="button"
               onClick={toggleTheme}
               className="p-2.5 rounded-xl border border-morning-200 bg-morning-50 hover:bg-morning-100 text-sage-600 hover:text-sapphire-900 transition flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
-              title={resolvedTheme === 'dark' ? 'Comută pe Mod Luminos (Light Mode)' : 'Comută pe Mod Întunecat (Dark Mode)'}
+              title={
+                resolvedTheme === 'dark'
+                  ? 'Temă: Întunecat (Click pentru Mod Luminos)'
+                  : resolvedTheme === 'gray'
+                  ? 'Temă: Gris Modern (Click pentru Mod Întunecat)'
+                  : 'Temă: Luminos (Click pentru Gris Modern)'
+              }
               aria-label="Comutator Temă"
             >
               {resolvedTheme === 'dark' ? (
                 <Sun className="w-4 h-4 text-amber-400" />
+              ) : resolvedTheme === 'gray' ? (
+                <Sparkles className="w-4 h-4 text-sky-400" />
               ) : (
                 <Moon className="w-4 h-4 text-sapphire-700" />
               )}

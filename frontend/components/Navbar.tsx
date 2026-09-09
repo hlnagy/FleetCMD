@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
   Droplets, FileText, CheckCircle2, ChevronRight, X, RefreshCw, Menu,
-  Users, Settings, LogOut, Package, Sun, Moon
+  Users, Settings, LogOut, Package, Sun, Moon, Sparkles
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useSidebar } from '../lib/SidebarContext';
@@ -167,16 +167,24 @@ export default function Navbar() {
           </Link>
         )}
 
-        {/* COMUTATOR RAPID MOD ÎNTUNECAT / LUMINOS */}
+        {/* COMUTATOR RAPID MOD LUMINOS / GRIS MODERN / ÎNTUNECAT */}
         <button
           type="button"
           onClick={toggleTheme}
           className="p-2 rounded-xl text-sage-600 hover:text-sapphire-900 hover:bg-morning-100 transition relative flex items-center justify-center cursor-pointer"
-          title={resolvedTheme === 'dark' ? 'Comută pe Mod Luminos (Light Mode)' : 'Comută pe Mod Întunecat (Dark Mode)'}
+          title={
+            resolvedTheme === 'dark'
+              ? 'Temă: Întunecat (Click pentru Mod Luminos)'
+              : resolvedTheme === 'gray'
+              ? 'Temă: Gris Modern (Click pentru Mod Întunecat)'
+              : 'Temă: Luminos (Click pentru Gris Modern)'
+          }
           aria-label="Comutator Temă"
         >
           {resolvedTheme === 'dark' ? (
             <Sun className="w-5 h-5 text-amber-400 hover:text-amber-300 transition-transform duration-300 hover:rotate-90" />
+          ) : resolvedTheme === 'gray' ? (
+            <Sparkles className="w-5 h-5 text-sky-400 hover:text-sky-300 transition-transform duration-300 hover:scale-110" />
           ) : (
             <Moon className="w-5 h-5 text-sapphire-700 hover:text-sapphire-900 transition-transform duration-300 hover:-rotate-12" />
           )}

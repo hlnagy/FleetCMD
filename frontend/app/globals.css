@@ -331,3 +331,258 @@ html.dark .swal2-title,
 html.dark .swal2-html-container {
   color: #F1F5F9 !important;
 }
+
+/* ========================================================================= */
+/* ACCESSIBILITY & FONT SIZE SCALING SYSTEM                                  */
+/* ========================================================================= */
+html[data-font-size="compact"] {
+  font-size: 14px;
+}
+
+html[data-font-size="standard"],
+html:not([data-font-size]) {
+  font-size: 16px;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+/* ========================================================================= */
+/* MODERN GRAY THEME SYSTEM (Titanium Slate & Graphite)                     */
+/* ========================================================================= */
+html.gray {
+  --background: #1E232B;
+  --foreground: #F1F5F9;
+  --primary: #38BDF8;
+  --rose-ash: #E5AEA9;
+  --terracotta: #F87171;
+  --periwinkle: #818CF8;
+  --sage: #94A3B8;
+  color-scheme: dark;
+
+  /* RGB Definitions in Gray Mode */
+  --color-morning-50: 39 45 55;         /* #272D37 - elevated surface / cards */
+  --color-morning-100: 25 29 36;        /* #191D24 - sleek slate input / container */
+  --color-morning-200: 45 53 66;        /* #2D3542 - divider / subtle border */
+  --color-morning-300: 62 73 88;        /* #3E4958 - active border */
+
+  --color-sapphire-50: 30 41 59;        /* #1E293B */
+  --color-sapphire-100: 40 56 78;       /* #28384E */
+  --color-sapphire-300: 56 189 248;     /* #38BDF8 */
+  --color-sapphire-500: 14 165 233;     /* #0EA5E9 */
+  --color-sapphire-600: 56 189 248;     /* #38BDF8 */
+  --color-sapphire-700: 125 211 252;    /* #7DD3FC */
+  --color-sapphire-900: 248 250 252;    /* #F8FAFC - crisp titles */
+
+  --color-roseash-100: 60 28 35;
+  --color-roseash-300: 200 65 75;
+  --color-roseash-500: 248 113 113;
+
+  --color-terracotta-100: 60 28 35;
+  --color-sage-100: 35 41 50;
+  --color-sage-500: 148 163 184;        /* #94A3B8 */
+  --color-sage-700: 203 213 225;        /* #CBD5E1 */
+}
+
+html.gray body {
+  color: #F1F5F9 !important;
+  background: #1E232B !important;
+}
+
+/* Cards & Surfaces in Gray Mode */
+html.gray .pleasant-card {
+  background-color: #272D37 !important;
+  border-color: #374151 !important;
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.35) !important;
+}
+
+html.gray .pleasant-card-hover:hover {
+  border-color: #38BDF8 !important;
+  box-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Common Backgrounds */
+html.gray .bg-white {
+  background-color: #272D37 !important;
+}
+
+html.gray .bg-white\/90,
+html.gray .bg-white\/80,
+html.gray .bg-white\/70,
+html.gray .bg-white\/60 {
+  background-color: rgba(39, 45, 55, 0.94) !important;
+}
+
+html.gray .bg-slate-50,
+html.gray .bg-slate-50\/90,
+html.gray .bg-slate-50\/80,
+html.gray .bg-slate-100 {
+  background-color: #202630 !important;
+}
+
+html.gray .bg-slate-200,
+html.gray .bg-slate-300 {
+  background-color: #333C4A !important;
+  color: #E2E8F0 !important;
+}
+
+/* Fix for amber alert pills & selection */
+html.gray .bg-amber-50,
+html.gray .bg-amber-50\/80,
+html.gray .\!bg-amber-50\/80 {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+html.gray .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.22) !important;
+  color: #FCD34D !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+/* Status Badge Overrides */
+html.gray .bg-blue-100 {
+  background-color: rgba(56, 189, 248, 0.2) !important;
+  color: #7DD3FC !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+html.gray .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.22) !important;
+  color: #6EE7B7 !important;
+  border-color: rgba(16, 185, 129, 0.38) !important;
+}
+
+html.gray .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.22) !important;
+  color: #D8B4FE !important;
+  border-color: rgba(168, 85, 247, 0.38) !important;
+}
+
+/* Borders & Dividers */
+html.gray .border-morning-100,
+html.gray .border-morning-200,
+html.gray .border-morning-300 {
+  border-color: #374151 !important;
+}
+
+html.gray .divide-morning-50 > :not([hidden]) ~ :not([hidden]),
+html.gray .divide-morning-100 > :not([hidden]) ~ :not([hidden]),
+html.gray .divide-morning-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #374151 !important;
+}
+
+/* Text Colors */
+html.gray .text-sapphire-900 {
+  color: #F8FAFC !important;
+}
+
+html.gray .text-sapphire-700 {
+  color: #7DD3FC !important;
+}
+
+html.gray .text-sapphire-600 {
+  color: #38BDF8 !important;
+}
+
+html.gray .text-slate-950,
+html.gray .text-slate-900 {
+  color: #F8FAFC !important;
+}
+
+html.gray .text-slate-800,
+html.gray .text-slate-700 {
+  color: #CBD5E1 !important;
+}
+
+html.gray .text-slate-600,
+html.gray .text-sage-700,
+html.gray .text-sage-600 {
+  color: #94A3B8 !important;
+}
+
+html.gray .text-sage-500 {
+  color: #94A3B8 !important;
+}
+
+html.gray .text-terracotta-700,
+html.gray .text-terracotta-600 {
+  color: #F87171 !important;
+}
+
+/* Form Controls: Inputs, Textareas, Selects */
+html.gray input:not([type="checkbox"]):not([type="radio"]),
+html.gray select,
+html.gray textarea {
+  background-color: #191D24 !important;
+  border-color: #374151 !important;
+  color: #F1F5F9 !important;
+}
+
+html.gray input:focus,
+html.gray select:focus,
+html.gray textarea:focus {
+  border-color: #38BDF8 !important;
+  background-color: #202630 !important;
+}
+
+html.gray select option {
+  background-color: #272D37 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Table Hovers */
+html.gray .hover\:bg-morning-50:hover,
+html.gray .hover\:bg-morning-100:hover,
+html.gray .hover\:bg-sapphire-50\/80:hover,
+html.gray .hover\:bg-sapphire-50:hover {
+  background-color: #303744 !important;
+}
+
+html.gray .hover\:bg-morning-200:hover {
+  background-color: #374151 !important;
+}
+
+/* Subtle Badges */
+html.gray .bg-sapphire-50 {
+  background-color: rgba(56, 189, 248, 0.18) !important;
+  color: #7DD3FC !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+html.gray .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.18) !important;
+}
+
+html.gray .bg-terracotta-50,
+html.gray .bg-roseash-50 {
+  background-color: rgba(248, 113, 113, 0.18) !important;
+}
+
+/* Scrollbars in Gray Mode */
+html.gray ::-webkit-scrollbar-track {
+  background: #1E232B;
+}
+
+html.gray ::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+html.gray ::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}
+
+/* SweetAlert2 Dialogs in Gray Mode */
+html.gray .swal2-popup {
+  background: #272D37 !important;
+  color: #F1F5F9 !important;
+  border: 1px solid #374151 !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+html.gray .swal2-title,
+html.gray .swal2-html-container {
+  color: #F1F5F9 !important;
+}

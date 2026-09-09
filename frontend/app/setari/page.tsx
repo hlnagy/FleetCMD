@@ -10,7 +10,7 @@ import {
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
   Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
-  Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight
+  Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -19,7 +19,7 @@ function SetariContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
   const { user: authUser, isAdmin, isOperator, isViewer, canEdit, authFetch } = useAuth();
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme, fontSize, setFontSize } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
     'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect'
@@ -2496,12 +2496,12 @@ function SetariContent() {
             </div>
           </div>
 
-          {/* Selector 3 Teme Principale */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Selector 4 Teme Principale */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* 1. MOD LUMINOS */}
             <div
               onClick={() => setTheme('light')}
-              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+              className={`pleasant-card rounded-3xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
                 theme === 'light'
                   ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
                   : 'border-morning-200 hover:border-sapphire-300 bg-white'
@@ -2509,8 +2509,8 @@ function SetariContent() {
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
-                    <Sun className="w-6 h-6" />
+                  <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-xs">
+                    <Sun className="w-5 h-5" />
                   </div>
                   <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                     theme === 'light'
@@ -2522,23 +2522,23 @@ function SetariContent() {
                 </div>
 
                 <div>
-                  <h4 className="font-extrabold text-base text-sapphire-900">Mod Luminos (Zi)</h4>
-                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
-                    Fundal aerisit, deschis, cu contrast ridicat pentru lizibilitate maximă a tabelelor și rapoartelor în spații puternic iluminate natural.
+                  <h4 className="font-extrabold text-sm text-sapphire-900">Mod Luminos (Zi)</h4>
+                  <p className="text-[11px] text-sage-600 mt-1 leading-relaxed">
+                    Fundal aerisit, deschis, cu contrast ridicat pentru lizibilitate maximă în spații puternic iluminate natural.
                   </p>
                 </div>
 
                 {/* Previzualizare miniatură */}
-                <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 space-y-1.5 pointer-events-none">
-                  <div className="h-2 w-20 bg-slate-300 rounded" />
-                  <div className="h-4 w-full bg-white rounded shadow-2xs border border-slate-200" />
+                <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 space-y-1.5 pointer-events-none">
+                  <div className="h-1.5 w-16 bg-slate-300 rounded" />
+                  <div className="h-3.5 w-full bg-white rounded shadow-2xs border border-slate-200" />
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setTheme('light'); }}
-                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
                   theme === 'light'
                     ? 'bg-sapphire-600 text-white shadow-xs'
                     : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
@@ -2546,19 +2546,78 @@ function SetariContent() {
               >
                 {theme === 'light' ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                    <span>Temă Selectată</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Temă Activă</span>
                   </>
                 ) : (
-                  <span>Selectează Mod Luminos</span>
+                  <span>Selectează Luminos</span>
                 )}
               </button>
             </div>
 
-            {/* 2. MOD ÎNTUNECAT */}
+            {/* 2. GRIS TITAN MODERN (ÎNTRE LUMINOS ȘI ÎNTUNECAT) */}
+            <div
+              onClick={() => setTheme('gray')}
+              className={`pleasant-card rounded-3xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg relative overflow-hidden ${
+                theme === 'gray'
+                  ? 'border-sky-500 bg-sky-50/20 shadow-md ring-2 ring-sky-500/30'
+                  : 'border-morning-200 hover:border-sky-400 bg-white'
+              }`}
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-800 text-sky-400 border border-slate-700 flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                    theme === 'gray'
+                      ? 'bg-sky-500 text-white animate-pulse'
+                      : 'bg-slate-800 text-sky-300 border border-slate-700'
+                  }`}>
+                    {theme === 'gray' ? 'Activ' : 'Nou & Modern'}
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex items-center space-x-1.5">
+                    <h4 className="font-extrabold text-sm text-sapphire-900">Gris Titan Modern</h4>
+                  </div>
+                  <p className="text-[11px] text-sage-600 mt-1 leading-relaxed">
+                    Echilibrul perfect între zi și noapte. Paletă Titanium Graphite cu finisaj mat ultramodern, contrast cald și aspect tehnologic de ultimă generație.
+                  </p>
+                </div>
+
+                {/* Previzualizare miniatură Gris Titan */}
+                <div className="p-2.5 rounded-xl bg-[#1E232B] border border-[#374151] space-y-1.5 pointer-events-none">
+                  <div className="h-1.5 w-16 bg-[#38BDF8] rounded" />
+                  <div className="h-3.5 w-full bg-[#272D37] rounded border border-[#374151]" />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setTheme('gray'); }}
+                className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
+                  theme === 'gray'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
+                }`}
+              >
+                {theme === 'gray' ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Temă Activă</span>
+                  </>
+                ) : (
+                  <span>Selectează Gris Modern</span>
+                )}
+              </button>
+            </div>
+
+            {/* 3. MOD ÎNTUNECAT */}
             <div
               onClick={() => setTheme('dark')}
-              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+              className={`pleasant-card rounded-3xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
                 theme === 'dark'
                   ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
                   : 'border-morning-200 hover:border-sapphire-300 bg-white'
@@ -2566,36 +2625,36 @@ function SetariContent() {
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-950 text-indigo-400 border border-indigo-800/40 flex items-center justify-center shadow-xs">
-                    <Moon className="w-6 h-6" />
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-950 text-indigo-400 border border-indigo-800/40 flex items-center justify-center shadow-xs">
+                    <Moon className="w-5 h-5" />
                   </div>
                   <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                     theme === 'dark'
                       ? 'bg-sapphire-500 text-white'
                       : 'bg-indigo-100 text-indigo-900'
                   }`}>
-                    {theme === 'dark' ? 'Activ' : 'Recomandat Atelier'}
+                    {theme === 'dark' ? 'Activ' : 'Nocturn'}
                   </span>
                 </div>
 
                 <div>
-                  <h4 className="font-extrabold text-base text-sapphire-900">Mod Întunecat (Noapte)</h4>
-                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
-                    Paletă sofisticată Midnight Sapphire & Obsidian. Reduce semnificativ oboseala ochilor, fiind optim pentru dispecerat, atelier și utilizare nocturnă.
+                  <h4 className="font-extrabold text-sm text-sapphire-900">Mod Întunecat (Noapte)</h4>
+                  <p className="text-[11px] text-sage-600 mt-1 leading-relaxed">
+                    Paletă Midnight Sapphire & Obsidian profundă. Reduce oboseala ochilor, optim pentru dispecerat, atelier și utilizare nocturnă.
                   </p>
                 </div>
 
                 {/* Previzualizare miniatură */}
-                <div className="p-3 rounded-xl bg-[#0B131B] border border-[#1E3145] space-y-1.5 pointer-events-none">
-                  <div className="h-2 w-20 bg-[#1E3145] rounded" />
-                  <div className="h-4 w-full bg-[#111D28] rounded border border-[#1E3145]" />
+                <div className="p-2.5 rounded-xl bg-[#0B131B] border border-[#1E3145] space-y-1.5 pointer-events-none">
+                  <div className="h-1.5 w-16 bg-[#1E3145] rounded" />
+                  <div className="h-3.5 w-full bg-[#111D28] rounded border border-[#1E3145]" />
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setTheme('dark'); }}
-                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
                   theme === 'dark'
                     ? 'bg-sapphire-600 text-white shadow-xs'
                     : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
@@ -2603,19 +2662,19 @@ function SetariContent() {
               >
                 {theme === 'dark' ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                    <span>Temă Selectată</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Temă Activă</span>
                   </>
                 ) : (
-                  <span>Selectează Mod Întunecat</span>
+                  <span>Selectează Întunecat</span>
                 )}
               </button>
             </div>
 
-            {/* 3. SINCRONIZARE SISTEM */}
+            {/* 4. SINCRONIZARE SISTEM */}
             <div
               onClick={() => setTheme('system')}
-              className={`pleasant-card rounded-3xl p-6 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
+              className={`pleasant-card rounded-3xl p-5 border-2 transition-all cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-lg ${
                 theme === 'system'
                   ? 'border-sapphire-500 bg-sapphire-50/20 shadow-md ring-2 ring-sapphire-500/20'
                   : 'border-morning-200 hover:border-sapphire-300 bg-white'
@@ -2623,8 +2682,8 @@ function SetariContent() {
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center shadow-xs">
-                    <Monitor className="w-6 h-6" />
+                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center shadow-xs">
+                    <Monitor className="w-5 h-5" />
                   </div>
                   <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                     theme === 'system'
@@ -2636,23 +2695,23 @@ function SetariContent() {
                 </div>
 
                 <div>
-                  <h4 className="font-extrabold text-base text-sapphire-900">Automat (Sistem OS)</h4>
-                  <p className="text-xs text-sage-600 mt-1.5 leading-relaxed">
-                    Aplicația preia automat preferințele sistemului tău de operare (Windows / macOS / Android / iOS). Se comută automat odată cu tema dispozitivului.
+                  <h4 className="font-extrabold text-sm text-sapphire-900">Automat (Sistem OS)</h4>
+                  <p className="text-[11px] text-sage-600 mt-1 leading-relaxed">
+                    Aplicația preia automat preferințele sistemului tău de operare (Windows / macOS / Android). Se comută sincronizat cu dispozitivul.
                   </p>
                 </div>
 
                 {/* Previzualizare miniatură split */}
-                <div className="p-3 rounded-xl bg-gradient-to-r from-slate-200 to-[#0B131B] border border-slate-300 space-y-1.5 pointer-events-none">
-                  <div className="h-2 w-20 bg-slate-400 rounded" />
-                  <div className="h-4 w-full bg-gradient-to-r from-white to-[#111D28] rounded border border-slate-300" />
+                <div className="p-2.5 rounded-xl bg-gradient-to-r from-slate-200 to-[#0B131B] border border-slate-300 space-y-1.5 pointer-events-none">
+                  <div className="h-1.5 w-16 bg-slate-400 rounded" />
+                  <div className="h-3.5 w-full bg-gradient-to-r from-white to-[#111D28] rounded border border-slate-300" />
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setTheme('system'); }}
-                className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 ${
+                className={`w-full py-2 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
                   theme === 'system'
                     ? 'bg-sapphire-600 text-white shadow-xs'
                     : 'bg-morning-100 hover:bg-morning-200 text-slate-700'
@@ -2660,13 +2719,124 @@ function SetariContent() {
               >
                 {theme === 'system' ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
                     <span>Sincronizare Activă</span>
                   </>
                 ) : (
-                  <span>Activează Sincronizare Sistem</span>
+                  <span>Sincronizare Sistem</span>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* CONTROL MĂRIME TEXT / SCARĂ TIPOGRAFICĂ */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-sapphire-100 text-sapphire-800 rounded-2xl shadow-2xs">
+                  <Type className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-base text-sapphire-900">Mărime Text & Lizibilitate Interfață</h4>
+                  <p className="text-xs text-sage-600 mt-0.5">
+                    Ajustați dimensiunea scrisului pentru a mări lizibilitatea sau pentru a afișa mai multe date pe ecran simultan.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 bg-morning-100 px-3 py-1.5 rounded-xl border border-morning-200">
+                <span className="text-[11px] font-bold text-sage-600">Scară activă:</span>
+                <span className="text-xs font-black uppercase text-sapphire-900">
+                  {fontSize === 'compact' ? 'Compact (14px)' : fontSize === 'large' ? 'Generos (18px)' : 'Standard (16px)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Cele 3 opțiuni de mărime */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. COMPACT */}
+              <div
+                onClick={() => setFontSize('compact')}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                  fontSize === 'compact'
+                    ? 'border-sapphire-500 bg-sapphire-50/25 ring-2 ring-sapphire-500/20 shadow-xs'
+                    : 'border-morning-200 hover:border-sapphire-300 bg-morning-50/60'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-black text-sm text-sapphire-900 bg-morning-200 w-6 h-6 rounded flex items-center justify-center">A</span>
+                    <span className="text-xs font-extrabold text-sapphire-900">Compact (Mic)</span>
+                  </div>
+                  {fontSize === 'compact' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sapphire-500 text-white">
+                      Selectat
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-sage-600 leading-relaxed">
+                  Densitate maximă. Afișează mai multe rânduri în tabele, stocuri și comenzi de lucru. Recomandat pentru ecrane mari.
+                </p>
+                <div className="text-[11px] font-mono font-bold text-sapphire-800 bg-morning-100 p-2 rounded-lg border border-morning-200 text-center">
+                  Exemplu: 14px Text dens
+                </div>
+              </div>
+
+              {/* 2. STANDARD */}
+              <div
+                onClick={() => setFontSize('standard')}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                  fontSize === 'standard'
+                    ? 'border-sapphire-500 bg-sapphire-50/25 ring-2 ring-sapphire-500/20 shadow-xs'
+                    : 'border-morning-200 hover:border-sapphire-300 bg-morning-50/60'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-black text-base text-sapphire-900 bg-morning-200 w-6 h-6 rounded flex items-center justify-center">A</span>
+                    <span className="text-xs font-extrabold text-sapphire-900">Standard (Mediu)</span>
+                  </div>
+                  {fontSize === 'standard' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sapphire-500 text-white">
+                      Recomandat
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-sage-600 leading-relaxed">
+                  Dimensiune echilibrată prestabilită. Oferă o experiență armonioasă și lizibilitate optimă pe laptopuri și monitoare.
+                </p>
+                <div className="text-xs font-mono font-bold text-sapphire-800 bg-morning-100 p-2 rounded-lg border border-morning-200 text-center">
+                  Exemplu: 16px Text standard
+                </div>
+              </div>
+
+              {/* 3. GENEROS */}
+              <div
+                onClick={() => setFontSize('large')}
+                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                  fontSize === 'large'
+                    ? 'border-sapphire-500 bg-sapphire-50/25 ring-2 ring-sapphire-500/20 shadow-xs'
+                    : 'border-morning-200 hover:border-sapphire-300 bg-morning-50/60'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-black text-lg text-sapphire-900 bg-morning-200 w-6 h-6 rounded flex items-center justify-center">A</span>
+                    <span className="text-xs font-extrabold text-sapphire-900">Generos (Mare)</span>
+                  </div>
+                  {fontSize === 'large' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sapphire-500 text-white">
+                      Selectat
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-sage-600 leading-relaxed">
+                  Lizibilitate sporită fără efort vizual. Ideal pentru tablete pe teren, ecrane tactile sau ateliere de mecanică.
+                </p>
+                <div className="text-sm font-mono font-bold text-sapphire-800 bg-morning-100 p-2 rounded-lg border border-morning-200 text-center">
+                  Exemplu: 18px Text generos
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2711,7 +2881,7 @@ function SetariContent() {
               <div>
                 <p className="font-extrabold">Tehnologie Zero-Flicker & Persistență Locală:</p>
                 <p className="text-[11px] text-sapphire-800 mt-0.5">
-                  Tema selectată se aplică instantaneu în browser și este stocată în memoria locală. La fiecare reîncărcare a paginii, scriptul anti-flash aplică tema întunecată înainte de randarea conținutului, eliminând orice pâlpâire luminoasă deranjantă.
+                  Tema și mărimea fontului selectate se aplică instantaneu pe întregul sistem și sunt stocate în memoria locală a browserului. La fiecare navigare sau reîncărcare, interfața se inițializează instant conform preferințelor dumneavoastră.
                 </p>
               </div>
             </div>
