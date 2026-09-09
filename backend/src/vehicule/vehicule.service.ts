@@ -51,7 +51,9 @@ export class VehiculeService {
   }
 
   async updateCategorieVehicul(id: string, numeNou: string, descriere?: string) {
-    const oldCat = await this.prisma.categorieVehicul.findUnique({ where: { id } });
+    const oldCat = await this.prisma.categorieVehicul.findFirst({
+      where: { OR: [{ id }, { nume: id }] },
+    });
     if (!oldCat) throw new NotFoundException('Categoria nu a fost găsită.');
 
     const newNumeUpper = (numeNou || oldCat.nume).trim().toUpperCase().replace(/\s+/g, '_');
@@ -62,23 +64,45 @@ export class VehiculeService {
         throw new BadRequestException(`Categoria "${newNumeUpper}" există deja.`);
       }
 
+      // 1. Creăm/actualizăm noul nume mai întâi pentru ca Foreign Key-ul din Vehicul să fie valid
+      await this.prisma.categorieVehicul.upsert({
+        where: { nume: newNumeUpper },
+        update: { descriere: descriere !== undefined ? descriere : oldCat.descriere },
+        create: { nume: newNumeUpper, descriere: descriere !== undefined ? descriere : oldCat.descriere },
+      });
+
+      // 2. Actualizăm vehiculele către noul nume
       await this.prisma.vehicul.updateMany({
         where: { categorieEnum: oldCat.nume },
         data: { categorieEnum: newNumeUpper },
       });
+
+      // 3. Actualizăm și regulile de mentenanță asociate categoriei
+      await this.prisma.regulaAlertaMentenanta.updateMany({
+        where: { categorieUtilaj: oldCat.nume },
+        data: { categorieUtilaj: newNumeUpper },
+      });
+
+      // 4. Ștergem vechea categorie
+      await this.prisma.categorieVehicul.delete({
+        where: { id: oldCat.id },
+      });
+
+      return this.prisma.categorieVehicul.findUnique({ where: { nume: newNumeUpper } });
     }
 
     return this.prisma.categorieVehicul.update({
       where: { id },
       data: {
-        nume: newNumeUpper,
         descriere: descriere !== undefined ? descriere : oldCat.descriere,
       },
     });
   }
 
   async deleteCategorieVehicul(id: string) {
-    const cat = await this.prisma.categorieVehicul.findUnique({ where: { id } });
+    const cat = await this.prisma.categorieVehicul.findFirst({
+      where: { OR: [{ id }, { nume: id }] },
+    });
     if (!cat) throw new NotFoundException('Categoria nu a fost găsită.');
 
     // Asigurăm că există categoria NEALOCAT

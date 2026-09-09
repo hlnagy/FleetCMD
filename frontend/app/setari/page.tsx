@@ -417,9 +417,10 @@ function SetariContent() {
 
   const handleUpdateVehiculCat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingVehiculCat) return;
+    const targetId = editingVehiculCat.id || editingVehiculCat.nume;
+    if (!targetId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${editingVehiculCat.id}`, {
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${encodeURIComponent(targetId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -429,12 +430,12 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert(` Categoria "${editingVehiculCat.nume}" a fost actualizată!`);
+        alert(`Categoria "${editingVehiculCat.nume}" a fost actualizată cu succes!`);
         setEditingVehiculCat(null);
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        alert(`Eroare: ${err.message || 'Nu s-a putut actualiza categoria'}`);
       }
     } catch (e) {
       alert('Eroare la actualizarea categoriei.');
@@ -2914,48 +2915,6 @@ function SetariContent() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL 1.D: EDITARE CATEGORIE VEHICUL */}
-      {/* ========================================================================= */}
-      {editingVehiculCat && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-                <Edit3 className="w-5 h-5 text-sapphire-500" />
-                <span>Editare Categorie Vehicul ({editingVehiculCat.nume})</span>
-              </h3>
-              <button onClick={() => setEditingVehiculCat(null)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
-            </div>
-
-            <form onSubmit={handleUpdateVehiculCat} className="space-y-3 text-xs">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Nume / Denumire Categorie: *</label>
-                <input
-                  required
-                  value={editingVehiculCat.nume || ''}
-                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, nume: e.target.value })}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie:</label>
-                <input
-                  value={editingVehiculCat.descriere || ''}
-                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, descriere: e.target.value })}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setEditingVehiculCat(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1.E: GESTIUNE CENTRALIZATĂ CATEGORII VEHICULE & UTILAJE */}
@@ -3079,6 +3038,68 @@ function SetariContent() {
                 Închide
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1.D: EDITARE CATEGORIE VEHICUL */}
+      {/* ========================================================================= */}
+      {editingVehiculCat && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Edit3 className="w-5 h-5 text-sapphire-500" />
+                <span>Editare Categorie ({editingVehiculCat.nume})</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingVehiculCat(null)}
+                className="text-sage-500 hover:text-sapphire-900 p-1 rounded-lg hover:bg-morning-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateVehiculCat} className="space-y-3 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Nume / Denumire Categorie: *</label>
+                <input
+                  required
+                  value={editingVehiculCat.nume || ''}
+                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, nume: e.target.value })}
+                  placeholder="ex: CAP_TRACTOR, BASCULANTA"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Categorie:</label>
+                <input
+                  value={editingVehiculCat.descriere || ''}
+                  onChange={(e) => setEditingVehiculCat({ ...editingVehiculCat, descriere: e.target.value })}
+                  placeholder="ex: Cap Tractor, Basculantă..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingVehiculCat(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20"
+                >
+                  Salvează Modificările
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
