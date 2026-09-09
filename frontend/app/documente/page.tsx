@@ -52,6 +52,7 @@ export default function DocumenteVehiculePage() {
   // Modal Adăugare / Editare
   const [showModal, setShowModal] = useState(false);
   const [editingDoc, setEditingDoc] = useState<any>(null);
+  const [canChangeVehicul, setCanChangeVehicul] = useState(false);
 
   // Formular Document
   const [formVehiculId, setFormVehiculId] = useState('');
@@ -81,7 +82,7 @@ export default function DocumenteVehiculePage() {
       setLoading(true);
       const [resDocs, resVeh] = await Promise.all([
         fetch(`${API_BASE_URL}/anomalii/documente-vehicule`),
-        fetch(`${API_BASE_URL}/mentenanta/vehicule`),
+        fetch(`${API_BASE_URL}/vehicule`),
       ]);
       if (resDocs.ok) setDocumente(await resDocs.json());
       if (resVeh.ok) setVehicule(await resVeh.json());
@@ -195,6 +196,7 @@ export default function DocumenteVehiculePage() {
 
   const handleOpenAddModal = (vehiculIdParam?: string, tipParam?: string) => {
     setEditingDoc(null);
+    setCanChangeVehicul(true);
     setFormVehiculId(vehiculIdParam || (vehicule[0]?.id || ''));
     setFormTip(tipParam || 'ITP');
     setFormTipCustom('');
@@ -213,6 +215,7 @@ export default function DocumenteVehiculePage() {
 
   const handleOpenEditModal = (doc: any) => {
     setEditingDoc(doc);
+    setCanChangeVehicul(false);
     setFormVehiculId(doc.vehiculId);
     if (DOC_TYPES_CONFIG[doc.tipDocument]) {
       setFormTip(doc.tipDocument);
@@ -338,6 +341,13 @@ export default function DocumenteVehiculePage() {
       (d.observatii || '').toLowerCase().includes(q);
 
     return matchTip && matchStatus && matchVehicul && matchSearch;
+  });
+
+  // Sortare vehicule
+  const vehiculeSortate = [...vehicule].sort((a, b) => {
+    const regA = (a.numarInmatriculare || a.numarIntern || '').toLowerCase();
+    const regB = (b.numarInmatriculare || b.numarIntern || '').toLowerCase();
+    return regA.localeCompare(regB, 'ro');
   });
 
   // Sortare lista
@@ -481,9 +491,9 @@ export default function DocumenteVehiculePage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
             >
               <option value="">Toate Utilajele & Mașinile ({vehicule.length})</option>
-              {vehicule.map((v) => (
+              {vehiculeSortate.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.numarIntern} ({v.numarInmatriculare}) - {v.categorieEnum}
+                  {v.numarInmatriculare || v.numarIntern} {v.numarIntern && v.numarIntern !== v.numarInmatriculare ? `(${v.numarIntern})` : ''} — {v.categorieEnum || 'Utilaj'}
                 </option>
               ))}
             </select>
@@ -863,22 +873,87 @@ export default function DocumenteVehiculePage() {
             </div>
 
             <form onSubmit={handleSaveDoc} className="space-y-3.5 text-xs">
-              {/* Utilaj */}
+              {/* Utilaj / Vehicul Recunoscut sau Selectabil */}
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Selectează Utilaj / Vehicul: *</label>
-                <select
-                  required
-                  value={formVehiculId}
-                  onChange={(e) => setFormVehiculId(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  <option value="">Alege vehiculul...</option>
-                  {vehicule.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.numarIntern} ({v.numarInmatriculare}) — {v.categorieEnum}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sage-700 font-bold block text-xs">
+                    {editingDoc ? 'Vehicul / Rendszám (Recunoscut Automat):' : 'Selectează Utilaj / Vehicul: *'}
+                  </label>
+                  {editingDoc && (
+                    <button
+                      type="button"
+                      onClick={() => setCanChangeVehicul(!canChangeVehicul)}
+                      className="text-[11px] font-bold text-sapphire-600 hover:text-sapphire-800 hover:underline cursor-pointer"
+                    >
+                      {canChangeVehicul ? 'Păstrează vehiculul curent' : 'Schimbă alt vehicul'}
+                    </button>
+                  )}
+                </div>
+
+                {editingDoc && !canChangeVehicul ? (
+                  (() => {
+                    const currentVehicul = editingDoc.vehicul || vehicule.find((v) => v.id === formVehiculId);
+                    const plate = currentVehicul?.numarInmatriculare || currentVehicul?.numarIntern || '—';
+                    const intern = currentVehicul?.numarIntern;
+                    const descriere = [currentVehicul?.marca, currentVehicul?.model].filter(Boolean).join(' ');
+
+                    return (
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-morning-100 border border-morning-300 shadow-2xs">
+                        <div className="flex items-center space-x-3">
+                          {/* Rendszám tábla dizájn */}
+                          <div className="flex items-center bg-white rounded-md border-2 border-slate-700 shadow-xs overflow-hidden">
+                            <div className="bg-blue-700 text-white font-black text-[9px] px-1.5 py-1.5 flex flex-col items-center justify-center leading-none">
+                              <span>RO</span>
+                            </div>
+                            <span className="font-mono font-black text-sm text-slate-900 px-3 py-1 tracking-wider uppercase">
+                              {plate}
+                            </span>
+                          </div>
+
+                          <div>
+                            <div className="flex items-center space-x-1.5">
+                              <p className="text-xs font-black text-sapphire-900">
+                                {intern && intern !== plate ? `${intern} ` : ''}
+                                {descriere ? `(${descriere})` : ''}
+                              </p>
+                            </div>
+                            <p className="text-[11px] text-sage-600 font-semibold">
+                              Categorie: <span className="font-bold text-slate-700">{currentVehicul?.categorieEnum || 'Utilaj / Vehicul'}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+                            <Check className="w-3 h-3 text-emerald-700 mr-0.5" />
+                            <span>Auto Recunoscut</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="space-y-1">
+                    <select
+                      required
+                      value={formVehiculId}
+                      onChange={(e) => setFormVehiculId(e.target.value)}
+                      className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 transition cursor-pointer"
+                    >
+                      <option value="">Alege vehiculul...</option>
+                      {vehiculeSortate.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.numarInmatriculare || v.numarIntern} {v.numarIntern && v.numarIntern !== v.numarInmatriculare ? `(${v.numarIntern})` : ''} — {v.categorieEnum || 'Utilaj'} {v.model ? `[${v.model}]` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {editingDoc && (
+                      <p className="text-[10px] text-amber-700 italic font-medium">
+                        * Ați activat schimbarea manuală a vehiculului asociat acestui document.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Tip Document */}
