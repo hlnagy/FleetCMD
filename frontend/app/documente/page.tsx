@@ -7,7 +7,7 @@ import {
   FileCheck, FileText, AlertTriangle, CheckCircle2, Clock, X,
   Search, RotateCcw, Plus, Download, Eye, Upload, Trash2, Edit3,
   RefreshCw, ShieldAlert, Truck, ExternalLink, Calendar, DollarSign,
-  Filter, Paperclip, ChevronRight, Check
+  Filter, Paperclip, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 
@@ -35,6 +35,19 @@ export default function DocumenteVehiculePage() {
   const [selectedStatus, setSelectedStatus] = useState<'TOATE' | 'EXPIRATE' | 'AVERTIZARE' | 'OPTIM'>('TOATE');
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Sortare
+  const [sortField, setSortField] = useState<'vehicul' | 'tip' | 'serie' | 'expirare' | 'zile' | 'act'>('zile');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'vehicul' | 'tip' | 'serie' | 'expirare' | 'zile' | 'act') => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Modal Adăugare / Editare
   const [showModal, setShowModal] = useState(false);
@@ -327,6 +340,46 @@ export default function DocumenteVehiculePage() {
     return matchTip && matchStatus && matchVehicul && matchSearch;
   });
 
+  // Sortare lista
+  const documenteSortate = [...documenteFiltrate].sort((a, b) => {
+    let comparison = 0;
+    if (sortField === 'vehicul') {
+      const regA = (a.vehicul?.numarInmatriculare || a.vehicul?.numarIntern || '').toLowerCase();
+      const regB = (b.vehicul?.numarInmatriculare || b.vehicul?.numarIntern || '').toLowerCase();
+      comparison = regA.localeCompare(regB, 'ro');
+    } else if (sortField === 'tip') {
+      const tipA = (a.tipDocument || '').toLowerCase();
+      const tipB = (b.tipDocument || '').toLowerCase();
+      comparison = tipA.localeCompare(tipB, 'ro');
+    } else if (sortField === 'serie') {
+      const sA = (a.serieDocument || a.emitent || '').toLowerCase();
+      const sB = (b.serieDocument || b.emitent || '').toLowerCase();
+      comparison = sA.localeCompare(sB, 'ro');
+    } else if (sortField === 'expirare') {
+      const timeA = new Date(a.dataExpirare).getTime();
+      const timeB = new Date(b.dataExpirare).getTime();
+      comparison = timeA - timeB;
+    } else if (sortField === 'zile') {
+      comparison = (a.zileRamase ?? 0) - (b.zileRamase ?? 0);
+    } else if (sortField === 'act') {
+      const actA = a.fisierUrl ? 1 : 0;
+      const actB = b.fisierUrl ? 1 : 0;
+      comparison = actB - actA;
+    }
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
+
+  const renderSortIcon = (field: 'vehicul' | 'tip' | 'serie' | 'expirare' | 'zile' | 'act') => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3.5 h-3.5 text-sage-400 opacity-40 group-hover:opacity-100 transition shrink-0" />;
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+    );
+  };
+
   const hasActiveFilters = selectedTip !== 'TOATE' || selectedStatus !== 'TOATE' || selectedVehiculId || searchQuery;
 
   return (
@@ -545,18 +598,72 @@ export default function DocumenteVehiculePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-black uppercase text-[10px] tracking-wider">
-                  <th className="p-3.5">Vehicul / Utilaj</th>
-                  <th className="p-3.5">Tip Document</th>
-                  <th className="p-3.5">Serie & Emitent</th>
-                  <th className="p-3.5">Data Expirării</th>
-                  <th className="p-3.5 text-center">Valabilitate</th>
-                  <th className="p-3.5 text-center">Act Scanat</th>
+                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-black uppercase text-[10px] tracking-wider select-none">
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                    onClick={() => handleSort('vehicul')}
+                    title="Click pentru sortare după număr înmatriculare / utilaj"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Vehicul / Rendszám</span>
+                      {renderSortIcon('vehicul')}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                    onClick={() => handleSort('tip')}
+                    title="Click pentru sortare după tipul documentului"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Tip Document</span>
+                      {renderSortIcon('tip')}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                    onClick={() => handleSort('serie')}
+                    title="Click pentru sortare după serie / emitent"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Serie & Emitent</span>
+                      {renderSortIcon('serie')}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                    onClick={() => handleSort('expirare')}
+                    title="Click pentru sortare cronologică după data expirării"
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Data Expirării</span>
+                      {renderSortIcon('expirare')}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group text-center"
+                    onClick={() => handleSort('zile')}
+                    title="Click pentru sortare după zile rămase / urgență lejárat"
+                  >
+                    <div className="flex items-center justify-center space-x-1.5">
+                      <span>Valabilitate / Lejárat</span>
+                      {renderSortIcon('zile')}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group text-center"
+                    onClick={() => handleSort('act')}
+                    title="Click pentru sortare după prezența actului scanat"
+                  >
+                    <div className="flex items-center justify-center space-x-1.5">
+                      <span>Act Scanat</span>
+                      {renderSortIcon('act')}
+                    </div>
+                  </th>
                   <th className="p-3.5 text-right">Acțiuni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
-                {documenteFiltrate.map((doc) => {
+                {documenteSortate.map((doc) => {
                   const dataExp = new Date(doc.dataExpirare);
                   const isExp = doc.esteExpirat;
                   const isCritic = doc.statusCalculat === 'CRITIC';
