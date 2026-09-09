@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import { SidebarProvider } from '@/lib/SidebarContext';
 import { ShieldCheck } from 'lucide-react';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
+import FleetAIAssistant from '@/components/ai/FleetAIAssistant';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -70,6 +71,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
         <OptiBaseFooter variant="light" />
       </div>
+      <FleetAIAssistant />
     </SidebarProvider>
   );
 }

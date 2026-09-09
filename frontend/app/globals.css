@@ -598,3 +598,90 @@ html.gray .swal2-title,
 html.gray .swal2-html-container {
   color: #F1F5F9 !important;
 }
+
+/* ========================================================================= */
+/* FLEET AI ROBOT DRONE ANIMATIONS & EFFECTS                                */
+/* ========================================================================= */
+@keyframes gyroSpin {
+  0% { transform: rotate(0deg) rotateX(65deg); }
+  100% { transform: rotate(360deg) rotateX(65deg); }
+}
+
+@keyframes gyroSpinReverse {
+  0% { transform: rotate(360deg) rotateY(65deg); }
+  100% { transform: rotate(0deg) rotateY(65deg); }
+}
+
+@keyframes robotFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1.5deg); }
+}
+
+@keyframes robotBoredBob {
+  0%, 100% { transform: translateY(0px) rotate(-3deg); }
+  50% { transform: translateY(4px) rotate(3deg); }
+}
+
+@keyframes scanLaser {
+  0% { transform: translateY(-100%); opacity: 0.1; }
+  50% { opacity: 0.8; }
+  100% { transform: translateY(100%); opacity: 0.1; }
+}
+
+@keyframes zzzFloat {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  30% { opacity: 0.9; }
+  100% { transform: translate(18px, -24px) scale(1.1); opacity: 0; }
+}
+
+@keyframes pulseCyan {
+  0%, 100% { box-shadow: 0 0 15px rgba(6, 182, 212, 0.4), inset 0 0 10px rgba(6, 182, 212, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(6, 182, 212, 0.75), inset 0 0 20px rgba(6, 182, 212, 0.6); }
+}
+
+@keyframes soundwaveAnim {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+.animate-gyro-spin {
+  animation: gyroSpin 9s linear infinite;
+}
+
+.animate-gyro-reverse {
+  animation: gyroSpinReverse 13s linear infinite;
+}
+
+.animate-robot-float {
+  animation: robotFloat 4.5s ease-in-out infinite;
+}
+
+.animate-robot-bored {
+  animation: robotBoredBob 6s ease-in-out infinite;
+}
+
+.animate-scan-laser {
+  animation: scanLaser 1.8s ease-in-out infinite;
+}
+
+.animate-zzz-1 {
+  animation: zzzFloat 2.6s ease-in infinite;
+  animation-delay: 0s;
+}
+
+.animate-zzz-2 {
+  animation: zzzFloat 2.6s ease-in infinite;
+  animation-delay: 0.85s;
+}
+
+.animate-zzz-3 {
+  animation: zzzFloat 2.6s ease-in infinite;
+  animation-delay: 1.7s;
+}
+
+.animate-soundwave-1 { animation: soundwaveAnim 0.6s ease-in-out infinite; }
+.animate-soundwave-2 { animation: soundwaveAnim 0.45s ease-in-out infinite 0.15s; }
+.animate-soundwave-3 { animation: soundwaveAnim 0.7s ease-in-out infinite 0.3s; }
+.animate-soundwave-4 { animation: soundwaveAnim 0.5s ease-in-out infinite 0.1s; }
+.animate-soundwave-5 { animation: soundwaveAnim 0.65s ease-in-out infinite 0.25s; }
+
