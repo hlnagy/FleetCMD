@@ -1120,7 +1120,7 @@ function StocuriGarantiiContent() {
                     {/* Header Card */}
                     <div className="flex items-center justify-between border-b border-morning-100 pb-2.5">
                       <div className="flex items-center space-x-1.5">
-                        <span className="px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-mono font-black text-xs tracking-wide shadow-xs">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono font-black text-xs tracking-wide shadow-xs">
                            {a.serieAnvelopa}
                         </span>
                         <span

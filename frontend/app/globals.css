@@ -290,6 +290,12 @@ html.dark .hover\:bg-morning-200:hover {
 }
 
 /* Subtle Badge Overrides in Dark Mode */
+html.dark .bg-sapphire-900 {
+  background-color: #142232 !important;
+  color: #F1F5F9 !important;
+  border-color: #1E3145 !important;
+}
+
 html.dark .bg-sapphire-50 {
   background-color: rgba(53, 98, 122, 0.3) !important;
   color: #93C5FD !important;
@@ -545,6 +551,12 @@ html.gray .hover\:bg-morning-200:hover {
 }
 
 /* Subtle Badges */
+html.gray .bg-sapphire-900 {
+  background-color: #192231 !important;
+  color: #F8FAFC !important;
+  border-color: #334155 !important;
+}
+
 html.gray .bg-sapphire-50 {
   background-color: rgba(56, 189, 248, 0.18) !important;
   color: #7DD3FC !important;

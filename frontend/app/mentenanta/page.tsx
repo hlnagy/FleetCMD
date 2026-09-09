@@ -340,7 +340,7 @@ export default function MentenantaPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-extrabold text-xs font-mono">
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-extrabold text-xs font-mono">
                           {s.vehiculNumarIntern}
                         </span>
                         <span className="text-xs font-bold text-sapphire-700">{s.vehiculInmatriculare}</span>

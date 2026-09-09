@@ -1638,8 +1638,8 @@ function SetariContent() {
                     <tr key={v.id} className="hover:bg-morning-50/80 transition">
                       {/* COD INTERN BADGE */}
                       <td className="p-3.5">
-                        <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-sapphire-900 text-white font-mono font-black text-xs shadow-2xs">
-                          <Truck className="w-3.5 h-3.5 text-sapphire-300" />
+                        <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono font-black text-xs shadow-2xs">
+                          <Truck className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                           <span>{v.numarIntern}</span>
                         </div>
                       </td>
