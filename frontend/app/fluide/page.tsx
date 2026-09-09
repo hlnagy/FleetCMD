@@ -164,13 +164,20 @@ export default function FluidePage() {
       const resAlert = await fetch(`${API_BASE_URL}/anomalii/alerte`);
       if (resAlert.ok) {
         const rawAlerts = await resAlert.json();
-        const lubeAlerts = rawAlerts.filter((a: any) =>
-          a.categorieAlert === 'SCURGERI_ULEI' ||
-          a.titlu?.toLowerCase().includes('ulei') ||
-          a.titlu?.toLowerCase().includes('fluid') ||
-          a.titlu?.toLowerCase().includes('lichid') ||
-          a.mesaj?.toLowerCase().includes('ulei')
-        );
+        const lubeAlerts = rawAlerts.filter((a: any) => {
+          const titlu = (a.titlu || '').toLowerCase();
+          const mesaj = (a.mesaj || '').toLowerCase();
+          // Exclude filter-related alerts — they belong in the Filtre section, not Fluide
+          const isFilterAlert = titlu.includes('filtru') || titlu.includes('filter');
+          if (isFilterAlert) return false;
+          return (
+            a.categorieAlert === 'SCURGERI_ULEI' ||
+            titlu.includes('ulei') ||
+            titlu.includes('fluid') ||
+            titlu.includes('lichid') ||
+            mesaj.includes('ulei')
+          );
+        });
         setAlerte(lubeAlerts);
       }
 
