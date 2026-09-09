@@ -65,59 +65,59 @@ export default function RobiSpeechBubble({
     }
   };
 
-  // Quick Action Prompts
+  // Quick Action Prompts in Romanian (Default)
   const quickActions = [
     {
-      label: '📊 Flotta Állapot',
-      prompt: 'Készíts egy átfogó analitikus összefoglalót a teljes járműflottáról, az aktákról és a szervizállapotról!',
+      label: '📊 Stare Flotă',
+      prompt: 'Generează un raport analitic complet despre starea întregii flote, acte și service!',
       icon: TrendingUp,
     },
     {
-      label: '⚠️ Lejáró Akták',
-      prompt: 'Mely járművek aktái jártak le vagy járnak le a következő 30 napban? Részletezd ITP, CASCO, RCA és tachográf szerint!',
+      label: '⚠️ Acte Expirate',
+      prompt: 'Care vehicule au documente expirate sau care expiră în următoarele 30 de zile? Detaliază ITP, CASCO, RCA și Tahograf!',
       icon: AlertTriangle,
     },
     {
-      label: '📦 Készlethiány',
-      prompt: 'Milyen alkatrészek és kenőanyagok vannak kritikus szinten vagy hiányoznak a raktárból?',
+      label: '📦 Stoc Critic Piese',
+      prompt: 'Ce piese și lubrifianți sunt la nivel critic sau lipsesc din depozit?',
       icon: Package,
     },
     {
-      label: '🔧 Munkalapok',
-      prompt: 'Milyen javítások vannak jelenleg folyamatban és mekkora a becsült összköltségük?',
+      label: '🔧 Comenzi de Lucru',
+      prompt: 'Ce reparații sunt în derulare și care este costul total estimat?',
       icon: Wrench,
     },
     {
-      label: '💡 Javaslatok',
-      prompt: 'Milyen költségcsökkentési és megelőző karbantartási javaslataid vannak a jelenlegi flottaadatok alapján?',
+      label: '💡 Optimizare Costuri',
+      prompt: 'Ce recomandări de optimizare a costurilor și mentenanță preventivă ai pe baza datelor flotei?',
       icon: Sparkles,
     },
   ];
 
-  // Mood Status Display
+  // Mood Status Display in Romanian
   const getMoodInfo = () => {
     switch (mood) {
       case 'thinking':
-        return { text: 'Gondolkodik...', color: 'text-purple-400 bg-purple-950/70 border-purple-500/40' };
+        return { text: 'Gândește...', color: 'text-purple-400 bg-purple-950/70 border-purple-500/40' };
       case 'analyzing':
-        return { text: 'Adatelemzés...', color: 'text-amber-400 bg-amber-950/70 border-amber-500/40' };
+        return { text: 'Analizează datele...', color: 'text-amber-400 bg-amber-950/70 border-amber-500/40' };
       case 'alert':
-        return { text: 'Flotta Riasztás!', color: 'text-red-400 bg-red-950/70 border-red-500/40' };
+        return { text: 'Alertă Flotă!', color: 'text-red-400 bg-red-950/70 border-red-500/40' };
       case 'happy':
-        return { text: 'Flotta Optimális', color: 'text-emerald-400 bg-emerald-950/70 border-emerald-500/40' };
+        return { text: 'Flotă Optimă', color: 'text-emerald-400 bg-emerald-950/70 border-emerald-500/40' };
       case 'bored':
-        return { text: 'Alszik (zZz)', color: 'text-slate-400 bg-slate-800/70 border-slate-600/40' };
+        return { text: 'Adoarme (zZz)', color: 'text-slate-400 bg-slate-800/70 border-slate-600/40' };
       case 'speaking':
-        return { text: 'Robi Válaszol...', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
+        return { text: 'Robi Răspunde...', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
       case 'idle':
       default:
-        return { text: 'Készenlét', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
+        return { text: 'În așteptare', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
     }
   };
 
   const moodInfo = getMoodInfo();
 
-  // Simple clean markdown formatter for Robi's speech
+  // Simple clean markdown formatter supporting both RO & HU tags
   const renderMessageContent = (text: string) => {
     const lines = text.split('\n');
     return (
@@ -189,21 +189,23 @@ export default function RobiSpeechBubble({
       /`(.*?)`/g,
       '<code class="px-1 py-0.5 bg-slate-900/90 border border-slate-700/60 rounded text-[11px] font-mono text-cyan-300">$1</code>'
     );
+
+    // Alert pills in Romanian & Hungarian
     out = out.replace(
-      /\[LEJÁRT\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono mr-1">LEJÁRT</span>'
+      /\[EXPIRAT\]|\[LEJÁRT\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono mr-1">EXPIRAT</span>'
     );
     out = out.replace(
-      /\[KRITIKUS\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono mr-1">KRITIKUS</span>'
+      /\[CRITIC\]|\[KRITIKUS\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono mr-1">CRITIC</span>'
     );
     out = out.replace(
-      /\[FIGYELEM\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-amber-900/80 border border-amber-500/50 text-amber-300 font-bold text-[10px] font-mono mr-1">FIGYELEM</span>'
+      /\[ATENȚIE\]|\[FIGYELEM\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-amber-900/80 border border-amber-500/50 text-amber-300 font-bold text-[10px] font-mono mr-1">ATENȚIE</span>'
     );
     out = out.replace(
-      /\[RENDBEN\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold text-[10px] font-mono mr-1">RENDBEN</span>'
+      /\[ÎN REGULĂ\]|\[RENDBEN\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold text-[10px] font-mono mr-1">ÎN REGULĂ</span>'
     );
 
     return out;
@@ -237,7 +239,7 @@ export default function RobiSpeechBubble({
               <span className="text-cyan-400 font-mono text-xs">AI</span>
             </span>
             <span
-              className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center space-x-1 ${moodInfo.color}`}
+              className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border flex items-center space-x-1 ${moodInfo.color}`}
             >
               <Volume2 className="w-3 h-3 animate-pulse" />
               <span>{moodInfo.text}</span>
@@ -249,7 +251,7 @@ export default function RobiSpeechBubble({
             <button
               type="button"
               onClick={onClearHistory}
-              title="Beszélgetés törlése"
+              title="Șterge conversația"
               className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
             >
               <RotateCcw className="w-4 h-4" />
@@ -257,7 +259,7 @@ export default function RobiSpeechBubble({
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}
-              title={isExpanded ? 'Kicsinyítés' : 'Teljes méret'}
+              title={isExpanded ? 'Micșorează' : 'Ecran complet'}
               className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors hidden sm:block"
             >
               {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -265,7 +267,7 @@ export default function RobiSpeechBubble({
             <button
               type="button"
               onClick={onClose}
-              title="Bezárás & Vissza alakulás gömbbé"
+              title="Închide și transformă în sferă"
               className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-950/40 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -273,34 +275,34 @@ export default function RobiSpeechBubble({
           </div>
         </div>
 
-        {/* LIVE KPI TICKER */}
+        {/* LIVE KPI TICKER (ROMANIAN) */}
         {kpi && (
           <div className="px-3.5 py-1.5 bg-slate-900/50 border-b border-slate-800/60 flex items-center justify-between text-[11px] font-mono overflow-x-auto no-scrollbar">
             <div className="flex items-center space-x-3 text-slate-300 whitespace-nowrap">
               <span>
-                Jármű: <strong className="text-cyan-400">{kpi.totalVehicles}</strong>
+                Vehicule: <strong className="text-cyan-400">{kpi.totalVehicles}</strong>
               </span>
               <span className="text-slate-700">•</span>
               <span>
-                Lejárt:{' '}
+                Expirate:{' '}
                 <strong className={kpi.expiredDocs > 0 ? 'text-red-400 font-bold' : 'text-emerald-400'}>
                   {kpi.expiredDocs}
                 </strong>
               </span>
               <span className="text-slate-700">•</span>
               <span>
-                30 napos:{' '}
+                În 30 zile:{' '}
                 <strong className="text-amber-400 font-bold">{kpi.imminentDocs}</strong>
               </span>
               <span className="text-slate-700">•</span>
               <span>
-                Hiány: <strong className="text-rose-400 font-bold">{kpi.lowStockItems}</strong>
+                Stoc critic: <strong className="text-rose-400 font-bold">{kpi.lowStockItems}</strong>
               </span>
             </div>
           </div>
         )}
 
-        {/* QUICK SUGGESTION CHIPS */}
+        {/* QUICK SUGGESTION CHIPS (ROMANIAN) */}
         <div className="px-3 py-2 bg-slate-950/70 border-b border-slate-900 flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
           {quickActions.map((action, i) => {
             const Icon = action.icon;
@@ -330,7 +332,7 @@ export default function RobiSpeechBubble({
               >
                 <div className="flex items-center space-x-1.5 mb-1 text-[10px] font-mono text-slate-400 px-1">
                   <span className={isAI ? 'text-cyan-400 font-bold' : 'text-slate-400'}>
-                    {isAI ? '🤖 ROBI' : '👤 TE'}
+                    {isAI ? '🤖 ROBI' : '👤 TU'}
                   </span>
                   <span>•</span>
                   <span>{msg.timestamp}</span>
@@ -354,11 +356,11 @@ export default function RobiSpeechBubble({
             );
           })}
 
-          {/* Typing / Analysis Wave */}
+          {/* Typing / Analysis Wave in Romanian */}
           {isLoading && (
             <div className="flex flex-col items-start">
               <div className="flex items-center space-x-1.5 mb-1 text-[10px] font-mono text-cyan-400 px-1">
-                <span>ROBI ELEMZÉSE</span>
+                <span>ROBI ANALIZEAZĂ</span>
                 <span className="animate-ping">•</span>
               </div>
               <div className="rounded-2xl rounded-tl-sm p-3.5 bg-slate-900/90 border border-cyan-500/40 text-slate-100 flex items-center space-x-3 shadow-lg">
@@ -368,7 +370,7 @@ export default function RobiSpeechBubble({
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
                 <span className="text-xs font-mono text-cyan-300">
-                  Robi átvizsgálja az adatbázist...
+                  Robi consultă baza de date a flotei...
                 </span>
               </div>
             </div>
@@ -377,7 +379,7 @@ export default function RobiSpeechBubble({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* SPEECH BUBBLE INPUT BAR */}
+        {/* SPEECH BUBBLE INPUT BAR (ALL ROMANIAN IN TEXTBOX) */}
         <form
           onSubmit={handleSubmit}
           className="p-3 bg-gradient-to-t from-slate-950 via-slate-950 to-slate-900/90 border-t border-slate-800/80 flex items-end space-x-2"
@@ -389,17 +391,17 @@ export default function RobiSpeechBubble({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Írj Robinak (pl. Lejáró akták, alkatrészhiány, költségek...)..."
-              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-400/50 resize-none font-sans"
+              placeholder="Scrie-i lui Robi (ex. Documente expirate, stoc piese, comenzi lucru, costuri)..."
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-400/50 resize-none font-sans"
             />
             <div className="absolute right-2 bottom-2 text-[9px] font-mono text-slate-500 pointer-events-none hidden sm:block">
-              Enter küldés
+              Enter trimite
             </div>
           </div>
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            aria-label="Üzenet küldése Robinak"
+            aria-label="Trimite mesaj lui Robi"
             className="h-12 w-12 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             <Send className="w-5 h-5 text-white" />

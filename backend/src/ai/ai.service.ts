@@ -217,10 +217,12 @@ export class AiService {
       mood = 'alert';
     }
 
+    const lang = this.detectLanguage(userMessage);
+
     // Ha van érvényes Gemini API kulcs, hívjuk meg a modellt valós kontextussal
     if (apiKey && apiKey.trim() !== '') {
       try {
-        const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot);
+        const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot, lang);
         return {
           answer: geminiResponse.answer,
           mood: geminiResponse.mood || mood,
@@ -237,8 +239,8 @@ export class AiService {
       }
     }
 
-    // Beépített Offline Analitikai Szabálymotor (Zero API key needed)
-    const ruleResponse = this.processRuleEngine(userMessage, snapshot);
+    // Beépített Analitikai Szabálymotor (Bilingv: RO implicit, HU ha magyarul kérdeztek)
+    const ruleResponse = this.processRuleEngine(userMessage, snapshot, lang);
     return {
       answer: ruleResponse.answer,
       mood: ruleResponse.mood,
@@ -253,29 +255,54 @@ export class AiService {
   }
 
   /**
+   * Detecție limbă (Română implicit, Maghiară dacă utilizatorul folosește cuvinte maghiare)
+   */
+  private detectLanguage(text: string): 'ro' | 'hu' {
+    const huWords = [
+      'szia', 'hogy', 'mennyi', 'melyik', 'hol', 'mit', 'kocsi', 'autó', 'jármű',
+      'akta', 'akták', 'lejárt', 'raktár', 'olaj', 'szerviz', 'költség', 'segíts',
+      'igen', 'nem', 'köszönöm', 'hali', 'flotta', 'munkalap', 'okmány', 'jelentés',
+      'állapot', 'kérlek', 'van', 'vannak', 'készlet', 'alkatrész'
+    ];
+    const lower = text.toLowerCase();
+    const hasHuChars = /[áéíóöőúüű]/i.test(lower);
+    const hasHuWords = huWords.some((w) => lower.includes(w));
+    return hasHuChars || hasHuWords ? 'hu' : 'ro';
+  }
+
+  /**
    * Hívás a Google Gemini API-hoz
    */
   private async callGeminiApi(
     apiKey: string,
     message: string,
     history: ChatMessage[],
-    snap: any
+    snap: any,
+    lang: 'ro' | 'hu'
   ): Promise<{ answer: string; mood: RobotMood }> {
     const systemPrompt = `
-Te Robi vagy, a FleetCMD intelligens AI Robot Asszisztense, egy futurisztikus, barátságos, közvetlen, precíz és profi mérnök-robot.
-A célod, hogy a flotta adatait elemezd és tökéletesen értsd. Válaszolj magyarul, közvetlen, segítőkész és mérnöki pontosságú stílusban! Robi néven mutatkozz be, ha kérdezik a neved!
-Használj szép Markdown formázást, kiemeléseket (**félkövér**), pontokba szedett listákat és szükség esetén táblázatokat.
+Ești Robi, asistentul robot prietenos, alb, amabil și inteligent al platformei FleetCMD.
+Aspectul tău: Ești un robot alb, plăcut, prietenos și extrem de politicos, inspirat din tehnologia viitorului.
+PERSONALITATE ȘI TON:
+- Ești întotdeauna foarte amabil, prietenos, zâmbitor, respectuos și precis din punct de vedere tehnic.
+- LIMBA IMPLICITĂ ESTE ROMÂNA.
+${
+  lang === 'hu'
+    ? 'UTILIZATORUL A SCRIS ÎN MAGHIARĂ: Răspunde-i impecabil, politicos și prietenos în limba MAGHIARĂ!'
+    : 'UTILIZATORUL A SCRIS ÎN ROMÂNĂ (sau limba implicită): Răspunde-i impecabil, politicos și prietenos în limba ROMÂNĂ!'
+}
+Formatare: Folosește formatare curată Markdown: titluri scurte, **text aldin**, liste cu puncte și tabele dacă sunt relevante.
 
-Íme a flotta VALÓS, ÉLŐ ADATBÁZIS PILLANATKÉPE a kérdés pillanatában:
-- Összes jármű: ${snap.totalVehicule} db (ebből aktív: ${snap.vehiculeActive} db)
-- Járműkategóriák: ${JSON.stringify(snap.categoriiCount)}
-- Lejárt dokumentumok (${snap.docExpirateCount} db): ${JSON.stringify(snap.docExpirate)}
-- 30 napon belül lejáró akták (${snap.docUrgenteCount} db): ${JSON.stringify(snap.docUrgente)}
-- Nyitott munkalapok (${snap.comenziDeschiseCount} db): ${JSON.stringify(snap.openOrders)}
-- Kritikus készlethiány (${snap.stocCriticCount} tétel): ${JSON.stringify(snap.stocCritic)}
-- Jármű minta (rendszám, típus, km): ${JSON.stringify(snap.vehiculeSample.slice(0, 15))}
+Date reale din baza de date a flotei în acest moment:
+- Total vehicule: ${snap.totalVehicule} (active: ${snap.vehiculeActive})
+- Categorii: ${JSON.stringify(snap.categoriiCount)}
+- Documente expirate (${snap.docExpirateCount}): ${JSON.stringify(snap.docExpirate)}
+- Acte care expiră în 30 de zile (${snap.docUrgenteCount}): ${JSON.stringify(snap.docUrgente)}
+- Comenzi de lucru deschise (${snap.comenziDeschiseCount}): ${JSON.stringify(snap.openOrders)}
+- Piese cu stoc critic (${snap.stocCriticCount}): ${JSON.stringify(snap.stocCritic)}
+- Eșantion vehicule (număr, tip, km): ${JSON.stringify(snap.vehiculeSample.slice(0, 15))}
 
-A válaszod végén javasolj 1-2 releváns, gyors további kérdést vagy műveletet!
+Încheie răspunsul cu o sugestie scurtă și prietenoasă de acțiune!
 `;
 
     const contents = [
@@ -297,13 +324,20 @@ A válaszod végén javasolj 1-2 releváns, gyors további kérdést vagy művel
     const res = await axios.post(url, { contents }, { timeout: 12000 });
 
     const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Üres válasz érkezett a Gemini API-tól');
+    if (!text) throw new Error('Răspuns gol de la Gemini API');
 
     let mood: RobotMood = 'happy';
     const lower = text.toLowerCase();
-    if (lower.includes('lejárt') || lower.includes('kritikus') || lower.includes('figyelem') || lower.includes('hiány')) {
+    if (
+      lower.includes('expirat') || lower.includes('lejárt') ||
+      lower.includes('critic') || lower.includes('kritikus') ||
+      lower.includes('atenție') || lower.includes('figyelem')
+    ) {
       mood = 'alert';
-    } else if (lower.includes('statisztika') || lower.includes('összesítés') || lower.includes('riport')) {
+    } else if (
+      lower.includes('statistici') || lower.includes('statisztika') ||
+      lower.includes('raport') || lower.includes('riport')
+    ) {
       mood = 'analyzing';
     }
 
@@ -311,134 +345,229 @@ A válaszod végén javasolj 1-2 releváns, gyors további kérdést vagy művel
   }
 
   /**
-   * Intelligens Helyi Flotta Analitikai Motor (Ha nincs API kulcs)
+   * Motor Analitic Bilingv (Implicit Română, Maghiară dacă interogarea a fost în maghiară)
    */
-  private processRuleEngine(message: string, snap: any): { answer: string; mood: RobotMood } {
+  private processRuleEngine(message: string, snap: any, lang: 'ro' | 'hu'): { answer: string; mood: RobotMood } {
     const q = message.toLowerCase().trim();
 
-    // 1. Általános köszönés vagy bemutatkozás / név
-    if (q.includes('szia') || q.includes('hello') || q.includes('üdv') || q.includes('ki vagy') || q.includes('neved') || q.includes('hívnak') || q.includes('robi')) {
-      return {
-        answer: `### 🤖 Szia! Robi vagyok, a FleetCMD flottaasszisztens robotja!
-Valós időben látom és elemzem a cég teljes adatbázisát:
+    // ==========================================
+    // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU)
+    // ==========================================
+    if (lang === 'hu') {
+      if (q.includes('szia') || q.includes('hello') || q.includes('üdv') || q.includes('ki vagy') || q.includes('neved') || q.includes('hívnak') || q.includes('robi')) {
+        return {
+          answer: `### 🤖 Szia! Robi vagyok, a te kedves és intelligens flottaasszisztens robotod!
+Valós időben kapcsolom össze a cég teljes adatbázisát:
 - **${snap.totalVehicule} járművet és gépet** a flottában
-- **${snap.docExpirateCount} lejárt** és **${snap.docUrgenteCount} sürgős** dokumentumot
+- **${snap.docExpirateCount} lejárt** és **${snap.docUrgenteCount} sürgős** okmányt (< 30 nap)
 - **${snap.comenziDeschiseCount} nyitott munkalapot** a szervizben
 - **${snap.stocCriticCount} készlethiányos alkatrészt** a raktárban
 
-Miben segíthetek ma? Kérhetsz állapotjelentést, lejárati listát vagy alkatrész-elemzést!`,
-        mood: 'happy',
-      };
-    }
-
-    // 2. Dokumentumok & Lejáratok (ITP, RCA, Rovinieta, Tahograf, Casco)
-    if (q.includes('okmány') || q.includes('akta') || q.includes('dokument') || q.includes('lejárt') || q.includes('itp') || q.includes('rca') || q.includes('roviniet') || q.includes('tahograf')) {
-      if (snap.docExpirateCount === 0 && snap.docUrgenteCount === 0) {
-        return {
-          answer: `### 🛡️ Dokumentum Státusz: Minden rendben!
-Átnéztem az összes jármű okmányait:
-- **0 db lejárt akta** található a flottában.
-- **0 db sürgős lejáró okmány** a következő 30 napban.
-
-Minden gép és teherautó rendelkezik érvényes ITP-vel, RCA-val és Rovinietával.`,
+Miben segíthetek ma? Kérhetsz állapotjelentést, lejárati listát vagy alkatrész-elemzést! *(Beszélek románul és magyarul is!)*`,
           mood: 'happy',
         };
       }
 
-      let response = `### ⚠️ Dokumentum Lejárati Elemzés\n\n`;
+      if (q.includes('okmány') || q.includes('akta') || q.includes('dokument') || q.includes('lejárt') || q.includes('itp') || q.includes('rca') || q.includes('roviniet') || q.includes('tahograf')) {
+        if (snap.docExpirateCount === 0 && snap.docUrgenteCount === 0) {
+          return {
+            answer: `### 🛡️ Dokumentum Státusz: Minden rendben van!
+Átnéztem az összes jármű okmányait:
+- **0 db lejárt akta** található a flottában.
+- **0 db sürgős lejáró okmány** a következő 30 napban.
+
+Minden gép és teherautó rendelkezik érvényes ITP-vel, RCA-val és Rovinietával!`,
+            mood: 'happy',
+          };
+        }
+
+        let response = `### ⚠️ Dokumentum Lejárati Elemzés\n\n`;
+        if (snap.docExpirateCount > 0) {
+          response += `🚨 **[LEJÁRT] Kritikus: ${snap.docExpirateCount} db dokumentum már lejárt!**\n\n`;
+          response += `| Jármű / Rendszám | Típus | Lejárat Dátuma | Státusz |\n| :--- | :--- | :--- | :--- |\n`;
+          snap.docExpirate.slice(0, 10).forEach((d: any) => {
+            response += `| **${d.vehicul}** | ${d.tip} | ${d.dataExpirare} | [LEJÁRT] (${Math.abs(d.zileRamase)} napja) |\n`;
+          });
+        }
+
+        if (snap.docUrgenteCount > 0) {
+          response += `\n⏰ **[FIGYELEM] ${snap.docUrgenteCount} db okmány 30 napon belül lejár:**\n\n`;
+          snap.docUrgente.slice(0, 6).forEach((d: any) => {
+            response += `- **${d.vehicul}**: ${d.tip} (Lejárat: ${d.dataExpirare}, még **${d.zileRamase} nap**)\n`;
+          });
+        }
+        return { answer: response, mood: 'alert' };
+      }
+
+      if (q.includes('munkalap') || q.includes('szerviz') || q.includes('javítás') || q.includes('karbantart')) {
+        let response = `### 🔧 Karbantartási & Munkalap Elemzés\n\n`;
+        response += `Jelenleg **${snap.comenziDeschiseCount} db nyitott munkalap** van folyamatban.\n\n`;
+        if (snap.openOrders.length > 0) {
+          response += `| Munkalap | Jármű | Státusz | Költség | Nyitás |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+          snap.openOrders.slice(0, 5).forEach((o: any) => {
+            response += `| **#${o.numar || '-'}** | ${o.vehicul || 'Flotta'} | ${o.stare} | **${o.costTotal} RON** | ${o.dataDeschidere} |\n`;
+          });
+        }
+        return { answer: response, mood: 'analyzing' };
+      }
+
+      if (q.includes('stoc') || q.includes('raktár') || q.includes('alkatrész') || q.includes('olaj') || q.includes('hiány')) {
+        let response = `### 📦 Raktárkészlet & Kenőanyag Elemzés\n\n`;
+        if (snap.stocCriticCount > 0) {
+          response += `⚠️ **[KRITIKUS] ${snap.stocCriticCount} db tétel érte el a minimum készletszintet:**\n\n`;
+          snap.stocCritic.slice(0, 8).forEach((item: any) => {
+            response += `- \`${item.cod || '-'}\` **${item.denumire}**: **${item.stoc} ${item.um}** (Minimum: ${item.minim} ${item.um})\n`;
+          });
+        } else {
+          response += `✅ **[RENDBEN] A raktárkészlet optimális!** Nincs hiányzó tétel.`;
+        }
+        return { answer: response, mood: snap.stocCriticCount > 0 ? 'alert' : 'happy' };
+      }
+
+      if (q.includes('flotta') || q.includes('riport') || q.includes('állapot') || q.includes('összesítés')) {
+        let catList = Object.entries(snap.categoriiCount)
+          .map(([k, v]) => `\`${k}\`: **${v} db**`)
+          .join(', ');
+        return {
+          answer: `### 📊 Globális Flotta Állapotjelentés
+- **Géppark mérete:** Összesen **${snap.totalVehicule} db** jármű regisztrálva.
+- **Üzemkész járművek:** **${snap.vehiculeActive} db (${Math.round((snap.vehiculeActive / (snap.totalVehicule || 1)) * 100)}%)** aktív.
+- **Megoszlás:** ${catList}
+- **Okmányok:** **${snap.docExpirateCount} lejárt** ❌, **${snap.docUrgenteCount} hamarosan lejáró** ⚠️
+- **Munkalapok:** **${snap.comenziDeschiseCount} nyitott javítás** 🔧
+- **Raktárhiány:** **${snap.stocCriticCount} kritikus tétel** 📦`,
+          mood: 'analyzing',
+        };
+      }
+    }
+
+    // ==========================================
+    // 2. RĂSPUNSURI ÎN LIMBA ROMÂNĂ (RO - IMPLICIT)
+    // ==========================================
+    // Salut / Prezentare / Identitate
+    if (q.includes('buna') || q.includes('salut') || q.includes('servus') || q.includes('cine esti') || q.includes('nume') || q.includes('robi') || q.includes('ajutor')) {
+      return {
+        answer: `### 🤖 Bună! Sunt Robi, asistentul tău robot prietenos de flotă!
+Monitorizez și analizez în timp real întreaga bază de date a companiei:
+- **${snap.totalVehicule} vehicule și utilaje** înregistrate în flotă
+- **${snap.docExpirateCount} documente expirate** și **${snap.docUrgenteCount} urgente** (< 30 zile)
+- **${snap.comenziDeschiseCount} comenzi de lucru deschise** în service
+- **${snap.stocCriticCount} piese cu stoc critic** în depozit
+
+Cu ce te pot ajuta astăzi? Îmi poți cere o analiză a actelor, a comenzilor sau un raport complet de flotă! *(Beszélek románul és magyarul is!)*`,
+        mood: 'happy',
+      };
+    }
+
+    // Acte & Valabilități (ITP, RCA, Rovinieta, Tahograf, Casco)
+    if (q.includes('act') || q.includes('document') || q.includes('expirat') || q.includes('itp') || q.includes('rca') || q.includes('roviniet') || q.includes('tahograf') || q.includes('casco') || q.includes('valabilitat')) {
+      if (snap.docExpirateCount === 0 && snap.docUrgenteCount === 0) {
+        return {
+          answer: `### 🛡️ Status Valabilități Documente: Totul este în regulă!
+Am verificat toate vehiculele din flotă:
+- **0 documente expirate** în acest moment.
+- **0 documente urgente** care să expire în următoarele 30 de zile.
+
+Toate camioanele și utilajele au ITP, RCA și Rovinietă valabile!`,
+          mood: 'happy',
+        };
+      }
+
+      let response = `### ⚠️ Analiză Valabilitate Documente Flotă\n\n`;
       if (snap.docExpirateCount > 0) {
-        response += `🚨 **Kritikus: ${snap.docExpirateCount} db dokumentum már lejárt!**\n\n`;
-        response += `| Jármű / Rendszám | Típus | Lejárat Dátuma | Státusz |\n| :--- | :--- | :--- | :--- |\n`;
+        response += `🚨 **[EXPIRAT] Critic: ${snap.docExpirateCount} documente sunt deja expirate!**\n\n`;
+        response += `| Vehicul / Nr. Înmatriculare | Tip Act | Dată Expirare | Status |\n| :--- | :--- | :--- | :--- |\n`;
         snap.docExpirate.slice(0, 10).forEach((d: any) => {
-          response += `| **${d.vehicul}** | ${d.tip} | ${d.dataExpirare} | <span style="color:#ef4444">Lejárt (${Math.abs(d.zileRamase)} napja)</span> |\n`;
+          response += `| **${d.vehicul}** | ${d.tip} | ${d.dataExpirare} | [EXPIRAT] (de ${Math.abs(d.zileRamase)} zile) |\n`;
         });
         if (snap.docExpirate.length > 10) {
-          response += `\n*...és további ${snap.docExpirate.length - 10} db dokumentum.*\n`;
+          response += `\n*...și încă ${snap.docExpirate.length - 10} alte documente expirate.*\n`;
         }
       }
 
       if (snap.docUrgenteCount > 0) {
-        response += `\n⏰ **Figyelem: ${snap.docUrgenteCount} db dokumentum hamarosan (< 30 nap) lejár:**\n\n`;
+        response += `\n⏰ **[ATENȚIE] ${snap.docUrgenteCount} documente expiră în următoarele 30 de zile:**\n\n`;
         snap.docUrgente.slice(0, 6).forEach((d: any) => {
-          response += `- **${d.vehicul}**: ${d.tip} (Lejárat: ${d.dataExpirare}, még **${d.zileRamase} nap**)\n`;
+          response += `- **${d.vehicul}**: ${d.tip} (Expiră: ${d.dataExpirare}, mai sunt **${d.zileRamase} zile**)\n`;
         });
       }
 
-      response += `\n💡 *Javaslat: Látogass el a bal oldali **Valabilitate Acte** menübe a megújítások rögzítéséhez!*`;
+      response += `\n💡 *Recomandare: Accesează meniul **Valabilitate Acte** din stânga pentru a înregistra reînnoirile!*`;
       return { answer: response, mood: 'alert' };
     }
 
-    // 3. Munkalapok & Karbantartás
-    if (q.includes('munkalap') || q.includes('szerviz') || q.includes('javítás') || q.includes('comand') || q.includes('karbantart')) {
-      let response = `### 🔧 Karbantartási & Munkalap Elemzés\n\n`;
-      response += `Jelenleg **${snap.comenziDeschiseCount} db nyitott munkalap** van folyamatban a szervizben.\n\n`;
+    // Comenzi de Lucru & Service
+    if (q.includes('comanda') || q.includes('lucru') || q.includes('service') || q.includes('reparati') || q.includes('mentenanta') || q.includes('atelier') || q.includes('cost')) {
+      let response = `### 🔧 Analiză Comenzi de Lucru & Mentenanță\n\n`;
+      response += `În prezent sunt **${snap.comenziDeschiseCount} comenzi de lucru deschise** în atelierul de service.\n\n`;
 
       if (snap.openOrders.length > 0) {
-        response += `| Munkalap | Jármű | Státusz | Költség | Nyitva tartás |\n| :--- | :--- | :--- | :--- | :--- |\n`;
+        response += `| Nr. Comandă | Vehicul | Stare | Cost Total | Dată Deschidere |\n| :--- | :--- | :--- | :--- | :--- |\n`;
         snap.openOrders.slice(0, 5).forEach((o: any) => {
-          response += `| **#${o.numar || '-'}** | ${o.vehicul || 'Flotta'} | ${o.stare} | **${o.costTotal} RON** | ${o.dataDeschidere} |\n`;
+          response += `| **#${o.numar || '-'}** | ${o.vehicul || 'Flotă'} | ${o.stare} | **${o.costTotal} RON** | ${o.dataDeschidere} |\n`;
         });
       } else {
-        response += `Nincsenek aktív szervizfeladatok rögzítve a rendszerben. Minden gép üzemkész.`;
+        response += `Nu există comenzi de lucru active în acest moment. Toate utilajele sunt disponibile pentru operare.`;
       }
 
       return { answer: response, mood: 'analyzing' };
     }
 
-    // 4. Raktárkészlet, Alkatrészek & Olajok
-    if (q.includes('stoc') || q.includes('raktár') || q.includes('alkatrész') || q.includes('olaj') || q.includes('szűrő') || q.includes('hiány')) {
-      let response = `### 📦 Raktárkészlet & Kenőanyag Elemzés\n\n`;
+    // Stoc Piese & Lubrifianți
+    if (q.includes('stoc') || q.includes('piese') || q.includes('ulei') || q.includes('filtru') || q.includes('depozit') || q.includes('critic') || q.includes('lipsa')) {
+      let response = `### 📦 Analiză Stoc Depozit & Lubrifianți\n\n`;
       if (snap.stocCriticCount > 0) {
-        response += `⚠️ **${snap.stocCriticCount} db tétel érte el a minimális készletszintet:**\n\n`;
-        response += `| Cikkszám | Megnevezés | Jelenlegi Készlet | Min. Készlet |\n| :--- | :--- | :--- | :--- |\n`;
+        response += `⚠️ **[CRITIC] ${snap.stocCriticCount} articole au atins nivelul minim de siguranță:**\n\n`;
+        response += `| Cod Articol | Denumire Piesă | Stoc Curent | Stoc Minim |\n| :--- | :--- | :--- | :--- |\n`;
         snap.stocCritic.slice(0, 8).forEach((item: any) => {
-          response += `| \`${item.cod || '-'}\` | **${item.denumire}** | <span style="color:#ef4444; font-weight:bold">${item.stoc} ${item.um}</span> | ${item.minim} ${item.um} |\n`;
+          response += `| \`${item.cod || '-'}\` | **${item.denumire}** | **${item.stoc} ${item.um}** | ${item.minim} ${item.um} |\n`;
         });
-        response += `\n🛒 *Javaslat: Generálj beszerzési listát az e-Factura vagy a Stocuri modulban!*`;
+        response += `\n🛒 *Recomandare: Generează o notă de aprovizionare sau verifică intrările în e-Factura!*`;
       } else {
-        response += `✅ **A raktárkészlet optimális!** Nincs minimális szint alá esett alkatrész vagy kenőanyag.`;
+        response += `✅ **[ÎN REGULĂ] Stocul este optim!** Niciun articol nu este sub cantitatea minimă.`;
       }
 
       return { answer: response, mood: snap.stocCriticCount > 0 ? 'alert' : 'happy' };
     }
 
-    // 5. Teljes Flotta Állapotjelentés / Statisztika
-    if (q.includes('flotta') || q.includes('riport') || q.includes('statisztika') || q.includes('összesítés') || q.includes('jelentés') || q.includes('állapot')) {
+    // Raport Global Stare Flotă
+    if (q.includes('flota') || q.includes('raport') || q.includes('stare') || q.includes('statistici') || q.includes('sumar') || q.includes('vehicul')) {
       let catList = Object.entries(snap.categoriiCount)
-        .map(([k, v]) => `\`${k}\`: **${v} db**`)
+        .map(([k, v]) => `\`${k}\`: **${v} unități**`)
         .join(', ');
 
       return {
-        answer: `### 📊 FleetCMD Globális Flotta Állapotjelentés
-- **Géppark mérete:** Összesen **${snap.totalVehicule} db** jármű és nehézgép regisztrálva.
-- **Üzemkész arány:** **${snap.vehiculeActive} db (${Math.round((snap.vehiculeActive / (snap.totalVehicule || 1)) * 100)}%)** aktív üzemben.
-- **Megoszlás:** ${catList}
+        answer: `### 📊 Raport Global Stare Flotă FleetCMD
+- **Parc Auto Total:** **${snap.totalVehicule} vehicule și utilaje** înregistrate.
+- **Rată Disponibilitate:** **${snap.vehiculeActive} unități (${Math.round((snap.vehiculeActive / (snap.totalVehicule || 1)) * 100)}%)** active în exploatare.
+- **Distribuție categorii:** ${catList}
 
-#### 📋 Üzemeltetési Diagnosztika:
-1. **Okmányok (Valabilitate):**
-   - Lejárt akták: **${snap.docExpirateCount} db** ${snap.docExpirateCount > 0 ? '❌ *(Azonnali megújítás szükséges)*' : '✅'}
-   - Hamarosan lejár (< 30 nap): **${snap.docUrgenteCount} db** ⚠️
-2. **Karbantartás (CMMS):**
-   - Folyamatban lévő munkalapok: **${snap.comenziDeschiseCount} db** 🔧
-3. **Anyaggazdálkodás (Stoc):**
-   - Utánrendelésre váró tételek: **${snap.stocCriticCount} db** 📦
+#### 📋 Diagnostic Operațional:
+1. **Documente & Valabilitate:**
+   - Expirate: **${snap.docExpirateCount} documente** ${snap.docExpirateCount > 0 ? '❌ *(Reînnoire urgentă)*' : '✅'}
+   - Expiră în 30 de zile: **${snap.docUrgenteCount} documente** ⚠️
+2. **Mentenanță & Service:**
+   - Comenzi de lucru deschise: **${snap.comenziDeschiseCount} comenzi** 🔧
+3. **Depozit & Piese:**
+   - Articole cu stoc critic: **${snap.stocCriticCount} repere** 📦
 
-Melyik terület részleteire vagy kíváncsi?`,
+Despre ce arie dorești informații detaliate?`,
         mood: 'analyzing',
       };
     }
 
-    // Alapértelmezett intelligens válasz
+    // Răspuns implicit prietenos în Română
     return {
-      answer: `### 🤖 Értem a kérdésedet!
-A flotta adatbázisában jelenleg **${snap.totalVehicule} járművet**, **${snap.comenziDeschiseCount} nyitott munkalapot** és **${snap.docExpirateCount} lejárt okmányt** tartok számon.
+      answer: `### 🤖 Am înțeles întrebarea ta!
+În baza de date a flotei am la dispoziție **${snap.totalVehicule} vehicule**, **${snap.comenziDeschiseCount} comenzi de lucru deschise** și **${snap.docExpirateCount} documente expirate**.
 
-Ha szeretnéd, hogy részletes elemzést adjak, próbáld ki az alábbi kérdések egyikét:
-- *"Melyik dokumentumok járnak le a héten?"*
-- *"Adj egy állapotjelentést a basculantákról!"*
-- *"Milyen alkatrészekből van hiány a raktárban?"*
-- *"Mekkora költségnél járnak a nyitott munkalapok?"*`,
+Pentru detalii imediate, încearcă una dintre întrebările rapide:
+- *"Care sunt actele expirate în flotă?"*
+- *"Ce piese sunt la nivel critic în depozit?"*
+- *"Care este costul comenzilor de lucru deschise?"*
+- *"Generează un raport complet al stării flotei!"*`,
       mood: 'thinking',
     };
   }
 }
+

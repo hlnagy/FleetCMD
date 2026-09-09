@@ -732,3 +732,23 @@ html.gray .swal2-html-container {
   animation: mechanicalArmSway 3.5s ease-in-out infinite;
 }
 
+@keyframes cuteWave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-24deg); }
+  75% { transform: rotate(18deg); }
+}
+
+@keyframes cuteHeadTilt {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(4deg); }
+}
+
+.animate-cute-wave {
+  animation: cuteWave 0.65s ease-in-out infinite;
+  transform-origin: top left;
+}
+
+.animate-head-tilt {
+  animation: cuteHeadTilt 3s ease-in-out infinite;
+}
+

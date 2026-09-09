@@ -17,17 +17,17 @@ export default function FleetAIAssistant() {
   const initialWelcome: ChatMessage = {
     id: 'welcome-1',
     sender: 'ai',
-    text: `### 🤖 Szia! Robi vagyok, a FleetCMD Intelligens Flottaasszisztense.
+    text: `### 🤖 Bună! Sunt Robi, asistentul tău inteligent de flotă.
 
-Valós időben kapcsolom össze a cég teljes flottáját, aktáit, raktárát és szervizét. 
+Conectez în timp real întreaga flotă de vehicule, documentele, stocurile de piese și comenzile de service. 
 
-**Miben segíthetek ma?**
-- 📋 **Akták & Lejáratok:** ITP, RCA, Rovinieta, Casco, Tachográf ellenőrzés
-- 📊 **Flotta Állapotjelentés:** Aktív járművek, kategóriák, futásteljesítmény
-- 📦 **Raktár & Kenőanyagok:** Kritikus készletszintek és olajhiány
-- 🔧 **Szerviz & Munkalapok:** Nyitott javítások és költségösszesítők
+**Cum te pot ajuta astăzi?**
+- 📋 **Acte & Valabilitate:** Verificare ITP, RCA, Rovinietă, Casco, Tahograf
+- 📊 **Raport Flotă:** Vehicule active, categorii, contoare KM
+- 📦 **Stoc & Lubrifianți:** Niveluri critice de piese și uleiuri
+- 🔧 **Service & Comenzi:** Reparații deschise și costuri estimate
 
-*Kattints a fenti gyorsgombok egyikére, vagy tegyél fel egy kérdést magyarul!*`,
+*Apasă pe oricare dintre sugestiile de mai sus sau scrie-mi o întrebare! (Răspund în Română și Maghiară / Beszélek románul és magyarul is!)*`,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   };
 
@@ -174,7 +174,7 @@ Valós időben kapcsolom össze a cég teljes flottáját, aktáit, raktárát �
         {
           id: `err-${Date.now()}`,
           sender: 'ai',
-          text: '⚠️ Nem sikerült kapcsolatot teremteni az AI szerverrel. Kérlek, próbáld újra pár másodperc múlva!',
+          text: '⚠️ Nu am putut stabili conexiunea cu serverul AI. Te rog încearcă din nou în câteva secunde!',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -191,7 +191,7 @@ Valós időben kapcsolom össze a cég teljes flottáját, aktáit, raktárát �
       {
         id: `clear-${Date.now()}`,
         sender: 'ai',
-        text: '🧹 A beszélgetési előzmények törölve. Milyen kérdésed van a flotta kapcsán?',
+        text: '🧹 Istoricul conversației a fost șters. Cu ce te pot ajuta legat de flotă?',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
