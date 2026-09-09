@@ -346,36 +346,6 @@ export default function DocumenteVehiculePage() {
         </div>
 
         <div className="flex items-center flex-wrap gap-2 self-start md:self-auto">
-          {/* Buton Import ODS Local */}
-          <button
-            type="button"
-            onClick={handleImportOdsDefault}
-            disabled={isImporting}
-            className="px-3.5 py-2.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition flex items-center space-x-1.5 border border-morning-300 disabled:opacity-50"
-            title="Importă automat din fișierul Valabilitate acte masini 2025.ods din Downloads"
-          >
-            <RefreshCw className={`w-4 h-4 text-sapphire-600 ${isImporting ? 'animate-spin' : ''}`} />
-            <span>{isImporting ? 'Se importă...' : 'Importă din ODS (Downloads)'}</span>
-          </button>
-
-          {/* Upload ODS alternativ */}
-          <input
-            ref={odsFileInputRef}
-            type="file"
-            accept=".ods,.xlsx,.csv"
-            onChange={handleUploadOdsFile}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => odsFileInputRef.current?.click()}
-            disabled={isImporting}
-            className="px-3 py-2.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-slate-700 text-xs font-bold transition flex items-center space-x-1 border border-morning-300"
-            title="Încarcă alt fișier ODS de pe computer"
-          >
-            <Upload className="w-3.5 h-3.5 text-slate-600" />
-            <span>Fișier ODS...</span>
-          </button>
 
           {/* Adăugare Document Manual */}
           <button
