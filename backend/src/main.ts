@@ -23,12 +23,11 @@ for (const envPath of envCandidates) {
           const idx = trimmed.indexOf('=');
           const k = trimmed.substring(0, idx).trim();
           const v = trimmed.substring(idx + 1).trim().replace(/^["']|["']$/g, '');
-          if (k && !process.env[k]) {
+          if (k && (!process.env[k] || process.env[k].trim() === '')) {
             process.env[k] = v;
           }
         }
       });
-      break;
     } catch (e) {}
   }
 }
