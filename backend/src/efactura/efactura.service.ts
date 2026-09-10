@@ -167,7 +167,8 @@ export class EFacturaService {
   // -------------------------------------------------------------------------
   // CONFIG & OAUTH2 TOKEN MANAGEMENT
   // -------------------------------------------------------------------------
-  async getConfig(forAdmin: boolean = false) {
+  // Raw config directly from database (always with full unmasked secrets for internal services)
+  async getRawConfig() {
     let cfg = await this.prisma.eFacturaConfig.findUnique({ where: { id: 'default' } });
     if (!cfg) {
       cfg = await this.prisma.eFacturaConfig.create({
@@ -175,11 +176,17 @@ export class EFacturaService {
           id: 'default',
           cifFirma: 'RO12345678',
           stareCronAuto: true,
-          intervalZileSyncAuto: 15,
+          intervalZileSyncAuto: 60,
         },
       });
     }
-    if (!forAdmin) {
+    return cfg;
+  }
+
+  // Public/Sanitized config for API responses (masks secrets for non-admin clients)
+  async getPublicConfig(isAdmin: boolean = false) {
+    const cfg = await this.getRawConfig();
+    if (!isAdmin) {
       return {
         ...cfg,
         clientSecret: cfg.clientSecret ? '••••••••' : null,
@@ -188,6 +195,14 @@ export class EFacturaService {
       };
     }
     return cfg;
+  }
+
+  // Backward-compatible getConfig: defaults to true (unmasked) for all internal service calls!
+  async getConfig(forAdmin: boolean = true) {
+    if (!forAdmin) {
+      return this.getPublicConfig(false);
+    }
+    return this.getRawConfig();
   }
 
   async updateConfig(data: {
@@ -202,7 +217,7 @@ export class EFacturaService {
     stareCronAuto?: boolean;
     intervalZileSyncAuto?: number;
   }) {
-    const existing = await this.getConfig(true);
+    const existing = await this.getRawConfig();
 
     const isSecretMasked = data.clientSecret && data.clientSecret.includes('••••');
     const isAccessMasked = data.accessToken && data.accessToken.includes('••••');
@@ -227,7 +242,7 @@ export class EFacturaService {
 
   // GENERARE URL AUTORIZARE ANAF OAUTH2 (Pasul 2)
   async generateAuthorizeUrl(): Promise<{ url: string; redirectUri: string }> {
-    const cfg = await this.getConfig();
+    const cfg = await this.getRawConfig();
     if (!cfg.clientId) {
       throw new BadRequestException('Vă rugăm să introduceți mai întâi Client ID în configurația ANAF.');
     }
@@ -240,7 +255,7 @@ export class EFacturaService {
   // BEVÁLTÁS: EXCHANGE AUTHORIZATION CODE FOR JWT ACCESS & REFRESH TOKENS (Pasul 3)
   async exchangeCodeForToken(code: string) {
     if (!code) throw new BadRequestException('Codul de autorizare este obligatoriu.');
-    const cfg = await this.getConfig();
+    const cfg = await this.getRawConfig();
     if (!cfg.clientId || !cfg.clientSecret) {
       throw new BadRequestException('Client ID și Client Secret sunt obligatorii pentru schimbul de token-uri.');
     }
@@ -305,7 +320,7 @@ export class EFacturaService {
 
   // Auto-refresh OAuth2 token 48h before 90-day expiration
   async refreshOAuthTokenIfNeeded(): Promise<string | null> {
-    const cfg = await this.getConfig();
+    const cfg = await this.getRawConfig();
     if (!cfg.accessToken) {
       this.logger.warn('Access Token ANAF e-Factura nu este configurat.');
       return null;
@@ -319,14 +334,19 @@ export class EFacturaService {
     if (expiresAt && hoursLeft < 48 && cfg.refreshToken) {
       this.logger.log(`AccessToken ANAF expiră în ${hoursLeft.toFixed(1)} ore. Inițiere auto-refresh token...`);
       try {
+        const authHeader = 'Basic ' + Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString('base64');
+        const params = new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: cfg.refreshToken!,
+          token_content_type: 'jwt',
+        });
+
         const response = await this.executeWithRetry(() =>
-          axios.post('https://loginservice.anaf.ro/gonaf/oauth2/v1/token', new URLSearchParams({
-            grant_type: 'refresh_token',
-            refresh_token: cfg.refreshToken!,
-            client_id: cfg.clientId || '',
-            client_secret: cfg.clientSecret || '',
-          }).toString(), {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          axios.post('https://logincert.anaf.ro/anaf-oauth2/v1/token', params.toString(), {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Authorization: authHeader,
+            },
           })
         );
 
@@ -349,7 +369,7 @@ export class EFacturaService {
           return newAccess;
         }
       } catch (err: any) {
-        this.logger.error(`Eroare la auto-refresh token ANAF: ${err?.message || err}`);
+        this.logger.error(`Eroare la auto-refresh token ANAF: ${err?.response?.data?.error_description || err?.message || err}`);
       }
     }
 
@@ -453,7 +473,7 @@ export class EFacturaService {
 
   private async executeBackgroundSync(safeZile: number) {
     try {
-      const cfg = await this.getConfig();
+      const cfg = await this.getRawConfig();
       const token = await this.refreshOAuthTokenIfNeeded();
 
       if (!token) {
@@ -487,8 +507,9 @@ export class EFacturaService {
           this.logger.log(`Pagină e-Factura ${currentPage}/${totalPages} descărcată (${pageMessages.length} mesaje).`);
           currentPage++;
         } catch (err: any) {
-          this.logger.error(`Eroare la interogarea paginii ${currentPage} ANAF: ${err?.message}`);
-          break;
+          const errMsg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Eroare conexiune ANAF';
+          this.logger.error(`Eroare la interogarea paginii ${currentPage} ANAF: ${errMsg}`);
+          throw new Error(`Eroare ANAF SPV la interogarea paginii ${currentPage}: ${errMsg}`);
         }
       }
 
@@ -790,7 +811,7 @@ export class EFacturaService {
   // ÎNCĂRCARE DIRECTĂ FIȘIERE XML / ZIP (DIN SPV) CU DEDUPLICARE AVANSATĂ
   // -------------------------------------------------------------------------
   async incarcaFisiereXmlSauZip(files: Array<{ numeFisier: string; continutBase64: string }>) {
-    const cfg = await this.getConfig();
+    const cfg = await this.getRawConfig();
     let procesateCount = 0;
     let duplicateCount = 0;
     let eroriCount = 0;

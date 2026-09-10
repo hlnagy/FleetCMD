@@ -33,7 +33,7 @@ export class EFacturaController {
       throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a accesa configurația facturilor.');
     }
     const isAdmin = role === 'ADMIN';
-    return this.efacturaService.getConfig(isAdmin);
+    return this.efacturaService.getPublicConfig(isAdmin);
   }
 
   @Roles('ADMIN')
@@ -76,8 +76,8 @@ export class EFacturaController {
     @Headers('authorization') authHeader?: string,
   ) {
     this.validateCronAccess(keyParam || secretParam, cronHeader, authHeader);
-    const zile = zileParam ? parseInt(zileParam, 10) : 15;
-    return this.efacturaService.syncFacturi(isNaN(zile) ? 15 : zile);
+    const zile = zileParam ? parseInt(zileParam, 10) : 60;
+    return this.efacturaService.syncFacturi(isNaN(zile) ? 60 : zile);
   }
 
   @Public()
@@ -90,11 +90,12 @@ export class EFacturaController {
     @Headers('authorization') authHeader?: string,
   ) {
     this.validateCronAccess(body?.key || body?.secret || keyParam || secretParam, cronHeader, authHeader);
-    const zile = body?.zile || 15;
+    const zile = body?.zile || 60;
     return this.efacturaService.syncFacturi(zile);
   }
 
   // STATUS SINCRONIZARE ÎN FUNDAL
+  @Public()
   @Get('sync/status')
   async getSyncStatus() {
     return this.efacturaService.getSyncStatus();

@@ -506,7 +506,7 @@ function EFacturaContent() {
       }
 
       // Verificăm dacă o sincronizare este deja în curs pe server la încărcarea paginii
-      const resSync = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+      const resSync = await authFetch(`${API_BASE_URL}/efactura/sync/status`);
       if (resSync.ok) {
         const sData = await resSync.json();
         setSyncStatusData(sData);
@@ -514,7 +514,7 @@ function EFacturaContent() {
           setSyncing(true);
           const pollInterval = setInterval(async () => {
             try {
-              const statusRes = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+              const statusRes = await authFetch(`${API_BASE_URL}/efactura/sync/status`);
               if (statusRes.ok) {
                 const polled = await statusRes.json();
                 setSyncStatusData(polled);
@@ -529,10 +529,10 @@ function EFacturaContent() {
             }
           }, 2000);
         } else if (loadedConfig?.stareCronAuto && loadedConfig?.accessToken) {
-          // AUTO-SYNC INTELIGENT: Dacă ultimul sync a fost acum mai mult de 60 de minute (sau după weekend/inactivitate), pornim automat sync în fundal!
+          // AUTO-SYNC INTELIGENT: Dacă ultimul sync a fost acum mai mult de 30 de minute (sau după weekend/inactivitate), pornim automat sync în fundal!
           const lastSyncTime = loadedConfig?.ultimulSyncSucces ? new Date(loadedConfig.ultimulSyncSucces).getTime() : 0;
-          const oneHourMs = 60 * 60 * 1000;
-          if (Date.now() - lastSyncTime > oneHourMs) {
+          const thirtyMinMs = 30 * 60 * 1000;
+          if (Date.now() - lastSyncTime > thirtyMinMs) {
             handleForceSync(60);
           }
         }
@@ -795,7 +795,7 @@ function EFacturaContent() {
     try {
       setSyncing(true);
       const zileToSync = customZile || Number(selectedZile) || 60;
-      const res = await fetch(`${API_BASE_URL}/efactura/sync`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ zile: zileToSync }),
@@ -806,7 +806,7 @@ function EFacturaContent() {
         // Poll status every 2 seconds until complete
         const pollInterval = setInterval(async () => {
           try {
-            const statusRes = await fetch(`${API_BASE_URL}/efactura/sync/status`);
+            const statusRes = await authFetch(`${API_BASE_URL}/efactura/sync/status`);
             if (statusRes.ok) {
               const sData = await statusRes.json();
               setSyncStatusData(sData);
@@ -814,6 +814,9 @@ function EFacturaContent() {
                 clearInterval(pollInterval);
                 setSyncing(false);
                 fetchData();
+                if (sData.errorMessage) {
+                  alert(`Atenție: Sincronizarea ANAF a raportat o eroare: ${sData.errorMessage}`);
+                }
               }
             }
           } catch (e) {
@@ -1680,6 +1683,26 @@ function EFacturaContent() {
           <span className="text-[10px] bg-white/20 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
             Non-blocant • 0-24h Cloud
           </span>
+        </div>
+      )}
+
+      {/* ERROR BANNER DACĂ A APĂRUT O EROARE LA SINCRONIZARE */}
+      {syncStatusData?.errorMessage && !syncing && !syncStatusData?.inProgress && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 shadow-sm flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-red-900">Atenție: Ultima sincronizare ANAF a întâmpinat o eroare</p>
+              <p className="text-xs text-red-700 font-medium">{syncStatusData.errorMessage}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => handleForceSync(60)}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1 shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Reîncearcă Sync (60 Zile)</span>
+          </button>
         </div>
       )}
 

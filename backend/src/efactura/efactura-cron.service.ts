@@ -13,7 +13,7 @@ export class EFacturaCronService {
   async handleHourlySyncCron() {
     this.logger.log(' Execuție Cron Job orar: Verificare și sincronizare e-Factura ANAF...');
     try {
-      const cfg = await this.efacturaService.getConfig();
+      const cfg = await this.efacturaService.getRawConfig();
       if (!cfg.stareCronAuto) {
         this.logger.log('Cron Job-ul automat e-Factura este DEZACTIVAT în setări. Omiteri.');
         return;
@@ -27,8 +27,8 @@ export class EFacturaCronService {
       // Verificare & Auto-refresh Token 48h înainte de expirare
       await this.efacturaService.refreshOAuthTokenIfNeeded();
 
-      // Sincronizare mesaje pe intervalul stabilit (default 15 zile)
-      const days = cfg.intervalZileSyncAuto || 15;
+      // Sincronizare mesaje pe intervalul stabilit (default 60 zile pentru a nu rata nicio factură)
+      const days = cfg.intervalZileSyncAuto || 60;
       await this.efacturaService.syncFacturi(days);
     } catch (err: any) {
       this.logger.error(`Eroare în Cron Job-ul orar e-Factura: ${err?.message || err}`);
