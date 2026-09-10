@@ -222,27 +222,26 @@ export default function RobiSpeechBubble({
         {/* SPEECH BUBBLE HEADER */}
         <div className="px-4 py-3 bg-gradient-to-b from-slate-900/90 to-slate-950/90 border-b border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            {/* Modern Mecha Captain Planet Mini Avatar */}
+            {/* Modern Mecha Captain Planet Mini Avatar (Sleek Armored Helmet - No Hair) */}
             <div className="relative w-8 h-8 rounded-lg bg-slate-900/90 border border-emerald-400/80 flex items-center justify-center overflow-hidden shadow-[0_0_10px_rgba(16,185,129,0.5)]">
               <svg viewBox="0 0 32 32" className="w-7 h-7">
-                {/* Modern Emerald Energy Crest */}
-                <polygon points="16,2 18,10 14,10" fill="#10b981" />
-                <polygon points="12,4 15,10 10,10" fill="#34d399" />
-                <polygon points="20,4 22,10 17,10" fill="#34d399" />
-                {/* Mecha Helmet Silhouette */}
-                <polygon
-                  points="9,10 23,10 26,17 23,26 16,29 9,26 6,17"
+                {/* Sleek Aerodynamic Helmet Dome */}
+                <path
+                  d="M 8,11 Q 16,5 24,11 L 26,17 L 23,26 L 16,29 L 9,26 L 6,17 Z"
                   fill="#0284c7"
                   stroke="#facc15"
                   strokeWidth="0.8"
                 />
+                {/* Central Gold Crest Accent */}
+                <polygon points="14,6 18,6 17,10 15,10" fill="#facc15" />
+                <circle cx="16" cy="8" r="1" fill="#10b981" />
                 {/* Forehead Crimson Guard */}
-                <polygon points="11,10 21,10 19,13 13,13" fill="#ef4444" />
+                <polygon points="11,11 21,11 19,14 13,14" fill="#ef4444" />
                 {/* Obsidian Visor */}
-                <polygon points="9,14 23,14 22,20 16,22 10,20" fill="#020617" stroke="#10b981" strokeWidth="0.6" />
+                <polygon points="9,15 23,15 22,20 16,22 10,20" fill="#020617" stroke="#10b981" strokeWidth="0.6" />
                 {/* Glowing Cyan LED Visor Eyes */}
-                <line x1="11" y1="17" x2="21" y2="17" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="16" cy="17" r="1" fill="#ffffff" className="animate-ping" />
+                <line x1="11" y1="18" x2="21" y2="18" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" />
+                <circle cx="16" cy="18" r="1" fill="#ffffff" className="animate-ping" />
               </svg>
             </div>
 

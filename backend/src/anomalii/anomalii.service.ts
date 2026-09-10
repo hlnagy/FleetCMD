@@ -802,7 +802,47 @@ export class AnomaliiService {
     });
   }
 
+  private unlinkDocumentFile(fisierUrl?: string | null) {
+    if (!fisierUrl) return;
+    const cleanFilename = path.basename(fisierUrl);
+    const candidates = [
+      path.resolve(process.cwd(), 'uploads', 'documente', cleanFilename),
+      path.resolve(process.cwd(), 'backend', 'uploads', 'documente', cleanFilename),
+      path.resolve(__dirname, '..', '..', 'uploads', 'documente', cleanFilename),
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        try {
+          fs.unlinkSync(candidate);
+        } catch (e) {
+          console.error('Eroare la ștergerea fișierului de pe disc:', e);
+        }
+        break;
+      }
+    }
+  }
+
+  async stergeFisierDocument(id: string) {
+    const doc = await this.prisma.documentVehicul.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException('Documentul nu a fost găsit.');
+
+    this.unlinkDocumentFile(doc.fisierUrl);
+
+    return this.prisma.documentVehicul.update({
+      where: { id },
+      data: {
+        fisierUrl: null,
+        fisierNume: null,
+        fisierMarime: null,
+      },
+    });
+  }
+
   async deleteDocumentVehicul(id: string) {
+    const doc = await this.prisma.documentVehicul.findUnique({ where: { id } });
+    if (doc?.fisierUrl) {
+      this.unlinkDocumentFile(doc.fisierUrl);
+    }
     return this.prisma.documentVehicul.delete({ where: { id } });
   }
 

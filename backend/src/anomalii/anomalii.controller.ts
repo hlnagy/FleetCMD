@@ -19,6 +19,37 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AnomaliiService } from './anomalii.service';
+import { Public } from '../auth/public.decorator';
+
+function getUploadDir(): string {
+  if (fs.existsSync(path.resolve(process.cwd(), 'uploads', 'documente'))) {
+    return path.resolve(process.cwd(), 'uploads', 'documente');
+  }
+  if (fs.existsSync(path.resolve(process.cwd(), 'backend', 'uploads', 'documente'))) {
+    return path.resolve(process.cwd(), 'backend', 'uploads', 'documente');
+  }
+  if (fs.existsSync(path.resolve(process.cwd(), 'backend'))) {
+    const p = path.resolve(process.cwd(), 'backend', 'uploads', 'documente');
+    fs.mkdirSync(p, { recursive: true });
+    return p;
+  }
+  const defaultP = path.resolve(process.cwd(), 'uploads', 'documente');
+  fs.mkdirSync(defaultP, { recursive: true });
+  return defaultP;
+}
+
+function findUploadedFile(filename: string): string | null {
+  const clean = path.basename(filename);
+  const candidates = [
+    path.resolve(process.cwd(), 'uploads', 'documente', clean),
+    path.resolve(process.cwd(), 'backend', 'uploads', 'documente', clean),
+    path.resolve(__dirname, '..', '..', 'uploads', 'documente', clean),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 @Controller('anomalii')
 export class AnomaliiController {
@@ -124,17 +155,20 @@ export class AnomaliiController {
     return this.anomaliiService.deleteDocumentVehicul(id);
   }
 
+  // Ștergere fișier scanat atașat unui document
+  @Delete('documente-vehicule/:id/fisier')
+  stergeFisierDocumentVehicul(@Param('id') id: string) {
+    return this.anomaliiService.stergeFisierDocument(id);
+  }
+
   // Upload fișier scanat / poză document
+  @Public()
   @Post('documente-vehicule/upload')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const uploadPath = path.resolve(process.cwd(), 'uploads', 'documente');
-          if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
-          }
-          cb(null, uploadPath);
+          cb(null, getUploadDir());
         },
         filename: (req, file, cb) => {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -156,14 +190,33 @@ export class AnomaliiController {
     };
   }
 
-  // Descărcare / Afișare fișier scanat atașat
+  // Descărcare / Afișare fișier scanat atașat (acces public pentru preview inline în browser / iframe / img)
+  @Public()
   @Get('documente-vehicule/fisier/:filename')
   descarcaFisierDocument(@Param('filename') filename: string, @Res() res: Response) {
     const cleanFilename = path.basename(filename);
-    const filePath = path.resolve(process.cwd(), 'uploads', 'documente', cleanFilename);
-    if (!fs.existsSync(filePath)) {
+    const filePath = findUploadedFile(cleanFilename);
+    if (!filePath) {
       throw new NotFoundException('Fișierul căutat nu există pe server.');
     }
+
+    const ext = path.extname(cleanFilename).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+    };
+
+    if (mimeTypes[ext]) {
+      res.setHeader('Content-Type', mimeTypes[ext]);
+    }
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Disposition', `inline; filename="${cleanFilename}"`);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.sendFile(filePath);
   }
 

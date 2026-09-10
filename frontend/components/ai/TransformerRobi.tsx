@@ -45,7 +45,6 @@ export default function TransformerRobi({
           glow: 'rgba(239, 68, 68, 0.85)',
           neon: '#ef4444',
           accentBg: 'bg-red-500',
-          hairGlow: 'drop-shadow(0 0 12px #ef4444)',
           aura: 'from-red-500/30 to-amber-500/20',
           badgeColor: 'bg-red-600',
         };
@@ -54,7 +53,6 @@ export default function TransformerRobi({
           glow: 'rgba(250, 204, 21, 0.85)',
           neon: '#facc15',
           accentBg: 'bg-amber-400',
-          hairGlow: 'drop-shadow(0 0 14px #facc15)',
           aura: 'from-amber-400/30 to-emerald-400/20',
           badgeColor: 'bg-amber-500',
         };
@@ -63,7 +61,6 @@ export default function TransformerRobi({
           glow: 'rgba(192, 132, 252, 0.8)',
           neon: '#c084fc',
           accentBg: 'bg-purple-400',
-          hairGlow: 'drop-shadow(0 0 14px #c084fc)',
           aura: 'from-purple-500/30 to-cyan-500/20',
           badgeColor: 'bg-purple-600',
         };
@@ -72,7 +69,6 @@ export default function TransformerRobi({
           glow: 'rgba(16, 185, 129, 0.95)',
           neon: '#10b981',
           accentBg: 'bg-emerald-400',
-          hairGlow: 'drop-shadow(0 0 18px #10b981)',
           aura: 'from-emerald-400/40 to-cyan-400/30',
           badgeColor: 'bg-emerald-600',
         };
@@ -81,7 +77,6 @@ export default function TransformerRobi({
           glow: 'rgba(148, 163, 184, 0.5)',
           neon: '#94a3b8',
           accentBg: 'bg-slate-400',
-          hairGlow: 'drop-shadow(0 0 8px #94a3b8)',
           aura: 'from-slate-500/20 to-slate-700/20',
           badgeColor: 'bg-slate-600',
         };
@@ -92,7 +87,6 @@ export default function TransformerRobi({
           glow: 'rgba(16, 185, 129, 0.85)',
           neon: '#10b981',
           accentBg: 'bg-emerald-400',
-          hairGlow: 'drop-shadow(0 0 14px #10b981)',
           aura: 'from-emerald-400/35 to-cyan-400/25',
           badgeColor: 'bg-emerald-500',
         };
@@ -253,29 +247,12 @@ export default function TransformerRobi({
                   <stop offset="100%" stopColor="#713f12" />
                 </linearGradient>
 
-                {/* Modern Aerodynamic Emerald Energy Crest Gradient */}
-                <linearGradient id="modernCrestGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-                  <stop offset="0%" stopColor="#047857" />
-                  <stop offset="40%" stopColor="#10b981" />
-                  <stop offset="75%" stopColor="#34d399" />
-                  <stop offset="100%" stopColor="#a7f3d0" />
-                </linearGradient>
-
                 {/* Abdominal 6-Pack Plates Gradient */}
                 <linearGradient id="absGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#38bdf8" />
                   <stop offset="50%" stopColor="#0284c7" />
                   <stop offset="100%" stopColor="#0c4a6e" />
                 </linearGradient>
-
-                {/* Power Fist Flame Gradient (Hover State) */}
-                <radialGradient id="fistFlame" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#ffffff" />
-                  <stop offset="30%" stopColor="#fef08a" />
-                  <stop offset="60%" stopColor="#f59e0b" />
-                  <stop offset="90%" stopColor="#ef4444" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#dc2626" stopOpacity="0" />
-                </radialGradient>
 
                 {/* Thruster Flame Gradient */}
                 <linearGradient id="thrusterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -416,26 +393,16 @@ export default function TransformerRobi({
                 <rect x="42" y="198" width="16" height="12" rx="4" fill="url(#chassisCyan)" stroke="#facc15" strokeWidth="1" />
               </g>
 
-              {/* Right Arm (Interactive: Normal Stance or Triumphant Raised Fist on Hover) */}
-              {isHovered ? (
-                <g className="animate-hero-fist">
-                  <path d="M 152,120 L 168,104 L 178,114 L 162,130 Z" fill="url(#chassisCyan)" stroke="#0284c7" strokeWidth="1" />
-                  <circle cx="174" cy="106" r="5" fill="url(#trimGold)" />
-                  <path d="M 172,104 L 164,68 L 178,64 L 186,100 Z" fill="url(#armorRed)" stroke="#facc15" strokeWidth="1" />
-                  <circle cx="172" cy="54" r="20" fill="url(#fistFlame)" filter="url(#heroGlow)" className="animate-pulse" />
-                  <rect x="163" y="46" width="18" height="16" rx="4" fill="url(#trimGold)" stroke="#ffffff" strokeWidth="1.2" />
-                  <line x1="167" y1="52" x2="177" y2="52" stroke="#713f12" strokeWidth="1" />
-                  <line x1="167" y1="56" x2="177" y2="56" stroke="#713f12" strokeWidth="1" />
-                  <circle cx="176" cy="50" r="3" fill="#10b981" filter="url(#heroGlow)" className="animate-ping" />
-                </g>
-              ) : (
-                <g>
-                  <path d="M 156,126 Q 168,142 160,166 L 148,164 Q 144,140 150,126 Z" fill="url(#chassisCyan)" stroke="#0284c7" strokeWidth="1" />
-                  <circle cx="161" cy="166" r="4.5" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
-                  <path d="M 163,168 L 148,168 L 142,198 L 160,198 Z" fill="url(#armorRed)" stroke="#facc15" strokeWidth="1" />
-                  <rect x="142" y="198" width="16" height="12" rx="4" fill="url(#chassisCyan)" stroke="#facc15" strokeWidth="1" />
-                </g>
-              )}
+              {/* Right Arm (Firmly Attached to Shoulder - Symmetric, Muscular, Never Tears Off) */}
+              <g>
+                <path d="M 156,126 Q 168,142 160,166 L 148,164 Q 144,140 150,126 Z" fill="url(#chassisCyan)" stroke="#0284c7" strokeWidth="1" />
+                <circle cx="161" cy="166" r="4.5" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
+                <path d="M 163,168 L 148,168 L 142,198 L 160,198 Z" fill="url(#armorRed)" stroke="#facc15" strokeWidth="1" />
+                <rect x="142" y="198" width="16" height="12" rx="4" fill="url(#chassisCyan)" stroke="#facc15" strokeWidth="1" />
+                {isHovered && (
+                  <circle cx="150" cy="204" r="3" fill="#10b981" filter="url(#heroGlow)" className="animate-ping" />
+                )}
+              </g>
 
               {/* 8. CHISELED CYBORG NECK & CONDUITS */}
               <path d="M 90,78 L 110,78 L 114,94 L 86,94 Z" fill="#0f172a" stroke="#0284c7" strokeWidth="0.8" />
@@ -443,14 +410,22 @@ export default function TransformerRobi({
               <line x1="100" y1="80" x2="100" y2="92" stroke="#22d3ee" strokeWidth="1.5" />
               <line x1="105" y1="80" x2="105" y2="92" stroke="#38bdf8" strokeWidth="1.2" />
 
-              {/* 9. CHISELED MECHA SUPERHERO HELMET & JAWLINE */}
-              <polygon
-                points="82,34 118,34 128,52 124,76 100,88 76,76 72,52"
+              {/* 9. CHISELED MECHA SUPERHERO HELMET & JAWLINE (SLEEK ARMORED DOME - NO HAIR!) */}
+              {/* Aerodynamic Cranial Dome */}
+              <path
+                d="M 76,36 Q 100,20 124,36 L 128,52 L 124,76 L 100,88 L 76,76 L 72,52 Z"
                 fill="url(#chassisCyan)"
                 stroke="url(#trimGold)"
                 strokeWidth="1.4"
               />
+              {/* Central Golden Helmet Crest & Cyber Beacon */}
+              <polygon points="95,21 105,21 103,36 97,36" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
+              <circle cx="100" cy="26" r="2.5" fill="#10b981" filter="url(#heroGlow)" />
+              {/* Forehead Crimson Brow Guard */}
               <polygon points="84,36 116,36 112,46 88,46" fill="url(#armorRed)" stroke="#facc15" strokeWidth="0.8" />
+              {/* Streamlined Cyber Ear Fins */}
+              <polygon points="72,46 64,38 72,54" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
+              <polygon points="128,46 136,38 128,54" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
 
               {/* High-Tech Obsidian Visor Faceplate */}
               <polygon
@@ -513,59 +488,6 @@ export default function TransformerRobi({
               <circle cx="73" cy="58" r="2" fill="#10b981" />
               <circle cx="127" cy="58" r="4.5" fill="url(#trimGold)" stroke="#713f12" strokeWidth="0.8" />
               <circle cx="127" cy="58" r="2" fill="#10b981" />
-
-              {/* 10. MODERN AERODYNAMIC EMERALD ENERGY CREST (NOT 80s MULLET!) */}
-              <g className="animate-hair-flow">
-                <polygon
-                  points="96,34 100,0 104,34 100,28"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#6ee7b7"
-                  strokeWidth="1.2"
-                  filter="url(#heroGlow)"
-                />
-                <line x1="100" y1="2" x2="100" y2="30" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
-                <polygon
-                  points="88,36 80,6 94,32"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#6ee7b7"
-                  strokeWidth="1"
-                  filter="url(#heroGlow)"
-                />
-                <polygon
-                  points="112,36 120,6 106,32"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#6ee7b7"
-                  strokeWidth="1"
-                  filter="url(#heroGlow)"
-                />
-                <polygon
-                  points="78,42 64,16 86,38"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#34d399"
-                  strokeWidth="1"
-                  filter="url(#heroGlow)"
-                />
-                <polygon
-                  points="122,42 136,16 114,38"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#34d399"
-                  strokeWidth="1"
-                  filter="url(#heroGlow)"
-                />
-                <polygon
-                  points="72,50 54,28 78,48"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#10b981"
-                  strokeWidth="0.8"
-                />
-                <polygon
-                  points="128,50 146,28 122,48"
-                  fill="url(#modernCrestGrad)"
-                  stroke="#10b981"
-                  strokeWidth="0.8"
-                />
-                <polygon points="97,36 103,36 100,42" fill="#facc15" filter="url(#heroGlow)" />
-              </g>
             </svg>
           </div>
         )}

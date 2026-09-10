@@ -67,6 +67,7 @@ export class AiService {
       topVendors,
       latestInvoices,
       activeCouplings,
+      recentOilItemsRaw,
     ] = await Promise.all([
       // 1. Járművek
       this.prisma.vehicul.findMany({
@@ -148,14 +149,22 @@ export class AiService {
         },
       }),
 
-      // 6. Gumiabroncsok
+      // 6. Gumiabroncsok (cu vehicul și axă)
       this.prisma.anvelopa.findMany({
-        select: {
-          id: true,
-          marca: true,
-          dimensiune: true,
-          adancimeCurentaMm: true,
-          stare: true,
+        include: {
+          vehicul: {
+            select: {
+              numarIntern: true,
+              numarInmatriculare: true,
+            },
+          },
+          pozitieAx: {
+            select: {
+              codPozitie: true,
+              descrierePozitie: true,
+              numarAx: true,
+            },
+          },
         },
       }),
 
@@ -204,6 +213,29 @@ export class AiService {
           capTractor: { select: { numarIntern: true, numarInmatriculare: true } },
           semiremorca: { select: { numarIntern: true, numarInmatriculare: true } },
         },
+      }),
+
+      // 13. Legutóbbi olajbeszerzések e-Factura tételekből
+      this.prisma.eFacturaItem.findMany({
+        where: {
+          OR: [
+            { descrierePiesa: { contains: 'ulei' } },
+            { descrierePiesa: { contains: 'oil' } },
+            { descrierePiesa: { contains: 'delvac' } },
+            { descrierePiesa: { contains: 'lubrifiant' } },
+          ],
+        },
+        include: {
+          factura: {
+            select: {
+              numeVanzator: true,
+              numarFactura: true,
+              dataFactura: true,
+            },
+          },
+        },
+        orderBy: { factura: { dataFactura: 'desc' } },
+        take: 8,
       }),
     ]);
 
@@ -275,6 +307,19 @@ export class AiService {
       stocCriticCount: stocCritic.length,
       stocCritic,
       anvelopeCount: anvelope.length,
+      anvelopeMontate: (anvelope as any[])
+        .filter((a) => a.vehicul)
+        .map((a) => ({
+          vehiculIntern: a.vehicul?.numarIntern,
+          numarInmatriculare: a.vehicul?.numarInmatriculare,
+          axa: a.pozitieAx?.codPozitie || a.pozitieAx?.descrierePozitie || 'Nesemnat',
+          numarAx: a.pozitieAx?.numarAx,
+          marca: `${a.marca} ${a.model || ''}`.trim(),
+          dimensiune: a.dimensiune,
+          profilMm: `${a.adancimeCurentaMm}mm`,
+          pretAchizitie: a.pretAchizitie,
+          codDot: a.codDot,
+        })),
       totalFacturiCount,
       totalArticoleFacturiCount,
       mecanici: mecanici.map((m) => ({
@@ -312,6 +357,17 @@ export class AiService {
         litri: f.cantitateLitri,
         data: f.dataCompletare.toISOString().split('T')[0],
       })),
+      recentOilPurchases: (recentOilItemsRaw || [])
+        .filter((it: any) => it.descrierePiesa && !it.descrierePiesa.toLowerCase().startsWith('taxa'))
+        .map((it: any) => ({
+          furnizor: it.factura?.numeVanzator || 'Furnizor',
+          numarFactura: it.factura?.numarFactura || '-',
+          dataFactura: it.factura?.dataFactura ? it.factura.dataFactura.toISOString().split('T')[0] : '',
+          descriere: it.descrierePiesa,
+          pretUnitar: it.pretUnitar,
+          cantitate: it.cantitate,
+          um: it.unitateMasura,
+        })),
     };
 
     this.cachedSnapshot = result;
@@ -767,7 +823,17 @@ export class AiService {
    * Căutare inteligentă de facturi în baza de date (eFacturaFactura și IntrareStoc)
    */
   async searchInvoices(userMessage: string) {
-    const isInvoiceQuery = /factur|száml|szaml|számláz|szamlaz|dubhe|parts\s*trade|furnizor|beszállító|beszallito|plati|fizet/i.test(userMessage);
+    const isTireOrAxleOrOil = /gumi|gumit|abroncs|tengely|axa|anvelop|pneu|olaj|kenőanyag|ulei|lubrifiant/i.test(userMessage);
+    const hasExplicitInvoiceKeyword = /factur|száml|szaml|számláz|szamlaz/i.test(userMessage);
+
+    if (isTireOrAxleOrOil && !hasExplicitInvoiceKeyword) {
+      return null;
+    }
+
+    const isInvoiceQuery = hasExplicitInvoiceKeyword || /dubhe|parts\s*trade/i.test(userMessage);
+    if (!isInvoiceQuery) {
+      return null;
+    }
 
     const stopWords = [
       'robi', 'bot', 'ai', 'asszisztens',
@@ -783,7 +849,9 @@ export class AiService {
       'toate', 'toti', 'vreau', 'arata', 'arată', 'nekem', 'mutasd', 'spune', 'spune-mi',
       'avem', 'aveti', 'aveți', 'exista', 'există', 'plati', 'plăți', 'fizet', 'fizetve',
       'kifizetve', 'adott', 'kapott', 'beérkező', 'beerkezo', 'kimenő', 'kimeno', 'kérlek', 'kerlek',
-      'kamion', 'teherautó', 'gumi', 'gumit', 'abroncs', 'alkatrész', 'piese'
+      'kamion', 'teherautó', 'gumi', 'gumit', 'abroncs', 'alkatrész', 'piese',
+      'cég', 'cégtől', 'ceg', 'cegtol', 'rendelve', 'rendeltünk', 'rendeltunk', 'rendelt', 'rendelés', 'rendeles',
+      'tengely', 'tengelyen', 'egyes', 'kettes', 'első', 'elso', 'kocsi', 'autó', 'auto', 'melyik', 'volt', 'mikor'
     ];
 
     const cleanWords = userMessage
@@ -791,10 +859,6 @@ export class AiService {
       .split(/\s+/)
       .filter((w) => w.length >= 3)
       .filter((w) => !stopWords.includes(w.toLowerCase()));
-
-    if (!isInvoiceQuery && cleanWords.length === 0) {
-      return null;
-    }
 
     if (cleanWords.length === 0) {
       // Întrebare generală despre facturi fără furnizor specific
@@ -1223,19 +1287,21 @@ REGULĂ STRICTĂ DE LUNGIME:
 - FĂRĂ politețuri inutile, introduceri lungi sau tabele uriașe.
 
 REGULĂ PRIVIND HYPERLINKURILE (LINKURI DIRECTE CĂTRE DATE):
-Când menționezi o factură specifică, un vehicul, o comandă de lucru sau un modul relevant, adaugă hyperlink markdown pentru a ajuta utilizatorul să deschidă direct pagina respectivă, DAR DOAR când este cu adevărat util și relevant (NU face tot textul albastru!):
-- Factură specifică: [Număr Factură](/efactura?search=NumarFactura) (ex: [ARA GR123459](/efactura?search=ARA+GR123459))
-- Furnizor facturi: [Nume Furnizor számlák](/efactura?search=Nume) (ex: [DUBHE számlák](/efactura?search=DUBHE))
-- Comandă de lucru: [Număr Comandă](/comenzi-lucru?search=Numar) (ex: [CL-00003](/comenzi-lucru?search=CL-00003))
+Când menționezi o factură specifică, un vehicul, o comandă de lucru sau un modul relevant, adaugă hyperlink markdown pentru a ajuta utilizatorul să deschidă direct pagina respectivă, DAR DOAR când este cu adevărat util și relevant (NU face tot textul albastru!).
+Sintaxă strictă markdown: [Text Vizibil](cale_url). În interiorul parantezelor rotunde ( ) pune EXCLUSIV URL-ul relativ (ex: /anvelope, /efactura?search=123), NICIODATĂ comentarii sau text adițional!
+Exemple exacte:
+- Factură specifică: [FBV26.4001321](/efactura?search=FBV26.4001321)
+- Fișă tehnică vehicul: [CV-06-CRA](/fisa-tehnica?search=CV-06-CRA)
 - Modul anvelope: [Gumiabroncs nyilvántartás](/anvelope)
 - Modul comenzi service: [Munkalapok](/comenzi-lucru)
 - Modul stocuri: [Raktárkészlet](/stocuri)
-- Fișă tehnică vehicul: [Număr](/fisa-tehnica?search=Numar)
 Păstrează linkurile scurte, elegante și doar la 1-3 referințe cheie per mesaj!
 
 TERMENI TEHNICI ȘI LIMBAJ AUTO (CRITIC):
 - În maghiară, „gumi”, „kamion gumi”, „abroncs” înseamnă EXCLUSIV GUMIABRONCS (anvelope de camion: dimensiuni tipice 315/80 R22.5, 385/65 R22.5 etc.). NICIODATĂ nu confunda cu robinete (csap), furtunuri sau piese mărunte din cauciuc! Prețul real al unei anvelope de camion este de 600 - 2500 RON/buc.
 - La întrebarea „Mennyiért vettük legutóbb kamion gumit?”, răspunde direct cu cele mai recente achiziții de anvelope (ex: ARA GRUP SRL 1286.59 RON, PARTS TRADE FL 620 RON) și anvelopele montate în flotă (Michelin 1850 RON, Benchmark 1600 RON), incluzând hyperlink la factura recentă și la modulul [Gumiabroncs nyilvántartás](/anvelope)!
+- Dacă utilizatorul întreabă despre anvelopele montate pe un anumit vehicul sau axă (ex: „keresd elő a CRA egyes tengelyen lévő gumiját”), verifică datele de mai jos și răspunde direct ce marcă, dimensiune, profil și DOT are pe acea axă (ex: CRA axa 1-ST are Michelin X-Multi Z 315/80 R22.5, 14mm), incluzând link către [Gumiabroncs nyilvántartás](/anvelope)!
+- Dacă utilizatorul întreabă despre furnizorul sau ultima comandă de ulei („melyik cégtől volt utoljára olaj rendelve?”), menționează ultimii furnizori (ex: STAR LUBRICANTS SRL cu Mobil Delvac 15W40, DIVINOL LUBRICANTS, PARTS TRADE FL) cu hyperlinkuri la facturi!
 
 CAPABILITĂȚI DE AGENT ȘI ACCES LA INSTRUMENTE (TOOLS):
 Ai acces direct la instrumentul „queryFleetDatabase” pentru a interoga în siguranță (read-only) ORICARE dintre tabelele bazei de date Prisma!
@@ -1288,6 +1354,8 @@ DATE OPERAȚIONALE RAPIDE DIN BAZA DE DATE:
 - Top furnizori: ${JSON.stringify((snap.topVendors || []).slice(0, 5))}
 - Ultimele facturi: ${JSON.stringify((snap.latestInvoices || []).slice(0, 3))}
 - Cuplări active tractor-remorcă: ${JSON.stringify(snap.activeCouplings || [])}
+- Anvelope montate pe vehicule și poziții axe (/anvelope): ${JSON.stringify(snap.anvelopeMontate || [])}
+- Ultimele achiziții de ulei / lubrifianți din e-Factura: ${JSON.stringify(snap.recentOilPurchases || [])}
 ${priceCompInfo}
 ${invoiceInfo}
 ${memoryInfo}
@@ -1422,17 +1490,17 @@ ${memoryInfo}
     };
 
     const modelsToTry = [
-      'gemini-3.6-flash',
-      'gemini-flash-latest',
       'gemini-3.5-flash-lite',
       'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
     ];
 
     let lastError: any = null;
     for (const modelName of modelsToTry) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const res = await axios.post(url, payload, { timeout: 25000 });
+        const res = await axios.post(url, payload, { timeout: 12000 });
         const candidate = res.data?.candidates?.[0]?.content;
 
         // Ellenőrizzük, hogy a modell Function Call-t kért-e
@@ -1534,6 +1602,84 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
         };
       }
 
+      // 1.0 Jármű és Tengely Gumiabroncs keresés (pl. CRA 1. tengely gumi)
+      const isTireAxleQuery =
+        /tengely|axa|gumiját|gumijat|abroncs|kerék|kerek|gumi/i.test(q) &&
+        (snap.anvelopeMontate?.length > 0 || snap.vehiculeSample?.length > 0);
+
+      if (isTireAxleQuery) {
+        const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
+        const matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
+          const intern = (a.vehiculIntern || '').toLowerCase().trim();
+          const inmClean = (a.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
+        }) || (snap.vehiculeSample || []).find((v: any) => {
+          const intern = (v.intern || '').toLowerCase().trim();
+          const inmClean = (v.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
+        });
+
+        if (matchedVeh) {
+          const vIntern = matchedVeh.vehiculIntern || matchedVeh.intern || '';
+          const vInm = matchedVeh.numarInmatriculare || matchedVeh.inm || '';
+          let vehTires = (snap.anvelopeMontate || []).filter(
+            (a: any) =>
+              (vIntern && (a.vehiculIntern || '').toLowerCase() === vIntern.toLowerCase()) ||
+              (vInm && (a.numarInmatriculare || '').toLowerCase() === vInm.toLowerCase())
+          );
+
+          if (q.includes('egyes') || q.includes('első') || q.includes('elso') || /\b1\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('1') || (a.axa || '').toLowerCase().includes('1'));
+            if (filtered.length > 0) vehTires = filtered;
+          } else if (q.includes('kettes') || q.includes('második') || q.includes('masodik') || /\b2\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('2') || (a.axa || '').toLowerCase().includes('2'));
+            if (filtered.length > 0) vehTires = filtered;
+          } else if (q.includes('hármas') || q.includes('harmas') || q.includes('harmadik') || /\b3\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('3') || (a.axa || '').toLowerCase().includes('3'));
+            if (filtered.length > 0) vehTires = filtered;
+          }
+
+          if (vehTires.length > 0) {
+            let resp = `🛞 **${vInm}${vIntern && vIntern !== vInm ? ` (${vIntern})` : ''} tengelyre szerelt gumiabroncsa:**\n`;
+            vehTires.forEach((t: any) => {
+              resp += `• Pozíció: **${t.axa}** – **${t.marca}** (${t.dimensiune || ''})\n`;
+              resp += `  - Profil: **${t.profilMm}** | DOT: **${t.codDot || '-'}** | Beszerzési ár: **${t.pretAchizitie ? t.pretAchizitie + ' RON' : '-'}**\n`;
+            });
+            resp += `Közvetlen link: [Gumiabroncs nyilvántartás](/anvelope)`;
+            return { answer: resp, mood: 'analyzing' };
+          }
+        }
+      }
+
+      // 1.05 Legutóbbi olajrendelés & Beszállító keresés
+      const isOilQuery =
+        /olaj|kenőanyag|ulei|lubrifiant/i.test(q) &&
+        /cég|ceg|beszállít|beszallit|rendel|vett|utoljára|utoljara|utolsó|utolso|partner|kitől|kitol|honnan/i.test(q);
+
+      if (isOilQuery && snap.recentOilPurchases && snap.recentOilPurchases.length > 0) {
+        const latest = snap.recentOilPurchases[0];
+        const latestLink = latest.numarFactura && latest.numarFactura !== '-'
+          ? `([${latest.numarFactura}](/efactura?search=${encodeURIComponent(latest.numarFactura)}))`
+          : '';
+
+        let resp = `🛢️ **Legutóbbi olajrendelések és partnerek:**\n`;
+        resp += `Legutóbb a **${latest.furnizor}** cégtől rendeltünk olajat (**${latest.dataFactura}**):\n`;
+        resp += `• **${latest.descriere}** – **${latest.pretUnitar} RON/${latest.um || 'L'}** ${latestLink}\n`;
+
+        const otherPurchases = snap.recentOilPurchases.slice(1, 4);
+        if (otherPurchases.length > 0) {
+          resp += `\nElőző olajbeszerzések:\n`;
+          otherPurchases.forEach((p: any) => {
+            const pLink = p.numarFactura && p.numarFactura !== '-'
+              ? `([${p.numarFactura}](/efactura?search=${encodeURIComponent(p.numarFactura)}))`
+              : '';
+            resp += `• **${p.furnizor}** (${p.dataFactura}): ${p.descriere} – ${p.pretUnitar} RON ${pLink}\n`;
+          });
+        }
+        resp += `Összes számla: [e-Factura modul](/efactura).`;
+        return { answer: resp, mood: 'analyzing' };
+      }
+
       // 1.1 Tételes számla & Időrendi Árösszehasonlítás
       if (priceCompData && (priceCompData.totalFound > 0 || (priceCompData.fleetTiresSample && priceCompData.fleetTiresSample.length > 0))) {
         let resp = `🔍 **Árelemzés: ${priceCompData.searchTerm}** (${priceCompData.totalFound} tétel a számlákban)\n`;
@@ -1603,7 +1749,7 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
           });
           resp += `Írj be egy konkrét beszállító vagy alkatrész nevet!`;
           return { answer: resp, mood: 'happy' };
-        } else {
+        } else if (/factur|száml|szaml/i.test(q)) {
           return {
             answer: `Nem találtam számlát erre a keresésre: *„${invoiceData.searchTerm}”*.`,
             mood: 'thinking',
@@ -1810,6 +1956,84 @@ Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra
       };
     }
 
+    // 2.0 Căutare anvelopă după vehicul și axă
+    const isRoTireAxleQuery =
+      /axa|tengely|anvelop|pneu|roat|cauciuc/i.test(q) &&
+      (snap.anvelopeMontate?.length > 0 || snap.vehiculeSample?.length > 0);
+
+    if (isRoTireAxleQuery) {
+      const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
+      const matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
+        const intern = (a.vehiculIntern || '').toLowerCase().trim();
+        const inmClean = (a.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
+      }) || (snap.vehiculeSample || []).find((v: any) => {
+        const intern = (v.intern || '').toLowerCase().trim();
+        const inmClean = (v.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
+      });
+
+      if (matchedVeh) {
+        const vIntern = matchedVeh.vehiculIntern || matchedVeh.intern || '';
+        const vInm = matchedVeh.numarInmatriculare || matchedVeh.inm || '';
+        let vehTires = (snap.anvelopeMontate || []).filter(
+          (a: any) =>
+            (vIntern && (a.vehiculIntern || '').toLowerCase() === vIntern.toLowerCase()) ||
+            (vInm && (a.numarInmatriculare || '').toLowerCase() === vInm.toLowerCase())
+        );
+
+        if (q.includes('prima') || q.includes('axa 1') || /\b1\b/.test(q)) {
+          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('1') || (a.axa || '').toLowerCase().includes('1'));
+          if (filtered.length > 0) vehTires = filtered;
+        } else if (q.includes('a doua') || q.includes('axa 2') || /\b2\b/.test(q)) {
+          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('2') || (a.axa || '').toLowerCase().includes('2'));
+          if (filtered.length > 0) vehTires = filtered;
+        } else if (q.includes('a treia') || q.includes('axa 3') || /\b3\b/.test(q)) {
+          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('3') || (a.axa || '').toLowerCase().includes('3'));
+          if (filtered.length > 0) vehTires = filtered;
+        }
+
+        if (vehTires.length > 0) {
+          let resp = `🛞 **Anvelope montate pe ${vInm}${vIntern && vIntern !== vInm ? ` (${vIntern})` : ''}:**\n`;
+          vehTires.forEach((t: any) => {
+            resp += `• Poziție: **${t.axa}** – **${t.marca}** (${t.dimensiune || ''})\n`;
+            resp += `  - Profil: **${t.profilMm}** | DOT: **${t.codDot || '-'}** | Preț achiziție: **${t.pretAchizitie ? t.pretAchizitie + ' RON' : '-'}**\n`;
+          });
+          resp += `Link direct: [Modul Anvelope](/anvelope)`;
+          return { answer: resp, mood: 'analyzing' };
+        }
+      }
+    }
+
+    // 2.05 Furnizori ulei / ultimele achiziții lubrifianți
+    const isRoOilQuery =
+      /ulei|lubrifiant|oil/i.test(q) &&
+      /furnizor|firma|cump|comand|achiz|ultim/i.test(q);
+
+    if (isRoOilQuery && snap.recentOilPurchases && snap.recentOilPurchases.length > 0) {
+      const latest = snap.recentOilPurchases[0];
+      const latestLink = latest.numarFactura && latest.numarFactura !== '-'
+        ? `([${latest.numarFactura}](/efactura?search=${encodeURIComponent(latest.numarFactura)}))`
+        : '';
+
+      let resp = `🛢️ **Ultimele achiziții de ulei și furnizori:**\n`;
+      resp += `Ultima comandă a fost plasată către **${latest.furnizor}** (${latest.dataFactura}):\n`;
+      resp += `• **${latest.descriere}** – **${latest.pretUnitar} RON/${latest.um || 'L'}** ${latestLink}\n`;
+
+      const otherPurchases = snap.recentOilPurchases.slice(1, 4);
+      if (otherPurchases.length > 0) {
+        resp += `\nAchiziții anterioare:\n`;
+        otherPurchases.forEach((p: any) => {
+          const pLink = p.numarFactura && p.numarFactura !== '-'
+            ? `([${p.numarFactura}](/efactura?search=${encodeURIComponent(p.numarFactura)}))`
+            : '';
+          resp += `• **${p.furnizor}** (${p.dataFactura}): ${p.descriere} – ${p.pretUnitar} RON ${pLink}\n`;
+        });
+      }
+      resp += `Toate facturile sunt disponibile în [e-Factura](/efactura).`;
+      return { answer: resp, mood: 'analyzing' };
+    }
+
     // 2.1 Analiză de preț & Istoric cronologic
     if (priceCompData && priceCompData.totalFound > 0) {
       let resp = `🔍 **Analiză Preț: „${priceCompData.searchTerm.toUpperCase()}”** (${priceCompData.totalFound} intrări în facturi)\n`;
@@ -1846,7 +2070,7 @@ Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra
         });
         resp += `Îmi poți da un nume de furnizor sau reper pentru detalii!`;
         return { answer: resp, mood: 'happy' };
-      } else {
+      } else if (/factur|száml|szaml/i.test(q)) {
         return {
           answer: `Nu am găsit facturi pentru termenul: *„${invoiceData.searchTerm}”*.`,
           mood: 'thinking',

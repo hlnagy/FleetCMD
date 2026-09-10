@@ -7,9 +7,11 @@ import {
   FileCheck, FileText, AlertTriangle, CheckCircle2, Clock, X,
   Search, RotateCcw, Plus, Download, Eye, Upload, Trash2, Edit3,
   RefreshCw, ShieldAlert, Truck, ExternalLink, Calendar, DollarSign,
-  Filter, Paperclip, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown
+  Filter, Paperclip, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown,
+  Image as ImageIcon
 } from 'lucide-react';
-import { showConfirm } from '@/lib/swal';
+import { showConfirm, showSuccess, showError } from '@/lib/swal';
+import { useAuth } from '@/lib/AuthContext';
 
 // Tipuri de documente suportate și configurarea lor vizuală
 const DOC_TYPES_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
@@ -24,6 +26,9 @@ const DOC_TYPES_CONFIG: Record<string, { label: string; bg: string; text: string
 };
 
 export default function DocumenteVehiculePage() {
+  const { authFetch } = useAuth();
+  const safeFetch = authFetch || fetch;
+
   const [documente, setDocumente] = useState<any[]>([]);
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,14 +80,21 @@ export default function DocumenteVehiculePage() {
   const odsFileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal Previzualizare Fișier
-  const [previewFisier, setPreviewFisier] = useState<{ url: string; nume: string } | null>(null);
+  const [previewFisier, setPreviewFisier] = useState<{
+    docId?: string;
+    url: string;
+    nume: string;
+    vehiculNumar?: string;
+    tipDocument?: string;
+  } | null>(null);
+  const [isDeletingFisier, setIsDeletingFisier] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [resDocs, resVeh] = await Promise.all([
-        fetch(`${API_BASE_URL}/anomalii/documente-vehicule`),
-        fetch(`${API_BASE_URL}/vehicule`),
+        safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule`),
+        safeFetch(`${API_BASE_URL}/vehicule`),
       ]);
       if (resDocs.ok) setDocumente(await resDocs.json());
       if (resVeh.ok) setVehicule(await resVeh.json());
@@ -173,7 +185,7 @@ export default function DocumenteVehiculePage() {
 
     try {
       setUploadingFile(true);
-      const res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/upload`, {
+      const res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -184,10 +196,10 @@ export default function DocumenteVehiculePage() {
         setFormFisierNume(data.fisierNume);
         setFormFisierMarime(data.fisierMarime);
       } else {
-        alert('Eroare la încărcarea fișierului.');
+        await showError('Eroare Upload', 'Nu s-a putut încărca fișierul selectat.');
       }
     } catch (e) {
-      alert('Eroare de rețea la încărcare.');
+      await showError('Eroare Rețea', 'Eroare de rețea la încărcarea fișierului.');
     } finally {
       setUploadingFile(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -240,7 +252,7 @@ export default function DocumenteVehiculePage() {
   const handleSaveDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formVehiculId || !formDataExpirare) {
-      alert('Vă rugăm să selectați vehiculul și data expirării.');
+      await showError('Date incomplete', 'Vă rugăm să selectați vehiculul și data expirării.');
       return;
     }
 
@@ -264,13 +276,13 @@ export default function DocumenteVehiculePage() {
 
       let res;
       if (editingDoc) {
-        res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/${editingDoc.id}`, {
+        res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule/${editingDoc.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule`, {
+        res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -278,39 +290,77 @@ export default function DocumenteVehiculePage() {
       }
 
       if (res.ok) {
-        alert(`Documentul a fost ${editingDoc ? 'actualizat' : 'salvat'} cu succes!`);
+        await showSuccess(
+          'Succes',
+          `Documentul a fost ${editingDoc ? 'actualizat' : 'înregistrat'} cu succes!`
+        );
         setShowModal(false);
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message || 'Verificați datele introduse'}`);
+        await showError('Eroare', err.message || 'Verificați datele introduse');
       }
     } catch (e) {
-      alert('Eroare la salvarea documentului.');
+      await showError('Eroare', 'Eroare la salvarea documentului.');
     }
   };
 
+  // Ștergere întreg document (cu confirmare)
   const handleDeleteDoc = async (id: string, denumire: string) => {
     const confirmed = await showConfirm(
       'Ștergere Document',
-      `Sigur doriți să ștergeți documentul "${denumire}"?`,
+      `Sigur doriți să ștergeți documentul "${denumire}"?\n\nBiztosan törölni szeretnéd ezt a dokumentumot?`,
       'Da, șterge',
       'Anulează'
     );
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/${id}`, {
+      const res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        alert('Documentul a fost șters!');
+        if (previewFisier?.docId === id) {
+          setPreviewFisier(null);
+        }
+        await showSuccess('Document Șters', `Documentul "${denumire}" a fost șters cu succes!`);
         fetchData();
       } else {
-        alert('Eroare la ștergerea documentului.');
+        await showError('Eroare', 'Eroare la ștergerea documentului de pe server.');
       }
     } catch (e) {
-      alert('Eroare de conexiune.');
+      await showError('Eroare Conexiune', 'Eroare de conexiune la server.');
+    }
+  };
+
+  // Ștergere fișier atașat de la document (cu confirmare)
+  const handleDeleteFisier = async (docId: string, numeFisier: string) => {
+    const confirmed = await showConfirm(
+      'Ștergere Fișier Atașat',
+      `Sigur doriți să ștergeți fișierul atașat "${numeFisier}"?\n\nBiztosan törölni szeretnéd a csatolt dokumentumot? Fișierul va fi șters definitiv de pe server.`,
+      'Da, șterge fișierul',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsDeletingFisier(true);
+      const res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule/${docId}/fisier`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        if (previewFisier?.docId === docId) {
+          setPreviewFisier(null);
+        }
+        await showSuccess('Fișier Șters', 'Fișierul atașat a fost șters cu succes de pe server.');
+        fetchData();
+      } else {
+        await showError('Eroare', 'Nu s-a putut șterge fișierul de pe server.');
+      }
+    } catch (e) {
+      await showError('Eroare Conexiune', 'A apărut o problemă la comunicarea cu serverul.');
+    } finally {
+      setIsDeletingFisier(false);
     }
   };
 
@@ -776,37 +826,48 @@ export default function DocumenteVehiculePage() {
                       {/* Act Scanat / Atașament */}
                       <td className="p-3.5 text-center">
                         {doc.fisierUrl ? (
-                          <div className="inline-flex items-center space-x-1">
+                          <div className="inline-flex items-center space-x-1.5">
                             <button
                               type="button"
                               onClick={() =>
                                 setPreviewFisier({
+                                  docId: doc.id,
                                   url: `${API_BASE_URL}${doc.fisierUrl}`,
                                   nume: doc.fisierNume || 'Document Scanat',
+                                  vehiculNumar: doc.vehicul?.numarInmatriculare,
+                                  tipDocument: doc.tipDocument,
                                 })
                               }
-                              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-200 transition flex items-center space-x-1"
-                              title="Previzualizează documentul scanat"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] border border-emerald-200 transition flex items-center space-x-1 cursor-pointer"
+                              title="Previzualizează documentul scanat (PDF sau Imagine)"
                             >
                               <Eye className="w-3 h-3 text-emerald-600" />
-                              <span className="max-w-[100px] truncate">{doc.fisierNume || 'Vezi Act'}</span>
+                              <span className="max-w-[95px] truncate">{doc.fisierNume || 'Vezi Act'}</span>
                             </button>
                             <a
                               href={`${API_BASE_URL}${doc.fisierUrl}`}
                               download={doc.fisierNume || 'document'}
                               target="_blank"
                               rel="noreferrer"
-                              className="p-1 text-sage-400 hover:text-sapphire-600 transition"
-                              title="Deschide în tab nou / Descarcă"
+                              className="p-1 text-sage-400 hover:text-sapphire-600 hover:bg-sapphire-50 rounded transition"
+                              title="Deschide în filă nouă / Descarcă"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFisier(doc.id, doc.fisierNume || 'Document Scanat')}
+                              className="p-1 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-50 rounded transition cursor-pointer"
+                              title="Șterge fișierul atașat (cu confirmare)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-terracotta-500" />
+                            </button>
                           </div>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(doc)}
-                            className="px-2 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-500 font-bold text-[10px] border border-dashed border-morning-300 transition flex items-center space-x-1 mx-auto"
+                            className="px-2 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-500 font-bold text-[10px] border border-dashed border-morning-300 transition flex items-center space-x-1 mx-auto cursor-pointer"
                             title="Atașează o copie scanată sau o fotografie"
                           >
                             <Upload className="w-3 h-3 text-sage-400" />
@@ -1086,15 +1147,23 @@ export default function DocumenteVehiculePage() {
                       <span className="max-w-[180px] truncate">{formFisierNume || 'Fișier atașat'}</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setFormFisierUrl('');
-                          setFormFisierNume('');
-                          setFormFisierMarime(null);
+                        onClick={async () => {
+                          const confirmed = await showConfirm(
+                            'Eliminare Fișier',
+                            'Sigur doriți să eliminați acest fișier atașat?\n\nBiztosan el szeretnéd távolítani a csatolt dokumentumot?',
+                            'Da, elimină',
+                            'Anulează'
+                          );
+                          if (confirmed) {
+                            setFormFisierUrl('');
+                            setFormFisierNume('');
+                            setFormFisierMarime(null);
+                          }
                         }}
-                        className="text-sage-400 hover:text-terracotta-600 ml-1"
+                        className="text-sage-400 hover:text-terracotta-600 ml-1 p-0.5 rounded hover:bg-emerald-100 transition cursor-pointer"
                         title="Șterge atașamentul"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
@@ -1133,57 +1202,143 @@ export default function DocumenteVehiculePage() {
         </div>
       )}
 
-      {/* MODAL PREVIZUALIZARE FIȘIER SCANAT */}
-      {previewFisier && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-4 w-full max-w-4xl h-[85vh] flex flex-col space-y-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-2.5">
-              <div className="flex items-center space-x-2">
-                <FileText className="w-5 h-5 text-sapphire-600" />
-                <h3 className="font-extrabold text-sapphire-900 text-sm truncate max-w-md">
-                  {previewFisier.nume}
-                </h3>
-              </div>
-              <div className="flex items-center space-x-2">
-                <a
-                  href={previewFisier.url}
-                  download={previewFisier.nume}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition flex items-center space-x-1"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Descarcă</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setPreviewFisier(null)}
-                  className="p-1.5 text-sage-400 hover:text-sapphire-900 rounded-lg hover:bg-morning-100 transition"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+      {/* MODAL PREVIZUALIZARE FIȘIER SCANAT (PDF & IMAGINE) */}
+      {previewFisier && (() => {
+        const isPdf =
+          previewFisier.url.toLowerCase().split('?')[0].endsWith('.pdf') ||
+          previewFisier.nume.toLowerCase().endsWith('.pdf');
+        const isImage =
+          /\.(png|jpe?g|webp|gif|svg)$/i.test(previewFisier.url.split('?')[0]) ||
+          /\.(png|jpe?g|webp|gif|svg)$/i.test(previewFisier.nume);
 
-            <div className="flex-1 bg-morning-50 rounded-xl overflow-hidden flex items-center justify-center border border-morning-200 p-2">
-              {previewFisier.url.toLowerCase().endsWith('.pdf') ? (
-                <iframe
-                  src={previewFisier.url}
-                  className="w-full h-full rounded-lg border-0"
-                  title={previewFisier.nume}
-                />
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={previewFisier.url}
-                  alt={previewFisier.nume}
-                  className="max-h-full max-w-full object-contain rounded-lg shadow-sm"
-                />
-              )}
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 md:p-6"
+            onClick={() => setPreviewFisier(null)}
+          >
+            <div
+              className="bg-white rounded-2xl p-4 w-full max-w-5xl h-[88vh] flex flex-col space-y-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header Modal Previzualizare */}
+              <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div
+                    className={`p-2 rounded-xl shrink-0 ${
+                      isPdf
+                        ? 'bg-rose-50 text-rose-600'
+                        : isImage
+                        ? 'bg-indigo-50 text-indigo-600'
+                        : 'bg-morning-100 text-slate-700'
+                    }`}
+                  >
+                    {isPdf ? (
+                      <FileText className="w-5 h-5" />
+                    ) : isImage ? (
+                      <ImageIcon className="w-5 h-5" />
+                    ) : (
+                      <Paperclip className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div className="truncate">
+                    <h3 className="font-black text-sapphire-900 text-sm md:text-base truncate">
+                      {previewFisier.nume}
+                    </h3>
+                    {(previewFisier.vehiculNumar || previewFisier.tipDocument) && (
+                      <p className="text-[11px] font-bold text-sage-500 uppercase tracking-wider">
+                        {previewFisier.vehiculNumar && <span>{previewFisier.vehiculNumar}</span>}
+                        {previewFisier.vehiculNumar && previewFisier.tipDocument && <span> • </span>}
+                        {previewFisier.tipDocument && <span>{previewFisier.tipDocument}</span>}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-1.5 md:space-x-2 shrink-0">
+                  <a
+                    href={previewFisier.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition flex items-center space-x-1"
+                    title="Deschide documentul în filă separată"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Deschide separat</span>
+                  </a>
+
+                  <a
+                    href={previewFisier.url}
+                    download={previewFisier.nume}
+                    className="px-3 py-1.5 rounded-xl bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 text-xs font-bold transition flex items-center space-x-1"
+                    title="Descarcă fișierul"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Descarcă</span>
+                  </a>
+
+                  {previewFisier.docId && (
+                    <button
+                      type="button"
+                      disabled={isDeletingFisier}
+                      onClick={() => previewFisier.docId && handleDeleteFisier(previewFisier.docId, previewFisier.nume)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-terracotta-700 text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                      title="Șterge acest fișier de pe server"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-terracotta-600" />
+                      <span className="hidden sm:inline">Șterge Fișier</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFisier(null)}
+                    className="p-1.5 text-sage-400 hover:text-sapphire-900 rounded-lg hover:bg-morning-100 transition ml-1 cursor-pointer"
+                    title="Închide fereastra"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Conținut Previzualizare */}
+              <div className="flex-1 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-morning-200 p-1 relative">
+                {isPdf ? (
+                  <iframe
+                    src={`${previewFisier.url}#toolbar=1&navpanes=0`}
+                    className="w-full h-full rounded-lg border-0 bg-white"
+                    title={previewFisier.nume}
+                  />
+                ) : isImage ? (
+                  <div className="w-full h-full flex items-center justify-center overflow-auto p-2 bg-slate-900/5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewFisier.url}
+                      alt={previewFisier.nume}
+                      className="max-h-full max-w-full object-contain rounded-lg shadow-sm"
+                    />
+                  </div>
+                ) : (
+                  <div className="text-center p-6 max-w-md">
+                    <FileText className="w-12 h-12 text-sapphire-400 mx-auto mb-3" />
+                    <h4 className="font-bold text-sapphire-900 mb-1">{previewFisier.nume}</h4>
+                    <p className="text-xs text-sage-600 mb-4">
+                      Previzualizarea directă nu este suportată pentru acest format de fișier.
+                    </p>
+                    <a
+                      href={previewFisier.url}
+                      download={previewFisier.nume}
+                      className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs inline-flex items-center space-x-1.5 shadow-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>Descarcă fișierul</span>
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
