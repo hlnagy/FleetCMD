@@ -6,24 +6,27 @@ export class VehiculeService {
   constructor(private prisma: PrismaService) {}
 
   async getCategorii() {
-    const implicite = [
-      { nume: 'CAP_TRACTOR', descriere: 'Cap Tractor' },
-      { nume: 'REMORCA', descriere: 'Remorcă / Semiremorcă' },
-      { nume: 'BASCULANTA', descriere: 'Basculantă 4 Axe' },
-      { nume: 'EXCAVATOR', descriere: 'Excavator / Utilitară' },
-      { nume: 'INCARCATOR_FRONTAL', descriere: 'Încărcător Frontal' },
-      { nume: 'BULLDOZER', descriere: 'Bulldozer' },
-      { nume: 'AUTOVALT', descriere: 'Autovalt / Compactor' },
-      { nume: 'UTILAJ_SPECIAL', descriere: 'Utilaj Special' },
-      { nume: 'AUTOUTILITARA', descriere: 'Autoutilitară' },
-    ];
+    const count = await this.prisma.categorieVehicul.count();
+    if (count === 0) {
+      const implicite = [
+        { nume: 'CAP_TRACTOR', descriere: 'Cap Tractor' },
+        { nume: 'REMORCA', descriere: 'Remorcă / Semiremorcă' },
+        { nume: 'BASCULANTA', descriere: 'Basculantă 4 Axe' },
+        { nume: 'EXCAVATOR', descriere: 'Excavator / Utilitară' },
+        { nume: 'INCARCATOR_FRONTAL', descriere: 'Încărcător Frontal' },
+        { nume: 'BULLDOZER', descriere: 'Bulldozer' },
+        { nume: 'AUTOVALT', descriere: 'Autovalt / Compactor' },
+        { nume: 'UTILAJ_SPECIAL', descriere: 'Utilaj Special' },
+        { nume: 'AUTOUTILITARA', descriere: 'Autoutilitară' },
+      ];
 
-    for (const cat of implicite) {
-      await this.prisma.categorieVehicul.upsert({
-        where: { nume: cat.nume },
-        update: {},
-        create: { nume: cat.nume, descriere: cat.descriere },
-      });
+      for (const cat of implicite) {
+        await this.prisma.categorieVehicul.upsert({
+          where: { nume: cat.nume },
+          update: {},
+          create: { nume: cat.nume, descriere: cat.descriere },
+        });
+      }
     }
 
     const allCats = await this.prisma.categorieVehicul.findMany({
@@ -40,7 +43,9 @@ export class VehiculeService {
     const existing = await this.prisma.categorieVehicul.findUnique({
       where: { nume: catNumeUpper },
     });
-    if (existing) return existing;
+    if (existing) {
+      throw new BadRequestException(`Categoria "${catNumeUpper}" există deja.`);
+    }
 
     return this.prisma.categorieVehicul.create({
       data: {
@@ -58,9 +63,13 @@ export class VehiculeService {
 
     const newNumeUpper = (numeNou || oldCat.nume).trim().toUpperCase().replace(/\s+/g, '_');
 
+    if (oldCat.nume === 'NEALOCAT' && newNumeUpper !== 'NEALOCAT') {
+      throw new BadRequestException('Categoria "NEALOCAT" este rezervată de sistem și nu poate fi redenumită.');
+    }
+
     if (oldCat.nume !== newNumeUpper) {
       const exist = await this.prisma.categorieVehicul.findUnique({ where: { nume: newNumeUpper } });
-      if (exist && exist.id !== id) {
+      if (exist && exist.id !== oldCat.id) {
         throw new BadRequestException(`Categoria "${newNumeUpper}" există deja.`);
       }
 
@@ -92,7 +101,7 @@ export class VehiculeService {
     }
 
     return this.prisma.categorieVehicul.update({
-      where: { id },
+      where: { id: oldCat.id },
       data: {
         descriere: descriere !== undefined ? descriere : oldCat.descriere,
       },
@@ -104,6 +113,10 @@ export class VehiculeService {
       where: { OR: [{ id }, { nume: id }] },
     });
     if (!cat) throw new NotFoundException('Categoria nu a fost găsită.');
+
+    if (cat.nume === 'NEALOCAT') {
+      throw new BadRequestException('Categoria "NEALOCAT" este rezervată de sistem și nu poate fi ștearsă.');
+    }
 
     // Asigurăm că există categoria NEALOCAT
     await this.prisma.categorieVehicul.upsert({
@@ -118,7 +131,13 @@ export class VehiculeService {
       data: { categorieEnum: 'NEALOCAT' },
     });
 
-    return this.prisma.categorieVehicul.delete({ where: { id } });
+    // Mutăm și regulile de mentenanță asociate la NEALOCAT
+    await this.prisma.regulaAlertaMentenanta.updateMany({
+      where: { categorieUtilaj: cat.nume },
+      data: { categorieUtilaj: 'NEALOCAT' },
+    });
+
+    return this.prisma.categorieVehicul.delete({ where: { id: cat.id } });
   }
 
   async createVehicul(data: {

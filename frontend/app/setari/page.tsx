@@ -412,12 +412,12 @@ function SetariContent() {
   };
 
   const openEditVehiculCat = (c: any) => {
-    setEditingVehiculCat({ ...c });
+    setEditingVehiculCat({ ...c, originalId: c.id, originalNume: c.nume });
   };
 
   const handleUpdateVehiculCat = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetId = editingVehiculCat.id || editingVehiculCat.nume;
+    const targetId = editingVehiculCat.originalId || editingVehiculCat.id || editingVehiculCat.originalNume;
     if (!targetId) return;
     try {
       const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${encodeURIComponent(targetId)}`, {
@@ -451,7 +451,8 @@ function SetariContent() {
     );
     if (!confirmed) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${id}`, {
+      const target = id || nume;
+      const res = await fetch(`${API_BASE_URL}/vehicule/categorii/${encodeURIComponent(target)}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -459,7 +460,7 @@ function SetariContent() {
         fetchData();
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge categoria'}`);
       }
     } catch (e) {
       alert('Eroare la ștergerea categoriei.');
