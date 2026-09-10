@@ -182,29 +182,40 @@ export default function RobiSpeechBubble({
       {/* SPEECH BUBBLE CONTAINER (Sci-Fi Dialogue Balloon)          */}
       {/* ========================================================= */}
       <div
-        className={`flex flex-col rounded-3xl border border-cyan-500/40 backdrop-blur-2xl bg-slate-950/92 shadow-[0_25px_65px_rgba(0,0,0,0.92)] overflow-hidden transition-all duration-300 ${
+        className={`flex flex-col rounded-3xl border border-emerald-500/40 backdrop-blur-2xl bg-slate-950/92 shadow-[0_25px_65px_rgba(0,0,0,0.92)] overflow-hidden transition-all duration-300 ${
           isExpanded
             ? 'w-[calc(100vw-2.5rem)] sm:w-[650px] h-[calc(100vh-4rem)] sm:h-[780px] max-h-[92vh]'
             : 'w-[calc(100vw-2.5rem)] sm:w-[480px] h-[540px] max-h-[82vh]'
         }`}
         style={{
           boxShadow:
-            '0 25px 65px -10px rgba(0, 0, 0, 0.95), 0 0 30px rgba(6, 182, 212, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
+            '0 25px 65px -10px rgba(0, 0, 0, 0.95), 0 0 30px rgba(16, 185, 129, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.15)',
         }}
       >
-        {/* Top Sci-Fi Neon Edge */}
-        <div className="h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_12px_#22d3ee]" />
+        {/* Top Sci-Fi Planeteer Neon Edge */}
+        <div className="h-1 bg-gradient-to-r from-emerald-500 via-cyan-400 to-yellow-400 shadow-[0_0_12px_#10b981]" />
 
         {/* SPEECH BUBBLE HEADER */}
         <div className="px-4 py-3 bg-gradient-to-b from-slate-900/90 to-slate-950/90 border-b border-slate-800/80 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-            <span className="text-sm font-black tracking-tight text-white flex items-center space-x-1">
-              <span>ROBI</span>
-              <span className="text-cyan-400 font-mono text-xs">AI</span>
-            </span>
+          <div className="flex items-center space-x-2.5">
+            {/* Captain Planet Mini Avatar */}
+            <div className="relative w-7 h-7 rounded-full bg-slate-900 border border-emerald-400 flex items-center justify-center overflow-hidden shadow-[0_0_10px_#10b981]">
+              <div className="absolute -top-1 w-5 h-2.5 rounded-full bg-emerald-400 blur-[0.5px]" />
+              <div className="w-4 h-4 rounded-full bg-gradient-to-b from-cyan-400 to-sky-600 border border-cyan-300 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-300 animate-ping" />
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <span className="text-xs font-black tracking-wider text-white flex items-center space-x-1.5">
+                <span className="text-emerald-400">ROBI</span>
+                <span className="text-[10px] text-yellow-400/90 font-mono tracking-normal">CAPTAIN PLANET</span>
+              </span>
+              <span className="text-[9px] text-cyan-300/80 font-mono -mt-0.5">„The Power is Yours!”</span>
+            </div>
+
             <span
-              className={`text-[10px] font-mono px-2.5 py-0.5 rounded-full border flex items-center space-x-1 ${moodInfo.color}`}
+              className={`text-[10px] font-mono px-2 py-0.5 rounded-full border flex items-center space-x-1 ${moodInfo.color}`}
             >
               <Volume2 className="w-3 h-3 animate-pulse" />
               <span>{moodInfo.text}</span>
@@ -318,7 +329,7 @@ export default function RobiSpeechBubble({
             type="submit"
             disabled={!input.trim() || isLoading}
             aria-label="Trimite mesaj lui Robi"
-            className="h-11 w-11 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            className="h-11 w-11 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             <Send className="w-4 h-4 text-white" />
           </button>

@@ -752,3 +752,38 @@ html.gray .swal2-html-container {
   animation: cuteHeadTilt 3s ease-in-out infinite;
 }
 
+/* Captain Planet Robi Animations */
+@keyframes planetSpinSlow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes hairEnergyFlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.75)) drop-shadow(0 -4px 14px rgba(52, 211, 153, 0.6));
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.95)) drop-shadow(0 -6px 22px rgba(110, 231, 183, 0.85));
+    transform: scale(1.03) translateY(-1px);
+  }
+}
+
+@keyframes heroFistPump {
+  0%, 100% { transform: rotate(-10deg) translateY(0); }
+  50% { transform: rotate(-28deg) translateY(-4px); }
+}
+
+.animate-planet-spin {
+  animation: planetSpinSlow 24s linear infinite;
+}
+
+.animate-hair-flow {
+  animation: hairEnergyFlow 2.8s ease-in-out infinite;
+}
+
+.animate-hero-fist {
+  animation: heroFistPump 1.2s ease-in-out infinite;
+  transform-origin: bottom left;
+}
+
