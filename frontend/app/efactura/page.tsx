@@ -240,12 +240,23 @@ function EFacturaContent() {
 
   const [activeTab, setActiveTab] = useState<'efactura' | 'manual' | 'istoric'>('efactura');
 
-  // Ascultăm schimbarea tab-ului din URL / Sidebar
+  const initialSearch = searchParams?.get('search') || searchParams?.get('q') || '';
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [stareFilter, setStareFilter] = useState(initialSearch ? 'TOATE' : 'NEPROCESAT');
+  const [lunaFilter, setLunaFilter] = useState<'TOATE' | string>('TOATE');
+
+  // Ascultăm schimbarea tab-ului sau a căutării din URL / Sidebar / Robi Hyperlink
   useEffect(() => {
     if (tabParam && ['efactura', 'manual', 'istoric'].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
-  }, [tabParam]);
+    const q = searchParams?.get('search') || searchParams?.get('q');
+    if (q) {
+      setSearchQuery(q);
+      setStareFilter('TOATE');
+      setLunaFilter('TOATE');
+    }
+  }, [tabParam, searchParams]);
 
   const [facturi, setFacturi] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
@@ -256,9 +267,6 @@ function EFacturaContent() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [selectedZile, setSelectedZile] = useState(60);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [stareFilter, setStareFilter] = useState('NEPROCESAT');
-  const [lunaFilter, setLunaFilter] = useState<'TOATE' | string>('TOATE');
 
   // STARE PENTRU RECEPȚIE MANUALĂ & ISTORIC FACTURI
   const [bevDepozitId, setBevDepozitId] = useState('');

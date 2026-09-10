@@ -31,6 +31,7 @@ export interface PriceComparisonResult {
   maxPricePurchase: PriceHistoryItem | null;
   priceChangePercent: number | null;
   chronologicalHistory: PriceHistoryItem[];
+  fleetTiresSample?: any[];
 }
 
 @Injectable()
@@ -402,42 +403,154 @@ export class AiService {
   }
 
   /**
-   * TÉTELES SZÁMLAKERESÉS ÉS IDŐRENDI ÁRÖSSZEHASONLÍTÁS (EFacturaItem & IntrareStoc)
+   * TÉTELES SZÁMLAKERESÉS ÉS IDŐRENDI ÁRÖSSZEHASONLÍTÁS (EFacturaItem & IntrareStoc & Anvelopa)
    */
   async searchInvoiceItemsAndPriceHistory(userMessage: string): Promise<PriceComparisonResult | null> {
     const isPriceOrItemQuery =
-      /piesa|piese|articol|articole|pret|preț|cost|scump|ieftin|istoric|compar|compara|comparare|patin[aă]|placute|plăcuțe|filtru|ulei|valva|valvă|disc|anvelop|bec|senzor|garnitur|bujie|lichid|alkatrész|alkatresz|tétel|tetel|számlatétel|termékkód|termekkod|cikkszám|cikkszam|ár|árak|arak|drág|drag|olcsó|olcso|összehasonlít|osszehasonlit|mennyiért|mennyiert|került|kerult|vettük|vettuk/i.test(
+      /piesa|piese|articol|articole|pret|preț|cost|scump|ieftin|istoric|compar|compara|comparare|patin[aă]|placute|plăcuțe|filtru|ulei|valva|valvă|disc|anvelop|bec|senzor|garnitur|bujie|lichid|alkatrész|alkatresz|tétel|tetel|számlatétel|termékkód|termekkod|cikkszám|cikkszam|ár|árak|arak|drág|drag|olcsó|olcso|összehasonlít|osszehasonlit|mennyiért|mennyiert|került|kerult|vettük|vettuk|vettünk|vettunk|gumi|abroncs|pneu/i.test(
         userMessage
       );
 
+    const isTireQuery = /gumi|gumit|gumik|gumikat|abroncs|abroncsot|abroncsok|kamiongumi|anvelop|pneu|pneuri/i.test(userMessage);
+
     const stopWords = new Set([
-      'szia', 'hello', 'hali', 'üdv', 'buna', 'salut', 'care', 'este', 'sunt', 'din',
-      'pentru', 'despre', 'poti', 'cauta', 'factura', 'facturi', 'szamla', 'szamlak',
+      'robi', 'bot', 'ai', 'asszisztens',
+      'szia', 'hello', 'hali', 'üdv', 'buna', 'salut', 'servus', 'care', 'este', 'sunt', 'din',
+      'pentru', 'despre', 'poti', 'cauta', 'factura', 'facturi', 'facturile', 'szamla', 'szamlak',
       'számla', 'számlák', 'havonta', 'havi', 'mennyi', 'mennyit', 'mennyibe', 'kerul',
-      'kerül', 'érdekel', 'erdekel', 'akarom', 'szeretném', 'tudsz', 'keresni', 'cat',
+      'kerül', 'érdekel', 'erdekel', 'akarom', 'szeretném', 'szeretnem', 'tudsz', 'keresni', 'cat',
       'cât', 'citi', 'câte', 'cate', 'total', 'toate', 'vreau', 'arata', 'arată', 'nekem',
-      'mutasd', 'spune', 'avem', 'există', 'plati', 'kifizetve', 'kérlek', 'kerlek', 'hogy',
+      'mutasd', 'spune', 'spune-mi', 'avem', 'există', 'exista', 'plati', 'plăți', 'kifizetve', 'kérlek', 'kerlek', 'hogy',
       'változott', 'valtozott', 'történt', 'tortent', 'hogyan', 'mikor', 'melyik', 'időrend',
-      'idorend', 'időrendben', 'idorendben', 'árösszehasonlítás', 'osszehasonlitas'
+      'idorend', 'időrendben', 'idorendben', 'árösszehasonlítás', 'osszehasonlitas',
+      'mennyiért', 'mennyiert', 'vettük', 'vettuk', 'vettünk', 'vettunk', 'vásároltunk', 'vasaroltunk',
+      'vettem', 'vett', 'került', 'kerult', 'fizettünk', 'fizettunk', 'ára', 'árak', 'arak', 'árát', 'arat',
+      'árban', 'arban', 'árú', 'aru', 'árral', 'arral', 'legutóbb', 'legutobb', 'legutóbbi', 'legutobbi',
+      'utoljára', 'utoljara', 'utolsó', 'utolso', 'friss', 'legfrissebb', 'legfrissebbet',
+      'cumpărat', 'cumparat', 'achiziționat', 'achizitionat', 'costat', 'ultimul', 'ultima', 'recente', 'recent',
+      'darab', 'darabot', 'db', 'buc', 'bucata', 'bucati',
+      'kamion', 'kamiont', 'kamionra', 'teherautó', 'teherauto'
     ]);
+
+    const partSynonyms: Record<string, string[]> = {
+      // Gumiabroncsok / Anvelope / Pneuri
+      gumi: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      gumit: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      gumik: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      gumikat: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      abroncs: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      abroncsot: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      abroncsok: ['anvelop', 'pneu', '385/65', '315/80', '295/80', '315/70', 'R22.5'],
+      kamiongumi: ['anvelop', '385/65', '315/80', '295/80', 'R22.5'],
+      kamiongumit: ['anvelop', '385/65', '315/80', '295/80', 'R22.5'],
+      anvelopa: ['anvelop', 'pneu', '385/65', '315/80', '295/80', 'R22.5'],
+      anvelope: ['anvelop', 'pneu', '385/65', '315/80', '295/80', 'R22.5'],
+      pneu: ['anvelop', 'pneu', '385/65', '315/80', '295/80', 'R22.5'],
+      pneuri: ['anvelop', 'pneu', '385/65', '315/80', '295/80', 'R22.5'],
+
+      // Olajok / Kenőanyagok
+      olaj: ['ulei', 'oil', 'lubrifiant', '10w40', '15w40', '5w30'],
+      olajat: ['ulei', 'oil', 'lubrifiant', '10w40', '15w40', '5w30'],
+      motorolaj: ['ulei motor', '10w40', '15w40', '5w30'],
+      motorolajat: ['ulei motor', '10w40', '15w40', '5w30'],
+      váltóolaj: ['ulei transmisie', '75w80', '75w90', '80w90'],
+      hidraulikaolaj: ['ulei hidraulic', 'h46', 'hv46', 'h68'],
+      ulei: ['ulei', 'oil', 'lubrifiant'],
+
+      // Fékek
+      fék: ['placute', 'disc frana', 'frana', 'tambur', 'sabot'],
+      fékbetét: ['placute', 'placuta frana'],
+      fékbetétet: ['placute', 'placuta frana'],
+      féktárcsa: ['disc frana'],
+      féktárcsát: ['disc frana'],
+      placute: ['placute', 'frana'],
+      frana: ['placute', 'disc frana', 'tambur', 'frana'],
+
+      // Szűrők
+      szűrő: ['filtru', 'filter'],
+      szűrőt: ['filtru', 'filter'],
+      szűrők: ['filtru', 'filter'],
+      olajszűrő: ['filtru ulei'],
+      olajszűrőt: ['filtru ulei'],
+      üzemanyagszűrő: ['filtru combustibil', 'filtru motorina'],
+      légszűrő: ['filtru aer'],
+      filtru: ['filtru', 'filter'],
+
+      // Akkumulátor
+      akku: ['baterie', 'acumulator'],
+      akkumulátor: ['baterie', 'acumulator'],
+      akksi: ['baterie', 'acumulator'],
+      baterie: ['baterie', 'acumulator'],
+      acumulator: ['baterie', 'acumulator'],
+
+      // Légrugó
+      légrugó: ['perna aer', 'diaphragm', 'burduf'],
+      legrugo: ['perna aer', 'diaphragm', 'burduf'],
+      perna: ['perna aer', 'burduf'],
+
+      // Hűtőfolyadék
+      fagyálló: ['antigel'],
+      fagyallot: ['antigel'],
+      fagyalló: ['antigel'],
+      antigel: ['antigel'],
+
+      // Kuplung
+      kuplung: ['ambreiaj'],
+      kuplungot: ['ambreiaj'],
+      ambreiaj: ['ambreiaj'],
+
+      // Izzó
+      izzó: ['bec', 'far', 'lampa', 'h7', '24v'],
+      izzo: ['bec', 'far', 'lampa', 'h7', '24v'],
+      bec: ['bec', 'far', 'lampa'],
+
+      // Szélvédő
+      szélvédő: ['parbriz'],
+      szelvedo: ['parbriz'],
+      parbriz: ['parbriz'],
+
+      // AdBlue
+      adblue: ['adblue', 'uree'],
+
+      // Csapágy
+      csapágy: ['rulment'],
+      csapagy: ['rulment'],
+      rulment: ['rulment'],
+
+      // Szíj
+      szíj: ['curea'],
+      ékszíj: ['curea'],
+      curea: ['curea'],
+    };
 
     const words = userMessage
       .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"„”]/g, ' ')
       .split(/\s+/)
-      .map((w) => w.trim())
-      .filter((w) => w.length >= 3 && !stopWords.has(w.toLowerCase()));
+      .map((w) => w.trim().toLowerCase())
+      .filter((w) => w.length >= 3 && !stopWords.has(w));
 
-    if (!isPriceOrItemQuery || words.length === 0) {
+    if (!isPriceOrItemQuery || (words.length === 0 && !isTireQuery)) {
       return null;
     }
 
+    let searchTokens = [...words];
+    for (const w of words) {
+      if (partSynonyms[w]) {
+        searchTokens.push(...partSynonyms[w]);
+      }
+    }
+    if (isTireQuery && searchTokens.length === 0) {
+      searchTokens = ['anvelop', '385/65', '315/80', 'pneu'];
+    }
+    searchTokens = Array.from(new Set(searchTokens));
+
     const orConditions: any[] = [];
-    words.forEach((w) => {
-      orConditions.push({ descrierePiesa: { contains: w } });
-      orConditions.push({ codArticolFurnizor: { contains: w } });
+    searchTokens.forEach((token) => {
+      orConditions.push({ descrierePiesa: { contains: token } });
+      orConditions.push({ codArticolFurnizor: { contains: token } });
     });
 
-    const items = await this.prisma.eFacturaItem.findMany({
+    let items = await this.prisma.eFacturaItem.findMany({
       where: { OR: orConditions },
       include: {
         factura: {
@@ -456,7 +569,49 @@ export class AiService {
       take: 200,
     });
 
-    if (items.length === 0) {
+    // Ha gumiabroncsra kérdeztek rá, szűrjük ki a nem-abroncs csap/kaucsuk tételeket (pl. ROBINET, stecher, covor cauciuc, garnitur)
+    if (isTireQuery) {
+      items = items.filter((it) => {
+        const d = (it.descrierePiesa || '').toLowerCase();
+        if (
+          d.includes('robinet') ||
+          d.includes('covor cauciuc') ||
+          d.includes('stecher') ||
+          d.includes('cuplung') ||
+          d.includes('cot ') ||
+          d.includes('garnitur') ||
+          d.includes('saiba') ||
+          d.includes('tampon') ||
+          d.includes('furtun')
+        ) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    let fleetTiresSample: any[] = [];
+    if (isTireQuery) {
+      try {
+        const fleetTires = await this.prisma.anvelopa.findMany({
+          include: { vehicul: { select: { numarIntern: true, numarInmatriculare: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+        });
+        fleetTiresSample = fleetTires.map((t) => ({
+          marca: t.marca,
+          model: t.model,
+          dimensiune: t.dimensiune,
+          pretAchizitie: t.pretAchizitie,
+          stare: t.stare,
+          vehicul: t.vehicul?.numarInmatriculare || t.vehicul?.numarIntern || 'În stoc atelier',
+        }));
+      } catch (err: any) {
+        console.warn('Eroare citire tabel anvelopa:', err.message);
+      }
+    }
+
+    if (items.length === 0 && fleetTiresSample.length === 0) {
       return null;
     }
 
@@ -478,25 +633,27 @@ export class AiService {
     history.sort((a, b) => a.dataFactura.localeCompare(b.dataFactura));
 
     const distinctVendors = Array.from(new Set(history.map((h) => h.furnizor)));
-    const oldestPurchase = history[0];
-    const latestPurchase = history[history.length - 1];
+    const oldestPurchase = history.length > 0 ? history[0] : null;
+    const latestPurchase = history.length > 0 ? history[history.length - 1] : null;
 
-    let minPricePurchase = history[0];
-    let maxPricePurchase = history[0];
+    let minPricePurchase = history.length > 0 ? history[0] : null;
+    let maxPricePurchase = history.length > 0 ? history[0] : null;
 
     history.forEach((h) => {
-      if (h.pretUnitar < minPricePurchase.pretUnitar) minPricePurchase = h;
-      if (h.pretUnitar > maxPricePurchase.pretUnitar) maxPricePurchase = h;
+      if (minPricePurchase && h.pretUnitar < minPricePurchase.pretUnitar) minPricePurchase = h;
+      if (maxPricePurchase && h.pretUnitar > maxPricePurchase.pretUnitar) maxPricePurchase = h;
     });
 
     let priceChangePercent: number | null = null;
-    if (oldestPurchase.pretUnitar > 0 && oldestPurchase !== latestPurchase) {
+    if (oldestPurchase && latestPurchase && oldestPurchase.pretUnitar > 0 && oldestPurchase !== latestPurchase) {
       priceChangePercent =
         Math.round(((latestPurchase.pretUnitar - oldestPurchase.pretUnitar) / oldestPurchase.pretUnitar) * 1000) / 10;
     }
 
+    const displayTerm = isTireQuery ? 'kamion gumiabroncs (anvelopa)' : words.join(' ') || searchTokens[0] || 'articol';
+
     return {
-      searchTerm: words.join(' '),
+      searchTerm: displayTerm,
       totalFound: history.length,
       distinctVendors,
       oldestPurchase,
@@ -505,6 +662,7 @@ export class AiService {
       maxPricePurchase,
       priceChangePercent,
       chronologicalHistory: history,
+      fleetTiresSample,
     };
   }
 
@@ -612,17 +770,20 @@ export class AiService {
     const isInvoiceQuery = /factur|száml|szaml|számláz|szamlaz|dubhe|parts\s*trade|furnizor|beszállító|beszallito|plati|fizet/i.test(userMessage);
 
     const stopWords = [
+      'robi', 'bot', 'ai', 'asszisztens',
       'szia', 'hello', 'hali', 'üdv', 'buna', 'salut', 'servus', 'care', 'ce', 'este',
       'sunt', 'din', 'pentru', 'despre', 'poti', 'cauta', 'factura', 'facturi', 'facturile',
       'factura', 'facturii', 'facturilor', 'szamla', 'szamlak', 'számla', 'számlák', 'számlát',
       'szamlat', 'számláz', 'szamlaz', 'számláznak', 'szamlaznak', 'számlázás', 'szamlazas',
       'havonta', 'havi', 'hónap', 'honap', 'mennyi', 'mennyit', 'mennyibe', 'kerul', 'kerül',
+      'mennyiért', 'mennyiert', 'vettük', 'vettuk', 'vettünk', 'vettunk', 'fizettünk', 'fizettunk',
       'összeg', 'osszeg', 'érdekel', 'erdekel', 'érdekelnek', 'erdekelnek', 'rdekelnek', 'rdekel',
       'látni', 'latni', 'akarom', 'szeretnem', 'szeretném', 'tudsz', 'keresni', 'luna', 'lunar',
       'cat', 'cât', 'citi', 'câte', 'cate', 'mult', 'total', 'totale', 'totala', 'totală',
       'toate', 'toti', 'vreau', 'arata', 'arată', 'nekem', 'mutasd', 'spune', 'spune-mi',
       'avem', 'aveti', 'aveți', 'exista', 'există', 'plati', 'plăți', 'fizet', 'fizetve',
-      'kifizetve', 'adott', 'kapott', 'beérkező', 'beerkezo', 'kimenő', 'kimeno', 'kérlek', 'kerlek'
+      'kifizetve', 'adott', 'kapott', 'beérkező', 'beerkezo', 'kimenő', 'kimeno', 'kérlek', 'kerlek',
+      'kamion', 'teherautó', 'gumi', 'gumit', 'abroncs', 'alkatrész', 'piese'
     ];
 
     const cleanWords = userMessage
@@ -771,6 +932,7 @@ export class AiService {
     action: 'findMany' | 'findFirst' | 'count' | 'aggregate' | 'groupBy';
     where?: any;
     select?: any;
+    include?: any;
     orderBy?: any;
     take?: number;
     skip?: number;
@@ -848,6 +1010,8 @@ export class AiService {
           delete cleanSelect.password;
           delete cleanSelect.token;
           queryOptions.select = cleanSelect;
+        } else if (params.include && typeof params.include === 'object') {
+          queryOptions.include = params.include;
         }
       } else if (action === 'groupBy') {
         if (!Array.isArray(params.by) || params.by.length === 0) {
@@ -1006,18 +1170,18 @@ CĂUTARE FACTURI: Nu s-au găsit facturi pentru termenul: „${invoiceData.searc
     }
 
     let priceCompInfo = '';
-    if (priceCompData && priceCompData.totalFound > 0) {
+    if (priceCompData && (priceCompData.totalFound > 0 || (priceCompData.fleetTiresSample && priceCompData.fleetTiresSample.length > 0))) {
       priceCompInfo = `
-REZULTATE ANALIZĂ TÉTELES SZÁMLÁK ÉS ÁR-ÖSSZEHASONLÍTÁS (CIFRE REALE DIN EFACTURAITEM):
-- Termen căutat: „${priceCompData.searchTerm}” (Găsite: ${priceCompData.totalFound} achiziții)
+REZULTATE ANALIZĂ TÉTELES SZÁMLÁK ÉS ÁR-ÖSSZEHASONLÍTÁS (CIFRE REALE DIN BAZA DE DATE):
+- Termen căutat: „${priceCompData.searchTerm}” (Găsite în e-Factura: ${priceCompData.totalFound} achiziții)
 - Furnizori identificați: ${priceCompData.distinctVendors.join(', ')}
-- Cel mai vechi preț achiziție: ${priceCompData.oldestPurchase?.pretUnitar} RON (${priceCompData.oldestPurchase?.dataFactura}, ${priceCompData.oldestPurchase?.furnizor}, factura ${priceCompData.oldestPurchase?.numarFactura})
-- Cel mai recent preț achiziție: ${priceCompData.latestPurchase?.pretUnitar} RON (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor}, factura ${priceCompData.latestPurchase?.numarFactura})
-- Cel mai mic preț (minim istoric): ${priceCompData.minPricePurchase?.pretUnitar} RON (${priceCompData.minPricePurchase?.dataFactura}, ${priceCompData.minPricePurchase?.furnizor})
-- Cel mai mare preț (maxim istoric): ${priceCompData.maxPricePurchase?.pretUnitar} RON (${priceCompData.maxPricePurchase?.dataFactura}, ${priceCompData.maxPricePurchase?.furnizor})
+${priceCompData.oldestPurchase ? `- Cel mai vechi preț achiziție e-Factura: ${priceCompData.oldestPurchase?.pretUnitar} RON (${priceCompData.oldestPurchase?.dataFactura}, ${priceCompData.oldestPurchase?.furnizor}, factura [${priceCompData.oldestPurchase?.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.oldestPurchase?.numarFactura)}))` : ''}
+${priceCompData.latestPurchase ? `- Cel mai recent preț achiziție e-Factura: ${priceCompData.latestPurchase?.pretUnitar} RON (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor}, factura [${priceCompData.latestPurchase?.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.latestPurchase?.numarFactura)}))` : ''}
+${priceCompData.minPricePurchase ? `- Cel mai mic preț (minim istoric): ${priceCompData.minPricePurchase?.pretUnitar} RON (${priceCompData.minPricePurchase?.dataFactura}, ${priceCompData.minPricePurchase?.furnizor}, factura [${priceCompData.minPricePurchase?.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.minPricePurchase?.numarFactura)}))` : ''}
+${priceCompData.maxPricePurchase ? `- Cel mai mare preț (maxim istoric): ${priceCompData.maxPricePurchase?.pretUnitar} RON (${priceCompData.maxPricePurchase?.dataFactura}, ${priceCompData.maxPricePurchase?.furnizor})` : ''}
 - Evoluție preț: ${priceCompData.priceChangePercent !== null ? (priceCompData.priceChangePercent >= 0 ? '+' : '') + priceCompData.priceChangePercent + '%' : 'constant'}
-- Istoric cronologic achiziții (ultimele 6): ${JSON.stringify(
-        priceCompData.chronologicalHistory.slice(-6).map((h) => ({
+- Istoric cronologic achiziții (cele mai recente): ${JSON.stringify(
+        priceCompData.chronologicalHistory.slice(-5).map((h) => ({
           data: h.dataFactura,
           furnizor: h.furnizor,
           pretUnitar: h.pretUnitar,
@@ -1025,9 +1189,11 @@ REZULTATE ANALIZĂ TÉTELES SZÁMLÁK ÉS ÁR-ÖSSZEHASONLÍTÁS (CIFRE REALE DI
           cod: h.codArticol,
           piesa: h.descriere,
           factura: h.numarFactura,
+          linkFactura: `/efactura?search=${encodeURIComponent(h.numarFactura)}`,
         }))
       )}
-Prezintă comparativ și cronologic aceste date exacte!
+${priceCompData.fleetTiresSample?.length ? `- Anvelope reale montate în flotă (Modul [Gumiabroncsok](/anvelope)): ${JSON.stringify(priceCompData.fleetTiresSample)}` : ''}
+Prezintă comparativ și cronologic aceste date exacte! Când menționezi o factură specifică, folosește hyperlink markdown exact în formatul: [NumarFactura](/efactura?search=NumarFactura)!
 `;
     }
 
@@ -1055,6 +1221,21 @@ REGULĂ STRICTĂ PRIVIND SALUTUL (CRITIC):
 REGULĂ STRICTĂ DE LUNGIME:
 - Răspunde în MAXIMUM 2-4 FRAZE sau o listă compactă cu liniuțe (3-5 rânduri).
 - FĂRĂ politețuri inutile, introduceri lungi sau tabele uriașe.
+
+REGULĂ PRIVIND HYPERLINKURILE (LINKURI DIRECTE CĂTRE DATE):
+Când menționezi o factură specifică, un vehicul, o comandă de lucru sau un modul relevant, adaugă hyperlink markdown pentru a ajuta utilizatorul să deschidă direct pagina respectivă, DAR DOAR când este cu adevărat util și relevant (NU face tot textul albastru!):
+- Factură specifică: [Număr Factură](/efactura?search=NumarFactura) (ex: [ARA GR123459](/efactura?search=ARA+GR123459))
+- Furnizor facturi: [Nume Furnizor számlák](/efactura?search=Nume) (ex: [DUBHE számlák](/efactura?search=DUBHE))
+- Comandă de lucru: [Număr Comandă](/comenzi-lucru?search=Numar) (ex: [CL-00003](/comenzi-lucru?search=CL-00003))
+- Modul anvelope: [Gumiabroncs nyilvántartás](/anvelope)
+- Modul comenzi service: [Munkalapok](/comenzi-lucru)
+- Modul stocuri: [Raktárkészlet](/stocuri)
+- Fișă tehnică vehicul: [Număr](/fisa-tehnica?search=Numar)
+Păstrează linkurile scurte, elegante și doar la 1-3 referințe cheie per mesaj!
+
+TERMENI TEHNICI ȘI LIMBAJ AUTO (CRITIC):
+- În maghiară, „gumi”, „kamion gumi”, „abroncs” înseamnă EXCLUSIV GUMIABRONCS (anvelope de camion: dimensiuni tipice 315/80 R22.5, 385/65 R22.5 etc.). NICIODATĂ nu confunda cu robinete (csap), furtunuri sau piese mărunte din cauciuc! Prețul real al unei anvelope de camion este de 600 - 2500 RON/buc.
+- La întrebarea „Mennyiért vettük legutóbb kamion gumit?”, răspunde direct cu cele mai recente achiziții de anvelope (ex: ARA GRUP SRL 1286.59 RON, PARTS TRADE FL 620 RON) și anvelopele montate în flotă (Michelin 1850 RON, Benchmark 1600 RON), incluzând hyperlink la factura recentă și la modulul [Gumiabroncs nyilvántartás](/anvelope)!
 
 CAPABILITĂȚI DE AGENT ȘI ACCES LA INSTRUMENTE (TOOLS):
 Ai acces direct la instrumentul „queryFleetDatabase” pentru a interoga în siguranță (read-only) ORICARE dintre tabelele bazei de date Prisma!
@@ -1354,29 +1535,62 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
       }
 
       // 1.1 Tételes számla & Időrendi Árösszehasonlítás
-      if (priceCompData && priceCompData.totalFound > 0) {
-        let resp = `🔍 **Árelemzés: „${priceCompData.searchTerm.toUpperCase()}”** (${priceCompData.totalFound} tétel az e-Factura számlákban)\n`;
-        resp += `- **Beszállítók:** ${priceCompData.distinctVendors.join(', ')}\n`;
-        resp += `- **Legfrissebb egységár:** **${priceCompData.latestPurchase?.pretUnitar} RON** (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor})\n`;
+      if (priceCompData && (priceCompData.totalFound > 0 || (priceCompData.fleetTiresSample && priceCompData.fleetTiresSample.length > 0))) {
+        let resp = `🔍 **Árelemzés: ${priceCompData.searchTerm}** (${priceCompData.totalFound} tétel a számlákban)\n`;
+        if (priceCompData.latestPurchase) {
+          const invLink =
+            priceCompData.latestPurchase.numarFactura && priceCompData.latestPurchase.numarFactura !== '-'
+              ? `([${priceCompData.latestPurchase.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.latestPurchase.numarFactura)}))`
+              : '';
+          resp += `- **Legfrissebb beszerzés:** **${priceCompData.latestPurchase.pretUnitar} RON/db** (${priceCompData.latestPurchase.dataFactura}, ${priceCompData.latestPurchase.furnizor} ${invLink})\n`;
+        }
         if (priceCompData.oldestPurchase && priceCompData.oldestPurchase !== priceCompData.latestPurchase) {
-          resp += `- **Korábbi bázisár:** ${priceCompData.oldestPurchase.pretUnitar} RON (${priceCompData.oldestPurchase.dataFactura})\n`;
+          const oldInvLink =
+            priceCompData.oldestPurchase.numarFactura && priceCompData.oldestPurchase.numarFactura !== '-'
+              ? `([${priceCompData.oldestPurchase.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.oldestPurchase.numarFactura)}))`
+              : '';
+          resp += `- **Korábbi bázisár:** ${priceCompData.oldestPurchase.pretUnitar} RON (${priceCompData.oldestPurchase.dataFactura} ${oldInvLink})\n`;
           if (priceCompData.priceChangePercent !== null) {
             const trend = priceCompData.priceChangePercent > 0 ? '🔺 drágulás' : '🔻 csökkenés';
             resp += `- **Árváltozás:** ${priceCompData.priceChangePercent}% (${trend})\n`;
           }
         }
-        resp += `- **Legolcsóbb beszerzés:** **${priceCompData.minPricePurchase?.pretUnitar} RON** (${priceCompData.minPricePurchase?.furnizor})\n`;
-        resp += `\n**Időrendi előzmények:**\n`;
-        priceCompData.chronologicalHistory.slice(-4).forEach((h) => {
-          resp += `• ${h.dataFactura}: **${h.pretUnitar} RON/db** (${h.cantitate} ${h.um}) – ${h.furnizor} (Számla: ${h.numarFactura})\n`;
-        });
+        if (priceCompData.minPricePurchase && priceCompData.minPricePurchase !== priceCompData.latestPurchase) {
+          const minInvLink =
+            priceCompData.minPricePurchase.numarFactura && priceCompData.minPricePurchase.numarFactura !== '-'
+              ? `([${priceCompData.minPricePurchase.numarFactura}](/efactura?search=${encodeURIComponent(priceCompData.minPricePurchase.numarFactura)}))`
+              : '';
+          resp += `- **Legolcsóbb beszerzés:** **${priceCompData.minPricePurchase.pretUnitar} RON** (${priceCompData.minPricePurchase.furnizor} ${minInvLink})\n`;
+        }
+        if (priceCompData.fleetTiresSample && priceCompData.fleetTiresSample.length > 0) {
+          resp += `- **Flotta nyilvántartás ([Gumiabroncs nyilvántartás](/anvelope)):** ${priceCompData.fleetTiresSample
+            .slice(0, 3)
+            .map((t: any) => `${t.marca} ${t.dimensiune || ''} – **${t.pretAchizitie} RON**`)
+            .join(', ')}\n`;
+        }
+        if (priceCompData.chronologicalHistory.length > 1) {
+          resp += `\n**Időrendi előzmények:**\n`;
+          priceCompData.chronologicalHistory
+            .slice(-3)
+            .reverse()
+            .forEach((h) => {
+              const invL =
+                h.numarFactura && h.numarFactura !== '-'
+                  ? `([${h.numarFactura}](/efactura?search=${encodeURIComponent(h.numarFactura)}))`
+                  : '';
+              resp += `• ${h.dataFactura}: **${h.pretUnitar} RON/db** (${h.cantitate} ${h.um}) – ${h.furnizor} ${invL}\n`;
+            });
+        }
         return { answer: resp, mood: 'analyzing' };
       }
 
       // 1.2 Számla keresés havi bontással
       if (invoiceData) {
         if (invoiceData.found) {
-          let resp = `📄 **${invoiceData.vendors.join(', ')} számlák havi bontásban:**\n`;
+          const vLink = invoiceData.vendors?.[0]
+            ? `([${invoiceData.vendors[0]} számlák](/efactura?search=${encodeURIComponent(invoiceData.vendors[0])}))`
+            : '';
+          let resp = `📄 **${invoiceData.vendors.join(', ')} számlák havi bontásban** ${vLink}:\n`;
           invoiceData.monthly.forEach((m: any) => {
             resp += `- **${m.luna}**: **${m.suma.toLocaleString('hu-HU')} RON** (${m.numar} db számla)\n`;
           });

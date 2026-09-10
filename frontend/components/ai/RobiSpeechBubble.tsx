@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Send,
   X,
@@ -30,6 +31,7 @@ export default function RobiSpeechBubble({
   onClearHistory,
   onClose,
 }: RobiSpeechBubbleProps) {
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -173,7 +175,29 @@ export default function RobiSpeechBubble({
       '<span class="px-1.5 py-0.5 rounded bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold text-[10px] font-mono mr-1">ÎN REGULĂ</span>'
     );
 
+    // Markdown links [text](url) - internal app links and external
+    out = out.replace(
+      /\[(.*?)\]\((.*?)\)/g,
+      (_match, label, url) => {
+        const isExternal = url.startsWith('http');
+        const target = isExternal ? 'target="_blank" rel="noopener noreferrer"' : 'target="_self"';
+        return `<a href="${url}" ${target} class="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 decoration-cyan-500/60 hover:decoration-cyan-300 transition-colors font-semibold inline-flex items-center gap-0.5 cursor-pointer">${label}</a>`;
+      }
+    );
+
     return out;
+  };
+
+  // Intercept internal link clicks for smooth Next.js SPA navigation
+  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = (e.target as HTMLElement).closest('a');
+    if (target) {
+      const href = target.getAttribute('href');
+      if (href && href.startsWith('/')) {
+        e.preventDefault();
+        router.push(href);
+      }
+    }
   };
 
   return (
@@ -268,7 +292,10 @@ export default function RobiSpeechBubble({
         </div>
 
         {/* SPEECH BUBBLE DIALOGUE BODY */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/60">
+        <div
+          className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/60"
+          onClick={handleContainerClick}
+        >
           {messages.map((msg) => {
             const isAI = msg.sender === 'ai';
             return (
