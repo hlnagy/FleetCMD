@@ -69,8 +69,8 @@ export default function AnvelopePage() {
   const [newMarca, setNewMarca] = useState('Michelin');
   const [newModel, setNewModel] = useState('X-Multi Z');
   const [newDimensiune, setNewDimensiune] = useState('315/80 R22.5');
-  const [newAdancimeInitiala, setNewAdancimeInitiala] = useState(16);
-  const [newAdancimeCurenta, setNewAdancimeCurenta] = useState(14);
+  const [newAdancimeInitiala, setNewAdancimeInitiala] = useState(0);
+  const [newAdancimeCurenta, setNewAdancimeCurenta] = useState(0);
   const [newPretAchizitie, setNewPretAchizitie] = useState(1850);
   
   // Date & Contor Montare
@@ -1330,14 +1330,11 @@ export default function AnvelopePage() {
                       <div className="grid grid-cols-2 gap-3 pt-1">
                         <div>
                           <label className="text-[10px] text-sage-600 font-bold block mb-1">
-                            Profil la Montare (mm):
+                            Status / Serie:
                           </label>
-                          <input
-                            type="number"
-                            value={newAdancimeCurenta}
-                            onChange={(e) => setNewAdancimeCurenta(Number(e.target.value))}
-                            className="bg-morning-50 border border-morning-200 rounded-lg p-2 font-mono font-bold text-sapphire-900 text-xs w-full"
-                          />
+                          <div className="bg-morning-100 border border-morning-200 rounded-lg p-2 font-mono font-bold text-sapphire-900 text-xs">
+                            {newSerie || 'Alocare automată'}
+                          </div>
                         </div>
                         <div>
                           <label className="text-[10px] text-sage-600 font-bold block mb-1">
@@ -1380,18 +1377,16 @@ export default function AnvelopePage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-sage-700 block mb-1 font-bold">Profil Inițial (mm):</label>
-                      <input type="number" value={newAdancimeInitiala} onChange={(e) => setNewAdancimeInitiala(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
-                    </div>
-                    <div>
-                      <label className="text-sage-700 block mb-1 font-bold">Profil Curent (mm):</label>
-                      <input type="number" value={newAdancimeCurenta} onChange={(e) => setNewAdancimeCurenta(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sage-700 block mb-1 font-bold">Preț Achiziție (RON):</label>
                       <input type="number" value={newPretAchizitie} onChange={(e) => setNewPretAchizitie(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-sage-700 block mb-1 font-bold">Stare Inițială:</label>
+                      <div className="w-full bg-morning-50 border border-morning-200 rounded-xl p-2.5 text-emerald-800 font-bold text-sm">
+                        NOUĂ / ÎN STOC
+                      </div>
                     </div>
                   </div>
                 </>

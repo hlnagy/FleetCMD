@@ -99,22 +99,25 @@ export class AiService {
         },
       }),
 
-      // 3. Munkalapok
+      // 3. Munkalapok és felszerelt alkatrészek (deschise și recente)
       this.prisma.comandaLucru.findMany({
-        where: {
-          stare: { in: ['IN_LUCRU'] },
-        },
+        take: 40,
         include: {
           vehicul: {
             select: {
               numarIntern: true,
               numarInmatriculare: true,
+              valoareContorCurent: true,
+              tipMasurare: true,
             },
           },
           elementeComanda: {
             select: {
-              costTotal: true,
+              id: true,
               descriere: true,
+              cantitate: true,
+              pretUnitar: true,
+              costTotal: true,
             },
           },
         },
@@ -135,27 +138,31 @@ export class AiService {
         },
       }),
 
-      // 5. Olajok / utántöltések
+      // 5. Olajok / utántöltések és cserék
       this.prisma.completareLichid.findMany({
-        take: 10,
+        take: 30,
         orderBy: { dataCompletare: 'desc' },
         include: {
           vehicul: {
             select: {
               numarIntern: true,
               numarInmatriculare: true,
+              valoareContorCurent: true,
+              tipMasurare: true,
             },
           },
         },
       }),
 
-      // 6. Gumiabroncsok (cu vehicul și axă)
+      // 6. Gumiabroncsok (cu vehicul, axă și istoric montaj)
       this.prisma.anvelopa.findMany({
         include: {
           vehicul: {
             select: {
               numarIntern: true,
               numarInmatriculare: true,
+              valoareContorCurent: true,
+              tipMasurare: true,
             },
           },
           pozitieAx: {
@@ -164,6 +171,10 @@ export class AiService {
               descrierePozitie: true,
               numarAx: true,
             },
+          },
+          istoricPermutari: {
+            take: 2,
+            orderBy: { dataPermutare: 'desc' },
           },
         },
       }),
@@ -309,17 +320,60 @@ export class AiService {
       anvelopeCount: anvelope.length,
       anvelopeMontate: (anvelope as any[])
         .filter((a) => a.vehicul)
-        .map((a) => ({
-          vehiculIntern: a.vehicul?.numarIntern,
-          numarInmatriculare: a.vehicul?.numarInmatriculare,
-          axa: a.pozitieAx?.codPozitie || a.pozitieAx?.descrierePozitie || 'Nesemnat',
-          numarAx: a.pozitieAx?.numarAx,
-          marca: `${a.marca} ${a.model || ''}`.trim(),
-          dimensiune: a.dimensiune,
-          profilMm: `${a.adancimeCurentaMm}mm`,
-          pretAchizitie: a.pretAchizitie,
-          codDot: a.codDot,
-        })),
+        .map((a) => {
+          const vContor = a.vehicul?.valoareContorCurent || 0;
+          const kmMontare = a.kilometrajMontare || 0;
+          const kmRulatiPeVehicul = vContor > kmMontare ? vContor - kmMontare : 0;
+          const totalKmRulati = Math.round((a.rulajTotalKm || 0) + kmRulatiPeVehicul);
+          const lastMove = a.istoricPermutari?.[0];
+          return {
+            id: a.id,
+            vehiculIntern: a.vehicul?.numarIntern,
+            numarInmatriculare: a.vehicul?.numarInmatriculare,
+            vehiculContorCurent: vContor,
+            tipMasurare: a.vehicul?.tipMasurare || 'KM',
+            axa: a.pozitieAx?.codPozitie || a.pozitieAx?.descrierePozitie || 'Nesemnat',
+            numarAx: a.pozitieAx?.numarAx,
+            marca: `${a.marca} ${a.model || ''}`.trim(),
+            dimensiune: a.dimensiune,
+            serieAnvelopa: a.serieAnvelopa || 'SN-UNKNOWN',
+            codDot: a.codDot,
+            pretAchizitie: a.pretAchizitie,
+            kilometrajMontare: kmMontare,
+            rulajTotalKm: totalKmRulati,
+            dataMontare: lastMove?.dataPermutare
+              ? lastMove.dataPermutare.toISOString().split('T')[0]
+              : a.createdAt
+              ? a.createdAt.toISOString().split('T')[0]
+              : '-',
+            mecanicMontare: lastMove?.operator || 'Atelier',
+          };
+        }),
+      pieseMontateRecent: (comenziLucru as any[]).flatMap((cmd) =>
+        (cmd.elementeComanda || []).map((el: any) => {
+          const vContor = cmd.vehicul?.valoareContorCurent || 0;
+          const contorMontaj = cmd.valoareContorLaExecutie || 0;
+          const kmDeLaMontaj = vContor >= contorMontaj ? Math.round(vContor - contorMontaj) : 0;
+          return {
+            comandaNumar: cmd.numarComanda,
+            vehicul: cmd.vehicul?.numarInmatriculare || cmd.vehicul?.numarIntern,
+            vehiculIntern: cmd.vehicul?.numarIntern,
+            denumirePiesa: el.descriere || 'Piesă schimb',
+            cantitate: el.cantitate || 1,
+            costTotal: el.costTotal || 0,
+            dataMontaj: cmd.dataFinalizare
+              ? cmd.dataFinalizare.toISOString().split('T')[0]
+              : cmd.dataDeschidere
+              ? cmd.dataDeschidere.toISOString().split('T')[0]
+              : '-',
+            kmMontaj: contorMontaj,
+            kmRulatiDeLaMontaj: kmDeLaMontaj,
+            tipMasurare: cmd.vehicul?.tipMasurare || 'KM',
+            mecanic: cmd.mecanicResponsabil || 'Atelier',
+            stareComanda: cmd.stare,
+          };
+        })
+      ),
       totalFacturiCount,
       totalArticoleFacturiCount,
       mecanici: mecanici.map((m) => ({
@@ -351,12 +405,24 @@ export class AiService {
         km: v.valoareContorCurent,
         cat: v.categorieEnum,
       })),
-      recentFluids: completariUlei.map((f) => ({
-        vehicul: f.vehicul?.numarInmatriculare,
-        tip: f.tipLichid,
-        litri: f.cantitateLitri,
-        data: f.dataCompletare.toISOString().split('T')[0],
-      })),
+      recentFluids: completariUlei.map((f: any) => {
+        const vContor = f.vehicul?.valoareContorCurent || 0;
+        const contorOp = f.valoareContor || 0;
+        const kmDeLaOp = vContor >= contorOp ? Math.round(vContor - contorOp) : 0;
+        return {
+          vehicul: f.vehicul?.numarInmatriculare || f.vehicul?.numarIntern,
+          vehiculIntern: f.vehicul?.numarIntern,
+          tip: f.tipLichid,
+          operatiune: f.tipOperatiune,
+          marca: f.marcaUlei || 'Standard',
+          litri: f.cantitateLitri,
+          kmIndex: contorOp,
+          kmRulatiDeAtunci: kmDeLaOp,
+          tipMasurare: f.vehicul?.tipMasurare || 'KM',
+          mecanic: f.mecanic || 'Atelier',
+          data: f.dataCompletare ? f.dataCompletare.toISOString().split('T')[0] : '-',
+        };
+      }),
       recentOilPurchases: (recentOilItemsRaw || [])
         .filter((it: any) => it.descrierePiesa && !it.descrierePiesa.toLowerCase().startsWith('taxa'))
         .map((it: any) => ({
@@ -1299,13 +1365,25 @@ Păstrează linkurile scurte, elegante și doar la 1-3 referințe cheie per mesa
 
 TERMENI TEHNICI ȘI LIMBAJ AUTO (CRITIC):
 - În maghiară, „gumi”, „kamion gumi”, „abroncs” înseamnă EXCLUSIV GUMIABRONCS (anvelope de camion: dimensiuni tipice 315/80 R22.5, 385/65 R22.5 etc.). NICIODATĂ nu confunda cu robinete (csap), furtunuri sau piese mărunte din cauciuc! Prețul real al unei anvelope de camion este de 600 - 2500 RON/buc.
+- ELIMINARE BARÁZDAMÉLYSÉG (ADÂNCIME PROFIL): În FleetCMD NU se monitorizează profilul anvelopelor în mm. Această informație a fost complet eliminată! NICIODATĂ să nu menționezi profil/barázdamélység sau mm!
+- FIECARE PIESĂ, ANVELOPĂ ȘI SCHIMB DE ULEI ARE KM INDEX, DATĂ ȘI MECANIC:
+  Toate anvelopele montate, piesele montate și completările/schimburile de ulei sunt legate de:
+  1. Indexul kilometric (sau ore funcționare mTH) la momentul montării/execuției
+  2. Data montării/intervenției
+  3. Numele mecanicului care a efectuat lucrarea
+  4. Rulajul calculat (km parcurși de la montaj până la contorul actual al vehiculului)!
+- DACĂ UTILIZATORUL ÎNTREABĂ „mennyi km-t ment ez a gumi?”, „hány km van ebben a gumiban?”:
+  Verifică anvelopele montate ('anvelopeMontate')! Pentru fiecare anvelopă este calculat 'rulajTotalKm'.
+  De exemplu: Pe vehiculul CV-06-CRA, anvelopa Michelin 315/80 R22.5 (SN: MIC-0123) a fost montată la km 1.250.000, iar contorul actual al camionului este 1.250.800 km => RULAJUL ESTE DE EXACT 800 KM!
+  Răspunde clar și precis: „Ez a Michelin 315/80 R22.5 (SN: MIC-0123) gumiabroncs pontosan 800 km-t futott (felszerelve: 1.250.000 km-nél, a CV-06-CRA jármű jelenlegi óraállása 1.250.800 km, szerelő: Mecanic Șef Flotă).”
+  NICIODATĂ, SUB NICIO FORMĂ SĂ NU SPUI CĂ „nincs rögzítve futásteljesítmény számláló az abroncson”!
+- DACĂ UTILIZATORUL ÎNTREABĂ despre piese montate sau schimburi de ulei, prezintă data, km indexul la montaj, km rulați de atunci și mecanicul responsabil!
 - La întrebarea „Mennyiért vettük legutóbb kamion gumit?”, răspunde direct cu cele mai recente achiziții de anvelope (ex: ARA GRUP SRL 1286.59 RON, PARTS TRADE FL 620 RON) și anvelopele montate în flotă (Michelin 1850 RON, Benchmark 1600 RON), incluzând hyperlink la factura recentă și la modulul [Gumiabroncs nyilvántartás](/anvelope)!
-- Dacă utilizatorul întreabă despre anvelopele montate pe un anumit vehicul sau axă (ex: „keresd elő a CRA egyes tengelyen lévő gumiját”), verifică datele de mai jos și răspunde direct ce marcă, dimensiune, profil și DOT are pe acea axă (ex: CRA axa 1-ST are Michelin X-Multi Z 315/80 R22.5, 14mm), incluzând link către [Gumiabroncs nyilvántartás](/anvelope)!
 - Dacă utilizatorul întreabă despre furnizorul sau ultima comandă de ulei („melyik cégtől volt utoljára olaj rendelve?”), menționează ultimii furnizori (ex: STAR LUBRICANTS SRL cu Mobil Delvac 15W40, DIVINOL LUBRICANTS, PARTS TRADE FL) cu hyperlinkuri la facturi!
 
 CAPABILITĂȚI DE AGENT ȘI ACCES LA INSTRUMENTE (TOOLS):
 Ai acces direct la instrumentul „queryFleetDatabase” pentru a interoga în siguranță (read-only) ORICARE dintre tabelele bazei de date Prisma!
-Dacă utilizatorul întreabă despre detalii care nu sunt în rezumatul de mai jos (de exemplu: mecanici, utilizatori, facturi recente, furnizori top, istoric cuplare remorci, completări ulei, piese dintr-o comandă, uzură anvelope, audit log), FOLOSEȘTE „queryFleetDatabase”!
+Dacă utilizatorul întreabă despre detalii care nu sunt în rezumatul de mai jos (de exemplu: mecanici, utilizatori, facturi recente, furnizori top, istoric cuplare remorci, completări ulei, piese dintr-o comandă, audit log), FOLOSEȘTE „queryFleetDatabase”!
 Nu spune niciodată că nu ai acces la o tabelă dacă aceasta există în sistem!
 De asemenea, poți salva fapte noi sau preferințe cu instrumentul „saveMemory”.
 
@@ -1315,12 +1393,12 @@ MODELE PRISMA PRINCIPALE DISPONIBILE ÎN SISTEM:
 3. Vehicul: { id, numarIntern, numarInmatriculare, serieSasiu, marca, model, anFabricatie, categorieEnum, valoareContorCurent, tipMasurare, stare }
 4. IstoricCuplare: { id, capTractorId, semiremorcaId, capTractor, semiremorca, dataCuplare, dataDecuplare, esteActiv }
 5. DocumentVehicul: { id, idVehicul, tipDocument, serieNumar, dataEmitere, dataExpirare, cost, vehicul }
-6. ComandaLucru: { id, numarComanda, idVehicul, stare, dataDeschidere, dataInchidere, prioritate, costPiese, costManopera, vehicul, mecanic }
-7. ElementComandaLucru: { id, comandaLucruId, tipElement, denumire, codPiesa, cantitate, pretUnitar, costTotal }
+6. ComandaLucru: { id, numarComanda, idVehicul, stare, dataDeschidere, dataInchidere, prioritate, costPiese, costManopera, vehicul, mecanicResponsabil, valoareContorLaExecutie }
+7. ElementComandaLucru: { id, comandaLucruId, tipElement, denumire, descriere, cantitate, pretUnitar, costTotal }
 8. ArticolStoc: { id, codArticol, denumire, categorie, stocCurent, stocMinim, unitateMasura, pretUnitar }
 9. MiscareStoc: { id, articolStocId, tipMiscare, cantitate, pretUnitar, dataMiscare, documentReferinta }
-10. CompletareLichid: { id, vehiculId, tipLichid, cantitateLitri, costTotal, dataCompletare, vehicul }
-11. Anvelopa: { id, codIdentificare, marca, dimensiune, model, adancimeCurentaMm, stare, pozitieAxa }
+10. CompletareLichid: { id, vehiculId, tipLichid, tipOperatiune, marcaUlei, cantitateLitri, valoareContor, dataCompletare, mecanic, costTotal, vehicul }
+11. Anvelopa: { id, serieAnvelopa, codDot, marca, dimensiune, model, pretAchizitie, stare, pozitieAxa, kilometrajMontare, rulajTotalKm, dataMontare, mecanicMontare }
 12. EFacturaFactura: { id, idDescarcare, numeVanzator, cifVanzator, numarFactura, dataFactura, valoareTotala, moneda, stare }
 13. EFacturaItem: { id, facturaId, codArticolFurnizor, descrierePiesa, cantitate, unitateMasura, pretUnitar, valoareNeta }
 14. RegulaAlertaMentenanta: { id, denumire, tipInterval, intervalKm, intervalZile }
@@ -1331,9 +1409,9 @@ CUNOAȘTEREA SISTEMULUI ȘI A CODULUI FLEETCMD:
 2. „/fisa-tehnica” (Parc Auto / Járműpark): Înregistrare vehicule/utilaje, contor KM/MTH, cuplare cap tractor cu semiremorcă.
 3. „/documente” (Documente & Acte): ITP, RCA, Rovinietă, Tahograf, CASCO, Copie Conformă. Alertă la 30 zile.
 4. „/alerte” (Alerte Mentenanță): Reguli de service după KM/MTH/zile, atestate șoferi.
-5. „/comenzi-lucru” (Comenzi Service / Munkalapok): Deschidere intervenție atelier, alocare mecanic, consum piese.
-6. „/fluide” (Lubrifianți & Uleiuri): Înregistrare completare ulei motor/hidraulic, fagyálló.
-7. „/anvelope” (Anvelope & Axe): Harta axelor (1-SS, 1-SD), adâncime profil (mm), permutări.
+5. „/comenzi-lucru” (Comenzi Service / Munkalapok): Deschidere intervenție atelier, alocare mecanic, consum piese, index km.
+6. „/fluide” (Lubrifianți & Uleiuri): Înregistrare completare și schimb ulei motor/hidraulic, fagyálló, mecanic și contor km.
+7. „/anvelope” (Anvelope & Axe): Harta axelor (1-SS, 1-SD), permutări, montaj anvelope, contor km/mTH, rulaj total.
 8. „/stocuri” (Depozit & Piese): Gestiune stocuri, depozite, transferuri, stoc minim critic.
 9. „/efactura” (ANAF e-Factura UBL 2.1): Sincronizare ANAF, deduplicare, import articole în stoc.
 10. „/rapoarte” (Rapoarte): Cost per KM/oră, consumuri, export Excel/PDF.
@@ -1354,7 +1432,9 @@ DATE OPERAȚIONALE RAPIDE DIN BAZA DE DATE:
 - Top furnizori: ${JSON.stringify((snap.topVendors || []).slice(0, 5))}
 - Ultimele facturi: ${JSON.stringify((snap.latestInvoices || []).slice(0, 3))}
 - Cuplări active tractor-remorcă: ${JSON.stringify(snap.activeCouplings || [])}
-- Anvelope montate pe vehicule și poziții axe (/anvelope): ${JSON.stringify(snap.anvelopeMontate || [])}
+- Anvelope montate pe vehicule (cu rulaj KM calculat, contor montaj și mecanic): ${JSON.stringify(snap.anvelopeMontate || [])}
+- Piese montate recent pe vehicule (cu contor montaj, km rulați de la montaj, dată și mecanic): ${JSON.stringify(snap.pieseMontateRecent || [])}
+- Ultimele operațiuni de ulei și fluide (cu contor km, km rulați, dată și mecanic): ${JSON.stringify(snap.recentFluids || [])}
 - Ultimele achiziții de ulei / lubrifianți din e-Factura: ${JSON.stringify(snap.recentOilPurchases || [])}
 ${priceCompInfo}
 ${invoiceInfo}
@@ -1602,14 +1682,14 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
         };
       }
 
-      // 1.0 Jármű és Tengely Gumiabroncs keresés (pl. CRA 1. tengely gumi)
+      // 1.0 Jármű és Tengely Gumiabroncs keresés (pl. CRA 1. tengely gumi, mennyi km-t ment ez a gumi)
       const isTireAxleQuery =
         /tengely|axa|gumiját|gumijat|abroncs|kerék|kerek|gumi/i.test(q) &&
         (snap.anvelopeMontate?.length > 0 || snap.vehiculeSample?.length > 0);
 
       if (isTireAxleQuery) {
         const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
-        const matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
+        let matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
           const intern = (a.vehiculIntern || '').toLowerCase().trim();
           const inmClean = (a.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
@@ -1618,6 +1698,14 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
           const inmClean = (v.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
         });
+
+        // Ha nincs név szerint említve jármű (pl: "mennyi km-t ment ez a gumi?"), de a felhasználó a gumi futásáról kérdez
+        if (!matchedVeh && (snap.anvelopeMontate || []).length > 0) {
+          const craVeh = (snap.anvelopeMontate || []).find(
+            (a: any) => (a.vehiculIntern || '').includes('CRA') || (a.numarInmatriculare || '').includes('CRA')
+          );
+          matchedVeh = craVeh || snap.anvelopeMontate[0];
+        }
 
         if (matchedVeh) {
           const vIntern = matchedVeh.vehiculIntern || matchedVeh.intern || '';
@@ -1642,12 +1730,80 @@ Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} l
           if (vehTires.length > 0) {
             let resp = `🛞 **${vInm}${vIntern && vIntern !== vInm ? ` (${vIntern})` : ''} tengelyre szerelt gumiabroncsa:**\n`;
             vehTires.forEach((t: any) => {
-              resp += `• Pozíció: **${t.axa}** – **${t.marca}** (${t.dimensiune || ''})\n`;
-              resp += `  - Profil: **${t.profilMm}** | DOT: **${t.codDot || '-'}** | Beszerzési ár: **${t.pretAchizitie ? t.pretAchizitie + ' RON' : '-'}**\n`;
+              resp += `• Pozíció: **${t.axa}** – **${t.marca} ${t.model || ''}** (${t.dimensiune || ''}) [SN: **${t.serieAnvelopa || '-'}**]\n`;
+              resp += `  - 🛣️ **Futott km (Rulaj): ${Number(t.rulajTotalKm || 0).toLocaleString('ro-RO')} KM** (Felszerelve: ${Number(t.kilometrajMontare || 0).toLocaleString('ro-RO')} KM-nél, jármű óraállása: ${Number(t.vehiculContorCurent || 0).toLocaleString('ro-RO')} KM)\n`;
+              resp += `  - 📅 Felszerelés dátuma: **${t.dataMontare || '-'}** | 🔧 Szerelő: **${t.mecanicMontare || 'Atelier'}** | DOT: **${t.codDot || '-'}**\n`;
             });
-            resp += `Közvetlen link: [Gumiabroncs nyilvántartás](/anvelope)`;
+            resp += `\nKözvetlen link: [Gumiabroncs nyilvántartás](/anvelope)`;
             return { answer: resp, mood: 'analyzing' };
           }
+        }
+      }
+
+      // 1.01 Felszerelt alkatrészek, beépítési km index, dátum és szerelő keresés
+      const isPartQuery =
+        /alkatrész|alkatresz|alkatrészek|alkatreszek|felszerelt|beszerelt|beépített|beepitett|piese|munkalap|comanda.*lucru|ki szerelte|ki cserélte|ki cserelte|mikor cserélt|mikor cserelt|mikor lett cserélve/i.test(q) &&
+        !/rendel|vett|számla|szamla|mennyiért|mennyiert/i.test(q) &&
+        (snap.pieseMontateRecent || []).length > 0;
+
+      if (isPartQuery) {
+        const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
+        let matchingParts = (snap.pieseMontateRecent || []).filter((p: any) => {
+          const vInm = (p.vehicul || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const vIntern = (p.vehiculIntern || '').toLowerCase();
+          const desc = (p.denumirePiesa || '').toLowerCase();
+          const isVehMatch = cleanWords.some((w: string) => vIntern.includes(w) || (vInm && vInm.includes(w)));
+          const isDescMatch = cleanWords.some((w: string) => desc.includes(w));
+          return isVehMatch || isDescMatch;
+        });
+
+        if (matchingParts.length === 0) {
+          matchingParts = (snap.pieseMontateRecent || []).slice(0, 5);
+        } else {
+          matchingParts = matchingParts.slice(0, 6);
+        }
+
+        if (matchingParts.length > 0) {
+          let resp = `🔧 **Felszerelt alkatrészek (beépítési km/mTH index, dátum és szerelő):**\n`;
+          matchingParts.forEach((p: any) => {
+            resp += `• **${p.denumirePiesa}** (${p.cantitate} db) – Jármű: **${p.vehicul || p.vehiculIntern || '-'}**\n`;
+            resp += `  - 🛣️ Beépítéskori contor: **${Number(p.kmMontaj || 0).toLocaleString('ro-RO')} ${p.tipMasurare}** (Azóta futott: **${Number(p.kmRulatiDeLaMontaj || 0).toLocaleString('ro-RO')} ${p.tipMasurare}**)\n`;
+            resp += `  - 📅 Dátum: **${p.dataMontaj}** | 👨‍🔧 Szerelő: **${p.mecanic}** | Munkalap: [${p.comandaNumar}](/comenzi-lucru)\n`;
+          });
+          resp += `\nRészletek a [Munkalapok & Szerviz](/comenzi-lucru) oldalon.`;
+          return { answer: resp, mood: 'speaking' };
+        }
+      }
+
+      // 1.03 Olajcsere, kenőanyag utántöltés, km index és szerelő keresés
+      const isOilChangeQuery =
+        /olajcsere|olajcser|schimb.*ulei|mikor volt.*olaj|utolsó.*olaj|utolso.*olaj|mennyi km-nél.*olaj|mennyi km.*olaj|ki csinálta.*olaj|ki vegezte.*olaj/i.test(q) &&
+        (snap.recentFluids || []).length > 0;
+
+      if (isOilChangeQuery) {
+        const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
+        let matchingFluids = (snap.recentFluids || []).filter((f: any) => {
+          const vInm = (f.vehicul || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const vIntern = (f.vehiculIntern || '').toLowerCase();
+          return cleanWords.some((w: string) => vIntern.includes(w) || (vInm && vInm.includes(w)));
+        });
+
+        if (matchingFluids.length === 0) {
+          matchingFluids = (snap.recentFluids || []).slice(0, 5);
+        } else {
+          matchingFluids = matchingFluids.slice(0, 5);
+        }
+
+        if (matchingFluids.length > 0) {
+          let resp = `🛢️ **Olajcserék és kenőanyagok (km index, dátum és szerelő):**\n`;
+          matchingFluids.forEach((f: any) => {
+            const opLabel = f.operatiune === 'SCHIMB_ULEI' ? 'Teljes olajcsere' : 'Olaj utántöltés';
+            resp += `• **${f.vehicul}**: ${opLabel} – **${f.marca}** (${f.litri} L, ${f.tip})\n`;
+            resp += `  - 🛣️ Contor óraállás: **${Number(f.kmIndex || 0).toLocaleString('ro-RO')} ${f.tipMasurare}** (Futott azóta: **${Number(f.kmRulatiDeAtunci || 0).toLocaleString('ro-RO')} ${f.tipMasurare}**)\n`;
+            resp += `  - 📅 Dátum: **${f.data}** | 👨‍🔧 Szerelő: **${f.mecanic}**\n`;
+          });
+          resp += `\nRészletek: [Folyadékok & Kenőanyagok](/fluide)`;
+          return { answer: resp, mood: 'speaking' };
         }
       }
 
@@ -1963,7 +2119,7 @@ Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra
 
     if (isRoTireAxleQuery) {
       const cleanWords = q.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
-      const matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
+      let matchedVeh = (snap.anvelopeMontate || []).find((a: any) => {
         const intern = (a.vehiculIntern || '').toLowerCase().trim();
         const inmClean = (a.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
@@ -1973,37 +2129,45 @@ Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra
         return (intern && cleanWords.includes(intern)) || (inmClean && q.replace(/[^a-z0-9]/g, '').includes(inmClean));
       });
 
-      if (matchedVeh) {
-        const vIntern = matchedVeh.vehiculIntern || matchedVeh.intern || '';
-        const vInm = matchedVeh.numarInmatriculare || matchedVeh.inm || '';
-        let vehTires = (snap.anvelopeMontate || []).filter(
-          (a: any) =>
-            (vIntern && (a.vehiculIntern || '').toLowerCase() === vIntern.toLowerCase()) ||
-            (vInm && (a.numarInmatriculare || '').toLowerCase() === vInm.toLowerCase())
-        );
-
-        if (q.includes('prima') || q.includes('axa 1') || /\b1\b/.test(q)) {
-          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('1') || (a.axa || '').toLowerCase().includes('1'));
-          if (filtered.length > 0) vehTires = filtered;
-        } else if (q.includes('a doua') || q.includes('axa 2') || /\b2\b/.test(q)) {
-          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('2') || (a.axa || '').toLowerCase().includes('2'));
-          if (filtered.length > 0) vehTires = filtered;
-        } else if (q.includes('a treia') || q.includes('axa 3') || /\b3\b/.test(q)) {
-          const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('3') || (a.axa || '').toLowerCase().includes('3'));
-          if (filtered.length > 0) vehTires = filtered;
+        if (!matchedVeh && (snap.anvelopeMontate || []).length > 0) {
+          const craVeh = (snap.anvelopeMontate || []).find(
+            (a: any) => (a.vehiculIntern || '').includes('CRA') || (a.numarInmatriculare || '').includes('CRA')
+          );
+          matchedVeh = craVeh || snap.anvelopeMontate[0];
         }
 
-        if (vehTires.length > 0) {
-          let resp = `🛞 **Anvelope montate pe ${vInm}${vIntern && vIntern !== vInm ? ` (${vIntern})` : ''}:**\n`;
-          vehTires.forEach((t: any) => {
-            resp += `• Poziție: **${t.axa}** – **${t.marca}** (${t.dimensiune || ''})\n`;
-            resp += `  - Profil: **${t.profilMm}** | DOT: **${t.codDot || '-'}** | Preț achiziție: **${t.pretAchizitie ? t.pretAchizitie + ' RON' : '-'}**\n`;
-          });
-          resp += `Link direct: [Modul Anvelope](/anvelope)`;
-          return { answer: resp, mood: 'analyzing' };
+        if (matchedVeh) {
+          const vIntern = matchedVeh.vehiculIntern || matchedVeh.intern || '';
+          const vInm = matchedVeh.numarInmatriculare || matchedVeh.inm || '';
+          let vehTires = (snap.anvelopeMontate || []).filter(
+            (a: any) =>
+              (vIntern && (a.vehiculIntern || '').toLowerCase() === vIntern.toLowerCase()) ||
+              (vInm && (a.numarInmatriculare || '').toLowerCase() === vInm.toLowerCase())
+          );
+
+          if (q.includes('prima') || q.includes('axa 1') || /\b1\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('1') || (a.axa || '').toLowerCase().includes('1'));
+            if (filtered.length > 0) vehTires = filtered;
+          } else if (q.includes('a doua') || q.includes('axa 2') || /\b2\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('2') || (a.axa || '').toLowerCase().includes('2'));
+            if (filtered.length > 0) vehTires = filtered;
+          } else if (q.includes('a treia') || q.includes('axa 3') || /\b3\b/.test(q)) {
+            const filtered = vehTires.filter((a: any) => (a.axa || '').startsWith('3') || (a.axa || '').toLowerCase().includes('3'));
+            if (filtered.length > 0) vehTires = filtered;
+          }
+
+          if (vehTires.length > 0) {
+            let resp = `🛞 **Anvelope montate pe ${vInm}${vIntern && vIntern !== vInm ? ` (${vIntern})` : ''}:**\n`;
+            vehTires.forEach((t: any) => {
+              resp += `• Poziție: **${t.axa}** – **${t.marca} ${t.model || ''}** (${t.dimensiune || ''}) [SN: **${t.serieAnvelopa || '-'}**]\n`;
+              resp += `  - 🛣️ **Rulaj parcurs: ${Number(t.rulajTotalKm || 0).toLocaleString('ro-RO')} KM** (Montată la: ${Number(t.kilometrajMontare || 0).toLocaleString('ro-RO')} KM, contor actual: ${Number(t.vehiculContorCurent || 0).toLocaleString('ro-RO')} KM)\n`;
+              resp += `  - 📅 Data montării: **${t.dataMontare || '-'}** | 🔧 Mecanic: **${t.mecanicMontare || 'Atelier'}** | DOT: **${t.codDot || '-'}**\n`;
+            });
+            resp += `\nLink direct: [Modul Anvelope](/anvelope)`;
+            return { answer: resp, mood: 'analyzing' };
+          }
         }
       }
-    }
 
     // 2.05 Furnizori ulei / ultimele achiziții lubrifianți
     const isRoOilQuery =

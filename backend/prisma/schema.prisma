@@ -293,8 +293,8 @@ model Anvelopa {
   marca                String
   model                String
   dimensiune           String
-  adancimeInitialaMm   Float
-  adancimeCurentaMm    Float
+  adancimeInitialaMm   Float?              @default(0)
+  adancimeCurentaMm    Float?              @default(0)
   pretAchizitie        Float
   stare                String              @default("IN_STOC") // "IN_STOC" | "MONTATA" | "CASATA" | "RESAPATA"
 
@@ -342,7 +342,7 @@ model MasurareUzuraAnvelopa {
   anvelopa           Anvelopa   @relation(fields: [anvelopaId], references: [id], onDelete: Cascade)
   dataMasurare       DateTime   @default(now())
   valoareContor      Float
-  adancimeProfilMm   Float
+  adancimeProfilMm   Float?     @default(0)
   rataUzuraPer10k    Float?
   kmRamasiEstimati   Float?
   tehnician          String

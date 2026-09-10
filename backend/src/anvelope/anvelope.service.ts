@@ -59,14 +59,14 @@ export class AnvelopeService {
         marca: a.marca,
         model: a.model,
         dimensiune: a.dimensiune,
-        adancimeInitialaMm: a.adancimeInitialaMm || 16,
-        adancimeCurentaMm: a.adancimeCurentaMm || 16,
+        adancimeInitialaMm: 0,
+        adancimeCurentaMm: 0,
         pretAchizitie: Number(Number(a.pretAchizitie || 0).toFixed(2)),
         stocDisponibil: 1,
         depozitId: a.depozitId,
         depozit: a.depozit,
         depozitNume: a.depozit?.nume || 'Depozit Central',
-        eticheta: `${tag} [SN: ${a.serieAnvelopa}] ${a.marca} ${a.model} (${a.dimensiune}) • DOT ${a.codDot || '-'} • Profil: ${a.adancimeCurentaMm}mm • ${Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON • ${a.depozit?.nume || 'Depozit'}`,
+        eticheta: `${tag} [SN: ${a.serieAnvelopa}] ${a.marca} ${a.model} (${a.dimensiune}) • DOT ${a.codDot || '-'} • ${Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON • ${a.depozit?.nume || 'Depozit'}`,
       };
     });
 
@@ -80,8 +80,8 @@ export class AnvelopeService {
     marca: string;
     model: string;
     dimensiune: string;
-    adancimeInitialaMm: number;
-    adancimeCurentaMm: number;
+    adancimeInitialaMm?: number;
+    adancimeCurentaMm?: number;
     pretAchizitie: number;
     stare?: string; // "IN_STOC" | "MONTATA"
     depozitId?: string;
@@ -185,8 +185,8 @@ export class AnvelopeService {
         marca: data.marca,
         model: data.model,
         dimensiune: data.dimensiune,
-        adancimeInitialaMm: Number(data.adancimeInitialaMm || 14),
-        adancimeCurentaMm: Number(data.adancimeCurentaMm || 14),
+        adancimeInitialaMm: 0,
+        adancimeCurentaMm: 0,
         pretAchizitie: Number(data.pretAchizitie || 0),
         stare,
         depozitId: data.depozitId || null,
@@ -207,7 +207,7 @@ export class AnvelopeService {
           valoareContor: valoareContorFinal,
           dataPermutare: dataMontareFinal,
           operator: mecanic,
-          observatii: data.observatii || `Montată pe axa ${pozitieTarget.numarAx} poz. ${pozitieTarget.codPozitie} (Profil: ${data.adancimeCurentaMm}mm)`,
+          observatii: data.observatii || `Montată pe axa ${pozitieTarget.numarAx} poz. ${pozitieTarget.codPozitie}`,
         },
       });
     }
@@ -224,15 +224,18 @@ export class AnvelopeService {
         depozit: true,
         masuratori: { orderBy: { dataMasurare: 'desc' }, take: 1 },
       },
-      orderBy: { adancimeCurentaMm: 'asc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     return anvelope.map((a) => {
-      const uzuraPct = Math.round(((a.adancimeInitialaMm - a.adancimeCurentaMm) / a.adancimeInitialaMm) * 100);
-      const esteKritica = a.adancimeCurentaMm <= 3.0;
+      const vContor = a.vehicul?.valoareContorCurent || 0;
+      const kmPeVehicul = vContor > (a.kilometrajMontare || 0) ? vContor - (a.kilometrajMontare || 0) : 0;
+      const totalKmRulati = Math.round((a.rulajTotalKm || 0) + kmPeVehicul);
+      const esteKritica = totalKmRulati > 150000;
       return {
         ...a,
-        uzuraPct,
+        rulajTotalCalculat: totalKmRulati,
+        uzuraPct: Math.min(100, Math.round((totalKmRulati / 150000) * 100)),
         esteKritica,
         vehiculNumarIntern: a.vehicul?.numarIntern || 'NEMONTATĂ',
         vehiculInmatriculare: a.vehicul?.numarInmatriculare || '-',
@@ -322,31 +325,6 @@ export class AnvelopeService {
     }
 
     const alerteGeometrie: string[] = [];
-    const axeGroupate = new Map<number, any[]>();
-
-    vehicul.pozitiiAxe.forEach((poz) => {
-      if (!axeGroupate.has(poz.numarAx)) axeGroupate.set(poz.numarAx, []);
-      axeGroupate.get(poz.numarAx).push(poz);
-    });
-
-    axeGroupate.forEach((pozitiiOnAx, numarAx) => {
-      const stanga = pozitiiOnAx.find((p) => p.codPozitie.includes('-SS') || p.codPozitie.includes('-SE'));
-      const dreapta = pozitiiOnAx.find((p) => p.codPozitie.includes('-DS') || p.codPozitie.includes('-DE'));
-
-      if (stanga?.anvelopa && dreapta?.anvelopa) {
-        const uzuraStanga = stanga.anvelopa.adancimeInitialaMm - stanga.anvelopa.adancimeCurentaMm;
-        const uzuraDreapta = dreapta.anvelopa.adancimeInitialaMm - dreapta.anvelopa.adancimeCurentaMm;
-
-        if (uzuraStanga > 0 && uzuraDreapta > 0) {
-          const difProcentual = Math.abs(uzuraStanga - uzuraDreapta) / Math.max(uzuraStanga, uzuraDreapta);
-          if (difProcentual > 0.3) {
-            alerteGeometrie.push(
-              `Alertă Geometrie Axa ${numarAx}: Risc de aliniere incorectă între ${stanga.codPozitie} (${stanga.anvelopa.adancimeCurentaMm}mm) și ${dreapta.codPozitie} (${dreapta.anvelopa.adancimeCurentaMm}mm). Diferență uzură > 30%!`,
-            );
-          }
-        }
-      }
-    });
 
     return {
       vehiculId: vehicul.id,
@@ -546,8 +524,8 @@ export class AnvelopeService {
           marca,
           model,
           dimensiune,
-          adancimeInitialaMm: Number(data.adancimeInitialaMm || 16),
-          adancimeCurentaMm: Number(data.adancimeCurentaMm || 16),
+          adancimeInitialaMm: 0,
+          adancimeCurentaMm: 0,
           pretAchizitie: Number(data.pretAchizitie || art.pretUnitar || 0),
           stare: 'MONTATA',
           depozitId: art.depozitId,
@@ -1127,8 +1105,8 @@ export class AnvelopeService {
           marca: data.marca,
           model: data.model,
           dimensiune: data.dimensiune,
-          adancimeInitialaMm: adancime,
-          adancimeCurentaMm: adancime,
+          adancimeInitialaMm: 0,
+          adancimeCurentaMm: 0,
           pretAchizitie: pret,
           stare: 'IN_STOC',
           depozitId,

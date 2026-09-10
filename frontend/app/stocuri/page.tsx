@@ -529,8 +529,7 @@ function StocuriGarantiiContent() {
         marca: editingAnvelopaStoc.marca,
         model: editingAnvelopaStoc.model,
         dimensiune: editingAnvelopaStoc.dimensiune,
-        adancimeCurentaMm: Number(editingAnvelopaStoc.adancimeCurentaMm),
-        adancimeInitialaMm: Number(editingAnvelopaStoc.adancimeInitialaMm || 16),
+        rulajTotalKm: Number(editingAnvelopaStoc.rulajTotalKm || 0),
         pretAchizitie: Number(Number(editingAnvelopaStoc.pretAchizitie || 0).toFixed(2)),
         depozitId: editingAnvelopaStoc.depozitId,
       };
@@ -1152,21 +1151,13 @@ function StocuriGarantiiContent() {
                       </div>
                     </div>
 
-                    {/* Bară Profil & Depozit */}
+                    {/* Rulaj & Depozit */}
                     <div className="p-2.5 bg-morning-50 rounded-xl border border-morning-200 space-y-1.5">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-sage-600 font-medium">Adâncime Profil:</span>
+                        <span className="text-sage-600 font-medium">Rulaj Acumulat:</span>
                         <span className="font-mono font-extrabold text-sapphire-900">
-                          {a.adancimeCurentaMm} mm <span className="text-sage-400 font-normal text-[10px]">/ 16mm</span>
+                          {Math.round(a.rulajTotalKm || 0).toLocaleString('ro-RO')} KM
                         </span>
-                      </div>
-                      <div className="w-full bg-morning-200 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className={`h-1.5 rounded-full ${
-                            procentProfil > 60 ? 'bg-emerald-500' : procentProfil > 30 ? 'bg-amber-500' : 'bg-rose-500'
-                          }`}
-                          style={{ width: `${procentProfil}%` }}
-                        />
                       </div>
                       <p className="text-[10px] text-sage-600 font-medium flex items-center space-x-1 pt-0.5">
                         <Building2 className="w-3 h-3 text-sapphire-500" />
@@ -2009,12 +2000,11 @@ function StocuriGarantiiContent() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Adâncime Profil Curentă (mm):</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Rulaj Total Acumulat (KM):</label>
                   <input
                     type="number"
-                    step="0.1"
-                    value={editingAnvelopaStoc.adancimeCurentaMm || 16}
-                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, adancimeCurentaMm: Number(e.target.value) })}
+                    value={editingAnvelopaStoc.rulajTotalKm || 0}
+                    onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, rulajTotalKm: Number(e.target.value) })}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-black"
                   />
                 </div>

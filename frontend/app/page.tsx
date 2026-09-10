@@ -311,7 +311,7 @@ export default function MasterDashboardPage() {
 
     const stocuriCritice = articoleStoc.filter((a) => (a.stocCurent || 0) <= (a.stocMinim || 0)).length;
 
-    const anvelopeUzuraCritica = anvelope.filter((anv) => (anv.adancimeCurentaMm || 0) <= 4).length;
+    const anvelopeUzuraCritica = anvelope.filter((anv) => (anv.rulajTotalCalculat || anv.rulajTotalKm || 0) > 150000).length;
 
     return {
       totalVehicule,
@@ -1042,10 +1042,8 @@ export default function MasterDashboardPage() {
                     <span className="text-[10px] text-sage-500 block font-mono">{anv.codDot || 'DOT'}</span>
                   </div>
                   <div className="text-right">
-                    <span className={`font-mono font-black ${
-                      (anv.adancimeCurentaMm || 0) <= 4 ? 'text-terracotta-600' : 'text-emerald-700'
-                    }`}>
-                      {anv.adancimeCurentaMm} mm
+                    <span className="font-mono font-black text-sapphire-900">
+                      {Math.round(anv.rulajTotalCalculat || anv.rulajTotalKm || 0).toLocaleString('ro-RO')} KM
                     </span>
                   </div>
                 </div>
