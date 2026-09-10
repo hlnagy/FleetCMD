@@ -3,17 +3,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
-  Sparkles,
   X,
   RotateCcw,
-  AlertTriangle,
-  Package,
-  Wrench,
-  TrendingUp,
   Maximize2,
   Minimize2,
   Volume2,
-  FileText,
 } from 'lucide-react';
 import { RobotMood } from './FleetRobotOrb';
 import { ChatMessage, FleetQuickKpi } from './FleetAIChatHUD';
@@ -22,7 +16,7 @@ interface RobiSpeechBubbleProps {
   messages: ChatMessage[];
   mood: RobotMood;
   isLoading: boolean;
-  kpi: FleetQuickKpi | null;
+  kpi?: FleetQuickKpi | null;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
   onClose: () => void;
@@ -32,7 +26,6 @@ export default function RobiSpeechBubble({
   messages,
   mood,
   isLoading,
-  kpi,
   onSendMessage,
   onClearHistory,
   onClose,
@@ -65,40 +58,6 @@ export default function RobiSpeechBubble({
       handleSubmit(e);
     }
   };
-
-  // Quick Action Prompts in Romanian (Default)
-  const quickActions = [
-    {
-      label: '📊 Stare Flotă',
-      prompt: 'Generează un raport analitic complet despre starea întregii flote, acte și service!',
-      icon: TrendingUp,
-    },
-    {
-      label: '⚠️ Acte Expirate',
-      prompt: 'Care vehicule au documente expirate sau care expiră în următoarele 30 de zile? Detaliază ITP, CASCO, RCA și Tahograf!',
-      icon: AlertTriangle,
-    },
-    {
-      label: '📦 Stoc Critic Piese',
-      prompt: 'Ce piese și lubrifianți sunt la nivel critic sau lipsesc din depozit?',
-      icon: Package,
-    },
-    {
-      label: '🔧 Comenzi de Lucru',
-      prompt: 'Ce reparații sunt în derulare și care este costul total estimat?',
-      icon: Wrench,
-    },
-    {
-      label: '📄 Facturi Furnizori',
-      prompt: 'Care sunt principalii furnizori din e-Factura și ce totaluri lunare avem înregistrate (ex: DUBHE)?',
-      icon: FileText,
-    },
-    {
-      label: '💡 Optimizare Costuri',
-      prompt: 'Ce recomandări de optimizare a costurilor și mentenanță preventivă ai pe baza datelor flotei?',
-      icon: Sparkles,
-    },
-  ];
 
   // Mood Status Display in Romanian
   const getMoodInfo = () => {
@@ -281,52 +240,6 @@ export default function RobiSpeechBubble({
           </div>
         </div>
 
-        {/* LIVE KPI TICKER (ROMANIAN) */}
-        {kpi && (
-          <div className="px-3.5 py-1.5 bg-slate-900/50 border-b border-slate-800/60 flex items-center justify-between text-[11px] font-mono overflow-x-auto no-scrollbar">
-            <div className="flex items-center space-x-3 text-slate-300 whitespace-nowrap">
-              <span>
-                Vehicule: <strong className="text-cyan-400">{kpi.totalVehicles}</strong>
-              </span>
-              <span className="text-slate-700">•</span>
-              <span>
-                Expirate:{' '}
-                <strong className={kpi.expiredDocs > 0 ? 'text-red-400 font-bold' : 'text-emerald-400'}>
-                  {kpi.expiredDocs}
-                </strong>
-              </span>
-              <span className="text-slate-700">•</span>
-              <span>
-                În 30 zile:{' '}
-                <strong className="text-amber-400 font-bold">{kpi.imminentDocs}</strong>
-              </span>
-              <span className="text-slate-700">•</span>
-              <span>
-                Stoc critic: <strong className="text-rose-400 font-bold">{kpi.lowStockItems}</strong>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* QUICK SUGGESTION CHIPS (ROMANIAN) */}
-        <div className="px-3 py-2 bg-slate-950/70 border-b border-slate-900 flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
-          {quickActions.map((action, i) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={i}
-                type="button"
-                disabled={isLoading}
-                onClick={() => onSendMessage(action.prompt)}
-                className="shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/50 text-slate-300 hover:text-cyan-300 transition-all flex items-center space-x-1 shadow-sm disabled:opacity-50"
-              >
-                <Icon className="w-3 h-3 text-cyan-400" />
-                <span>{action.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
         {/* SPEECH BUBBLE DIALOGUE BODY */}
         <div className="flex-1 p-4 overflow-y-auto space-y-3.5 bg-slate-950/60">
           {messages.map((msg) => {
@@ -397,20 +310,17 @@ export default function RobiSpeechBubble({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Scrie-i lui Robi (ex. Documente expirate, stoc piese, comenzi lucru, costuri)..."
-              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-400/50 resize-none font-sans"
+              placeholder="Scrie-i lui Robi (piese, prețuri, flotta, funcții sistem)..."
+              className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-400/50 resize-none font-sans"
             />
-            <div className="absolute right-2 bottom-2 text-[9px] font-mono text-slate-500 pointer-events-none hidden sm:block">
-              Enter trimite
-            </div>
           </div>
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
             aria-label="Trimite mesaj lui Robi"
-            className="h-12 w-12 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            className="h-11 w-11 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/30 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
-            <Send className="w-5 h-5 text-white" />
+            <Send className="w-4 h-4 text-white" />
           </button>
         </form>
       </div>

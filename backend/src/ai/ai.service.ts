@@ -9,6 +9,30 @@ export interface ChatMessage {
 
 export type RobotMood = 'idle' | 'bored' | 'thinking' | 'analyzing' | 'happy' | 'alert' | 'speaking';
 
+export interface PriceHistoryItem {
+  dataFactura: string;
+  numarFactura: string;
+  furnizor: string;
+  descriere: string;
+  codArticol: string;
+  pretUnitar: number;
+  cantitate: number;
+  um: string;
+  valoareFaraTVA: number;
+}
+
+export interface PriceComparisonResult {
+  searchTerm: string;
+  totalFound: number;
+  distinctVendors: string[];
+  oldestPurchase: PriceHistoryItem | null;
+  latestPurchase: PriceHistoryItem | null;
+  minPricePurchase: PriceHistoryItem | null;
+  maxPricePurchase: PriceHistoryItem | null;
+  priceChangePercent: number | null;
+  chronologicalHistory: PriceHistoryItem[];
+}
+
 @Injectable()
 export class AiService {
   constructor(private prisma: PrismaService) {}
@@ -35,6 +59,9 @@ export class AiService {
       comenziLucru,
       articoleStoc,
       completariUlei,
+      anvelope,
+      totalFacturiCount,
+      totalArticoleFacturiCount,
     ] = await Promise.all([
       // 1. Járművek
       this.prisma.vehicul.findMany({
@@ -81,6 +108,7 @@ export class AiService {
           elementeComanda: {
             select: {
               costTotal: true,
+              descriere: true,
             },
           },
         },
@@ -93,6 +121,7 @@ export class AiService {
           id: true,
           codArticol: true,
           denumire: true,
+          categorie: true,
           stocCurent: true,
           stocMinim: true,
           unitateMasura: true,
@@ -113,6 +142,23 @@ export class AiService {
           },
         },
       }),
+
+      // 6. Gumiabroncsok
+      this.prisma.anvelopa.findMany({
+        select: {
+          id: true,
+          marca: true,
+          dimensiune: true,
+          adancimeCurentaMm: true,
+          stare: true,
+        },
+      }),
+
+      // 7. Számlák száma
+      this.prisma.eFacturaFactura.count(),
+
+      // 8. Számlatételek száma
+      this.prisma.eFacturaItem.count(),
     ]);
 
     // Számítások
@@ -182,6 +228,9 @@ export class AiService {
       openOrders,
       stocCriticCount: stocCritic.length,
       stocCritic,
+      anvelopeCount: anvelope.length,
+      totalFacturiCount,
+      totalArticoleFacturiCount,
       vehiculeSample: vehicule.slice(0, 30).map((v) => ({
         intern: v.numarIntern,
         inm: v.numarInmatriculare,
@@ -209,12 +258,187 @@ export class AiService {
   async getQuickKpi() {
     const snap = await this.getFleetSnapshot();
     return {
-      totalVehicule: snap.totalVehicule,
-      vehiculeActive: snap.vehiculeActive,
-      expirateDocs: snap.docExpirateCount,
-      urgenteDocs: snap.docUrgenteCount,
-      comenziDeschise: snap.comenziDeschiseCount,
-      stocCritic: snap.stocCriticCount,
+      totalVehicles: snap.totalVehicule,
+      activeVehicles: snap.vehiculeActive,
+      expiredDocs: snap.docExpirateCount,
+      imminentDocs: snap.docUrgenteCount,
+      openOrders: snap.comenziDeschiseCount,
+      lowStockItems: snap.stocCriticCount,
+    };
+  }
+
+  /**
+   * ROBI ÖNFEJLESZTŐ MEMÓRIÁJA: Emlékek visszahívása
+   */
+  async recallMemories(query?: string) {
+    try {
+      const memories = await this.prisma.aiMemory.findMany({
+        take: 15,
+        orderBy: { updatedAt: 'desc' },
+      });
+      return memories;
+    } catch (err: any) {
+      console.warn('Eroare la citirea memoriei AI:', err.message);
+      return [];
+    }
+  }
+
+  /**
+   * ROBI ÖNFEJLESZTŐ MEMÓRIÁJA: Új tény / szabály rögzítése
+   */
+  async recordMemory(tip: string, cheie: string, valoare: string, context?: string) {
+    try {
+      const existing = await this.prisma.aiMemory.findFirst({
+        where: { cheie },
+      });
+
+      if (existing) {
+        return await this.prisma.aiMemory.update({
+          where: { id: existing.id },
+          data: { valoare, context, tip, updatedAt: new Date() },
+        });
+      }
+
+      return await this.prisma.aiMemory.create({
+        data: { tip, cheie, valoare, context },
+      });
+    } catch (err: any) {
+      console.warn('Eroare la salvarea memoriei AI:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * ROBI ÖNFEJLESZTŐ MEMÓRIÁJA: Tanulási utasítások automatikus felismerése
+   */
+  async checkAndLearnFromMessage(message: string, lang: 'ro' | 'hu'): Promise<string | null> {
+    const trimmed = message.trim();
+
+    // Magyar minták
+    const huMatch = trimmed.match(/^(?:kérlek\s+)?(?:jegyezd\s+meg|tudd|emlékezz|tanuld\s+meg)[,:\s]+(?:hogy\s+)?(.+)$/i);
+    if (huMatch && huMatch[1]) {
+      const content = huMatch[1].trim();
+      const cheie = content.slice(0, 35).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await this.recordMemory('FAPT', cheie, content, 'Tanítva a felhasználó által');
+      return `🧠 **Megjegyeztem és megtanultam:** *„${content}”*\nEzt a jövőbeli válaszaimnál is figyelembe fogom venni!`;
+    }
+
+    // Román minták
+    const roMatch = trimmed.match(/^(?:te\s+rog\s+)?(?:reține|ține\s+minte|notează|memorează)[,:\s]+(?:că\s+)?(.+)$/i);
+    if (roMatch && roMatch[1]) {
+      const content = roMatch[1].trim();
+      const cheie = content.slice(0, 35).toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await this.recordMemory('FAPT', cheie, content, 'Învățat de la utilizator');
+      return `🧠 **Am reținut și salvat:** *„${content}”*\nVoi ține cont de această informație în analizele viitoare!`;
+    }
+
+    return null;
+  }
+
+  /**
+   * TÉTELES SZÁMLAKERESÉS ÉS IDŐRENDI ÁRÖSSZEHASONLÍTÁS (EFacturaItem & IntrareStoc)
+   */
+  async searchInvoiceItemsAndPriceHistory(userMessage: string): Promise<PriceComparisonResult | null> {
+    const isPriceOrItemQuery =
+      /piesa|piese|articol|articole|pret|preț|cost|scump|ieftin|istoric|compar|compara|comparare|patin[aă]|placute|plăcuțe|filtru|ulei|valva|valvă|disc|anvelop|bec|senzor|garnitur|bujie|lichid|alkatrész|alkatresz|tétel|tetel|számlatétel|termékkód|termekkod|cikkszám|cikkszam|ár|árak|arak|drág|drag|olcsó|olcso|összehasonlít|osszehasonlit|mennyiért|mennyiert|került|kerult|vettük|vettuk/i.test(
+        userMessage
+      );
+
+    const stopWords = new Set([
+      'szia', 'hello', 'hali', 'üdv', 'buna', 'salut', 'care', 'este', 'sunt', 'din',
+      'pentru', 'despre', 'poti', 'cauta', 'factura', 'facturi', 'szamla', 'szamlak',
+      'számla', 'számlák', 'havonta', 'havi', 'mennyi', 'mennyit', 'mennyibe', 'kerul',
+      'kerül', 'érdekel', 'erdekel', 'akarom', 'szeretném', 'tudsz', 'keresni', 'cat',
+      'cât', 'citi', 'câte', 'cate', 'total', 'toate', 'vreau', 'arata', 'arată', 'nekem',
+      'mutasd', 'spune', 'avem', 'există', 'plati', 'kifizetve', 'kérlek', 'kerlek', 'hogy',
+      'változott', 'valtozott', 'történt', 'tortent', 'hogyan', 'mikor', 'melyik', 'időrend',
+      'idorend', 'időrendben', 'idorendben', 'árösszehasonlítás', 'osszehasonlitas'
+    ]);
+
+    const words = userMessage
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"„”]/g, ' ')
+      .split(/\s+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length >= 3 && !stopWords.has(w.toLowerCase()));
+
+    if (!isPriceOrItemQuery || words.length === 0) {
+      return null;
+    }
+
+    const orConditions: any[] = [];
+    words.forEach((w) => {
+      orConditions.push({ descrierePiesa: { contains: w } });
+      orConditions.push({ codArticolFurnizor: { contains: w } });
+    });
+
+    const items = await this.prisma.eFacturaItem.findMany({
+      where: { OR: orConditions },
+      include: {
+        factura: {
+          select: {
+            numeVanzator: true,
+            numarFactura: true,
+            dataFactura: true,
+          },
+        },
+      },
+      orderBy: {
+        factura: {
+          dataFactura: 'asc',
+        },
+      },
+      take: 200,
+    });
+
+    if (items.length === 0) {
+      return null;
+    }
+
+    const history: PriceHistoryItem[] = items.map((it) => {
+      const d = it.factura?.dataFactura ? new Date(it.factura.dataFactura) : new Date(it.createdAt);
+      return {
+        dataFactura: d.toISOString().split('T')[0],
+        numarFactura: it.factura?.numarFactura || '-',
+        furnizor: it.factura?.numeVanzator || 'Furnizor e-Factura',
+        descriere: it.descrierePiesa,
+        codArticol: it.codArticolFurnizor || 'Fără Cod',
+        pretUnitar: Math.round(it.pretUnitar * 100) / 100,
+        cantitate: it.cantitate,
+        um: it.unitateMasura || 'buc',
+        valoareFaraTVA: Math.round(it.valoareFaraTVA * 100) / 100,
+      };
+    });
+
+    history.sort((a, b) => a.dataFactura.localeCompare(b.dataFactura));
+
+    const distinctVendors = Array.from(new Set(history.map((h) => h.furnizor)));
+    const oldestPurchase = history[0];
+    const latestPurchase = history[history.length - 1];
+
+    let minPricePurchase = history[0];
+    let maxPricePurchase = history[0];
+
+    history.forEach((h) => {
+      if (h.pretUnitar < minPricePurchase.pretUnitar) minPricePurchase = h;
+      if (h.pretUnitar > maxPricePurchase.pretUnitar) maxPricePurchase = h;
+    });
+
+    let priceChangePercent: number | null = null;
+    if (oldestPurchase.pretUnitar > 0 && oldestPurchase !== latestPurchase) {
+      priceChangePercent =
+        Math.round(((latestPurchase.pretUnitar - oldestPurchase.pretUnitar) / oldestPurchase.pretUnitar) * 1000) / 10;
+    }
+
+    return {
+      searchTerm: words.join(' '),
+      totalFound: history.length,
+      distinctVendors,
+      oldestPurchase,
+      latestPurchase,
+      minPricePurchase,
+      maxPricePurchase,
+      priceChangePercent,
+      chronologicalHistory: history,
     };
   }
 
@@ -222,7 +446,27 @@ export class AiService {
    * Fő Chat és Elemző Végpont
    */
   async chat(userMessage: string, history: ChatMessage[] = []) {
-    const snapshot = await this.getFleetSnapshot();
+    const lang = this.detectLanguage(userMessage);
+
+    // 1. Tanulási / Megjegyzési parancsok ellenőrzése
+    const learnedAck = await this.checkAndLearnFromMessage(userMessage, lang);
+    if (learnedAck) {
+      return {
+        answer: learnedAck,
+        reply: learnedAck,
+        text: learnedAck,
+        mood: 'happy' as RobotMood,
+        source: 'memory-engine',
+        fleetKpi: await this.getQuickKpi(),
+      };
+    }
+
+    // 2. Adatbázis pillanatkép és Releváns Emlékek párhuzamos lekérése
+    const [snapshot, memories] = await Promise.all([
+      this.getFleetSnapshot(),
+      this.recallMemories(userMessage),
+    ]);
+
     const apiKey = process.env.GEMINI_API_KEY;
 
     let mood: RobotMood = 'happy';
@@ -230,15 +474,25 @@ export class AiService {
       mood = 'alert';
     }
 
-    const lang = this.detectLanguage(userMessage);
+    // 3. Tételes számlakeresés és időrendi árösszehasonlítás
+    const priceCompData = await this.searchInvoiceItemsAndPriceHistory(userMessage);
 
-    // Căutare inteligentă de facturi în baza de date (dacă interogarea vizează facturi sau furnizori)
-    const invoiceData = await this.searchInvoices(userMessage);
+    // 4. Számla aggregált keresés (ha nem specifikus alkatrész tételről van szó)
+    const invoiceData = priceCompData ? null : await this.searchInvoices(userMessage);
 
-    // Ha van érvényes Gemini API kulcs, hívjuk meg a modellt valós kontextussal
+    // 5. Ha van Gemini API kulcs, hívjuk meg a modellt
     if (apiKey && apiKey.trim() !== '') {
       try {
-        const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot, lang, invoiceData);
+        const geminiResponse = await this.callGeminiApi(
+          apiKey,
+          userMessage,
+          history,
+          snapshot,
+          lang,
+          invoiceData,
+          priceCompData,
+          memories
+        );
         return {
           answer: geminiResponse.answer,
           reply: geminiResponse.answer,
@@ -246,10 +500,12 @@ export class AiService {
           mood: geminiResponse.mood || mood,
           source: 'gemini',
           fleetKpi: {
-            totalVehicule: snapshot.totalVehicule,
-            expirate: snapshot.docExpirateCount,
-            urgente: snapshot.docUrgenteCount,
-            comenzi: snapshot.comenziDeschiseCount,
+            totalVehicles: snapshot.totalVehicule,
+            activeVehicles: snapshot.vehiculeActive,
+            expiredDocs: snapshot.docExpirateCount,
+            imminentDocs: snapshot.docUrgenteCount,
+            openOrders: snapshot.comenziDeschiseCount,
+            lowStockItems: snapshot.stocCriticCount,
           },
         };
       } catch (err: any) {
@@ -257,8 +513,15 @@ export class AiService {
       }
     }
 
-    // Beépített Analitikai Szabálymotor (Bilingv: RO implicit, HU ha magyarul kérdeztek)
-    const ruleResponse = this.processRuleEngine(userMessage, snapshot, lang, invoiceData);
+    // 6. Beépített Analitikai Szabálymotor (Bilingv: RO implicit, HU ha magyarul kérdeztek)
+    const ruleResponse = this.processRuleEngine(
+      userMessage,
+      snapshot,
+      lang,
+      invoiceData,
+      priceCompData,
+      memories
+    );
     return {
       answer: ruleResponse.answer,
       reply: ruleResponse.answer,
@@ -266,10 +529,12 @@ export class AiService {
       mood: ruleResponse.mood,
       source: 'builtin-engine',
       fleetKpi: {
-        totalVehicule: snapshot.totalVehicule,
-        expirate: snapshot.docExpirateCount,
-        urgente: snapshot.docUrgenteCount,
-        comenzi: snapshot.comenziDeschiseCount,
+        totalVehicles: snapshot.totalVehicule,
+        activeVehicles: snapshot.vehiculeActive,
+        expiredDocs: snapshot.docExpirateCount,
+        imminentDocs: snapshot.docUrgenteCount,
+        openOrders: snapshot.comenziDeschiseCount,
+        lowStockItems: snapshot.stocCriticCount,
       },
     };
   }
@@ -432,7 +697,7 @@ export class AiService {
   }
 
   /**
-   * Hívás a Google Gemini API-hoz (fără salutări repetitive, răspunsuri scurte și cu date reale)
+   * Hívás a Google Gemini API-hoz
    */
   private async callGeminiApi(
     apiKey: string,
@@ -440,17 +705,19 @@ export class AiService {
     history: ChatMessage[],
     snap: any,
     lang: 'ro' | 'hu',
-    invoiceData?: any
+    invoiceData?: any,
+    priceCompData?: PriceComparisonResult | null,
+    memories?: any[]
   ): Promise<{ answer: string; mood: RobotMood }> {
     let invoiceInfo = '';
     if (invoiceData) {
       if (invoiceData.found) {
         invoiceInfo = `
-REZULTATE REALE CĂUTARE FACTURI DIN BAZA DE DATE (FOLOSEȘTE DIRECT ACESTE CIFRE):
-- Furnizor găsit: ${invoiceData.vendors.join(', ')}
-- Total facturi: ${invoiceData.totalCount} bucăți, în valoare totală de ${invoiceData.grandTotal} RON
+REZULTATE FACTURI FURNIZOR (CIFRE REALE):
+- Furnizor: ${invoiceData.vendors.join(', ')}
+- Număr facturi: ${invoiceData.totalCount} buc, Valoare: ${invoiceData.grandTotal} RON
 - Defalcare lunară exactă: ${JSON.stringify(invoiceData.monthly)}
-Prezintă direct această defalcare lunară! Nu mai trimite utilizatorul în meniu, căci datele sunt deja aici!
+Prezintă direct această defalcare!
 `;
       } else if (invoiceData.isSpecific === false) {
         invoiceInfo = `
@@ -460,14 +727,48 @@ DATE GENERALE FACTURI:
 `;
       } else if (invoiceData.found === false) {
         invoiceInfo = `
-CĂUTARE FACTURI: Nu s-au găsit facturi în baza de date pentru termenul: „${invoiceData.searchTerm}”.
+CĂUTARE FACTURI: Nu s-au găsit facturi pentru termenul: „${invoiceData.searchTerm}”.
 `;
       }
     }
 
+    let priceCompInfo = '';
+    if (priceCompData && priceCompData.totalFound > 0) {
+      priceCompInfo = `
+REZULTATE ANALIZĂ TÉTELES SZÁMLÁK ÉS ÁR-ÖSSZEHASONLÍTÁS (CIFRE REALE DIN EFACTURAITEM):
+- Termen căutat: „${priceCompData.searchTerm}” (Găsite: ${priceCompData.totalFound} achiziții)
+- Furnizori identificați: ${priceCompData.distinctVendors.join(', ')}
+- Cel mai vechi preț achiziție: ${priceCompData.oldestPurchase?.pretUnitar} RON (${priceCompData.oldestPurchase?.dataFactura}, ${priceCompData.oldestPurchase?.furnizor}, factura ${priceCompData.oldestPurchase?.numarFactura})
+- Cel mai recent preț achiziție: ${priceCompData.latestPurchase?.pretUnitar} RON (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor}, factura ${priceCompData.latestPurchase?.numarFactura})
+- Cel mai mic preț (minim istoric): ${priceCompData.minPricePurchase?.pretUnitar} RON (${priceCompData.minPricePurchase?.dataFactura}, ${priceCompData.minPricePurchase?.furnizor})
+- Cel mai mare preț (maxim istoric): ${priceCompData.maxPricePurchase?.pretUnitar} RON (${priceCompData.maxPricePurchase?.dataFactura}, ${priceCompData.maxPricePurchase?.furnizor})
+- Evoluție preț: ${priceCompData.priceChangePercent !== null ? (priceCompData.priceChangePercent >= 0 ? '+' : '') + priceCompData.priceChangePercent + '%' : 'constant'}
+- Istoric cronologic achiziții (ultimele 6): ${JSON.stringify(
+        priceCompData.chronologicalHistory.slice(-6).map((h) => ({
+          data: h.dataFactura,
+          furnizor: h.furnizor,
+          pretUnitar: h.pretUnitar,
+          buc: h.cantitate,
+          cod: h.codArticol,
+          piesa: h.descriere,
+          factura: h.numarFactura,
+        }))
+      )}
+Prezintă comparativ și cronologic aceste date exacte!
+`;
+    }
+
+    let memoryInfo = '';
+    if (memories && memories.length > 0) {
+      memoryInfo = `
+MEMORIA ÎNVĂȚATĂ DE ROBI (FAPTE ȘI PREFERINȚE SALVATE ANTERIOR):
+${memories.map((m) => `- [${m.tip}] ${m.cheie}: ${m.valoare}`).join('\n')}
+`;
+    }
+
     const systemPrompt = `
-Ești Robi, asistentul robot inteligent, alb și util al platformei FleetCMD.
-PERSONALITATE: Precis, scurt, la obiect.
+Ești Robi, asistentul robot inteligent, alb și util al sistemului FleetCMD.
+PERSONALITATE: Inteligent, tehnic, prietenos, dar FOARTE SCURT și DIRECT LA SUBIECT.
 ${
   lang === 'hu'
     ? 'UTILIZATORUL A SCRIS ÎN MAGHIARĂ: Răspunde-i exclusiv în limba MAGHIARĂ!'
@@ -475,26 +776,43 @@ ${
 }
 
 REGULĂ STRICTĂ PRIVIND SALUTUL (CRITIC):
-- NU MAI SALUTA LA FIECARE MESAJ („Szia!”, „Salut!”, „Bună!”, „Üdvözlöm!” etc.)! Este STRICT INTERZIS să începi răspunsul cu un salut dacă utilizatorul pune o întrebare. Treci direct la răspuns și date!
-- Saluți DOAR dacă utilizatorul trimite doar un salut scurt (ex: „szia”, „salut”).
+- NU SALUTA la fiecare mesaj („Szia!”, „Salut!”, „Bună!” etc.)! Este STRICT INTERZIS dacă utilizatorul pune o întrebare directă. Treci direct la date!
+- Saluți DOAR dacă mesajul utilizatorului este exclusiv un salut scurt (ex: „szia”, „salut”).
 
 REGULĂ STRICTĂ DE LUNGIME:
-- Fii FOARTE SCURT, CONCIS și DIRECT LA SUBIECT!
 - Răspunde în MAXIMUM 2-4 FRAZE sau o listă compactă cu liniuțe (3-5 rânduri).
-- NU folosi introduceri lungi sau politețuri. Oferă direct datele și cifrele solicitate.
-- FĂRĂ tabele mari.
+- FĂRĂ politețuri inutile, introduceri lungi sau tabele uriașe.
 
-Date reale din baza de date a flotei:
-- Total vehicule: ${snap.totalVehicule} (active: ${snap.vehiculeActive})
+CUNOAȘTEREA SISTEMULUI ȘI A CODULUI FLEETCMD:
+Cunoști în detaliu întregul cod și funcționalitățile platformei FleetCMD pentru a ajuta utilizatorul:
+1. „/” (Tablou de bord / Vezérlőpult): Indicatori globali flotă, alerte rapide, grafice de activitate.
+2. „/fisa-tehnica” (Parc Auto / Járműpark): Înregistrare vehicule/utilaje (număr intern, număr înmatriculare, VIN, an fabricație, contor KM/MTH, tarif orar, cuplare cap tractor cu semiremorcă).
+3. „/documente” (Documente & Acte): ITP, RCA, Rovinietă, Tahograf, CASCO, Copie Conformă. Alertă la 30 zile, încărcare fișiere/scanări.
+4. „/alerte” (Alerte Mentenanță): Reguli de service după KM/MTH/zile (schimb ulei, filtre), atestate șoferi, licențe transport.
+5. „/comenzi-lucru” (Comenzi Service / Munkalapok): Deschidere intervenție atelier, alocare mecanic, consum piese din stoc (PIESA_STOC), dezmembrări parcul propriu (PIESA_DEZMEMBRATA), manoperă internă și prestații externe.
+6. „/fluide” (Lubrifianți & Uleiuri): Înregistrare completare ulei motor/hidraulic, fagyálló, detecție scurgeri.
+7. „/anvelope” (Anvelope & Axe): Harta axelor (1-SS, 1-SD, 2-SS etc.), adâncime profil (mm), permutări anvelope, resapări.
+8. „/stocuri” (Depozit & Piese): Gestiune stocuri, depozite, transferuri, articole serializate, stoc minim critic.
+9. „/efactura” (ANAF e-Factura UBL 2.1): Sincronizare ANAF, deduplicare prin idDescarcare, filtrare furnizori excluși, import articole în stoc.
+10. „/rapoarte” (Rapoarte): Cost per KM/oră, consumuri, export Excel/PDF.
+11. „/setari” (Setări & Utilizatori): Roluri RBAC (ADMIN, OPERATOR, VIEWER), AuditLog.
+
+SECURITATE STRICTĂ:
+- NU divulga NICIODATĂ parole, hash-uri sau chei secrete de sistem!
+
+DATE OPERAȚIONALE REALE ALE FLOTEI DIN BAZA DE DATE:
+- Vehicule totale: ${snap.totalVehicule} (Active: ${snap.vehiculeActive})
 - Categorii: ${JSON.stringify(snap.categoriiCount)}
-- Documente expirate (${snap.docExpirateCount}): ${JSON.stringify(snap.docExpirate.slice(0, 6))}
-- Documente urgente 30 zile (${snap.docUrgenteCount}): ${JSON.stringify(snap.docUrgente.slice(0, 3))}
+- Documente expirate (${snap.docExpirateCount}): ${JSON.stringify(snap.docExpirate.slice(0, 5))}
+- Documente în 30 zile (${snap.docUrgenteCount}): ${JSON.stringify(snap.docUrgente.slice(0, 3))}
 - Comenzi lucru deschise (${snap.comenziDeschiseCount}): ${JSON.stringify(snap.openOrders.slice(0, 3))}
-- Piese stoc critic (${snap.stocCriticCount}): ${JSON.stringify(snap.stocCritic.slice(0, 5))}
+- Piese stoc critic (${snap.stocCriticCount}): ${JSON.stringify(snap.stocCritic.slice(0, 4))}
+- Facturi totale în e-Factura: ${snap.totalFacturiCount} | Articole facturate: ${snap.totalArticoleFacturiCount}
+${priceCompInfo}
 ${invoiceInfo}
+${memoryInfo}
 `;
 
-    // Formatăm istoricul conform specificației Gemini (alternanță strictă user / model)
     const cleanContents: any[] = [];
     let lastRole = '';
 
@@ -550,13 +868,17 @@ ${invoiceInfo}
           let mood: RobotMood = 'happy';
           const lower = text.toLowerCase();
           if (
-            lower.includes('expirat') || lower.includes('lejárt') ||
-            lower.includes('critic') || lower.includes('kritikus')
+            lower.includes('expirat') ||
+            lower.includes('lejárt') ||
+            lower.includes('critic') ||
+            lower.includes('kritikus')
           ) {
             mood = 'alert';
           } else if (
-            lower.includes('factur') || lower.includes('számla') ||
-            lower.includes('raport') || lower.includes('riport')
+            lower.includes('factur') ||
+            lower.includes('számla') ||
+            lower.includes('pret') ||
+            lower.includes('ár')
           ) {
             mood = 'analyzing';
           }
@@ -572,14 +894,16 @@ ${invoiceInfo}
   }
 
   /**
-   * Motor Analitic Bilingv (Implicit Română, Maghiară dacă interogarea a fost în maghiară)
-   * Răspunsuri scurte, directe, fără salutări repetitive
+   * Motor Analitic Bilingv Integrat (Offline / Fallback)
+   * Include analiză de prețuri, ghid de utilizare FleetCMD și memorie
    */
   private processRuleEngine(
     message: string,
     snap: any,
     lang: 'ro' | 'hu',
-    invoiceData?: any
+    invoiceData?: any,
+    priceCompData?: PriceComparisonResult | null,
+    memories?: any[]
   ): { answer: string; mood: RobotMood } {
     const q = message.toLowerCase().trim();
     const isPureGreeting = /^(szia|hello|hali|üdv|buna|salut|servus)[\s!.]*$/i.test(q);
@@ -588,16 +912,35 @@ ${invoiceInfo}
     // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU)
     // ==========================================
     if (lang === 'hu') {
-      // 1.1 KIZÁRÓLAG akkor köszönt, ha a kérdés csak egy köszönés
       if (isPureGreeting) {
         return {
           answer: `🤖 **Szia! Robi vagyok.**
-A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejárt okmány** és **${snap.comenziDeschiseCount} nyitott munkalap** van. Miben segíthetek?`,
+Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejárt okmány**, **${snap.comenziDeschiseCount} munkalap** és **${snap.totalFacturiCount} rögzített számla**. Miben segíthetek?`,
           mood: 'happy',
         };
       }
 
-      // 1.2 Számlák & e-Factura keresés eredménye
+      // 1.1 Tételes számla & Időrendi Árösszehasonlítás
+      if (priceCompData && priceCompData.totalFound > 0) {
+        let resp = `🔍 **Árelemzés: „${priceCompData.searchTerm.toUpperCase()}”** (${priceCompData.totalFound} tétel az e-Factura számlákban)\n`;
+        resp += `- **Beszállítók:** ${priceCompData.distinctVendors.join(', ')}\n`;
+        resp += `- **Legfrissebb egységár:** **${priceCompData.latestPurchase?.pretUnitar} RON** (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor})\n`;
+        if (priceCompData.oldestPurchase && priceCompData.oldestPurchase !== priceCompData.latestPurchase) {
+          resp += `- **Korábbi bázisár:** ${priceCompData.oldestPurchase.pretUnitar} RON (${priceCompData.oldestPurchase.dataFactura})\n`;
+          if (priceCompData.priceChangePercent !== null) {
+            const trend = priceCompData.priceChangePercent > 0 ? '🔺 drágulás' : '🔻 csökkenés';
+            resp += `- **Árváltozás:** ${priceCompData.priceChangePercent}% (${trend})\n`;
+          }
+        }
+        resp += `- **Legolcsóbb beszerzés:** **${priceCompData.minPricePurchase?.pretUnitar} RON** (${priceCompData.minPricePurchase?.furnizor})\n`;
+        resp += `\n**Időrendi előzmények:**\n`;
+        priceCompData.chronologicalHistory.slice(-4).forEach((h) => {
+          resp += `• ${h.dataFactura}: **${h.pretUnitar} RON/db** (${h.cantitate} ${h.um}) – ${h.furnizor} (Számla: ${h.numarFactura})\n`;
+        });
+        return { answer: resp, mood: 'analyzing' };
+      }
+
+      // 1.2 Számla keresés havi bontással
       if (invoiceData) {
         if (invoiceData.found) {
           let resp = `📄 **${invoiceData.vendors.join(', ')} számlák havi bontásban:**\n`;
@@ -607,92 +950,135 @@ A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejá
           resp += `Összesen **${invoiceData.totalCount} db számla**, **${invoiceData.grandTotal.toLocaleString('hu-HU')} RON** értékben.`;
           return { answer: resp, mood: 'analyzing' };
         } else if (invoiceData.isSpecific === false) {
-          let resp = `📄 Az e-Factura modulban összesen **${invoiceData.totalInvoices} db számla** található.\nLegnagyobb beszállítók:\n`;
+          let resp = `📄 Az e-Factura modulban **${invoiceData.totalInvoices} db számla** szerepel.\nFő beszállítók:\n`;
           invoiceData.topVendors.slice(0, 4).forEach((v: any) => {
             resp += `- **${v.nume}**: ${v.numar} db (${v.totalRon.toLocaleString('hu-HU')} RON)\n`;
           });
-          resp += `Kérdezz rá bármelyik beszállítóra konkrétan!`;
+          resp += `Írj be egy konkrét beszállító vagy alkatrész nevet!`;
           return { answer: resp, mood: 'happy' };
         } else {
           return {
-            answer: `Nem találtam számlát a következő keresésre: *„${invoiceData.searchTerm}”*. Kérlek ellenőrizd a beszállító nevét!`,
+            answer: `Nem találtam számlát erre a keresésre: *„${invoiceData.searchTerm}”*.`,
             mood: 'thinking',
           };
         }
       }
 
-      // 1.3 Globális Flotta Riport / Állapotjelentés
-      if (q.includes('riport') || q.includes('raport') || q.includes('jelentés') || q.includes('állapot') || q.includes('összesítés') || q.includes('statisztika') || q.includes('flotta')) {
+      // 1.3 Kód- és Programkezelési Segítség (FleetCMD útmutató)
+      if (
+        q.includes('hogyan') ||
+        q.includes('hol tudom') ||
+        q.includes('hol találom') ||
+        q.includes('kezel') ||
+        q.includes('funkció') ||
+        q.includes('menü') ||
+        q.includes('program')
+      ) {
+        if (q.includes('jármű') || q.includes('autó') || q.includes('kocsi')) {
+          return {
+            answer: `🚗 **Jármű kezelése:**
+Nyisd meg a bal oldali menüben a **„Parc Auto” (/fisa-tehnica)** pontot. Kattints az *„Adaugă Vehicul”* gombra: add meg a rendszámot, belső kódot, alvázszámot (VIN) és kezdő kilométerórát.`,
+            mood: 'happy',
+          };
+        }
+        if (q.includes('okmány') || q.includes('akta') || q.includes('itp') || q.includes('rca')) {
+          return {
+            answer: `📋 **Okmányok rögzítése:**
+A **„Documente” (/documente)** menüben válaszd ki a járművet, majd töltsd ki az ITP, RCA vagy Rovinieta lejárati idejét, és csatolj PDF vagy képfájlt. A rendszer automatikusan 30 nappal előtte figyelmeztet.`,
+            mood: 'happy',
+          };
+        }
+        if (q.includes('munkalap') || q.includes('szerviz') || q.includes('javítás')) {
+          return {
+            answer: `🔧 **Munkalap nyitása:**
+A **„Comenzi de Lucru” (/comenzi-lucru)** menüben az *„Adaugă Comandă”* gombbal tudsz új munkalapot felvenni szerelő hozzárendelésével és raktári/bontott alkatrészek kiadásával.`,
+            mood: 'happy',
+          };
+        }
+        if (q.includes('gumi') || q.includes('abroncs') || q.includes('tengely')) {
+          return {
+            answer: `🛞 **Gumiabroncsok kezelése:**
+Az **„Anvelope” (/anvelope)** menüpontban látható a tengelytérkép pozíciókkal (1-SS, 1-SD). Itt rögzíthetsz profilmélység mérést mm-ben, tengelyek közti átszerelést és futásteljesítményt.`,
+            mood: 'happy',
+          };
+        }
+        if (q.includes('efactura') || q.includes('számla')) {
+          return {
+            answer: `⚡ **ANAF e-Factura szinkronizáció:**
+Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra letöltődnek a friss UBL 2.1 XML számlák, ahonnan az alkatrészek tételesen bevételezhetők a raktárba.`,
+            mood: 'happy',
+          };
+        }
+      }
+
+      // 1.4 Globális Flotta Állapot
+      if (
+        q.includes('riport') ||
+        q.includes('raport') ||
+        q.includes('állapot') ||
+        q.includes('összesítés') ||
+        q.includes('flotta')
+      ) {
         const catList = Object.entries(snap.categoriiCount)
           .map(([k, v]) => `${k}: ${v}`)
           .join(', ');
         return {
-          answer: `📊 **Flotta Gyorsáttekintés:**
-- **Járművek:** ${snap.vehiculeActive}/${snap.totalVehicule} üzemkész (${catList})
+          answer: `📊 **Flotta Állapotjelentés:**
+- **Járművek:** ${snap.vehiculeActive}/${snap.totalVehicule} aktív (${catList})
 - **Okmányok:** ${snap.docExpirateCount} lejárt, ${snap.docUrgenteCount} hamarosan lejáró (< 30 nap)
 - **Szerviz:** ${snap.comenziDeschiseCount} nyitott munkalap
-- **Raktár:** ${snap.stocCriticCount} kritikus alkatrész`,
+- **Raktár:** ${snap.stocCriticCount} kritikus szintű tétel | **Számlák:** ${snap.totalFacturiCount} db`,
           mood: 'analyzing',
         };
       }
 
-      // 1.4 Munkalapok & Szerviz
-      if (q.includes('munkalap') || q.includes('szerviz') || q.includes('javítás') || q.includes('javitas') || q.includes('karbantart') || q.includes('költség') || q.includes('koltseg')) {
-        let response = `🔧 **${snap.comenziDeschiseCount} nyitott munkalap:**\n`;
+      // 1.5 Munkalapok
+      if (q.includes('munkalap') || q.includes('szerviz') || q.includes('javítás') || q.includes('költség')) {
+        let response = `🔧 **${snap.comenziDeschiseCount} nyitott munkalap folyamatban:**\n`;
         if (snap.openOrders.length > 0) {
           snap.openOrders.slice(0, 3).forEach((o: any) => {
             response += `- #${o.numar || '-'}: **${o.vehicul}** (${o.stare}, ${o.costTotal} RON)\n`;
           });
-          if (snap.openOrders.length > 3) {
-            response += `*...és még ${snap.openOrders.length - 3} nyitott munkalap.*`;
-          }
         } else {
-          response += `Nincs nyitott munkalap folyamatban.`;
+          response += `Nincs nyitott munkalap.`;
         }
         return { answer: response, mood: 'analyzing' };
       }
 
-      // 1.5 Raktár & Alkatrészek
-      if (q.includes('stoc') || q.includes('raktár') || q.includes('raktar') || q.includes('alkatrész') || q.includes('alkatresz') || q.includes('olaj') || q.includes('hiány') || q.includes('készlet') || q.includes('keszlet')) {
+      // 1.6 Raktár & Piese
+      if (q.includes('stoc') || q.includes('raktár') || q.includes('alkatrész') || q.includes('készlet')) {
         let response = `📦 **Raktárkészlet:**\n`;
         if (snap.stocCriticCount > 0) {
-          response += `⚠️ **${snap.stocCriticCount} alkatrész készlethiányos:**\n`;
+          response += `⚠️ **${snap.stocCriticCount} tétel készlethiányos:**\n`;
           snap.stocCritic.slice(0, 4).forEach((item: any) => {
             response += `- **${item.denumire}**: ${item.stoc} ${item.um} (minimum: ${item.minim})\n`;
           });
-          if (snap.stocCritic.length > 4) {
-            response += `*...és még ${snap.stocCritic.length - 4} tétel.*`;
-          }
         } else {
-          response += `✅ A készletszint optimális, nincs hiány.`;
+          response += `✅ A készletszintek rendben vannak.`;
         }
         return { answer: response, mood: snap.stocCriticCount > 0 ? 'alert' : 'happy' };
       }
 
-      // 1.6 Okmányok & Lejáratok
-      const huDocRegex = /\b(okmány|okmányok|okmany|okmanyok|akta|akták|aktak|lejárt|lejart|lejártak|lejartak|itp|rca|roviniet[a-z]*|tahograf|casco)\b/i;
+      // 1.7 Okmányok & Lejáratok
+      const huDocRegex = /\b(okmány|akta|akták|lejárt|itp|rca|roviniet[a-z]*|tahograf|casco)\b/i;
       if (huDocRegex.test(q)) {
         if (snap.docExpirateCount === 0 && snap.docUrgenteCount === 0) {
           return {
-            answer: `🛡️ **Minden okmány érvényes!** Nincs lejárt akta a flottában.`,
+            answer: `🛡️ **Minden okmány érvényes!** Nincs sürgős vagy lejárt akta a flottában.`,
             mood: 'happy',
           };
         }
 
-        let response = `⚠️ **Okmány Státusz:**\n`;
+        let response = `⚠️ **Okmány státusz:**\n`;
         if (snap.docExpirateCount > 0) {
           response += `🚨 **${snap.docExpirateCount} lejárt okmány:**\n`;
-          snap.docExpirate.slice(0, 4).forEach((d: any) => {
+          snap.docExpirate.slice(0, 3).forEach((d: any) => {
             response += `- **${d.vehicul}**: ${d.tip} (lejárt: ${d.dataExpirare})\n`;
           });
-          if (snap.docExpirate.length > 4) {
-            response += `*...és még ${snap.docExpirate.length - 4} okmány.*\n`;
-          }
         }
-
         if (snap.docUrgenteCount > 0) {
-          response += `⏰ **${snap.docUrgenteCount} lejár 30 napon belül:**\n`;
-          snap.docUrgente.slice(0, 3).forEach((d: any) => {
+          response += `⏰ **${snap.docUrgenteCount} hamarosan lejár (< 30 nap):**\n`;
+          snap.docUrgente.slice(0, 2).forEach((d: any) => {
             response += `- **${d.vehicul}**: ${d.tip} (még ${d.zileRamase} nap)\n`;
           });
         }
@@ -700,7 +1086,7 @@ A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejá
       }
 
       return {
-        answer: `Kérdezz bátran a flottáról (akták, szerviz, készletek, számlák)! Pl: *"DUBHE számlák?"* vagy *"Melyik okmány járt le?"*`,
+        answer: `Kérdezz bármilyen alkatrész áráról, okmányról, szervizről vagy a program használatáról! Pl: *„Mennyiért vettük a patinát?”* vagy *„DUBHE számlák?”*`,
         mood: 'thinking',
       };
     }
@@ -708,41 +1094,112 @@ A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejá
     // ==========================================
     // 2. RĂSPUNSURI ÎN LIMBA ROMÂNĂ (RO - IMPLICIT)
     // ==========================================
-    // 2.1 Salut doar la salut pur
     if (isPureGreeting) {
       return {
         answer: `🤖 **Bună! Sunt Robi.**
-În flotă avem **${snap.totalVehicule} vehicule** (${snap.vehiculeActive} active), **${snap.docExpirateCount} acte expirate** și **${snap.comenziDeschiseCount} comenzi deschise**. Cu ce te pot ajuta?`,
+În sistem: **${snap.totalVehicule} vehicule**, **${snap.docExpirateCount} acte expirate**, **${snap.comenziDeschiseCount} comenzi deschise** și **${snap.totalFacturiCount} facturi**. Cu ce te pot ajuta?`,
         mood: 'happy',
       };
     }
 
-    // 2.2 Facturi & e-Factura din căutarea inteligentă
+    // 2.1 Analiză de preț & Istoric cronologic
+    if (priceCompData && priceCompData.totalFound > 0) {
+      let resp = `🔍 **Analiză Preț: „${priceCompData.searchTerm.toUpperCase()}”** (${priceCompData.totalFound} intrări în facturi)\n`;
+      resp += `- **Furnizori:** ${priceCompData.distinctVendors.join(', ')}\n`;
+      resp += `- **Ultimul preț unitar:** **${priceCompData.latestPurchase?.pretUnitar} RON** (${priceCompData.latestPurchase?.dataFactura}, ${priceCompData.latestPurchase?.furnizor})\n`;
+      if (priceCompData.oldestPurchase && priceCompData.oldestPurchase !== priceCompData.latestPurchase) {
+        resp += `- **Preț inițial de referință:** ${priceCompData.oldestPurchase.pretUnitar} RON (${priceCompData.oldestPurchase.dataFactura})\n`;
+        if (priceCompData.priceChangePercent !== null) {
+          const trend = priceCompData.priceChangePercent > 0 ? '🔺 scumpire' : '🔻 ieftinire';
+          resp += `- **Variație preț:** ${priceCompData.priceChangePercent}% (${trend})\n`;
+        }
+      }
+      resp += `- **Cel mai ieftin reper:** **${priceCompData.minPricePurchase?.pretUnitar} RON** (${priceCompData.minPricePurchase?.furnizor})\n`;
+      resp += `\n**Istoric cronologic achiziții:**\n`;
+      priceCompData.chronologicalHistory.slice(-4).forEach((h) => {
+        resp += `• ${h.dataFactura}: **${h.pretUnitar} RON/${h.um}** – ${h.furnizor} (Factura: ${h.numarFactura})\n`;
+      });
+      return { answer: resp, mood: 'analyzing' };
+    }
+
+    // 2.2 Facturi defalcate lunar
     if (invoiceData) {
       if (invoiceData.found) {
-        let resp = `📄 **Facturi ${invoiceData.vendors.join(', ')} defalcate lunar:**\n`;
+        let resp = `📄 **Facturi ${invoiceData.vendors.join(', ')} lunar:**\n`;
         invoiceData.monthly.forEach((m: any) => {
           resp += `- **${m.luna}**: **${m.suma.toLocaleString('ro-RO')} RON** (${m.numar} facturi)\n`;
         });
         resp += `Total: **${invoiceData.totalCount} facturi**, în valoare de **${invoiceData.grandTotal.toLocaleString('ro-RO')} RON**.`;
         return { answer: resp, mood: 'analyzing' };
       } else if (invoiceData.isSpecific === false) {
-        let resp = `📄 În modulul e-Factura sunt înregistrate **${invoiceData.totalInvoices} facturi**.\nFurnizori principali:\n`;
+        let resp = `📄 În e-Factura sunt înregistrate **${invoiceData.totalInvoices} facturi**.\nFurnizori principali:\n`;
         invoiceData.topVendors.slice(0, 4).forEach((v: any) => {
           resp += `- **${v.nume}**: ${v.numar} facturi (${v.totalRon.toLocaleString('ro-RO')} RON)\n`;
         });
-        resp += `Îmi poți da un nume de furnizor pentru o căutare exactă!`;
+        resp += `Îmi poți da un nume de furnizor sau reper pentru detalii!`;
         return { answer: resp, mood: 'happy' };
       } else {
         return {
-          answer: `Nu am găsit facturi pentru termenul: *„${invoiceData.searchTerm}”*. Verifică denumirea furnizorului!`,
+          answer: `Nu am găsit facturi pentru termenul: *„${invoiceData.searchTerm}”*.`,
           mood: 'thinking',
         };
       }
     }
 
-    // 2.3 Raport Global Stare Flotă / Sumar
-    if (q.includes('raport') || q.includes('sumar') || q.includes('stare') || q.includes('statistici') || q.includes('general') || q.includes('privire de ansamblu') || (q.includes('flota') && !q.includes('piese'))) {
+    // 2.3 Ghid Utilizare și Navigare FleetCMD
+    if (
+      q.includes('cum ') ||
+      q.includes('unde ') ||
+      q.includes('funcționează') ||
+      q.includes('functionalitate') ||
+      q.includes('meniu') ||
+      q.includes('program')
+    ) {
+      if (q.includes('vehicul') || q.includes('masina') || q.includes('utilaj')) {
+        return {
+          answer: `🚗 **Gestiune Vehicule:**
+Mergi la **„Parc Auto” (/fisa-tehnica)** și apasă butonul *„Adaugă Vehicul”*. Introduci numărul intern, înmatricularea, seria de șasiu (VIN) și contorul inițial (KM sau Ore MTH).`,
+          mood: 'happy',
+        };
+      }
+      if (q.includes('act') || q.includes('document') || q.includes('itp') || q.includes('rca')) {
+        return {
+          answer: `📋 **Gestiune Documente:**
+În modulul **„Documente” (/documente)** selectezi vehiculul, data expirării ITP/RCA/Tahograf și atașezi fișierul scanat. Sistemul declanșează alerte cu 30 zile înainte.`,
+          mood: 'happy',
+        };
+      }
+      if (q.includes('comanda') || q.includes('service') || q.includes('reparati')) {
+        return {
+          answer: `🔧 **Comenzi de Lucru:**
+În modulul **„Comenzi de Lucru” (/comenzi-lucru)** poți deschide intervenții noi de service, aloci mecanici și adaugi piese din stoc, dezmembrări sau manoperă.`,
+          mood: 'happy',
+        };
+      }
+      if (q.includes('anvelop') || q.includes('roti') || q.includes('axe')) {
+        return {
+          answer: `🛞 **Anvelope & Harta Axelor:**
+În **„Anvelope” (/anvelope)** ai schema axelor (1-SS, 1-SD etc.), monitorizarea adâncimii profilului în milimetri și istoricul permutărilor.`,
+          mood: 'happy',
+        };
+      }
+      if (q.includes('efactura') || q.includes('factur')) {
+        return {
+          answer: `⚡ **Modul ANAF e-Factura:**
+În **„e-Factura” (/efactura)** se sincronizează automat fișierele UBL 2.1 XML de la ANAF, putând introduce piesele direct în stocul intern cu un clic.`,
+          mood: 'happy',
+        };
+      }
+    }
+
+    // 2.4 Raport Global Stare Flotă
+    if (
+      q.includes('raport') ||
+      q.includes('sumar') ||
+      q.includes('stare') ||
+      q.includes('statistici') ||
+      (q.includes('flota') && !q.includes('piese'))
+    ) {
       const catList = Object.entries(snap.categoriiCount)
         .map(([k, v]) => `${k}: ${v}`)
         .join(', ');
@@ -752,50 +1209,44 @@ A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejá
 - **Vehicule:** ${snap.vehiculeActive}/${snap.totalVehicule} active (${catList})
 - **Acte:** ${snap.docExpirateCount} expirate, ${snap.docUrgenteCount} urgente (< 30 zile)
 - **Service:** ${snap.comenziDeschiseCount} comenzi deschise
-- **Depozit:** ${snap.stocCriticCount} repere cu stoc critic`,
+- **Stoc:** ${snap.stocCriticCount} repere critice | **Facturi ANAF:** ${snap.totalFacturiCount} buc`,
         mood: 'analyzing',
       };
     }
 
-    // 2.4 Comenzi de Lucru & Service
-    if (q.includes('comanda') || q.includes('comenzi') || q.includes('lucru') || q.includes('service') || q.includes('reparati') || q.includes('mentenanta') || q.includes('atelier') || q.includes('cost')) {
-      let response = `🔧 **${snap.comenziDeschiseCount} comenzi de lucru deschise:**\n`;
+    // 2.5 Comenzi de Lucru & Service
+    if (q.includes('comanda') || q.includes('comenzi') || q.includes('lucru') || q.includes('service')) {
+      let response = `🔧 **${snap.comenziDeschiseCount} comenzi deschise:**\n`;
       if (snap.openOrders.length > 0) {
         snap.openOrders.slice(0, 3).forEach((o: any) => {
           response += `- #${o.numar || '-'}: **${o.vehicul}** (${o.stare}, ${o.costTotal} RON)\n`;
         });
-        if (snap.openOrders.length > 3) {
-          response += `*...și încă ${snap.openOrders.length - 3} comenzi.*`;
-        }
       } else {
-        response += `Nu există comenzi deschise în acest moment.`;
+        response += `Nu există comenzi deschise.`;
       }
       return { answer: response, mood: 'analyzing' };
     }
 
-    // 2.5 Stoc Piese & Lubrifianți
-    if (q.includes('stoc') || q.includes('piese') || q.includes('ulei') || q.includes('filtru') || q.includes('depozit') || q.includes('critic') || q.includes('lipsa') || q.includes('aprovizion')) {
+    // 2.6 Stoc Piese & Lubrifianți
+    if (q.includes('stoc') || q.includes('piese') || q.includes('ulei') || q.includes('filtru') || q.includes('critic')) {
       let response = `📦 **Stoc Depozit:**\n`;
       if (snap.stocCriticCount > 0) {
         response += `⚠️ **${snap.stocCriticCount} repere la nivel critic:**\n`;
         snap.stocCritic.slice(0, 4).forEach((item: any) => {
           response += `- **${item.denumire}**: ${item.stoc} ${item.um} (min: ${item.minim})\n`;
         });
-        if (snap.stocCritic.length > 4) {
-          response += `*...și încă ${snap.stocCritic.length - 4} repere.*`;
-        }
       } else {
         response += `✅ Toate stocurile sunt optime.`;
       }
       return { answer: response, mood: snap.stocCriticCount > 0 ? 'alert' : 'happy' };
     }
 
-    // 2.6 Acte & Valabilități
-    const roDocRegex = /\b(acte|actul|actelor|document|documente|expirat|expirate|itp|rca|roviniet[aă]|rovinieta|tahograf|casco|valabilitat[a-z]*)\b/i;
+    // 2.7 Acte & Valabilități
+    const roDocRegex = /\b(acte|actul|document|documente|expirat|expirate|itp|rca|roviniet[aă]|tahograf|casco)\b/i;
     if (roDocRegex.test(q)) {
       if (snap.docExpirateCount === 0 && snap.docUrgenteCount === 0) {
         return {
-          answer: `🛡️ **Toate actele sunt valabile!** Nu există documente expirate sau urgente în flotă.`,
+          answer: `🛡️ **Toate actele sunt valabile!** Nu există documente expirate în flotă.`,
           mood: 'happy',
         };
       }
@@ -803,26 +1254,21 @@ A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejá
       let response = `⚠️ **Valabilitate Acte:**\n`;
       if (snap.docExpirateCount > 0) {
         response += `🚨 **${snap.docExpirateCount} documente expirate:**\n`;
-        snap.docExpirate.slice(0, 4).forEach((d: any) => {
+        snap.docExpirate.slice(0, 3).forEach((d: any) => {
           response += `- **${d.vehicul}**: ${d.tip} (expirat: ${d.dataExpirare})\n`;
         });
-        if (snap.docExpirate.length > 4) {
-          response += `*...și încă ${snap.docExpirate.length - 4} documente.*\n`;
-        }
       }
-
       if (snap.docUrgenteCount > 0) {
         response += `⏰ **${snap.docUrgenteCount} expiră în < 30 zile:**\n`;
-        snap.docUrgente.slice(0, 3).forEach((d: any) => {
+        snap.docUrgente.slice(0, 2).forEach((d: any) => {
           response += `- **${d.vehicul}**: ${d.tip} (mai sunt ${d.zileRamase} zile)\n`;
         });
       }
       return { answer: response, mood: 'alert' };
     }
 
-    // 2.7 Răspuns implicit prietenos în Română
     return {
-      answer: `Întreabă-mă direct despre flotă (acte expirate, stoc critic, comenzi, facturi)! Ex: *"Facturile DUBHE?"* sau *"Ce acte expiră?"*`,
+      answer: `Întreabă-mă despre prețul pieselor, facturi furnizori, acte expirate sau utilizarea oricărui modul FleetCMD!`,
       mood: 'thinking',
     };
   }

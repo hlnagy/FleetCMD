@@ -63,6 +63,11 @@ model Vehicul {
 
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
+
+  @@index([stare])
+  @@index([categorieEnum])
+  @@index([marca, model])
+  @@index([serieSasiu])
 }
 
 model IstoricCuplare {
@@ -93,6 +98,8 @@ model IstoricContorVehicul {
   sursa            String   @default("MANUAL") // MANUAL | ALIMENTARE | SERVICE | GPS
   operator         String?
   observatii       String?
+
+  @@index([vehiculId, dataInregistrare])
 }
 
 model ConfigurareUleiVehicul {
@@ -163,6 +170,9 @@ model SarcinaMentenanta {
   elementeComanda       ElementComandaLucru[]
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
+
+  @@index([vehiculId])
+  @@index([profilId])
 }
 
 // ==========================================
@@ -184,6 +194,11 @@ model ComandaLucru {
   elementeComanda        ElementComandaLucru[]
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
+
+  @@index([stare])
+  @@index([dataDeschidere])
+  @@index([vehiculId])
+  @@index([mecanicResponsabil])
 }
 
 model ElementComandaLucru {
@@ -208,6 +223,13 @@ model ElementComandaLucru {
   numarFactura         String?
 
   createdAt            DateTime            @default(now())
+
+  @@index([comandaLucruId])
+  @@index([articolStocId])
+  @@index([descriere])
+  @@index([furnizor])
+  @@index([numarFactura])
+  @@index([pilonCost])
 }
 
 model Mecanic {
@@ -253,6 +275,11 @@ model CompletareLichid {
   stareAlerta         String      @default("NOUA") // NOUA, REZOLVATA
   solutieRezolvare    String?
   dataRezolvare       DateTime?
+
+  @@index([vehiculId])
+  @@index([dataCompletare])
+  @@index([tipLichid])
+  @@index([articolStocId])
 }
 
 // ==========================================
@@ -289,6 +316,11 @@ model Anvelopa {
   istoricPermutari     IstoricPermutareAnvelopa[]
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
+
+  @@index([stare])
+  @@index([vehiculId])
+  @@index([dimensiune])
+  @@index([marca])
 }
 
 model PozitieAx {
@@ -314,6 +346,9 @@ model MasurareUzuraAnvelopa {
   rataUzuraPer10k    Float?
   kmRamasiEstimati   Float?
   tehnician          String
+
+  @@index([anvelopaId])
+  @@index([dataMasurare])
 }
 
 model IstoricPermutareAnvelopa {
@@ -328,6 +363,10 @@ model IstoricPermutareAnvelopa {
   dataPermutare     DateTime @default(now())
   operator          String?
   observatii        String?
+
+  @@index([anvelopaId])
+  @@index([vehiculId])
+  @@index([dataPermutare])
 }
 
 // ==========================================
@@ -396,6 +435,10 @@ model ArticolStoc {
   updatedAt          DateTime              @updatedAt
 
   @@unique([codArticol, depozitId])
+  @@index([codArticol])
+  @@index([denumire])
+  @@index([categorie])
+  @@index([depozitId])
 }
 
 model TransferStoc {
@@ -410,6 +453,9 @@ model TransferStoc {
   operator             String?
   observatii           String?
   dataTransfer         DateTime    @default(now())
+
+  @@index([articolStocId])
+  @@index([dataTransfer])
 }
 
 model IntrareStoc {
@@ -430,6 +476,12 @@ model IntrareStoc {
   pretTotal          Float
   observatii         String?
   createdAt          DateTime     @default(now())
+
+  @@index([furnizor])
+  @@index([numarFactura])
+  @@index([dataFactura])
+  @@index([articolStocId])
+  @@index([depozitId])
 }
 
 // ==========================================
@@ -456,6 +508,10 @@ model DocumentVehicul {
   updatedAt             DateTime  @updatedAt
 
   @@unique([vehiculId, tipDocument])
+  @@index([dataExpirare])
+  @@index([tipDocument])
+  @@index([stare])
+  @@index([vehiculId, dataExpirare])
 }
 
 model RegulaAlertaMentenanta {
@@ -470,6 +526,8 @@ model RegulaAlertaMentenanta {
   executiiVehicule   ExecutieRegulaVehicul[]
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
+
+  @@index([stare])
 }
 
 model AlertaPersonalizata {
@@ -483,6 +541,8 @@ model AlertaPersonalizata {
   stare                 String   @default("ACTIV")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  @@index([stare, dataExpirare])
 }
 
 model ExecutieRegulaVehicul {
@@ -538,6 +598,13 @@ model EFacturaFactura {
   articole          EFacturaItem[]
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+
+  @@index([numeVanzator])
+  @@index([cifVanzator])
+  @@index([numarFactura])
+  @@index([dataFactura])
+  @@index([stare])
+  @@index([valoareTotala])
 }
 
 model EFacturaItem {
@@ -556,6 +623,12 @@ model EFacturaItem {
   stare              String          @default("NEPROCESAT") // NEPROCESAT | IMPORTAT | ELIMINAT
   articolStocId      String?         // Relație cu ArticolStoc creat/actualizat
   createdAt          DateTime        @default(now())
+
+  @@index([facturaId])
+  @@index([descrierePiesa])
+  @@index([codArticolFurnizor])
+  @@index([pretUnitar])
+  @@index([articolStocId])
 }
 
 model EFacturaFurnizorExclus {
@@ -603,4 +676,29 @@ model AuditLog {
   detalii     String?  // Text sau JSON descriind modificarea
   ipAdresa    String?
   createdAt   DateTime @default(now())
+
+  @@index([modul])
+  @@index([actiune])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([entitateTip, entitateId])
 }
+
+// ==========================================
+// MEMORIE AI ȘI ÎNVĂȚARE CONTINUĂ (ROBI)
+// ==========================================
+
+model AiMemory {
+  id        String   @id @default(uuid())
+  tip       String   // "PREFERINTA" | "FAPT" | "CORECTIE" | "NOTA"
+  cheie     String   // Identificator / Subiect (ex: "dubhe_piese", "format_raspuns")
+  valoare   String   // Textul informației învățate / memorate
+  context   String?  // Ocasie sau sursă
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tip])
+  @@index([cheie])
+  @@index([createdAt])
+}
+
