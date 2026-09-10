@@ -13,6 +13,7 @@ import {
   Maximize2,
   Minimize2,
   Volume2,
+  FileText,
 } from 'lucide-react';
 import { RobotMood } from './FleetRobotOrb';
 import { ChatMessage, FleetQuickKpi } from './FleetAIChatHUD';
@@ -86,6 +87,11 @@ export default function RobiSpeechBubble({
       label: '🔧 Comenzi de Lucru',
       prompt: 'Ce reparații sunt în derulare și care este costul total estimat?',
       icon: Wrench,
+    },
+    {
+      label: '📄 Facturi Furnizori',
+      prompt: 'Care sunt principalii furnizori din e-Factura și ce totaluri lunare avem înregistrate (ex: DUBHE)?',
+      icon: FileText,
     },
     {
       label: '💡 Optimizare Costuri',

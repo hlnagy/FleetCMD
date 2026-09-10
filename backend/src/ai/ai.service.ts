@@ -232,10 +232,13 @@ export class AiService {
 
     const lang = this.detectLanguage(userMessage);
 
+    // Căutare inteligentă de facturi în baza de date (dacă interogarea vizează facturi sau furnizori)
+    const invoiceData = await this.searchInvoices(userMessage);
+
     // Ha van érvényes Gemini API kulcs, hívjuk meg a modellt valós kontextussal
     if (apiKey && apiKey.trim() !== '') {
       try {
-        const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot, lang);
+        const geminiResponse = await this.callGeminiApi(apiKey, userMessage, history, snapshot, lang, invoiceData);
         return {
           answer: geminiResponse.answer,
           reply: geminiResponse.answer,
@@ -255,7 +258,7 @@ export class AiService {
     }
 
     // Beépített Analitikai Szabálymotor (Bilingv: RO implicit, HU ha magyarul kérdeztek)
-    const ruleResponse = this.processRuleEngine(userMessage, snapshot, lang);
+    const ruleResponse = this.processRuleEngine(userMessage, snapshot, lang, invoiceData);
     return {
       answer: ruleResponse.answer,
       reply: ruleResponse.answer,
@@ -272,61 +275,223 @@ export class AiService {
   }
 
   /**
+   * Căutare inteligentă de facturi în baza de date (eFacturaFactura și IntrareStoc)
+   */
+  async searchInvoices(userMessage: string) {
+    const isInvoiceQuery = /factur|száml|szaml|számláz|szamlaz|dubhe|parts\s*trade|furnizor|beszállító|beszallito|plati|fizet/i.test(userMessage);
+
+    const stopWords = [
+      'szia', 'hello', 'hali', 'üdv', 'buna', 'salut', 'servus', 'care', 'ce', 'este',
+      'sunt', 'din', 'pentru', 'despre', 'poti', 'cauta', 'factura', 'facturi', 'facturile',
+      'factura', 'facturii', 'facturilor', 'szamla', 'szamlak', 'számla', 'számlák', 'számlát',
+      'szamlat', 'számláz', 'szamlaz', 'számláznak', 'szamlaznak', 'számlázás', 'szamlazas',
+      'havonta', 'havi', 'hónap', 'honap', 'mennyi', 'mennyit', 'mennyibe', 'kerul', 'kerül',
+      'összeg', 'osszeg', 'érdekel', 'erdekel', 'érdekelnek', 'erdekelnek', 'rdekelnek', 'rdekel',
+      'látni', 'latni', 'akarom', 'szeretnem', 'szeretném', 'tudsz', 'keresni', 'luna', 'lunar',
+      'cat', 'cât', 'citi', 'câte', 'cate', 'mult', 'total', 'totale', 'totala', 'totală',
+      'toate', 'toti', 'vreau', 'arata', 'arată', 'nekem', 'mutasd', 'spune', 'spune-mi',
+      'avem', 'aveti', 'aveți', 'exista', 'există', 'plati', 'plăți', 'fizet', 'fizetve',
+      'kifizetve', 'adott', 'kapott', 'beérkező', 'beerkezo', 'kimenő', 'kimeno', 'kérlek', 'kerlek'
+    ];
+
+    const cleanWords = userMessage
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"„”]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3)
+      .filter((w) => !stopWords.includes(w.toLowerCase()));
+
+    if (!isInvoiceQuery && cleanWords.length === 0) {
+      return null;
+    }
+
+    if (cleanWords.length === 0) {
+      // Întrebare generală despre facturi fără furnizor specific
+      const totalCount = await this.prisma.eFacturaFactura.count();
+      const topVendors = await this.prisma.eFacturaFactura.groupBy({
+        by: ['numeVanzator'],
+        _count: { id: true },
+        _sum: { valoareTotala: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      });
+      return {
+        isSpecific: false,
+        totalInvoices: totalCount,
+        topVendors: topVendors.map((v) => ({
+          nume: v.numeVanzator,
+          numar: v._count.id,
+          totalRon: Math.round((v._sum.valoareTotala || 0) * 100) / 100,
+        })),
+      };
+    }
+
+    // Căutare după termenii identificați
+    const orConditions: any[] = [];
+    cleanWords.forEach((word) => {
+      orConditions.push({ numeVanzator: { contains: word } });
+      orConditions.push({ numarFactura: { contains: word } });
+    });
+
+    const matchingFacturi = await this.prisma.eFacturaFactura.findMany({
+      where: { OR: orConditions },
+      orderBy: { dataFactura: 'desc' },
+      take: 200,
+    });
+
+    if (matchingFacturi.length === 0) {
+      // Încercăm și în intrări stoc
+      const matchingIntrari = await this.prisma.intrareStoc.findMany({
+        where: {
+          OR: cleanWords.map((word) => ({ furnizor: { contains: word } })),
+        },
+        orderBy: { dataFactura: 'desc' },
+        take: 50,
+      });
+
+      if (matchingIntrari.length > 0) {
+        const monthlyTotals: Record<string, { total: number; count: number }> = {};
+        let grandTotal = 0;
+        matchingIntrari.forEach((i) => {
+          const d = new Date(i.dataFactura);
+          const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthlyTotals[m]) monthlyTotals[m] = { total: 0, count: 0 };
+          monthlyTotals[m].total += i.pretTotal;
+          monthlyTotals[m].count += 1;
+          grandTotal += i.pretTotal;
+        });
+
+        return {
+          isSpecific: true,
+          found: true,
+          source: 'intrareStoc',
+          vendors: [matchingIntrari[0].furnizor],
+          totalCount: matchingIntrari.length,
+          grandTotal: Math.round(grandTotal * 100) / 100,
+          monthly: Object.entries(monthlyTotals)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([month, data]) => ({
+              luna: month,
+              suma: Math.round(data.total * 100) / 100,
+              numar: data.count,
+            })),
+        };
+      }
+
+      return {
+        isSpecific: true,
+        found: false,
+        searchTerm: cleanWords.join(' '),
+      };
+    }
+
+    // Agregare lunară
+    const monthlyTotals: Record<string, { total: number; count: number }> = {};
+    let grandTotal = 0;
+    const vendorNames = new Set<string>();
+
+    matchingFacturi.forEach((f) => {
+      vendorNames.add(f.numeVanzator);
+      const d = new Date(f.dataFactura);
+      const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyTotals[m]) monthlyTotals[m] = { total: 0, count: 0 };
+      monthlyTotals[m].total += f.valoareTotala;
+      monthlyTotals[m].count += 1;
+      grandTotal += f.valoareTotala;
+    });
+
+    return {
+      isSpecific: true,
+      found: true,
+      source: 'eFacturaFactura',
+      vendors: Array.from(vendorNames),
+      totalCount: matchingFacturi.length,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      monthly: Object.entries(monthlyTotals)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, data]) => ({
+          luna: month,
+          suma: Math.round(data.total * 100) / 100,
+          numar: data.count,
+        })),
+    };
+  }
+
+  /**
    * Detecție limbă (Română implicit, Maghiară dacă utilizatorul folosește cuvinte sau caractere maghiare)
    */
   private detectLanguage(text: string): 'ro' | 'hu' {
     const lower = text.toLowerCase();
-    // Diacritice românești clare -> Română
     if (/[ăâîșț]/i.test(lower)) {
       return 'ro';
     }
-    // Diacritice maghiare clare -> Maghiară
     if (/[áéíóöőúüű]/i.test(lower)) {
       return 'hu';
     }
-    // Cuvinte maghiare uzuale (cu delimitatori de cuvânt pentru a evita false pozitive)
-    const huWordRegex = /\b(szia|hogy|mennyi|melyik|kocsi|autó|auto|jármű|jarmu|akta|akták|aktak|lejárt|lejart|raktár|raktar|szerviz|költség|koltseg|segíts|segits|köszönöm|koszonom|hali|munkalap|okmány|okmany|jelentés|jelentes|állapot|allapot|kérlek|kerlek|vannak|készlet|keszlet|alkatrész|alkatresz|számla|szamla|mennyibe|keress|keresd)\b/i;
+    const huWordRegex = /\b(szia|hogy|mennyi|melyik|kocsi|autó|auto|jármű|jarmu|akta|akták|aktak|lejárt|lejart|raktár|raktar|szerviz|költség|koltseg|segíts|segits|köszönöm|koszonom|hali|munkalap|okmány|okmany|jelentés|jelentes|állapot|allapot|kérlek|kerlek|vannak|készlet|keszlet|alkatrész|alkatresz|számla|szamla|számlák|szamlak|mennyibe|keress|keresd|érdekel|rdekelnek)\b/i;
     return huWordRegex.test(lower) ? 'hu' : 'ro';
   }
 
   /**
-   * Hívás a Google Gemini API-hoz (optimizat cu gemini-3.5-flash-lite și system_instruction)
-   */
-  /**
-   * Hívás a Google Gemini API-hoz (optimizat cu gemini-3.5-flash-lite, răspunsuri scurte și concise)
+   * Hívás a Google Gemini API-hoz (fără salutări repetitive, răspunsuri scurte și cu date reale)
    */
   private async callGeminiApi(
     apiKey: string,
     message: string,
     history: ChatMessage[],
     snap: any,
-    lang: 'ro' | 'hu'
+    lang: 'ro' | 'hu',
+    invoiceData?: any
   ): Promise<{ answer: string; mood: RobotMood }> {
+    let invoiceInfo = '';
+    if (invoiceData) {
+      if (invoiceData.found) {
+        invoiceInfo = `
+REZULTATE REALE CĂUTARE FACTURI DIN BAZA DE DATE (FOLOSEȘTE DIRECT ACESTE CIFRE):
+- Furnizor găsit: ${invoiceData.vendors.join(', ')}
+- Total facturi: ${invoiceData.totalCount} bucăți, în valoare totală de ${invoiceData.grandTotal} RON
+- Defalcare lunară exactă: ${JSON.stringify(invoiceData.monthly)}
+Prezintă direct această defalcare lunară! Nu mai trimite utilizatorul în meniu, căci datele sunt deja aici!
+`;
+      } else if (invoiceData.isSpecific === false) {
+        invoiceInfo = `
+DATE GENERALE FACTURI:
+- Total facturi în e-Factura: ${invoiceData.totalInvoices}
+- Top furnizori: ${JSON.stringify(invoiceData.topVendors)}
+`;
+      } else if (invoiceData.found === false) {
+        invoiceInfo = `
+CĂUTARE FACTURI: Nu s-au găsit facturi în baza de date pentru termenul: „${invoiceData.searchTerm}”.
+`;
+      }
+    }
+
     const systemPrompt = `
-Ești Robi, asistentul robot inteligent, alb și prietenos al platformei FleetCMD.
-PERSONALITATE: Politicos, util, direct și rapid.
+Ești Robi, asistentul robot inteligent, alb și util al platformei FleetCMD.
+PERSONALITATE: Precis, scurt, la obiect.
 ${
   lang === 'hu'
     ? 'UTILIZATORUL A SCRIS ÎN MAGHIARĂ: Răspunde-i exclusiv în limba MAGHIARĂ!'
     : 'UTILIZATORUL A SCRIS ÎN ROMÂNĂ: Răspunde-i în limba ROMÂNĂ!'
 }
 
-REGULĂ STRICTĂ DE LUNGIME (PRIORITATE MAXIMĂ):
+REGULĂ STRICTĂ PRIVIND SALUTUL (CRITIC):
+- NU MAI SALUTA LA FIECARE MESAJ („Szia!”, „Salut!”, „Bună!”, „Üdvözlöm!” etc.)! Este STRICT INTERZIS să începi răspunsul cu un salut dacă utilizatorul pune o întrebare. Treci direct la răspuns și date!
+- Saluți DOAR dacă utilizatorul trimite doar un salut scurt (ex: „szia”, „salut”).
+
+REGULĂ STRICTĂ DE LUNGIME:
 - Fii FOARTE SCURT, CONCIS și DIRECT LA SUBIECT!
-- Răspunde în MAXIMUM 2-4 FRAZE sau o listă succintă cu liniuțe (3-5 rânduri).
-- NU folosi introduceri lungi, formule pompoase, repetiții sau politețuri excesive. Oferă direct datele și cifrele solicitate.
-- FĂRĂ tabele kilometrice. Dacă sunt mai multe elemente, menționează primele 3-4 și totalul.
-- Când răspunzi în maghiară: LEGYÉL NAGYON TÖMÖR, RÖVID ÉS LÉNYEGRETÖRŐ (maximum 2-4 mondat vagy rövid lista)!
+- Răspunde în MAXIMUM 2-4 FRAZE sau o listă compactă cu liniuțe (3-5 rânduri).
+- NU folosi introduceri lungi sau politețuri. Oferă direct datele și cifrele solicitate.
+- FĂRĂ tabele mari.
 
 Date reale din baza de date a flotei:
 - Total vehicule: ${snap.totalVehicule} (active: ${snap.vehiculeActive})
 - Categorii: ${JSON.stringify(snap.categoriiCount)}
-- Documente expirate (${snap.docExpirateCount}): ${JSON.stringify(snap.docExpirate.slice(0, 10))}
-- Documente urgente 30 zile (${snap.docUrgenteCount}): ${JSON.stringify(snap.docUrgente.slice(0, 5))}
-- Comenzi lucru deschise (${snap.comenziDeschiseCount}): ${JSON.stringify(snap.openOrders.slice(0, 5))}
-- Piese stoc critic (${snap.stocCriticCount}): ${JSON.stringify(snap.stocCritic.slice(0, 8))}
-
-Pentru facturi/e-Factura: menționează scurt că modulul e-Factura este disponibil în meniul lateral și întreabă dacă dorește o căutare după număr sau furnizor.
+- Documente expirate (${snap.docExpirateCount}): ${JSON.stringify(snap.docExpirate.slice(0, 6))}
+- Documente urgente 30 zile (${snap.docUrgenteCount}): ${JSON.stringify(snap.docUrgente.slice(0, 3))}
+- Comenzi lucru deschise (${snap.comenziDeschiseCount}): ${JSON.stringify(snap.openOrders.slice(0, 3))}
+- Piese stoc critic (${snap.stocCriticCount}): ${JSON.stringify(snap.stocCritic.slice(0, 5))}
+${invoiceInfo}
 `;
 
     // Formatăm istoricul conform specificației Gemini (alternanță strictă user / model)
@@ -364,7 +529,7 @@ Pentru facturi/e-Factura: menționează scurt că modulul e-Factura este disponi
       contents: cleanContents,
       generationConfig: {
         maxOutputTokens: 350,
-        temperature: 0.3,
+        temperature: 0.2,
       },
     };
 
@@ -386,12 +551,11 @@ Pentru facturi/e-Factura: menționează scurt că modulul e-Factura este disponi
           const lower = text.toLowerCase();
           if (
             lower.includes('expirat') || lower.includes('lejárt') ||
-            lower.includes('critic') || lower.includes('kritikus') ||
-            lower.includes('atenție') || lower.includes('figyelem')
+            lower.includes('critic') || lower.includes('kritikus')
           ) {
             mood = 'alert';
           } else if (
-            lower.includes('statistici') || lower.includes('statisztika') ||
+            lower.includes('factur') || lower.includes('számla') ||
             lower.includes('raport') || lower.includes('riport')
           ) {
             mood = 'analyzing';
@@ -409,31 +573,52 @@ Pentru facturi/e-Factura: menționează scurt că modulul e-Factura este disponi
 
   /**
    * Motor Analitic Bilingv (Implicit Română, Maghiară dacă interogarea a fost în maghiară)
-   * Răspunsuri scurte, succinte și directe
+   * Răspunsuri scurte, directe, fără salutări repetitive
    */
-  private processRuleEngine(message: string, snap: any, lang: 'ro' | 'hu'): { answer: string; mood: RobotMood } {
+  private processRuleEngine(
+    message: string,
+    snap: any,
+    lang: 'ro' | 'hu',
+    invoiceData?: any
+  ): { answer: string; mood: RobotMood } {
     const q = message.toLowerCase().trim();
+    const isPureGreeting = /^(szia|hello|hali|üdv|buna|salut|servus)[\s!.]*$/i.test(q);
 
     // ==========================================
-    // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU) - RÖVID ÉS TÖMÖR
+    // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU)
     // ==========================================
     if (lang === 'hu') {
-      // 1.1 Üdvözlés & Bemutatkozás
-      if (q.includes('szia') || q.includes('hello') || q.includes('üdv') || q.includes('ki vagy') || q.includes('neved') || q.includes('hívnak') || q.includes('robi') || q.includes('segíts')) {
+      // 1.1 KIZÁRÓLAG akkor köszönt, ha a kérdés csak egy köszönés
+      if (isPureGreeting) {
         return {
           answer: `🤖 **Szia! Robi vagyok.**
-A flottában **${snap.totalVehicule} jármű** (${snap.vehiculeActive} aktív), **${snap.docExpirateCount} lejárt okmány**, **${snap.comenziDeschiseCount} nyitott munkalap** és **${snap.stocCriticCount} készlethiány** van. Miben segíthetek?`,
+A flottában **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejárt okmány** és **${snap.comenziDeschiseCount} nyitott munkalap** van. Miben segíthetek?`,
           mood: 'happy',
         };
       }
 
-      // 1.2 Számlák & e-Factura
-      if (q.includes('számla') || q.includes('szamla') || q.includes('factur') || q.includes('efactura') || q.includes('e-factura')) {
-        return {
-          answer: `📄 **Számlák & e-Factura:**
-Az összes számla elérhető az **e-Factura** menüpontban, összekapcsolva a raktárral és a szervizzel. Keressek egy konkrét számlaszámot vagy beszállítót?`,
-          mood: 'happy',
-        };
+      // 1.2 Számlák & e-Factura keresés eredménye
+      if (invoiceData) {
+        if (invoiceData.found) {
+          let resp = `📄 **${invoiceData.vendors.join(', ')} számlák havi bontásban:**\n`;
+          invoiceData.monthly.forEach((m: any) => {
+            resp += `- **${m.luna}**: **${m.suma.toLocaleString('hu-HU')} RON** (${m.numar} db számla)\n`;
+          });
+          resp += `Összesen **${invoiceData.totalCount} db számla**, **${invoiceData.grandTotal.toLocaleString('hu-HU')} RON** értékben.`;
+          return { answer: resp, mood: 'analyzing' };
+        } else if (invoiceData.isSpecific === false) {
+          let resp = `📄 Az e-Factura modulban összesen **${invoiceData.totalInvoices} db számla** található.\nLegnagyobb beszállítók:\n`;
+          invoiceData.topVendors.slice(0, 4).forEach((v: any) => {
+            resp += `- **${v.nume}**: ${v.numar} db (${v.totalRon.toLocaleString('hu-HU')} RON)\n`;
+          });
+          resp += `Kérdezz rá bármelyik beszállítóra konkrétan!`;
+          return { answer: resp, mood: 'happy' };
+        } else {
+          return {
+            answer: `Nem találtam számlát a következő keresésre: *„${invoiceData.searchTerm}”*. Kérlek ellenőrizd a beszállító nevét!`,
+            mood: 'thinking',
+          };
+        }
       }
 
       // 1.3 Globális Flotta Riport / Állapotjelentés
@@ -515,30 +700,45 @@ Az összes számla elérhető az **e-Factura** menüpontban, összekapcsolva a r
       }
 
       return {
-        answer: `🤖 Kérdezz bátran röviden a flottáról (akták, szerviz, készletek, számlák)! Pl: *"Melyik okmány járt le?"* vagy *"Készlethiány?"*`,
+        answer: `Kérdezz bátran a flottáról (akták, szerviz, készletek, számlák)! Pl: *"DUBHE számlák?"* vagy *"Melyik okmány járt le?"*`,
         mood: 'thinking',
       };
     }
 
     // ==========================================
-    // 2. RĂSPUNSURI ÎN LIMBA ROMÂNĂ (RO - IMPLICIT) - SCURT ȘI DIRECT
+    // 2. RĂSPUNSURI ÎN LIMBA ROMÂNĂ (RO - IMPLICIT)
     // ==========================================
-    // 2.1 Salut / Prezentare / Identitate
-    if (q.includes('buna') || q.includes('salut') || q.includes('servus') || q.includes('cine esti') || q.includes('nume') || q.includes('robi') || q.includes('ajutor')) {
+    // 2.1 Salut doar la salut pur
+    if (isPureGreeting) {
       return {
         answer: `🤖 **Bună! Sunt Robi.**
-În flotă avem **${snap.totalVehicule} vehicule** (${snap.vehiculeActive} active), **${snap.docExpirateCount} acte expirate**, **${snap.comenziDeschiseCount} comenzi deschise** și **${snap.stocCriticCount} piese cu stoc critic**. Cu ce te pot ajuta?`,
+În flotă avem **${snap.totalVehicule} vehicule** (${snap.vehiculeActive} active), **${snap.docExpirateCount} acte expirate** și **${snap.comenziDeschiseCount} comenzi deschise**. Cu ce te pot ajuta?`,
         mood: 'happy',
       };
     }
 
-    // 2.2 Facturi & e-Factura
-    if (q.includes('factur') || q.includes('efactura') || q.includes('e-factura') || q.includes('fiscal')) {
-      return {
-        answer: `📄 **Facturi & e-Factura:**
-Facturile sunt sincronizate în modulul **e-Factura** cu stocurile și service-ul. Le poți filtra din meniul lateral. Cauți o factură anume?`,
-        mood: 'happy',
-      };
+    // 2.2 Facturi & e-Factura din căutarea inteligentă
+    if (invoiceData) {
+      if (invoiceData.found) {
+        let resp = `📄 **Facturi ${invoiceData.vendors.join(', ')} defalcate lunar:**\n`;
+        invoiceData.monthly.forEach((m: any) => {
+          resp += `- **${m.luna}**: **${m.suma.toLocaleString('ro-RO')} RON** (${m.numar} facturi)\n`;
+        });
+        resp += `Total: **${invoiceData.totalCount} facturi**, în valoare de **${invoiceData.grandTotal.toLocaleString('ro-RO')} RON**.`;
+        return { answer: resp, mood: 'analyzing' };
+      } else if (invoiceData.isSpecific === false) {
+        let resp = `📄 În modulul e-Factura sunt înregistrate **${invoiceData.totalInvoices} facturi**.\nFurnizori principali:\n`;
+        invoiceData.topVendors.slice(0, 4).forEach((v: any) => {
+          resp += `- **${v.nume}**: ${v.numar} facturi (${v.totalRon.toLocaleString('ro-RO')} RON)\n`;
+        });
+        resp += `Îmi poți da un nume de furnizor pentru o căutare exactă!`;
+        return { answer: resp, mood: 'happy' };
+      } else {
+        return {
+          answer: `Nu am găsit facturi pentru termenul: *„${invoiceData.searchTerm}”*. Verifică denumirea furnizorului!`,
+          mood: 'thinking',
+        };
+      }
     }
 
     // 2.3 Raport Global Stare Flotă / Sumar
@@ -622,7 +822,7 @@ Facturile sunt sincronizate în modulul **e-Factura** cu stocurile și service-u
 
     // 2.7 Răspuns implicit prietenos în Română
     return {
-      answer: `🤖 Întreabă-mă pe scurt despre flotă (acte expirate, stoc critic, comenzi, facturi)! Ex: *"Care acte sunt expirate?"*`,
+      answer: `Întreabă-mă direct despre flotă (acte expirate, stoc critic, comenzi, facturi)! Ex: *"Facturile DUBHE?"* sau *"Ce acte expiră?"*`,
       mood: 'thinking',
     };
   }

@@ -19,11 +19,12 @@ export default function FleetAIAssistant() {
     sender: 'ai',
     text: `### 🤖 Bună! Sunt Robi, asistentul tău inteligent de flotă.
 
-Conectez în timp real întreaga flotă de vehicule, documentele, stocurile de piese și comenzile de service. 
+Conectez în timp real întreaga flotă de vehicule, documentele, facturile din e-Factura, stocurile și comenzile de service. 
 
 **Cum te pot ajuta astăzi?**
 - 📋 **Acte & Valabilitate:** Verificare ITP, RCA, Rovinietă, Casco, Tahograf
 - 📊 **Raport Flotă:** Vehicule active, categorii, contoare KM
+- 📄 **Facturi & Furnizori:** Căutare facturi e-Factura și totaluri lunare (ex: DUBHE, PARTS TRADE)
 - 📦 **Stoc & Lubrifianți:** Niveluri critice de piese și uleiuri
 - 🔧 **Service & Comenzi:** Reparații deschise și costuri estimate
 
