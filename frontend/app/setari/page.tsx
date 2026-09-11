@@ -18,7 +18,7 @@ import { useTheme } from '@/lib/ThemeContext';
 function SetariContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
-  const { user: authUser, isAdmin, isOperator, isViewer, canEdit, authFetch } = useAuth();
+  const { user: authUser, isAdmin, isOperator, isViewer, canEdit, authFetch, updateCurrentUser } = useAuth();
   const { theme, resolvedTheme, setTheme, fontSize, setFontSize } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
@@ -272,6 +272,10 @@ function SetariContent() {
       if (resCust.ok) {
         const custList = await resCust.json();
         setAlertePersonalizate(Array.isArray(custList) ? custList : []);
+      }
+
+      if (isAdmin) {
+        fetchUsers();
       }
     } catch (e) {
       console.log('Eroare la încărcarea datelor din setări', e);
@@ -1147,6 +1151,14 @@ function SetariContent() {
 
       if (res.ok) {
         alert(editingUser ? `Utilizatorul "${userNume}" a fost actualizat!` : `Utilizatorul "${userNume}" a fost creat cu succes!`);
+        if (authUser && editingUser && (authUser.id === editingUser.id || authUser.username === editingUser.username)) {
+          updateCurrentUser({
+            nume: userNume.trim(),
+            username: userUsername.trim(),
+            functie: userFunctie,
+            telefon: userTelefon,
+          });
+        }
         setShowAddUserModal(false);
         setEditingUser(null);
         fetchUsers();

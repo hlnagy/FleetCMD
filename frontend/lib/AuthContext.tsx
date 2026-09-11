@@ -29,6 +29,7 @@ interface AuthContextType {
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
+  updateCurrentUser: (data: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }
 
-    // Rezolvare ID admin doar dacă există deja o sesiune activă cu token valid
+    // Sincronizare profil utilizator curent cu datele din baza de date
     const currentToken = localStorage.getItem('fleetcmd_token');
     if (currentToken) {
       fetch(`${API_BASE_URL}/auth/users`, {
@@ -86,17 +87,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .then((users) => {
           if (Array.isArray(users)) {
-            const dbAdmin = users.find((u) => u.username === 'admin' || u.rol === 'ADMIN');
-            if (dbAdmin) {
-              setUser((prev) => {
-                if (prev && (prev.id === 'default-admin-id' || prev.username === 'admin')) {
-                  const updated = { ...prev, id: dbAdmin.id, nume: dbAdmin.nume || prev.nume };
-                  localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
-                  return updated;
-                }
-                return prev;
-              });
-            }
+            setUser((prev) => {
+              if (!prev) return null;
+              const freshUser = users.find((u) => u.id === prev.id || u.username === prev.username);
+              if (freshUser) {
+                const updated = {
+                  ...prev,
+                  id: freshUser.id,
+                  nume: freshUser.nume || prev.nume,
+                  username: freshUser.username || prev.username,
+                  rol: freshUser.rol || prev.rol,
+                  functie: freshUser.functie || prev.functie,
+                  email: freshUser.email || prev.email,
+                  telefon: freshUser.telefon || prev.telefon,
+                  activ: freshUser.activ !== undefined ? freshUser.activ : prev.activ,
+                };
+                localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
+                return updated;
+              }
+              return prev;
+            });
           }
         })
         .catch(() => {});
@@ -177,6 +187,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return res;
   };
 
+  const updateCurrentUser = (data: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...data };
+      localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -192,6 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoginModalOpen,
         setIsLoginModalOpen,
         authFetch,
+        updateCurrentUser,
       }}
     >
       {children}

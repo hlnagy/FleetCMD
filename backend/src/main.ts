@@ -62,13 +62,15 @@ async function bootstrap() {
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
     'https://fleet-cmd.vercel.app',
+    'https://fleet-cmd.optibase.ro',
+    'http://fleet-cmd.optibase.ro',
     process.env.FRONTEND_URL,
   ].filter(Boolean) as string[];
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Permite cererile fără origin (mobile, curl, backend proxies), whitelist sau preview Vercel
-      if (!origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      // Permite cererile fără origin (mobile, curl, backend proxies), whitelist sau preview Vercel / optibase.ro
+      if (!origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin) || /(?:^|\.)optibase\.ro$/.test(origin)) {
         callback(null, true);
       } else {
         callback(null, false);
