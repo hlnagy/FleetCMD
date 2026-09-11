@@ -5,8 +5,9 @@ import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } 
 import {
   UploadCloud, FileText, CheckCircle2, AlertTriangle, XCircle, ArrowRight,
   RefreshCw, Filter, Layers, Check, Edit2, ShieldAlert, Gauge, Clock,
-  ChevronDown, ChevronUp, Info, HelpCircle, Save, Car, Truck
+  ChevronDown, ChevronUp, Info, HelpCircle, Save, Car, Truck, ClipboardCopy, Type
 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
 
 // Helper pentru extragerea sigură a numelui categoriei ca șir de caractere
 function extractCatName(c: any): string {
@@ -22,6 +23,41 @@ function extractCatName(c: any): string {
 function formatKm(val: any): string {
   if (val === null || val === undefined || isNaN(Number(val))) return '0';
   return Math.round(Number(val)).toLocaleString('ro-RO');
+}
+
+// Normalizare cod vehicul pentru potrivire (elimină spații, caractere speciale, sufix B)
+function normalizeCodVehicul(cod: string): string {
+  if (!cod) return '';
+  return String(cod)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+B$/i, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+// Parsare sigură linie CSV cu virgule și ghilimele
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result.map((s) => s.trim().replace(/^"|"$/g, '').trim());
 }
 
 // Error Boundary pentru captarea oricărei erori la nivel de interfață
@@ -112,8 +148,12 @@ interface Statistici {
 }
 
 function ImportKmPompaContent() {
+  const { user } = useAuth();
   const [csvContent, setCsvContent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
+  const [pasteText, setPasteText] = useState<string>('');
+
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [allVehicule, setAllVehicule] = useState<any[]>([]);
@@ -144,19 +184,24 @@ function ImportKmPompaContent() {
 
   // Încărcare vehicule și categorii la montare
   useEffect(() => {
+    let isMounted = true;
     async function loadData() {
       try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const [resVeh, resCat] = await Promise.all([
-          fetch(`${API_BASE_URL}/vehicule`),
-          fetch(`${API_BASE_URL}/vehicule/categorii`),
+          fetch(`${API_BASE_URL}/vehicule`, { headers }),
+          fetch(`${API_BASE_URL}/vehicule/categorii`, { headers }),
         ]);
 
-        if (resVeh.ok) {
+        if (resVeh.ok && isMounted) {
           const vehData = await resVeh.json();
           setAllVehicule(Array.isArray(vehData) ? vehData : []);
         }
 
-        if (resCat.ok) {
+        if (resCat.ok && isMounted) {
           const catData = await resCat.json();
           let rawList: any[] = [];
           if (Array.isArray(catData)) {
@@ -183,12 +228,229 @@ function ImportKmPompaContent() {
       }
     }
     loadData();
+    return () => {
+      isMounted = false;
+    };
   }, [defaultKmCategories]);
 
-  // Funcție de analiză CSV
-  const processCsvContent = async (rawCsv: string, categoriesToUse?: string[]) => {
+  // PARSARE & RECONCILIERE LOCALĂ (Executată instant în browser fără a depinde de latența serverului)
+  const parseAndReconcileLocal = (rawCsv: string, categoriesToUse: string[], fleetVehicles: any[]) => {
     if (!rawCsv || !rawCsv.trim()) {
-      setErrorMessage('Fișierul CSV este gol.');
+      return { previewRows: [], statistici: null };
+    }
+
+    const lines = rawCsv.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const vehiculeMap = new Map<string, any>();
+
+    for (const v of fleetVehicles) {
+      if (v.numarInmatriculare) {
+        vehiculeMap.set(normalizeCodVehicul(v.numarInmatriculare), v);
+      }
+      if (v.numarIntern) {
+        vehiculeMap.set(normalizeCodVehicul(v.numarIntern), v);
+      }
+    }
+
+    interface RawAlim {
+      dataStr: string;
+      oraStr: string;
+      timestamp: Date;
+      kmRaw: string;
+      valoareKm: number;
+      unitRaw: string;
+      cleanUnit: string;
+      normUnit: string;
+      cantitateLitri?: number;
+    }
+
+    const alimentari: RawAlim[] = [];
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const cols = parseCsvLine(lines[idx]);
+      if (cols.length < 15) continue;
+
+      const dataCol = cols[10]?.trim();
+      const oraCol = cols[11]?.trim() || '00:00';
+      const kmCol = cols[14]?.trim();
+      const unitCol = cols[15]?.trim();
+
+      const isDate = /^\d{2}\.\d{2}\.\d{4}$/.test(dataCol) || /^\d{4}-\d{2}-\d{2}$/.test(dataCol);
+      if (!isDate || !unitCol) continue;
+
+      let valKm = 0;
+      if (kmCol) {
+        const noDots = kmCol.replace(/\./g, '').replace(/,/g, '.');
+        valKm = parseFloat(noDots) || 0;
+      }
+
+      let parsedDate = new Date();
+      if (/^\d{2}\.\d{2}\.\d{4}$/.test(dataCol)) {
+        const [d, m, y] = dataCol.split('.').map(Number);
+        const [h, min] = oraCol.split(':').map(Number);
+        parsedDate = new Date(y, m - 1, d, h || 0, min || 0);
+      } else {
+        parsedDate = new Date(`${dataCol}T${oraCol}:00`);
+      }
+      if (isNaN(parsedDate.getTime())) parsedDate = new Date();
+
+      const cleanUnit = unitCol.replace(/\s+B$/i, '').trim();
+      const normUnit = normalizeCodVehicul(cleanUnit);
+
+      const litriRaw = cols[16] || cols[9];
+      let cantitateLitri: number | undefined = undefined;
+      if (litriRaw) {
+        const val = parseFloat(litriRaw.replace(/\./g, '').replace(/,/g, '.'));
+        cantitateLitri = !isNaN(val) ? (val > 1000 ? val / 1000 : val) : undefined;
+      }
+
+      alimentari.push({
+        dataStr: dataCol,
+        oraStr: oraCol,
+        timestamp: parsedDate,
+        kmRaw: kmCol,
+        valoareKm: valKm,
+        unitRaw: unitCol,
+        cleanUnit,
+        normUnit,
+        cantitateLitri,
+      });
+    }
+
+    // Deduplicare pe zi și vehicul (se reține exclusiv ultima alimentare din acea zi)
+    const alimentariPerZiMap = new Map<string, RawAlim>();
+    for (const al of alimentari) {
+      const key = `${al.normUnit}___${al.dataStr}`;
+      const existing = alimentariPerZiMap.get(key);
+      if (!existing || al.timestamp.getTime() > existing.timestamp.getTime()) {
+        alimentariPerZiMap.set(key, al);
+      }
+    }
+
+    // Cea mai recentă alimentare generală din fișier
+    const vehiculeAlimentariMap = new Map<string, {
+      ultimaAlimentare: RawAlim;
+      toateAlimentarileZi: RawAlim[];
+    }>();
+
+    alimentariPerZiMap.forEach((al) => {
+      const existing = vehiculeAlimentariMap.get(al.normUnit);
+      if (!existing) {
+        vehiculeAlimentariMap.set(al.normUnit, {
+          ultimaAlimentare: al,
+          toateAlimentarileZi: [al],
+        });
+      } else {
+        existing.toateAlimentarileZi.push(al);
+        if (al.timestamp.getTime() > existing.ultimaAlimentare.timestamp.getTime()) {
+          existing.ultimaAlimentare = al;
+        }
+      }
+    });
+
+    const rows: PreviewRow[] = [];
+    const allowedCatsSet = categoriesToUse && categoriesToUse.length > 0
+      ? new Set(categoriesToUse.map((c) => c.toUpperCase()))
+      : null;
+
+    vehiculeAlimentariMap.forEach((item, normUnit) => {
+      const ultima = item.ultimaAlimentare;
+      const vehicul = vehiculeMap.get(normUnit);
+
+      let status: PreviewRow['status'] = 'VALID';
+      const anomaliiMesaje: string[] = [];
+
+      if (!vehicul) {
+        status = 'VEHICUL_NEGASIȚ';
+        anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în parcul auto.`);
+      } else {
+        const catUpper = (vehicul.categorieEnum || '').toUpperCase();
+        const isMth = vehicul.tipMasurare === 'MTH';
+
+        if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" nu este selectată pentru actualizare.`);
+        } else if (isMth) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push('Vehiculul este configurat pe Ore de Funcționare (MTH).');
+        } else {
+          const curKm = vehicul.valoareContorCurent || 0;
+          const newKm = ultima.valoareKm;
+          const delta = newKm - curKm;
+
+          if (newKm === 0) {
+            status = 'KM_ZERO';
+            anomaliiMesaje.push('Index 0 km raportat la pompă.');
+          } else if (curKm > 0 && newKm < curKm) {
+            status = 'REGRESSIE_KM';
+            anomaliiMesaje.push(`Indexul nou (${formatKm(newKm)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+          } else if (curKm > 0 && delta > 5000) {
+            status = 'DELTA_EXCESIV';
+            anomaliiMesaje.push(`Salt mare de kilometraj (+${formatKm(delta)} km).`);
+          }
+        }
+      }
+
+      const curKm = vehicul?.valoareContorCurent || 0;
+      const newKm = ultima.valoareKm;
+      const delta = vehicul ? newKm - curKm : 0;
+
+      rows.push({
+        idTemp: `${normUnit}_${ultima.dataStr}`,
+        normUnit,
+        cleanUnit: ultima.cleanUnit,
+        unitRaw: ultima.unitRaw,
+        data: ultima.dataStr,
+        ora: ultima.oraStr,
+        timestamp: ultima.timestamp.getTime(),
+        valoareKmInitiala: newKm,
+        valoareKmPropusa: newKm,
+        contorCurent: curKm,
+        deltaKm: delta,
+        tipMasurare: vehicul?.tipMasurare || 'KM',
+        vehiculId: vehicul?.id || null,
+        numarInmatriculare: vehicul?.numarInmatriculare || ultima.cleanUnit,
+        numarIntern: vehicul?.numarIntern || null,
+        categorieEnum: extractCatName(vehicul?.categorieEnum) || 'NECUNOSCUT',
+        status,
+        anomaliiMesaje,
+        aprobat: status === 'VALID',
+        istoricAlimentariFisier: item.toateAlimentarileZi.map((a) => ({
+          data: a.dataStr,
+          ora: a.oraStr,
+          km: a.valoareKm,
+          litri: a.cantitateLitri,
+        })),
+      });
+    });
+
+    rows.sort((a, b) => {
+      const order: Record<string, number> = {
+        REGRESSIE_KM: 1,
+        KM_ZERO: 2,
+        DELTA_EXCESIV: 3,
+        VEHICUL_NEGASIȚ: 4,
+        CATEGORIE_IGNORATA: 5,
+        VALID: 6,
+      };
+      const diff = (order[a.status] || 99) - (order[b.status] || 99);
+      if (diff !== 0) return diff;
+      return a.numarInmatriculare.localeCompare(b.numarInmatriculare);
+    });
+
+    const stats: Statistici = {
+      totalVehiculeGasiteInCsv: rows.length,
+      valide: rows.filter((r) => r.status === 'VALID').length,
+      cuAnomalii: rows.filter((r) => ['REGRESSIE_KM', 'KM_ZERO', 'DELTA_EXCESIV', 'VEHICUL_NEGASIȚ'].includes(r.status)).length,
+      ignorateSauMth: rows.filter((r) => r.status === 'CATEGORIE_IGNORATA').length,
+    };
+
+    return { previewRows: rows, statistici: stats };
+  };
+
+  // Funcție de procesare CSV (locală rapidă, cu fallback opțional la server)
+  const processCsvContent = (rawCsv: string, categoriesToUse?: string[]) => {
+    if (!rawCsv || !rawCsv.trim()) {
+      setErrorMessage('Conținutul CSV este gol.');
       return;
     }
 
@@ -199,32 +461,17 @@ function ImportKmPompaContent() {
     const cats = categoriesToUse !== undefined ? categoriesToUse : selectedCategories;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/import-km-pompa/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          csvContent: rawCsv,
-          selectedCategories: cats,
-        }),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || 'Eroare la parsarea fișierului pe server');
-      }
-
-      const data = await res.json();
-      const rows: PreviewRow[] = Array.isArray(data.previewRows) ? data.previewRows : [];
+      // Reconciliere locală instantanee
+      const { previewRows: rows, statistici: stats } = parseAndReconcileLocal(rawCsv, cats, allVehicule);
       setPreviewRows(rows);
-      setStatistici(data.statistici || null);
+      setStatistici(stats);
 
-      if (Array.isArray(data.categoriiDisponibile) && data.categoriiDisponibile.length > 0) {
-        const extraCats = data.categoriiDisponibile.map(extractCatName).filter(Boolean);
-        setAllCategories((prev) => Array.from(new Set([...prev, ...extraCats])));
+      if (rows.length === 0) {
+        setErrorMessage('Nu s-au putut extrage date valide de alimentare din CSV. Verificați formatul fișierului.');
       }
     } catch (err: any) {
-      console.error('Eroare previzualizare:', err);
-      setErrorMessage(`Eroare la procesarea fișierului CSV: ${err.message || err}`);
+      console.error('Eroare parsare CSV:', err);
+      setErrorMessage(`Eroare la parsarea datelor: ${err.message || err}`);
     } finally {
       setLoadingPreview(false);
     }
@@ -260,6 +507,17 @@ function ImportKmPompaContent() {
       processCsvContent(text);
     };
     reader.readAsText(file);
+  };
+
+  // Handler lipire directă text
+  const handlePasteSubmit = () => {
+    if (!pasteText.trim()) {
+      setErrorMessage('Vă rugăm să introduceți sau să lipiți textul CSV.');
+      return;
+    }
+    setFileName('Text lipit direct (Pompă)');
+    setCsvContent(pasteText);
+    processCsvContent(pasteText);
   };
 
   // Modificare manuală a kilometrajului propus
@@ -384,14 +642,20 @@ function ImportKmPompaContent() {
         })),
       };
 
+      const token = typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (user?.id) headers['x-user-id'] = user.id;
+
       const res = await fetch(`${API_BASE_URL}/vehicule/import-km-pompa/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        throw new Error('Eroare la aplicarea contoarelor.');
+        const errBody = await res.text();
+        throw new Error(errBody || 'Eroare la aplicarea contoarelor pe server.');
       }
 
       const result = await res.json();
@@ -471,7 +735,7 @@ function ImportKmPompaContent() {
         <div className="p-4 bg-rose-950/40 border border-rose-500/50 rounded-xl flex items-start gap-3 animate-fadeIn">
           <XCircle className="w-5 h-5 text-rose-400 mt-0.5 shrink-0" />
           <div className="flex-1 text-xs text-rose-300">
-            <strong className="block font-semibold mb-0.5">A apărut o problemă la procesare:</strong>
+            <strong className="block font-semibold mb-0.5">Atenție:</strong>
             <span>{errorMessage}</span>
           </div>
           <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-rose-200 text-xs">
@@ -501,57 +765,103 @@ function ImportKmPompaContent() {
         </div>
       )}
 
-      {/* PAS 1 & 2: UPLOAD & CONFIGURARE CATEGORII */}
+      {/* PAS 1 & 2: UPLOAD / PASTE & CONFIGURARE CATEGORII */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ZONA DE UPLOAD */}
+        {/* ZONA DE INTRODUCERE CSV (Upload fișier sau Lipire directă) */}
         <div className="lg:col-span-1 bg-slate-800/60 border border-slate-700/70 rounded-2xl p-5 flex flex-col justify-between backdrop-blur-sm">
           <div>
-            <div className="flex items-center gap-2 text-white font-semibold mb-3">
-              <UploadCloud className="w-5 h-5 text-blue-400" />
-              <span>1. Fișier Livrări Pompă (CSV)</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-white font-semibold">
+                <UploadCloud className="w-5 h-5 text-blue-400" />
+                <span>1. Date Livrări Pompă</span>
+              </div>
+
+              {/* TABS UPLOAD VS PASTE */}
+              <div className="flex bg-slate-900/60 p-0.5 rounded-lg border border-slate-700 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setInputMode('upload')}
+                  className={`px-2 py-1 rounded transition flex items-center gap-1 ${
+                    inputMode === 'upload' ? 'bg-blue-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-3 h-3" />
+                  Fișier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInputMode('paste')}
+                  className={`px-2 py-1 rounded transition flex items-center gap-1 ${
+                    inputMode === 'paste' ? 'bg-blue-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Type className="w-3 h-3" />
+                  Lipire text
+                </button>
+              </div>
             </div>
 
-            <div
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                fileName
-                  ? 'border-emerald-500/50 bg-emerald-950/20'
-                  : 'border-slate-600 hover:border-blue-500 bg-slate-900/40'
-              }`}
-            >
-              <input
-                type="file"
-                id="csvInput"
-                accept=".csv,text/csv,text/plain"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <label htmlFor="csvInput" className="cursor-pointer block">
-                {fileName ? (
-                  <div className="flex flex-col items-center">
-                    <FileText className="w-10 h-10 text-emerald-400 mb-2" />
-                    <span className="text-sm font-medium text-white break-all">{fileName}</span>
-                    <span className="text-xs text-slate-400 mt-1">
-                      {csvContent.split('\n').filter(Boolean).length} rânduri citite
-                    </span>
-                    <span className="text-xs text-emerald-400 mt-2 hover:underline">
-                      Click pentru a schimba fișierul
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <UploadCloud className="w-10 h-10 text-slate-400 mb-2 group-hover:text-blue-400" />
-                    <span className="text-sm font-medium text-slate-200">
-                      Trage fișierul CSV aici sau apasă pentru a alege
-                    </span>
-                    <span className="text-xs text-slate-500 mt-1">
-                      Export din sistemul pompei (ex: 11.csv)
-                    </span>
-                  </div>
-                )}
-              </label>
-            </div>
+            {inputMode === 'upload' ? (
+              <div
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+                  fileName && fileName !== 'Text lipit direct (Pompă)'
+                    ? 'border-emerald-500/50 bg-emerald-950/20'
+                    : 'border-slate-600 hover:border-blue-500 bg-slate-900/40'
+                }`}
+              >
+                <input
+                  type="file"
+                  id="csvInput"
+                  accept=".csv,text/csv,text/plain"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <label htmlFor="csvInput" className="cursor-pointer block">
+                  {fileName && fileName !== 'Text lipit direct (Pompă)' ? (
+                    <div className="flex flex-col items-center">
+                      <FileText className="w-10 h-10 text-emerald-400 mb-2" />
+                      <span className="text-sm font-medium text-white break-all">{fileName}</span>
+                      <span className="text-xs text-slate-400 mt-1">
+                        {csvContent.split('\n').filter(Boolean).length} rânduri detectate
+                      </span>
+                      <span className="text-xs text-emerald-400 mt-2 hover:underline">
+                        Click pentru a schimba fișierul
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <UploadCloud className="w-10 h-10 text-slate-400 mb-2 group-hover:text-blue-400" />
+                      <span className="text-sm font-medium text-slate-200">
+                        Trage fișierul CSV aici sau apasă pentru a alege
+                      </span>
+                      <span className="text-xs text-slate-500 mt-1">
+                        Export din sistemul pompei (ex: 11.csv)
+                      </span>
+                    </div>
+                  )}
+                </label>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  rows={6}
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder="Lipește aici conținutul generat de pompă (linii cu SelfService System, Data, Ora, Kilometraj...)"
+                  className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500 resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={handlePasteSubmit}
+                  disabled={!pasteText.trim()}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-xs font-medium rounded-lg transition"
+                >
+                  Procesează Textul Lipit
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-700/50">
@@ -827,7 +1137,7 @@ function ImportKmPompaContent() {
                     <input
                       type="checkbox"
                       checked={
-                        filteredRows.length > 0 && filteredRows.every((r) => r.aprobat)
+                        filteredRows.length > 0 && filteredRows.every((r) => Boolean(r.aprobat))
                       }
                       onChange={(e) => handleSelectAllVisible(e.target.checked)}
                       className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer"
@@ -951,7 +1261,7 @@ function ImportKmPompaContent() {
                           <div className="inline-flex items-center gap-1">
                             <input
                               type="number"
-                              value={row.valoareKmPropusa}
+                              value={row.valoareKmPropusa ?? ''}
                               onChange={(e) => handleEditKm(row.idTemp, e.target.value)}
                               disabled={isIgnored}
                               className={`w-24 text-right font-mono text-xs px-2 py-1 rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
