@@ -1,12 +1,78 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import {
   UploadCloud, FileText, CheckCircle2, AlertTriangle, XCircle, ArrowRight,
   RefreshCw, Filter, Layers, Check, Edit2, ShieldAlert, Gauge, Clock,
   ChevronDown, ChevronUp, Info, HelpCircle, Save, Car, Truck
 } from 'lucide-react';
+
+// Helper pentru extragerea sigură a numelui categoriei ca șir de caractere
+function extractCatName(c: any): string {
+  if (!c) return '';
+  if (typeof c === 'string') return c;
+  if (typeof c === 'object') {
+    return c.nume || c.name || c.id || '';
+  }
+  return String(c);
+}
+
+// Helper pentru formatarea sigură a kilometrajului (fără excepții pe null/undefined)
+function formatKm(val: any): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return '0';
+  return Math.round(Number(val)).toLocaleString('ro-RO');
+}
+
+// Error Boundary pentru captarea oricărei erori la nivel de interfață
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMsg: string;
+}
+
+class SafeImportErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, errorMsg: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMsg: error?.message || 'Eroare necunoscută' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Eroare în componenta Import KM:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-4xl mx-auto my-12 bg-slate-900 border border-rose-500/50 rounded-2xl text-center space-y-4 shadow-2xl">
+          <div className="w-16 h-16 mx-auto bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-center justify-center text-rose-400">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-white">A apărut o problemă la afișarea paginii de import</h2>
+          <p className="text-sm text-slate-400 max-w-md mx-auto">
+            {this.state.errorMsg || 'A apărut o eroare neașteptată în timpul procesării.'}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, errorMsg: '' });
+              window.location.reload();
+            }}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition shadow-md"
+          >
+            Reîncarcă Pagina
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface FuelHistory {
   data: string;
@@ -45,7 +111,7 @@ interface Statistici {
   ignorateSauMth: number;
 }
 
-export default function ImportKmPompaPage() {
+function ImportKmPompaContent() {
   const [csvContent, setCsvContent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
   const [allCategories, setAllCategories] = useState<string[]>([]);
@@ -53,6 +119,7 @@ export default function ImportKmPompaPage() {
   const [allVehicule, setAllVehicule] = useState<any[]>([]);
 
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [statistici, setStatistici] = useState<Statistici | null>(null);
 
@@ -86,16 +153,30 @@ export default function ImportKmPompaPage() {
 
         if (resVeh.ok) {
           const vehData = await resVeh.json();
-          setAllVehicule(vehData);
+          setAllVehicule(Array.isArray(vehData) ? vehData : []);
         }
 
         if (resCat.ok) {
           const catData = await resCat.json();
-          const catNames: string[] = catData.map((c: any) => c.nume || c);
-          setAllCategories(catNames);
-          // Preselectează doar categoriile KM
-          const preselected = catNames.filter(c => defaultKmCategories.includes(c));
-          setSelectedCategories(preselected.length > 0 ? preselected : catNames);
+          let rawList: any[] = [];
+          if (Array.isArray(catData)) {
+            rawList = catData;
+          } else if (catData && typeof catData === 'object') {
+            rawList = [
+              ...(Array.isArray(catData.categoriiPersonalizate) ? catData.categoriiPersonalizate : []),
+              ...(Array.isArray(catData.categoriiEnum) ? catData.categoriiEnum : []),
+            ];
+          }
+
+          const catNames = Array.from(
+            new Set(rawList.map(extractCatName).filter(Boolean))
+          );
+
+          if (catNames.length > 0) {
+            setAllCategories(catNames);
+            const preselected = catNames.filter((c) => defaultKmCategories.includes(c));
+            setSelectedCategories(preselected.length > 0 ? preselected : catNames);
+          }
         }
       } catch (err) {
         console.error('Eroare la inițializare import KM:', err);
@@ -104,16 +185,61 @@ export default function ImportKmPompaPage() {
     loadData();
   }, [defaultKmCategories]);
 
-  // Handler fișier CSV
+  // Funcție de analiză CSV
+  const processCsvContent = async (rawCsv: string, categoriesToUse?: string[]) => {
+    if (!rawCsv || !rawCsv.trim()) {
+      setErrorMessage('Fișierul CSV este gol.');
+      return;
+    }
+
+    setLoadingPreview(true);
+    setErrorMessage(null);
+    setApplyResult(null);
+
+    const cats = categoriesToUse !== undefined ? categoriesToUse : selectedCategories;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/vehicule/import-km-pompa/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csvContent: rawCsv,
+          selectedCategories: cats,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Eroare la parsarea fișierului pe server');
+      }
+
+      const data = await res.json();
+      const rows: PreviewRow[] = Array.isArray(data.previewRows) ? data.previewRows : [];
+      setPreviewRows(rows);
+      setStatistici(data.statistici || null);
+
+      if (Array.isArray(data.categoriiDisponibile) && data.categoriiDisponibile.length > 0) {
+        const extraCats = data.categoriiDisponibile.map(extractCatName).filter(Boolean);
+        setAllCategories((prev) => Array.from(new Set([...prev, ...extraCats])));
+      }
+    } catch (err: any) {
+      console.error('Eroare previzualizare:', err);
+      setErrorMessage(`Eroare la procesarea fișierului CSV: ${err.message || err}`);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  // Handler fișier CSV (Auto-procesare la selectare)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
+      const text = (event.target?.result as string) || '';
       setCsvContent(text);
-      setApplyResult(null);
+      processCsvContent(text);
     };
     reader.readAsText(file);
   };
@@ -129,43 +255,11 @@ export default function ImportKmPompaPage() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
+      const text = (event.target?.result as string) || '';
       setCsvContent(text);
-      setApplyResult(null);
+      processCsvContent(text);
     };
     reader.readAsText(file);
-  };
-
-  // Rulare Previzualizare & Validare
-  const runPreview = async () => {
-    if (!csvContent) return;
-    setLoadingPreview(true);
-    setApplyResult(null);
-    try {
-      const res = await fetch(`${API_BASE_URL}/vehicule/import-km-pompa/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          csvContent,
-          selectedCategories,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Eroare la parsarea fișierului CSV');
-      }
-
-      const data = await res.json();
-      setPreviewRows(data.previewRows || []);
-      setStatistici(data.statistici || null);
-      if (data.categoriiDisponibile?.length > 0 && allCategories.length === 0) {
-        setAllCategories(data.categoriiDisponibile);
-      }
-    } catch (err: any) {
-      alert(`Eroare la previzualizare: ${err.message}`);
-    } finally {
-      setLoadingPreview(false);
-    }
   };
 
   // Modificare manuală a kilometrajului propus
@@ -175,9 +269,9 @@ export default function ImportKmPompaPage() {
       prev.map((row) => {
         if (row.idTemp !== idTemp) return row;
         const safeVal = isNaN(newVal) ? 0 : newVal;
-        const newDelta = row.vehiculId ? safeVal - row.contorCurent : 0;
-        
-        // Recalculare status
+        const curKm = row.contorCurent || 0;
+        const newDelta = row.vehiculId ? safeVal - curKm : 0;
+
         let newStatus = row.status;
         const newAnomalii: string[] = [];
 
@@ -185,16 +279,16 @@ export default function ImportKmPompaPage() {
           newStatus = 'VEHICUL_NEGASIȚ';
           newAnomalii.push(`Vehiculul "${row.cleanUnit}" nu a fost identificat.`);
         } else if (row.status === 'CATEGORIE_IGNORATA') {
-          // păstrează categoria ignorată dacă este nebifată
+          // Păstrează categoria ignorată dacă este nebifată
         } else if (safeVal === 0) {
           newStatus = 'KM_ZERO';
           newAnomalii.push('Contor 0 km raportat.');
-        } else if (safeVal < row.contorCurent) {
+        } else if (safeVal < curKm) {
           newStatus = 'REGRESSIE_KM';
-          newAnomalii.push(`Indexul nou (${safeVal} km) este mai mic decât contorul curent (${row.contorCurent} km).`);
-        } else if (row.contorCurent > 0 && newDelta > 5000) {
+          newAnomalii.push(`Indexul nou (${formatKm(safeVal)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+        } else if (curKm > 0 && newDelta > 5000) {
           newStatus = 'DELTA_EXCESIV';
-          newAnomalii.push(`Salt mare de kilometraj (+${newDelta.toLocaleString()} km).`);
+          newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
         } else {
           newStatus = 'VALID';
         }
@@ -211,7 +305,7 @@ export default function ImportKmPompaPage() {
     );
   };
 
-  // Asociere manuală vehicul dacă nu s-a potrivit automat
+  // Asociere manuală vehicul
   const handleAssignVehicle = (idTemp: string, vehiculId: string) => {
     const veh = allVehicule.find((v) => v.id === vehiculId);
     if (!veh) return;
@@ -230,18 +324,18 @@ export default function ImportKmPompaPage() {
           newAnomalii.push('Contor 0 km raportat.');
         } else if (row.valoareKmPropusa < curKm) {
           newStatus = 'REGRESSIE_KM';
-          newAnomalii.push(`Index nou (${row.valoareKmPropusa} km) mai mic decât înregistrarea din sistem (${curKm} km).`);
+          newAnomalii.push(`Index nou (${formatKm(row.valoareKmPropusa)} km) mai mic decât înregistrarea din sistem (${formatKm(curKm)} km).`);
         } else if (curKm > 0 && newDelta > 5000) {
           newStatus = 'DELTA_EXCESIV';
-          newAnomalii.push(`Salt mare de kilometraj (+${newDelta.toLocaleString()} km).`);
+          newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
         }
 
         return {
           ...row,
           vehiculId: veh.id,
-          numarInmatriculare: veh.numarInmatriculare,
-          numarIntern: veh.numarIntern,
-          categorieEnum: veh.categorieEnum,
+          numarInmatriculare: veh.numarInmatriculare || row.cleanUnit,
+          numarIntern: veh.numarIntern || null,
+          categorieEnum: extractCatName(veh.categorieEnum) || 'CAP_TRACTOR',
           contorCurent: curKm,
           deltaKm: newDelta,
           status: newStatus,
@@ -252,14 +346,12 @@ export default function ImportKmPompaPage() {
     );
   };
 
-  // Toggle aprobare rând
   const toggleRowApproval = (idTemp: string) => {
     setPreviewRows((prev) =>
       prev.map((r) => (r.idTemp === idTemp ? { ...r, aprobat: !r.aprobat } : r))
     );
   };
 
-  // Selectează / Deselectează toate vizibile
   const handleSelectAllVisible = (select: boolean) => {
     const visibleIds = new Set(filteredRows.map((r) => r.idTemp));
     setPreviewRows((prev) =>
@@ -267,7 +359,6 @@ export default function ImportKmPompaPage() {
     );
   };
 
-  // Salvare în DB
   const handleApplyUpdates = async () => {
     const approved = previewRows.filter((r) => r.aprobat && r.vehiculId && r.valoareKmPropusa > 0);
     if (approved.length === 0) {
@@ -305,8 +396,6 @@ export default function ImportKmPompaPage() {
 
       const result = await res.json();
       setApplyResult(result);
-      
-      // Elimină rândurile aplicate din listă sau marchează-le
       setPreviewRows((prev) => prev.filter((r) => !approved.some((a) => a.idTemp === r.idTemp)));
     } catch (err: any) {
       alert(`Eroare la salvare: ${err.message}`);
@@ -317,8 +406,9 @@ export default function ImportKmPompaPage() {
 
   // Filtrare tabel
   const filteredRows = useMemo(() => {
+    if (!Array.isArray(previewRows)) return [];
     return previewRows.filter((row) => {
-      // Filtru stare
+      if (!row) return false;
       if (activeFilter === 'valide' && row.status !== 'VALID') return false;
       if (
         activeFilter === 'anomalii' &&
@@ -327,13 +417,12 @@ export default function ImportKmPompaPage() {
         return false;
       if (activeFilter === 'ignorate' && row.status !== 'CATEGORIE_IGNORATA') return false;
 
-      // Căutare text
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchPlate = row.numarInmatriculare?.toLowerCase().includes(q);
-        const matchIntern = row.numarIntern?.toLowerCase().includes(q);
-        const matchRaw = row.unitRaw?.toLowerCase().includes(q);
-        const matchClean = row.cleanUnit?.toLowerCase().includes(q);
+        const matchPlate = String(row.numarInmatriculare || '').toLowerCase().includes(q);
+        const matchIntern = String(row.numarIntern || '').toLowerCase().includes(q);
+        const matchRaw = String(row.unitRaw || '').toLowerCase().includes(q);
+        const matchClean = String(row.cleanUnit || '').toLowerCase().includes(q);
         if (!matchPlate && !matchIntern && !matchRaw && !matchClean) return false;
       }
 
@@ -363,10 +452,10 @@ export default function ImportKmPompaPage() {
           </div>
         </div>
 
-        {statistici && (
+        {csvContent && (
           <div className="flex items-center gap-2">
             <button
-              onClick={runPreview}
+              onClick={() => processCsvContent(csvContent)}
               disabled={loadingPreview}
               className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm border border-slate-600 transition"
             >
@@ -377,6 +466,20 @@ export default function ImportKmPompaPage() {
         )}
       </div>
 
+      {/* MESAJ EROARE */}
+      {errorMessage && (
+        <div className="p-4 bg-rose-950/40 border border-rose-500/50 rounded-xl flex items-start gap-3 animate-fadeIn">
+          <XCircle className="w-5 h-5 text-rose-400 mt-0.5 shrink-0" />
+          <div className="flex-1 text-xs text-rose-300">
+            <strong className="block font-semibold mb-0.5">A apărut o problemă la procesare:</strong>
+            <span>{errorMessage}</span>
+          </div>
+          <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-rose-200 text-xs">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* REZULTAT SALVARE REUȘITĂ */}
       {applyResult && (
         <div className="p-4 bg-emerald-950/40 border border-emerald-500/50 rounded-xl flex items-start gap-3 animate-fadeIn">
@@ -386,7 +489,7 @@ export default function ImportKmPompaPage() {
               {applyResult.mesaj || 'Kilometrajul a fost actualizat cu succes în baza de date!'}
             </h4>
             <p className="text-emerald-400/80 text-xs mt-1">
-              Au fost actualizate {applyResult.numarActualizate} vehicule. Dacă au existat capete tractor cuplate cu semiremorci active, rulajul s-a propagat automat.
+              Au fost actualizate {applyResult.numarActualizate || 0} vehicule. Dacă au existat capete tractor cuplate cu semiremorci active, rulajul s-a propagat automat.
             </p>
           </div>
           <button
@@ -453,7 +556,7 @@ export default function ImportKmPompaPage() {
 
           <div className="mt-4 pt-3 border-t border-slate-700/50">
             <button
-              onClick={runPreview}
+              onClick={() => processCsvContent(csvContent)}
               disabled={!csvContent || loadingPreview}
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-xl font-medium text-sm transition shadow-md shadow-blue-900/20"
             >
@@ -487,6 +590,7 @@ export default function ImportKmPompaPage() {
                   onClick={() => {
                     const roadOnly = allCategories.filter((c) => defaultKmCategories.includes(c));
                     setSelectedCategories(roadOnly);
+                    if (csvContent) processCsvContent(csvContent, roadOnly);
                   }}
                   className="text-xs px-2.5 py-1 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg border border-indigo-500/30 transition"
                 >
@@ -494,14 +598,20 @@ export default function ImportKmPompaPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedCategories(allCategories)}
+                  onClick={() => {
+                    setSelectedCategories(allCategories);
+                    if (csvContent) processCsvContent(csvContent, allCategories);
+                  }}
                   className="text-xs px-2 py-1 bg-slate-700 text-slate-300 hover:bg-slate-600 rounded-lg transition"
                 >
                   Toate
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedCategories([])}
+                  onClick={() => {
+                    setSelectedCategories([]);
+                    if (csvContent) processCsvContent(csvContent, []);
+                  }}
                   className="text-xs px-2 py-1 bg-slate-700 text-slate-300 hover:bg-slate-600 rounded-lg transition"
                 >
                   Deselectează
@@ -514,7 +624,9 @@ export default function ImportKmPompaPage() {
             </p>
 
             <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
-              {allCategories.map((cat) => {
+              {allCategories.map((rawCat) => {
+                const cat = extractCatName(rawCat);
+                if (!cat) return null;
                 const isSelected = selectedCategories.includes(cat);
                 const isKmRecommended = defaultKmCategories.includes(cat);
                 return (
@@ -522,11 +634,11 @@ export default function ImportKmPompaPage() {
                     key={cat}
                     type="button"
                     onClick={() => {
-                      if (isSelected) {
-                        setSelectedCategories(selectedCategories.filter((c) => c !== cat));
-                      } else {
-                        setSelectedCategories([...selectedCategories, cat]);
-                      }
+                      const nextCats = isSelected
+                        ? selectedCategories.filter((c) => c !== cat)
+                        : [...selectedCategories, cat];
+                      setSelectedCategories(nextCats);
+                      if (csvContent) processCsvContent(csvContent, nextCats);
                     }}
                     className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
                       isSelected
@@ -557,7 +669,7 @@ export default function ImportKmPompaPage() {
               Categorii active: <strong>{selectedCategories.length}</strong> din {allCategories.length}
             </span>
             <span className="text-slate-500">
-              * Pentru categorii neselectate, rândurile vor fi marcate ca <em>Ignorate</em>.
+              * Pentru categoriile neselectate, vehiculele vor fi marcate ca <em>Ignorate</em>.
             </span>
           </div>
         </div>
@@ -571,7 +683,7 @@ export default function ImportKmPompaPage() {
               Total Vehicule CSV
             </div>
             <div className="text-2xl font-bold text-white mt-1">
-              {statistici.totalVehiculeGasiteInCsv}
+              {statistici.totalVehiculeGasiteInCsv || 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">unități distincte găsite</div>
           </div>
@@ -588,7 +700,7 @@ export default function ImportKmPompaPage() {
               <span>Valide pentru Salvare</span>
               <CheckCircle2 className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-emerald-300 mt-1">{statistici.valide}</div>
+            <div className="text-2xl font-bold text-emerald-300 mt-1">{statistici.valide || 0}</div>
             <div className="text-[11px] text-emerald-500/80 mt-0.5">gata de import</div>
           </div>
 
@@ -604,7 +716,7 @@ export default function ImportKmPompaPage() {
               <span>Necesită Atenție</span>
               <AlertTriangle className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-bold text-amber-300 mt-1">{statistici.cuAnomalii}</div>
+            <div className="text-2xl font-bold text-amber-300 mt-1">{statistici.cuAnomalii || 0}</div>
             <div className="text-[11px] text-amber-500/80 mt-0.5">0 km, regresiuni, salturi mari</div>
           </div>
 
@@ -621,7 +733,7 @@ export default function ImportKmPompaPage() {
               <Clock className="w-4 h-4" />
             </div>
             <div className="text-2xl font-bold text-slate-300 mt-1">
-              {statistici.ignorateSauMth}
+              {statistici.ignorateSauMth || 0}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">din categorii excluse</div>
           </div>
@@ -738,7 +850,9 @@ export default function ImportKmPompaPage() {
                     row.status
                   );
                   const isIgnored = row.status === 'CATEGORIE_IGNORATA';
-                  const isUnmatched = row.status === 'VEHICUL_NEGASIȚ';
+
+                  const curContorStr = row.vehiculId ? `${formatKm(row.contorCurent)} km` : '-';
+                  const deltaKmVal = Number(row.deltaKm || 0);
 
                   return (
                     <React.Fragment key={row.idTemp}>
@@ -757,7 +871,7 @@ export default function ImportKmPompaPage() {
                         <td className="p-3 text-center">
                           <input
                             type="checkbox"
-                            checked={row.aprobat}
+                            checked={Boolean(row.aprobat)}
                             disabled={!row.vehiculId || isIgnored}
                             onChange={() => toggleRowApproval(row.idTemp)}
                             className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-30"
@@ -767,7 +881,7 @@ export default function ImportKmPompaPage() {
                         {/* VEHICUL CSV */}
                         <td className="p-3">
                           <div className="font-semibold text-white flex items-center gap-1.5">
-                            <span>{row.cleanUnit}</span>
+                            <span>{row.cleanUnit || '-'}</span>
                           </div>
                           {row.unitRaw !== row.cleanUnit && (
                             <span className="text-[10px] text-slate-500">
@@ -789,7 +903,7 @@ export default function ImportKmPompaPage() {
                                 )}
                               </div>
                               <span className="text-[10px] text-slate-400">
-                                {row.categorieEnum}
+                                {extractCatName(row.categorieEnum)}
                               </span>
                             </div>
                           ) : (
@@ -806,9 +920,9 @@ export default function ImportKmPompaPage() {
                                 <option value="" disabled>
                                   Asociază manual vehicul...
                                 </option>
-                                {allVehicule.map((v) => (
+                                {Array.isArray(allVehicule) && allVehicule.map((v) => (
                                   <option key={v.id} value={v.id}>
-                                    {v.numarInmatriculare} ({v.numarIntern || v.categorieEnum})
+                                    {v.numarInmatriculare} ({v.numarIntern || extractCatName(v.categorieEnum)})
                                   </option>
                                 ))}
                               </select>
@@ -820,7 +934,7 @@ export default function ImportKmPompaPage() {
                         <td className="p-3 text-slate-300">
                           <div className="font-medium">{row.data}</div>
                           <div className="text-[10px] text-slate-500">ora {row.ora}</div>
-                          {row.istoricAlimentariFisier.length > 1 && (
+                          {Array.isArray(row.istoricAlimentariFisier) && row.istoricAlimentariFisier.length > 1 && (
                             <span className="inline-block mt-0.5 text-[9px] bg-blue-900/50 text-blue-300 px-1 rounded">
                               Ultima din {row.istoricAlimentariFisier.length} alimentări
                             </span>
@@ -829,7 +943,7 @@ export default function ImportKmPompaPage() {
 
                         {/* CONTOR CURENT DB */}
                         <td className="p-3 text-right font-mono text-slate-300">
-                          {row.vehiculId ? `${row.contorCurent.toLocaleString()} km` : '-'}
+                          {curContorStr}
                         </td>
 
                         {/* CONTOR NOU CSV EDITABIL */}
@@ -853,19 +967,19 @@ export default function ImportKmPompaPage() {
                         {/* DELTA */}
                         <td className="p-3 text-right font-mono">
                           {row.vehiculId && row.valoareKmPropusa > 0 ? (
-                            row.deltaKm >= 0 ? (
+                            deltaKmVal >= 0 ? (
                               <span
                                 className={`${
-                                  row.deltaKm > 5000
+                                  deltaKmVal > 5000
                                     ? 'text-amber-400 font-bold'
                                     : 'text-emerald-400 font-medium'
                                 }`}
                               >
-                                +{row.deltaKm.toLocaleString()} km
+                                +{formatKm(deltaKmVal)} km
                               </span>
                             ) : (
                               <span className="text-rose-400 font-bold">
-                                {row.deltaKm.toLocaleString()} km
+                                {formatKm(deltaKmVal)} km
                               </span>
                             )
                           ) : (
@@ -878,7 +992,7 @@ export default function ImportKmPompaPage() {
                           {row.status === 'VALID' && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
                               <CheckCircle2 className="w-3 h-3" />
-                              Valid (+{row.deltaKm} km)
+                              Valid (+{formatKm(deltaKmVal)} km)
                             </span>
                           )}
                           {row.status === 'KM_ZERO' && (
@@ -893,7 +1007,7 @@ export default function ImportKmPompaPage() {
                                 Regresie index
                               </span>
                               <p className="text-[10px] text-rose-400/90 mt-0.5">
-                                Nou ({row.valoareKmPropusa}) &lt; Curent ({row.contorCurent})
+                                Nou ({formatKm(row.valoareKmPropusa)}) &lt; Curent ({formatKm(row.contorCurent)})
                               </p>
                             </div>
                           )}
@@ -904,7 +1018,7 @@ export default function ImportKmPompaPage() {
                                 Salt excesiv
                               </span>
                               <p className="text-[10px] text-amber-400/90 mt-0.5">
-                                +{row.deltaKm.toLocaleString()} km (posibilă tastare greșită)
+                                +{formatKm(deltaKmVal)} km (posibilă tastare greșită)
                               </p>
                             </div>
                           )}
@@ -922,7 +1036,7 @@ export default function ImportKmPompaPage() {
 
                         {/* BUTON EXPAND ISTORIC ALIMENTARI */}
                         <td className="p-3 text-center">
-                          {row.istoricAlimentariFisier.length > 1 ? (
+                          {Array.isArray(row.istoricAlimentariFisier) && row.istoricAlimentariFisier.length > 1 ? (
                             <button
                               type="button"
                               onClick={() => setExpandedRowId(isExpanded ? null : row.idTemp)}
@@ -942,7 +1056,7 @@ export default function ImportKmPompaPage() {
                         </td>
                       </tr>
 
-                      {/* DETALII EXPANDATE (DacĂ vehiculul a alimentat de mai multe ori) */}
+                      {/* DETALII EXPANDATE (Dacă vehiculul a alimentat de mai multe ori) */}
                       {isExpanded && (
                         <tr className="bg-slate-900/90 border-b border-slate-700">
                           <td colSpan={9} className="p-3 pl-12">
@@ -954,11 +1068,11 @@ export default function ImportKmPompaPage() {
                                 </span>
                               </div>
                               <div className="space-y-1.5">
-                                {row.istoricAlimentariFisier.map((al, idx) => (
+                                {(row.istoricAlimentariFisier || []).map((al, idx) => (
                                   <div
                                     key={idx}
                                     className={`flex items-center justify-between text-xs px-2.5 py-1 rounded ${
-                                      idx === row.istoricAlimentariFisier.length - 1
+                                      idx === (row.istoricAlimentariFisier?.length || 1) - 1
                                         ? 'bg-blue-950/50 text-blue-200 border border-blue-500/30'
                                         : 'bg-slate-900 text-slate-400'
                                     }`}
@@ -966,7 +1080,7 @@ export default function ImportKmPompaPage() {
                                     <div className="flex items-center gap-2">
                                       <span className="font-mono">{al.data}</span>
                                       <span className="font-mono text-slate-300">{al.ora}</span>
-                                      {idx === row.istoricAlimentariFisier.length - 1 && (
+                                      {idx === (row.istoricAlimentariFisier?.length || 1) - 1 && (
                                         <span className="text-[10px] bg-blue-600 text-white px-1 rounded">
                                           reținută
                                         </span>
@@ -977,14 +1091,14 @@ export default function ImportKmPompaPage() {
                                         <span className="text-slate-400">{al.litri} L</span>
                                       )}
                                       <span className="font-mono font-semibold text-white">
-                                        {al.km.toLocaleString()} km
+                                        {formatKm(al.km)} km
                                       </span>
                                     </div>
                                   </div>
                                 ))}
                               </div>
                               <p className="text-[11px] text-slate-400 mt-2 italic">
-                                * Conform cerinței, sistemul reține automat <strong>ultima alimentare</strong> a zilei ({row.ora} cu {row.valoareKmInitiala} km).
+                                * Conform cerinței, sistemul reține automat <strong>ultima alimentare</strong> a zilei ({row.ora} cu {formatKm(row.valoareKmInitiala)} km).
                               </p>
                             </div>
                           </td>
@@ -1047,5 +1161,13 @@ export default function ImportKmPompaPage() {
         </ul>
       </div>
     </div>
+  );
+}
+
+export default function ImportKmPompaPage() {
+  return (
+    <SafeImportErrorBoundary>
+      <ImportKmPompaContent />
+    </SafeImportErrorBoundary>
   );
 }

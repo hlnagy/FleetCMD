@@ -956,6 +956,9 @@ export class VehiculeService {
       } else {
         parsedDate = new Date(`${dataCol}T${oraCol}:00`);
       }
+      if (isNaN(parsedDate.getTime())) {
+        parsedDate = new Date();
+      }
 
       const cleanUnit = unitCol.replace(/\s+B$/i, '').trim();
       const normUnit = this.normalizeCodVehicul(cleanUnit);
@@ -1112,7 +1115,7 @@ export class VehiculeService {
     return {
       statistici,
       previewRows,
-      categoriiDisponibile: categoriiDb,
+      categoriiDisponibile: categoriiDb.map((c) => c.nume),
     };
   }
 
