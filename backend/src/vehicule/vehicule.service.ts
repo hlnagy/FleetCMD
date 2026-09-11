@@ -860,4 +860,347 @@ export class VehiculeService {
 
     return { tipRol: 'NECUPLAT', cuplareActiv: null, partener: null };
   }
+
+  // =========================================================================
+  // MODUL IMPORT & SINCRONIZARE KILOMETRAJ POMPĂ COMBUSTIBIL (CSV SELFSERVICE)
+  // =========================================================================
+
+  private normalizeCodVehicul(cod: string): string {
+    if (!cod) return '';
+    return cod
+      .trim()
+      .toUpperCase()
+      .replace(/\s+B$/i, '')
+      .replace(/[^A-Z0-9]/g, '');
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result.map((s) => s.trim().replace(/^"|"$/g, '').trim());
+  }
+
+  async previewCsvPompa(csvContent: string, selectedCategories?: string[]) {
+    if (!csvContent || !csvContent.trim()) {
+      throw new BadRequestException('Fișierul CSV furnizat este gol.');
+    }
+
+    const lines = csvContent.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const vehiculeDb = await this.prisma.vehicul.findMany({
+      include: { categorie: true },
+    });
+    const categoriiDb = await this.prisma.categorieVehicul.findMany();
+
+    const vehiculeMap = new Map<string, any>();
+    for (const v of vehiculeDb) {
+      vehiculeMap.set(this.normalizeCodVehicul(v.numarInmatriculare), v);
+      vehiculeMap.set(this.normalizeCodVehicul(v.numarIntern), v);
+    }
+
+    interface RawAlimentare {
+      dataStr: string;
+      oraStr: string;
+      timestamp: Date;
+      kmRaw: string;
+      valoareKm: number;
+      unitRaw: string;
+      cleanUnit: string;
+      normUnit: string;
+      cantitateLitri?: number;
+      linieIndex: number;
+    }
+
+    const alimentari: RawAlimentare[] = [];
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const cols = this.parseCsvLine(lines[idx]);
+      if (cols.length < 15) continue;
+
+      const dataCol = cols[10]?.trim();
+      const oraCol = cols[11]?.trim() || '00:00';
+      const kmCol = cols[14]?.trim();
+      const unitCol = cols[15]?.trim();
+
+      const isDate = /^\d{2}\.\d{2}\.\d{4}$/.test(dataCol) || /^\d{4}-\d{2}-\d{2}$/.test(dataCol);
+      if (!isDate || !unitCol) continue;
+
+      let valKm = 0;
+      if (kmCol) {
+        const noDots = kmCol.replace(/\./g, '').replace(/,/g, '.');
+        valKm = parseFloat(noDots) || 0;
+      }
+
+      let parsedDate = new Date();
+      if (/^\d{2}\.\d{2}\.\d{4}$/.test(dataCol)) {
+        const [d, m, y] = dataCol.split('.').map(Number);
+        const [h, min] = oraCol.split(':').map(Number);
+        parsedDate = new Date(y, m - 1, d, h || 0, min || 0);
+      } else {
+        parsedDate = new Date(`${dataCol}T${oraCol}:00`);
+      }
+
+      const cleanUnit = unitCol.replace(/\s+B$/i, '').trim();
+      const normUnit = this.normalizeCodVehicul(cleanUnit);
+
+      const litriRaw = cols[16] || cols[9];
+      let cantitateLitri: number | undefined = undefined;
+      if (litriRaw) {
+        const val = parseFloat(litriRaw.replace(/\./g, '').replace(/,/g, '.'));
+        cantitateLitri = !isNaN(val) ? (val > 1000 ? val / 1000 : val) : undefined;
+      }
+
+      alimentari.push({
+        dataStr: dataCol,
+        oraStr: oraCol,
+        timestamp: parsedDate,
+        kmRaw: kmCol,
+        valoareKm: valKm,
+        unitRaw: unitCol,
+        cleanUnit,
+        normUnit,
+        cantitateLitri,
+        linieIndex: idx + 1,
+      });
+    }
+
+    // Deduplicare pe zi și vehicul (întotdeauna ultima alimentare din acea zi)
+    const alimentariPerZiMap = new Map<string, RawAlimentare>();
+    for (const al of alimentari) {
+      const key = `${al.normUnit}___${al.dataStr}`;
+      const existing = alimentariPerZiMap.get(key);
+      if (!existing || al.timestamp.getTime() > existing.timestamp.getTime()) {
+        alimentariPerZiMap.set(key, al);
+      }
+    }
+
+    // Cea mai recentă alimentare din întregul fișier pentru fiecare vehicul
+    const vehiculeAlimentariMap = new Map<string, {
+      ultimaAlimentare: RawAlimentare;
+      toateAlimentarileZi: RawAlimentare[];
+    }>();
+
+    for (const al of alimentariPerZiMap.values()) {
+      const existing = vehiculeAlimentariMap.get(al.normUnit);
+      if (!existing) {
+        vehiculeAlimentariMap.set(al.normUnit, {
+          ultimaAlimentare: al,
+          toateAlimentarileZi: [al],
+        });
+      } else {
+        existing.toateAlimentarileZi.push(al);
+        if (al.timestamp.getTime() > existing.ultimaAlimentare.timestamp.getTime()) {
+          existing.ultimaAlimentare = al;
+        }
+      }
+    }
+
+    const previewRows = [];
+    const allowedCatsSet = selectedCategories && selectedCategories.length > 0
+      ? new Set(selectedCategories.map((c) => c.toUpperCase()))
+      : null;
+
+    for (const [normUnit, item] of vehiculeAlimentariMap.entries()) {
+      const ultima = item.ultimaAlimentare;
+      const vehicul = vehiculeMap.get(normUnit);
+
+      let status = 'VALID';
+      const anomaliiMesaje: string[] = [];
+
+      if (!vehicul) {
+        status = 'VEHICUL_NEGASIȚ';
+        anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în baza de date.`);
+      } else {
+        const catUpper = (vehicul.categorieEnum || '').toUpperCase();
+        const isMth = vehicul.tipMasurare === 'MTH';
+
+        if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" nu este selectată pentru actualizare.`);
+        } else if (isMth) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push(`Vehiculul este pe Ore de Funcționare (MTH), nu pe Kilometri.`);
+        } else {
+          const curKm = vehicul.valoareContorCurent || 0;
+          const newKm = ultima.valoareKm;
+          const delta = newKm - curKm;
+
+          if (newKm === 0) {
+            status = 'KM_ZERO';
+            anomaliiMesaje.push('Indexul introdus la pompă este 0 km.');
+          } else if (curKm > 0 && newKm < curKm) {
+            status = 'REGRESSIE_KM';
+            anomaliiMesaje.push(`Indexul nou (${newKm} km) este mai mic decât contorul curent (${curKm} km).`);
+          } else if (curKm > 0 && delta > 5000) {
+            status = 'DELTA_EXCESIV';
+            anomaliiMesaje.push(`Salt mare de kilometraj (+${delta.toLocaleString()} km). Posibilă cifră în plus.`);
+          }
+        }
+      }
+
+      const curKm = vehicul?.valoareContorCurent || 0;
+      const newKm = ultima.valoareKm;
+      const delta = vehicul ? newKm - curKm : 0;
+
+      previewRows.push({
+        idTemp: `${normUnit}_${ultima.dataStr}`,
+        normUnit,
+        cleanUnit: ultima.cleanUnit,
+        unitRaw: ultima.unitRaw,
+        data: ultima.dataStr,
+        ora: ultima.oraStr,
+        timestamp: ultima.timestamp,
+        valoareKmInitiala: newKm,
+        valoareKmPropusa: newKm,
+        contorCurent: curKm,
+        deltaKm: delta,
+        tipMasurare: vehicul?.tipMasurare || 'KM',
+        vehiculId: vehicul?.id || null,
+        numarInmatriculare: vehicul?.numarInmatriculare || ultima.cleanUnit,
+        numarIntern: vehicul?.numarIntern || null,
+        categorieEnum: vehicul?.categorieEnum || 'NECUNOSCUT',
+        status,
+        anomaliiMesaje,
+        aprobat: status === 'VALID',
+        istoricAlimentariFisier: item.toateAlimentarileZi.map((a) => ({
+          data: a.dataStr,
+          ora: a.oraStr,
+          km: a.valoareKm,
+          litri: a.cantitateLitri,
+        })),
+      });
+    }
+
+    previewRows.sort((a, b) => {
+      const order: Record<string, number> = {
+        REGRESSIE_KM: 1,
+        KM_ZERO: 2,
+        DELTA_EXCESIV: 3,
+        VEHICUL_NEGASIȚ: 4,
+        CATEGORIE_IGNORATA: 5,
+        VALID: 6,
+      };
+      const diff = (order[a.status] || 99) - (order[b.status] || 99);
+      if (diff !== 0) return diff;
+      return a.numarInmatriculare.localeCompare(b.numarInmatriculare);
+    });
+
+    const statistici = {
+      totalVehiculeGasiteInCsv: previewRows.length,
+      valide: previewRows.filter((r) => r.status === 'VALID').length,
+      cuAnomalii: previewRows.filter((r) => ['REGRESSIE_KM', 'KM_ZERO', 'DELTA_EXCESIV', 'VEHICUL_NEGASIȚ'].includes(r.status)).length,
+      ignorateSauMth: previewRows.filter((r) => r.status === 'CATEGORIE_IGNORATA').length,
+    };
+
+    return {
+      statistici,
+      previewRows,
+      categoriiDisponibile: categoriiDb,
+    };
+  }
+
+  async applyCsvPompa(
+    entries: Array<{
+      vehiculId: string;
+      valoareKm: number;
+      data: string;
+      ora?: string;
+      observatii?: string;
+    }>,
+    actorUserId?: string
+  ) {
+    if (!entries || entries.length === 0) {
+      throw new BadRequestException('Nu a fost transmisă nicio înregistrare pentru salvare.');
+    }
+
+    const actualizate = [];
+    const erori = [];
+
+    for (const item of entries) {
+      if (!item.vehiculId) {
+        erori.push('Lipsește identificatorul vehiculului.');
+        continue;
+      }
+
+      const valKm = Number(item.valoareKm);
+      if (isNaN(valKm) || valKm < 0) {
+        erori.push(`Valoare kilometraj invalidă (${item.valoareKm})`);
+        continue;
+      }
+
+      const v = await this.prisma.vehicul.findUnique({ where: { id: item.vehiculId } });
+      if (!v) {
+        erori.push(`Vehiculul cu ID ${item.vehiculId} nu a fost găsit.`);
+        continue;
+      }
+
+      let dataInreg = new Date();
+      if (item.data && /^\d{2}\.\d{2}\.\d{4}$/.test(item.data)) {
+        const [d, m, y] = item.data.split('.').map(Number);
+        const [h, min] = (item.ora || '12:00').split(':').map(Number);
+        dataInreg = new Date(y, m - 1, d, h || 0, min || 0);
+      } else if (item.data) {
+        dataInreg = new Date(item.data);
+      }
+
+      const obs = item.observatii || `Alimentare pompă carburant ${item.data || ''} ${item.ora || ''} (${valKm} km)`;
+
+      await this.prisma.istoricContorVehicul.create({
+        data: {
+          vehiculId: v.id,
+          valoareContor: valKm,
+          dataInregistrare: dataInreg,
+          sursa: 'ALIMENTARE',
+          operator: 'Pompă Combustibil (Import CSV)',
+          observatii: obs,
+        },
+      });
+
+      if (v.categorieEnum === 'CAP_TRACTOR' && valKm > v.valoareContorCurent) {
+        await this.propagaKmCuplare(v.id, v.valoareContorCurent, valKm);
+      }
+
+      await this.prisma.vehicul.update({
+        where: { id: v.id },
+        data: {
+          valoareContorCurent: valKm,
+          dataInregistrareContor: dataInreg,
+        },
+      });
+
+      actualizate.push({
+        id: v.id,
+        numarInmatriculare: v.numarInmatriculare,
+        numarIntern: v.numarIntern,
+        vechiKm: v.valoareContorCurent,
+        nouKm: valKm,
+        delta: valKm - v.valoareContorCurent,
+      });
+    }
+
+    return {
+      mesaj: `Au fost actualizate cu succes contoarele pentru ${actualizate.length} vehicule!`,
+      numarActualizate: actualizate.length,
+      actualizate,
+      erori,
+    };
+  }
 }
+

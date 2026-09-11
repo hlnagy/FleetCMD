@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles, Gauge
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
@@ -43,6 +43,7 @@ export default function Sidebar() {
       icon: Truck,
       subItems: [
         { name: 'Fișă Tehnică & Flotă', href: '/fisa-tehnica', icon: Truck },
+        { name: 'Actualizare KM (Pompă)', href: '/import-km', icon: Gauge },
         { name: 'Valabilitate Acte & Documente', href: '/documente', icon: FileCheck },
         { name: 'Cuplare Ansambluri', href: '/ansambluri', icon: Link2 },
       ],
@@ -94,7 +95,7 @@ export default function Sidebar() {
     close();
     if (pathname.startsWith('/stocuri')) {
       setOpenSections((prev) => ({ ...prev, '/stocuri': true }));
-    } else if (pathname.startsWith('/fisa-tehnica') || pathname.startsWith('/ansambluri') || pathname.startsWith('/documente')) {
+    } else if (pathname.startsWith('/fisa-tehnica') || pathname.startsWith('/ansambluri') || pathname.startsWith('/documente') || pathname.startsWith('/import-km')) {
       setOpenSections((prev) => ({ ...prev, '/fisa-tehnica': true }));
     } else if (pathname.startsWith('/efactura')) {
       setOpenSections((prev) => ({ ...prev, '/efactura': true }));

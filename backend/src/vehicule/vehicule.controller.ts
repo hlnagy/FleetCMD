@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Query, Param } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Query, Param, Headers } from '@nestjs/common';
 import { VehiculeService } from './vehicule.service';
 
 @Controller('vehicule')
@@ -103,6 +103,19 @@ export class VehiculeController {
   @Post('import-gps')
   importDataGps(@Body() body: { records: any[] }) {
     return this.vehiculeService.importDataGps(body.records || []);
+  }
+
+  @Post('import-km-pompa/preview')
+  previewCsvPompa(@Body() body: { csvContent: string; selectedCategories?: string[] }) {
+    return this.vehiculeService.previewCsvPompa(body.csvContent, body.selectedCategories);
+  }
+
+  @Post('import-km-pompa/apply')
+  applyCsvPompa(
+    @Body() body: { entries: Array<{ vehiculId: string; valoareKm: number; data: string; ora?: string; observatii?: string }> },
+    @Headers('x-user-id') actorUserId?: string,
+  ) {
+    return this.vehiculeService.applyCsvPompa(body.entries, actorUserId);
   }
 
   @Patch(':id/contor')
