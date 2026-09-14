@@ -191,12 +191,15 @@ function ImportKmPompaContent() {
   const defaultKmCategories = useMemo(() => [
     'CAP_TRACTOR',
     'CAP_TRACTOR_CU_SEMI',
+    'BASCULANTA',
     'CAMION',
     'AUTOTURISM',
     'AUTOUTILITARA',
     'DUBITA',
     'MICROBUZ',
     'CAMPER',
+    'REMORCA',
+    'SEMIREMORCA',
   ], []);
 
   // Încărcare vehicule și categorii la montare
@@ -236,7 +239,10 @@ function ImportKmPompaContent() {
 
           if (catNames.length > 0) {
             setAllCategories(catNames);
-            const preselected = catNames.filter((c) => defaultKmCategories.includes(c));
+            const preselected = catNames.filter((c) => {
+              const cUpper = c.toUpperCase();
+              return defaultKmCategories.some((dk) => dk.toUpperCase() === cUpper);
+            });
             setSelectedCategories(preselected.length > 0 ? preselected : catNames);
           }
         }
@@ -391,12 +397,12 @@ function ImportKmPompaContent() {
         const catUpper = (vehicul.categorieEnum || '').toUpperCase();
         const isMth = vehicul.tipMasurare === 'MTH';
 
-        if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
-          status = 'CATEGORIE_IGNORATA';
-          anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" nu este selectată pentru actualizare.`);
-        } else if (isMth) {
+        if (isMth) {
           status = 'CATEGORIE_IGNORATA';
           anomaliiMesaje.push('Vehiculul este configurat pe Ore de Funcționare (MTH).');
+        } else if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" este debifată în selectorul de categorii.`);
         } else {
           const curKm = vehicul.valoareContorCurent || 0;
           const newKm = ultima.valoareKm;
@@ -1123,7 +1129,7 @@ function ImportKmPompaContent() {
             </div>
 
             <p className="text-xs text-slate-400 mb-4">
-              Pompa cere indexul la fiecare alimentare. Utilajele grele (excavatoare, buldozere, dumpere 8x4) funcționează pe <strong>ore de funcționare (mTH)</strong> sau introduc 0. Selectează doar categoriile pe care dorești să le actualizezi în KM.
+              Pompa cere indexul la fiecare alimentare. Autovehiculele rutiere (capete tractor, basculante 8x4, camioane, autoutilitare) funcționează pe <strong>Kilometri (KM)</strong>. Doar utilajele de carieră/șantier (excavatoare, buldozere, compactoare) funcționează pe <strong>ore (MTH)</strong>.
             </p>
 
             <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
@@ -1375,7 +1381,7 @@ function ImportKmPompaContent() {
                           <input
                             type="checkbox"
                             checked={Boolean(row.aprobat)}
-                            disabled={!row.vehiculId || isIgnored}
+                            disabled={!row.vehiculId || row.tipMasurare === 'MTH'}
                             onChange={() => toggleRowApproval(row.idTemp)}
                             className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-30"
                           />
@@ -1542,9 +1548,14 @@ function ImportKmPompaContent() {
                             </span>
                           )}
                           {row.status === 'CATEGORIE_IGNORATA' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[11px]">
-                              Categorie MTH / Exclusă
-                            </span>
+                            <div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[11px]">
+                                {row.tipMasurare === 'MTH' ? 'Utilaj MTH (Ore)' : 'Categorie nebifată'}
+                              </span>
+                              <p className="text-[10px] text-slate-400/80 mt-0.5">
+                                {row.tipMasurare === 'MTH' ? 'Configurat pe ore (MTH)' : `Bifează ${row.categorieEnum} sus`}
+                              </p>
+                            </div>
                           )}
                         </td>
 
