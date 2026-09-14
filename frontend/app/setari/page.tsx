@@ -35,7 +35,6 @@ function SetariContent() {
         setActiveTab(tabParam as any);
         if (tabParam === 'utilizatori') fetchUsers();
         if (tabParam === 'audit') fetchAuditLogs();
-        if (tabParam === 'efactura') fetchEfacturaConfig();
       }
     }
   }, [tabParam, isAdmin]);
@@ -268,6 +267,59 @@ function SetariContent() {
   const [showEfacturaGuide, setShowEfacturaGuide] = useState(false);
   const [showEfacturaTokens, setShowEfacturaTokens] = useState(false);
 
+  // Securitate & Step-Up Authentication: Deblocare cu parolă la intrarea pe tab-ul ANAF OAuth2
+  const [efacturaUnlocked, setEfacturaUnlocked] = useState(false);
+  const [efacturaPasswordPrompt, setEfacturaPasswordPrompt] = useState('');
+  const [efacturaShowPassword, setEfacturaShowPassword] = useState(false);
+  const [efacturaPasswordError, setEfacturaPasswordError] = useState('');
+  const [efacturaVerifyingPassword, setEfacturaVerifyingPassword] = useState(false);
+
+  // La părăsirea tab-ului ANAF, blocăm automat accesul pentru următoarea vizită
+  useEffect(() => {
+    if (activeTab !== 'efactura') {
+      setEfacturaUnlocked(false);
+      setEfacturaPasswordPrompt('');
+      setEfacturaPasswordError('');
+    }
+  }, [activeTab]);
+
+  const handleVerifyEfacturaPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!efacturaPasswordPrompt) {
+      setEfacturaPasswordError('Vă rugăm să introduceți parola de administrator.');
+      return;
+    }
+
+    try {
+      setEfacturaVerifyingPassword(true);
+      setEfacturaPasswordError('');
+
+      const identifier = authUser?.username || authUser?.email || 'admin';
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier,
+          parola: efacturaPasswordPrompt,
+        }),
+      });
+
+      if (res.ok) {
+        setEfacturaUnlocked(true);
+        setEfacturaPasswordPrompt('');
+        setEfacturaPasswordError('');
+        fetchEfacturaConfig();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setEfacturaPasswordError(err.message || 'Parolă incorectă. Vă rugăm să încercați din nou.');
+      }
+    } catch (err) {
+      setEfacturaPasswordError('Eroare de comunicare cu serverul de securitate.');
+    } finally {
+      setEfacturaVerifyingPassword(false);
+    }
+  };
+
   // Capturare automată ?code= din URL dacă utilizatorul este redirecționat de ANAF către /setari
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -276,7 +328,6 @@ function SetariContent() {
       if (code && isAdmin) {
         setActiveTab('efactura');
         setEfacturaAuthCodeInput(code);
-        fetchEfacturaConfig();
       }
     }
   }, [isAdmin]);
@@ -1670,7 +1721,7 @@ function SetariContent() {
             </button>
 
             <button
-              onClick={() => { setActiveTab('efactura'); fetchEfacturaConfig(); }}
+              onClick={() => { setActiveTab('efactura'); }}
               className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
                 activeTab === 'efactura'
                   ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
@@ -3368,6 +3419,109 @@ function SetariContent() {
             <h3 className="text-base font-bold text-sapphire-900 dark:text-white">Acces Restricționat</h3>
             <p className="text-xs text-sage-600 dark:text-slate-400">Configurarea integrării ANAF e-Factura este rezervată exclusiv administratorilor de sistem.</p>
           </div>
+        ) : !efacturaUnlocked ? (
+          <div className="max-w-md mx-auto my-8 pleasant-card bg-white dark:bg-[#142232] border-2 border-sapphire-200 dark:border-sapphire-800/80 p-6 sm:p-8 rounded-3xl shadow-xl space-y-6 animate-fade-in">
+            <div className="text-center space-y-3">
+              <div className="w-16 h-16 rounded-3xl bg-sapphire-50 dark:bg-sapphire-950/60 border border-sapphire-200 dark:border-sapphire-800 text-sapphire-600 dark:text-sapphire-400 flex items-center justify-center mx-auto shadow-inner">
+                <Lock className="w-8 h-8 text-sapphire-600 dark:text-sapphire-400" />
+              </div>
+              <div className="space-y-1">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-sapphire-100 dark:bg-sapphire-950/60 text-sapphire-800 dark:text-sapphire-300 border border-sapphire-200 dark:border-sapphire-800">
+                  Zonă Securizată ANAF
+                </span>
+                <h3 className="text-lg font-black text-sapphire-900 dark:text-white">
+                  Confirmare Parolă Administrator
+                </h3>
+                <p className="text-xs text-sage-600 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
+                  Accesul la credențialele OAuth2, cheile SPV și generarea de token-uri e-Factura necesită reconfirmarea parolei de administrator.
+                </p>
+              </div>
+            </div>
+
+            {/* Profil utilizator curent */}
+            <div className="p-3 bg-morning-100/70 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-2xl flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-sapphire-600 text-white font-black flex items-center justify-center text-xs">
+                  {authUser?.nume ? authUser.nume.charAt(0).toUpperCase() : 'A'}
+                </div>
+                <div>
+                  <p className="font-extrabold text-sapphire-900 dark:text-white">{authUser?.nume || 'Administrator'}</p>
+                  <p className="text-[11px] font-mono text-sage-500">@{authUser?.username || 'admin'}</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">
+                Admin Verificat
+              </span>
+            </div>
+
+            {/* Formular introducere parolă */}
+            <form onSubmit={handleVerifyEfacturaPassword} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-sapphire-900 dark:text-white block mb-1.5">
+                  Introduceți Parola Dvs.: *
+                </label>
+                <div className="relative">
+                  <input
+                    type={efacturaShowPassword ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={efacturaPasswordPrompt}
+                    onChange={(e) => {
+                      setEfacturaPasswordPrompt(e.target.value);
+                      if (efacturaPasswordError) setEfacturaPasswordError('');
+                    }}
+                    placeholder="••••••••••••"
+                    className={`w-full bg-morning-100 dark:bg-[#101b27] border rounded-2xl pl-4 pr-11 py-3 text-xs text-sapphire-900 dark:text-white font-bold outline-none transition ${
+                      efacturaPasswordError
+                        ? 'border-red-400 dark:border-red-500 focus:ring-2 focus:ring-red-400'
+                        : 'border-morning-200 dark:border-morning-200 focus:border-sapphire-500 focus:ring-2 focus:ring-sapphire-500/20'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEfacturaShowPassword(!efacturaShowPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900 dark:hover:text-white p-1 cursor-pointer"
+                    tabIndex={-1}
+                  >
+                    {efacturaShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {efacturaPasswordError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1.5 flex items-center space-x-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{efacturaPasswordError}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('vehicule')}
+                  className="flex-1 py-3 rounded-2xl bg-white dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 hover:bg-morning-100 text-slate-700 dark:text-slate-200 font-bold text-xs transition cursor-pointer text-center"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={efacturaVerifyingPassword || !efacturaPasswordPrompt}
+                  className="flex-1 py-3 rounded-2xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {efacturaVerifyingPassword ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Se verifică...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-4 h-4" />
+                      <span>Deblochează</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         ) : (
           <div className="space-y-6 animate-fade-in">
             {/* Header Card */}
@@ -3393,6 +3547,16 @@ function SetariContent() {
               </div>
 
               <div className="flex items-center space-x-2.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setEfacturaUnlocked(false)}
+                  className="px-3.5 py-2 rounded-xl bg-morning-100 dark:bg-morning-100/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 text-slate-700 dark:text-slate-200 border border-morning-200 dark:border-morning-200 font-bold text-xs transition flex items-center space-x-1.5"
+                  title="Blochează accesul la datele confidențiale ANAF"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Blochează</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setShowEfacturaGuide(!showEfacturaGuide)}
