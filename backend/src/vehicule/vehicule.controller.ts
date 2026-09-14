@@ -115,7 +115,16 @@ export class VehiculeController {
   @Public()
   @Post('import-km-pompa/apply')
   applyCsvPompa(
-    @Body() body: { entries: Array<{ vehiculId: string; valoareKm: number; data: string; ora?: string; observatii?: string }> },
+    @Body() body: {
+      entries: Array<{
+        vehiculId: string;
+        valoareKm: number;
+        data: string;
+        ora?: string;
+        observatii?: string;
+        alimentari?: Array<{ valoareKm: number; data: string; ora?: string; litri?: number }>;
+      }>;
+    },
     @Headers('x-user-id') actorUserId?: string,
   ) {
     return this.vehiculeService.applyCsvPompa(body.entries, actorUserId);

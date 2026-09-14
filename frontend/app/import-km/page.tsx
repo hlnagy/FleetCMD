@@ -5,7 +5,8 @@ import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } 
 import {
   UploadCloud, FileText, CheckCircle2, AlertTriangle, XCircle, ArrowRight,
   RefreshCw, Filter, Layers, Check, Edit2, ShieldAlert, Gauge, Clock,
-  ChevronDown, ChevronUp, Info, HelpCircle, Save, Car, Truck, ClipboardCopy, Type
+  ChevronDown, ChevronUp, Info, HelpCircle, Save, Car, Truck, ClipboardCopy, Type,
+  Plus, X, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -170,6 +171,22 @@ function ImportKmPompaContent() {
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
+  // Modal pentru adăugare rapidă a unui vehicul nou apărut în CSV
+  const [quickCreateModal, setQuickCreateModal] = useState<{
+    isOpen: boolean;
+    rowIdTemp: string;
+    numarInmatriculare: string;
+    numarIntern: string;
+    marca: string;
+    model: string;
+    anFabricatie: number;
+    categorieEnum: string;
+    tipMasurare: string;
+    valoareContor: number;
+    isSubmitting: boolean;
+    error: string | null;
+  } | null>(null);
+
   // Categorii tipice pentru autovehicule cu contor KM
   const defaultKmCategories = useMemo(() => [
     'CAP_TRACTOR',
@@ -299,8 +316,18 @@ function ImportKmPompaContent() {
       const litriRaw = cols[16] || cols[9];
       let cantitateLitri: number | undefined = undefined;
       if (litriRaw) {
+        const hasDotOrComma = litriRaw.includes('.') || litriRaw.includes(',');
         const val = parseFloat(litriRaw.replace(/\./g, '').replace(/,/g, '.'));
-        cantitateLitri = !isNaN(val) ? (val > 1000 ? val / 1000 : val) : undefined;
+        if (!isNaN(val)) {
+          if (!hasDotOrComma && val > 100) {
+            cantitateLitri = Number((val / 100).toFixed(2));
+          } else if (hasDotOrComma) {
+            const parsedFloat = parseFloat(litriRaw.replace(/,/g, '.'));
+            cantitateLitri = !isNaN(parsedFloat) ? Number(parsedFloat.toFixed(2)) : undefined;
+          } else {
+            cantitateLitri = val;
+          }
+        }
       }
 
       alimentari.push({
@@ -316,34 +343,32 @@ function ImportKmPompaContent() {
       });
     }
 
-    // Deduplicare pe zi și vehicul (se reține exclusiv ultima alimentare din acea zi)
-    const alimentariPerZiMap = new Map<string, RawAlim>();
-    for (const al of alimentari) {
-      const key = `${al.normUnit}___${al.dataStr}`;
-      const existing = alimentariPerZiMap.get(key);
-      if (!existing || al.timestamp.getTime() > existing.timestamp.getTime()) {
-        alimentariPerZiMap.set(key, al);
-      }
-    }
-
-    // Cea mai recentă alimentare generală din fișier
+    // Păstrăm toate alimentările pentru fiecare vehicul (fără eliminare/deduplicare)
     const vehiculeAlimentariMap = new Map<string, {
       ultimaAlimentare: RawAlim;
-      toateAlimentarileZi: RawAlim[];
+      toateAlimentarile: RawAlim[];
     }>();
 
-    alimentariPerZiMap.forEach((al) => {
+    alimentari.forEach((al) => {
       const existing = vehiculeAlimentariMap.get(al.normUnit);
       if (!existing) {
         vehiculeAlimentariMap.set(al.normUnit, {
           ultimaAlimentare: al,
-          toateAlimentarileZi: [al],
+          toateAlimentarile: [al],
         });
       } else {
-        existing.toateAlimentarileZi.push(al);
+        existing.toateAlimentarile.push(al);
         if (al.timestamp.getTime() > existing.ultimaAlimentare.timestamp.getTime()) {
           existing.ultimaAlimentare = al;
         }
+      }
+    });
+
+    // Sortăm alimentările fiecărui vehicul cronologic
+    vehiculeAlimentariMap.forEach((item) => {
+      item.toateAlimentarile.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      if (item.toateAlimentarile.length > 0) {
+        item.ultimaAlimentare = item.toateAlimentarile[item.toateAlimentarile.length - 1];
       }
     });
 
@@ -414,7 +439,7 @@ function ImportKmPompaContent() {
         status,
         anomaliiMesaje,
         aprobat: status === 'VALID',
-        istoricAlimentariFisier: item.toateAlimentarileZi.map((a) => ({
+        istoricAlimentariFisier: item.toateAlimentarile.map((a) => ({
           data: a.dataStr,
           ora: a.oraStr,
           km: a.valoareKm,
@@ -604,6 +629,162 @@ function ImportKmPompaContent() {
     );
   };
 
+  // Modificare manuală a kilometrajului pentru o alimentare individuală din fișier
+  const handleEditFuelingKm = (rowIdTemp: string, fuelingIndex: number, newKmStr: string) => {
+    const newVal = parseInt(newKmStr, 10);
+    const safeKm = isNaN(newVal) ? 0 : newVal;
+
+    setPreviewRows((prev) =>
+      prev.map((row) => {
+        if (row.idTemp !== rowIdTemp) return row;
+
+        const updatedAlimentari = [...row.istoricAlimentariFisier];
+        if (!updatedAlimentari[fuelingIndex]) return row;
+
+        updatedAlimentari[fuelingIndex] = {
+          ...updatedAlimentari[fuelingIndex],
+          km: safeKm,
+        };
+
+        // Recalculăm valoareKmPropusa ca fiind maximul dintre alimentări (sau cel mai recent)
+        let maxKm = 0;
+        for (const al of updatedAlimentari) {
+          if (al.km > maxKm) maxKm = al.km;
+        }
+
+        const curKm = row.contorCurent || 0;
+        const newDelta = row.vehiculId ? maxKm - curKm : 0;
+
+        let newStatus = row.status;
+        const newAnomalii: string[] = [];
+
+        if (!row.vehiculId) {
+          newStatus = 'VEHICUL_NEGASIȚ';
+          newAnomalii.push(`Vehiculul "${row.cleanUnit}" nu a fost identificat.`);
+        } else if (row.status === 'CATEGORIE_IGNORATA') {
+          // Păstrează categoria ignorată
+        } else if (maxKm === 0) {
+          newStatus = 'KM_ZERO';
+          newAnomalii.push('Contor 0 km raportat.');
+        } else if (curKm > 0 && maxKm < curKm) {
+          newStatus = 'REGRESSIE_KM';
+          newAnomalii.push(`Indexul nou (${formatKm(maxKm)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+        } else if (curKm > 0 && newDelta > 5000) {
+          newStatus = 'DELTA_EXCESIV';
+          newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
+        } else {
+          newStatus = 'VALID';
+        }
+
+        return {
+          ...row,
+          istoricAlimentariFisier: updatedAlimentari,
+          valoareKmPropusa: maxKm,
+          deltaKm: newDelta,
+          status: newStatus,
+          anomaliiMesaje: newAnomalii,
+          aprobat: newStatus === 'VALID',
+        };
+      })
+    );
+  };
+
+  // Deschidere modal adăugare rapidă vehicul nou
+  const handleOpenQuickCreate = (row: PreviewRow) => {
+    const cleanPlate = row.cleanUnit;
+    const initialKm = row.valoareKmPropusa || row.valoareKmInitiala || 0;
+    const defaultCat = (allCategories.length > 0 && allCategories[0]) || 'CAP_TRACTOR';
+
+    setQuickCreateModal({
+      isOpen: true,
+      rowIdTemp: row.idTemp,
+      numarInmatriculare: cleanPlate,
+      numarIntern: cleanPlate,
+      marca: 'Nedefinit',
+      model: 'Standard',
+      anFabricatie: new Date().getFullYear(),
+      categorieEnum: defaultCat,
+      tipMasurare: 'KM',
+      valoareContor: initialKm,
+      isSubmitting: false,
+      error: null,
+    });
+  };
+
+  // Salvare vehicul nou creat rapid
+  const handleSaveQuickVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCreateModal) return;
+
+    setQuickCreateModal((prev) => (prev ? { ...prev, isSubmitting: true, error: null } : null));
+
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (user?.id) headers['x-user-id'] = user.id;
+
+      const body = {
+        numarInmatriculare: quickCreateModal.numarInmatriculare.trim(),
+        numarIntern: quickCreateModal.numarIntern.trim(),
+        marca: quickCreateModal.marca.trim() || 'Nedefinit',
+        model: quickCreateModal.model.trim() || 'Standard',
+        anFabricatie: Number(quickCreateModal.anFabricatie) || new Date().getFullYear(),
+        categorieEnum: quickCreateModal.categorieEnum,
+        tipMasurare: quickCreateModal.tipMasurare || 'KM',
+        valoareContorInitial: Number(quickCreateModal.valoareContor) || 0,
+        valoareContorCurent: Number(quickCreateModal.valoareContor) || 0,
+      };
+
+      const res = await fetch(`${API_BASE_URL}/vehicule`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Eroare la crearea vehiculului.');
+      }
+
+      const newVeh = await res.json();
+
+      // Adăugăm vehiculul în parcul auto local
+      setAllVehicule((prev) => [...prev, newVeh]);
+
+      // Asociem noul vehicul la rândul din preview
+      const targetRowId = quickCreateModal.rowIdTemp;
+      const normTarget = normalizeCodVehicul(newVeh.numarInmatriculare);
+
+      setPreviewRows((prev) =>
+        prev.map((r) => {
+          if (r.idTemp === targetRowId || r.normUnit === normTarget) {
+            const curKm = newVeh.valoareContorCurent || 0;
+            const newDelta = r.valoareKmPropusa - curKm;
+            return {
+              ...r,
+              vehiculId: newVeh.id,
+              numarInmatriculare: newVeh.numarInmatriculare,
+              numarIntern: newVeh.numarIntern || null,
+              categorieEnum: extractCatName(newVeh.categorieEnum) || quickCreateModal.categorieEnum,
+              contorCurent: curKm,
+              deltaKm: newDelta,
+              status: 'VALID',
+              anomaliiMesaje: [],
+              aprobat: true,
+            };
+          }
+          return r;
+        })
+      );
+
+      setQuickCreateModal(null);
+    } catch (err: any) {
+      console.error('Eroare adaugare vehicul:', err);
+      setQuickCreateModal((prev) => (prev ? { ...prev, isSubmitting: false, error: err.message } : null));
+    }
+  };
+
   const toggleRowApproval = (idTemp: string) => {
     setPreviewRows((prev) =>
       prev.map((r) => (r.idTemp === idTemp ? { ...r, aprobat: !r.aprobat } : r))
@@ -639,6 +820,18 @@ function ImportKmPompaContent() {
           data: r.data,
           ora: r.ora,
           observatii: `Pompă Combustibil ${r.data} ${r.ora} (CSV: ${r.unitRaw})`,
+          alimentari: (r.istoricAlimentariFisier && r.istoricAlimentariFisier.length > 0)
+            ? r.istoricAlimentariFisier.map((al) => ({
+                valoareKm: al.km,
+                data: al.data,
+                ora: al.ora,
+                litri: al.litri,
+              }))
+            : [{
+                valoareKm: r.valoareKmPropusa,
+                data: r.data,
+                ora: r.ora,
+              }],
         })),
       };
 
@@ -1217,18 +1410,29 @@ function ImportKmPompaContent() {
                               </span>
                             </div>
                           ) : (
-                            <div className="space-y-1">
-                              <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
-                                <AlertTriangle className="w-3.5 h-3.5" />
-                                Neatribuit automat
-                              </span>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  Neatribuit
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenQuickCreate(row)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition shadow-sm"
+                                  title="Adaugă rapid acest vehicul în baza de date cu un singur click"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  + Adaugă în flotă
+                                </button>
+                              </div>
                               <select
                                 onChange={(e) => handleAssignVehicle(row.idTemp, e.target.value)}
                                 defaultValue=""
-                                className="bg-slate-900 border border-amber-500/50 text-[11px] text-slate-200 rounded px-2 py-1 max-w-[180px] focus:outline-none focus:border-blue-500"
+                                className="bg-slate-900 border border-amber-500/40 text-[11px] text-slate-200 rounded px-2 py-1 max-w-[190px] focus:outline-none focus:border-blue-500"
                               >
                                 <option value="" disabled>
-                                  Asociază manual vehicul...
+                                  sau alege vehicul existent...
                                 </option>
                                 {Array.isArray(allVehicule) && allVehicule.map((v) => (
                                   <option key={v.id} value={v.id}>
@@ -1370,45 +1574,62 @@ function ImportKmPompaContent() {
                       {isExpanded && (
                         <tr className="bg-slate-900/90 border-b border-slate-700">
                           <td colSpan={9} className="p-3 pl-12">
-                            <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700 max-w-xl">
-                              <div className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-2">
-                                <Clock className="w-4 h-4 text-blue-400" />
-                                <span>
-                                  Istoric alimentări înregistrate în fișier pentru {row.cleanUnit}
+                            <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700 max-w-2xl">
+                              <div className="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-4 h-4 text-blue-400" />
+                                  <span>
+                                    Toate alimentările din fișier pentru {row.cleanUnit} ({row.istoricAlimentariFisier?.length || 0})
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-normal">
+                                  Indexurile pot fi editate manual direct în căsuțe
                                 </span>
                               </div>
                               <div className="space-y-1.5">
                                 {(row.istoricAlimentariFisier || []).map((al, idx) => (
                                   <div
                                     key={idx}
-                                    className={`flex items-center justify-between text-xs px-2.5 py-1 rounded ${
+                                    className={`flex items-center justify-between text-xs px-3 py-1.5 rounded transition ${
                                       idx === (row.istoricAlimentariFisier?.length || 1) - 1
                                         ? 'bg-blue-950/50 text-blue-200 border border-blue-500/30'
-                                        : 'bg-slate-900 text-slate-400'
+                                        : 'bg-slate-900 text-slate-300 border border-slate-800'
                                     }`}
                                   >
                                     <div className="flex items-center gap-2">
-                                      <span className="font-mono">{al.data}</span>
-                                      <span className="font-mono text-slate-300">{al.ora}</span>
+                                      <span className="font-mono font-medium">{al.data}</span>
+                                      <span className="font-mono text-slate-400">{al.ora}</span>
                                       {idx === (row.istoricAlimentariFisier?.length || 1) - 1 && (
-                                        <span className="text-[10px] bg-blue-600 text-white px-1 rounded">
-                                          reținută
+                                        <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-medium">
+                                          recentă
                                         </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
                                       {al.litri !== undefined && (
-                                        <span className="text-slate-400">{al.litri} L</span>
+                                        <span className="text-emerald-400 font-mono font-semibold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30 text-[11px]">
+                                          {al.litri} L
+                                        </span>
                                       )}
-                                      <span className="font-mono font-semibold text-white">
-                                        {formatKm(al.km)} km
-                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <input
+                                          type="number"
+                                          value={al.km ?? ''}
+                                          onChange={(e) => handleEditFuelingKm(row.idTemp, idx, e.target.value)}
+                                          className="w-28 text-right font-mono text-xs px-2 py-1 rounded border bg-slate-950 border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          title="Editează acest index dacă a fost tastat greșit la pompă"
+                                        />
+                                        <span className="text-slate-500 text-[10px]">km</span>
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                              <p className="text-[11px] text-slate-400 mt-2 italic">
-                                * Conform cerinței, sistemul reține automat <strong>ultima alimentare</strong> a zilei ({row.ora} cu {formatKm(row.valoareKmInitiala)} km).
+                              <p className="text-[11px] text-emerald-400/90 mt-2 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                <span>
+                                  <strong>Toate alimentările</strong> vor fi înregistrate în istoricul vehiculului (pentru trasabilitate completă), iar contorul principal preia cel mai recent index.
+                                </span>
                               </p>
                             </div>
                           </td>
@@ -1449,6 +1670,184 @@ function ImportKmPompaContent() {
         </div>
       )}
 
+      {/* MODAL ADĂUGARE RAPIDĂ VEHICUL NOU */}
+      {quickCreateModal && quickCreateModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Car className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Adăugare Vehicul în Flotă</h3>
+                  <p className="text-xs text-slate-400">Preluat automat din fișierul CSV de alimentare</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickCreateModal(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickVehicle} className="p-5 space-y-4 text-xs">
+              {quickCreateModal.error && (
+                <div className="p-3 bg-rose-950/40 border border-rose-500/50 rounded-xl text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{quickCreateModal.error}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Număr Înmatriculare *</label>
+                  <input
+                    type="text"
+                    required
+                    value={quickCreateModal.numarInmatriculare}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, numarInmatriculare: e.target.value.toUpperCase() } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Număr Intern / Cod *</label>
+                  <input
+                    type="text"
+                    required
+                    value={quickCreateModal.numarIntern}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, numarIntern: e.target.value.toUpperCase() } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Categorie Vehicul *</label>
+                  <select
+                    value={quickCreateModal.categorieEnum}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, categorieEnum: e.target.value } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  >
+                    {allCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    {!allCategories.includes('CAP_TRACTOR') && <option value="CAP_TRACTOR">CAP_TRACTOR</option>}
+                    {!allCategories.includes('AUTOUTILITARA') && <option value="AUTOUTILITARA">AUTOUTILITARA</option>}
+                    {!allCategories.includes('CAMION') && <option value="CAMION">CAMION</option>}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Tip Măsurare *</label>
+                  <select
+                    value={quickCreateModal.tipMasurare}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, tipMasurare: e.target.value } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="KM">Kilometri (KM)</option>
+                    <option value="MTH">Ore Funcționare (MTH)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Marcă</label>
+                  <input
+                    type="text"
+                    value={quickCreateModal.marca}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, marca: e.target.value } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={quickCreateModal.model}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, model: e.target.value } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Contor Curent</label>
+                  <input
+                    type="number"
+                    value={quickCreateModal.valoareContor}
+                    onChange={(e) =>
+                      setQuickCreateModal((prev) =>
+                        prev ? { ...prev, valoareContor: Number(e.target.value) || 0 } : null
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQuickCreateModal(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition font-medium"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickCreateModal.isSubmitting}
+                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white font-semibold rounded-xl transition shadow-lg shadow-emerald-900/20"
+                >
+                  {quickCreateModal.isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Se adaugă...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Salvează și Asociază
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* GHID / INFORMARE UTILIZATOR */}
       <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 text-xs text-slate-400 space-y-2">
         <div className="font-semibold text-slate-300 flex items-center gap-2">
@@ -1457,13 +1856,16 @@ function ImportKmPompaContent() {
         </div>
         <ul className="list-disc list-inside space-y-1 pl-1 text-slate-400">
           <li>
-            <strong>Deduplicare automată pe zile:</strong> Dacă un vehicul a alimentat de 2 sau mai multe ori în aceeași zi, se reține exclusiv alimentarea cu ora cea mai târzie.
+            <strong>Înregistrare completă a tuturor alimentărilor:</strong> Dacă un vehicul are mai multe alimentări în fișier (pe aceeași zi sau pe mai multe zile), toate vor fi salvate individual în istoricul vehiculului (inclusiv cantitatea exactă în litri și ora) pentru trasabilitate completă.
           </li>
           <li>
-            <strong>Separare pe categorii:</strong> Autovehiculele rutiere (capete tractor, autoutilitare) folosesc KM. Utilajele de carieră / construcții (excavatoare, buldozere) folosesc ore de funcționare (mTH) sau tastează 0 la pompă și sunt excluse automat.
+            <strong>Separare pe categorii:</strong> Autovehiculele rutiere (capete tractor, autoutilitare) folosesc KM. Utilajele de carieră / construcții (excavatoare, buldozere) folosesc ore de funcționare (MTH) sau tastează 0 la pompă și sunt excluse automat.
           </li>
           <li>
-            <strong>Detectare anomalii & editare manuală:</strong> Dacă un șofer a tastat greșit un index la pompă (regresie sau salt nerealist de kilometraj), rândul este semnalizat vizual. Poți corecta valoarea direct în căsuța de text înainte de salvare.
+            <strong>Detectare anomalii & editare manuală:</strong> Dacă un șofer a tastat greșit un index la pompă (regresie sau salt nerealist de kilometraj), rândul este semnalizat vizual. Poți corecta manual orice index atât pe linia principală, cât și în tabelul detaliat al fiecărei alimentări.
+          </li>
+          <li>
+            <strong>Adăugare rapidă de vehicule noi:</strong> Dacă în fișier apare un vehicul necunoscut în parcul auto, îl poți înregistra instantaneu apăsând pe butonul <em>&quot;+ Adaugă în flotă&quot;</em>.
           </li>
           <li>
             <strong>Propagare la semiremorci cuplate:</strong> Când se actualizează kilometrajul unui cap tractor, rulajul parcurs (+km) este transmis automat semiremorcii cuplate activ.

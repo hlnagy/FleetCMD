@@ -966,8 +966,18 @@ export class VehiculeService {
       const litriRaw = cols[16] || cols[9];
       let cantitateLitri: number | undefined = undefined;
       if (litriRaw) {
+        const hasDotOrComma = litriRaw.includes('.') || litriRaw.includes(',');
         const val = parseFloat(litriRaw.replace(/\./g, '').replace(/,/g, '.'));
-        cantitateLitri = !isNaN(val) ? (val > 1000 ? val / 1000 : val) : undefined;
+        if (!isNaN(val)) {
+          if (!hasDotOrComma && val > 100) {
+            cantitateLitri = Number((val / 100).toFixed(2));
+          } else if (hasDotOrComma) {
+            const parsedFloat = parseFloat(litriRaw.replace(/,/g, '.'));
+            cantitateLitri = !isNaN(parsedFloat) ? Number(parsedFloat.toFixed(2)) : undefined;
+          } else {
+            cantitateLitri = val;
+          }
+        }
       }
 
       alimentari.push({
@@ -984,34 +994,32 @@ export class VehiculeService {
       });
     }
 
-    // Deduplicare pe zi și vehicul (întotdeauna ultima alimentare din acea zi)
-    const alimentariPerZiMap = new Map<string, RawAlimentare>();
-    for (const al of alimentari) {
-      const key = `${al.normUnit}___${al.dataStr}`;
-      const existing = alimentariPerZiMap.get(key);
-      if (!existing || al.timestamp.getTime() > existing.timestamp.getTime()) {
-        alimentariPerZiMap.set(key, al);
-      }
-    }
-
-    // Cea mai recentă alimentare din întregul fișier pentru fiecare vehicul
+    // Păstrăm toate alimentările pentru fiecare vehicul (fără eliminare/deduplicare)
     const vehiculeAlimentariMap = new Map<string, {
       ultimaAlimentare: RawAlimentare;
-      toateAlimentarileZi: RawAlimentare[];
+      toateAlimentarile: RawAlimentare[];
     }>();
 
-    for (const al of alimentariPerZiMap.values()) {
+    for (const al of alimentari) {
       const existing = vehiculeAlimentariMap.get(al.normUnit);
       if (!existing) {
         vehiculeAlimentariMap.set(al.normUnit, {
           ultimaAlimentare: al,
-          toateAlimentarileZi: [al],
+          toateAlimentarile: [al],
         });
       } else {
-        existing.toateAlimentarileZi.push(al);
+        existing.toateAlimentarile.push(al);
         if (al.timestamp.getTime() > existing.ultimaAlimentare.timestamp.getTime()) {
           existing.ultimaAlimentare = al;
         }
+      }
+    }
+
+    // Sortăm alimentările fiecărui vehicul cronologic și selectăm ultima
+    for (const item of vehiculeAlimentariMap.values()) {
+      item.toateAlimentarile.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      if (item.toateAlimentarile.length > 0) {
+        item.ultimaAlimentare = item.toateAlimentarile[item.toateAlimentarile.length - 1];
       }
     }
 
@@ -1082,7 +1090,7 @@ export class VehiculeService {
         status,
         anomaliiMesaje,
         aprobat: status === 'VALID',
-        istoricAlimentariFisier: item.toateAlimentarileZi.map((a) => ({
+        istoricAlimentariFisier: item.toateAlimentarile.map((a) => ({
           data: a.dataStr,
           ora: a.oraStr,
           km: a.valoareKm,
@@ -1126,6 +1134,12 @@ export class VehiculeService {
       data: string;
       ora?: string;
       observatii?: string;
+      alimentari?: Array<{
+        valoareKm: number;
+        data: string;
+        ora?: string;
+        litri?: number;
+      }>;
     }>,
     actorUserId?: string
   ) {
@@ -1142,49 +1156,79 @@ export class VehiculeService {
         continue;
       }
 
-      const valKm = Number(item.valoareKm);
-      if (isNaN(valKm) || valKm < 0) {
-        erori.push(`Valoare kilometraj invalidă (${item.valoareKm})`);
-        continue;
-      }
-
       const v = await this.prisma.vehicul.findUnique({ where: { id: item.vehiculId } });
       if (!v) {
         erori.push(`Vehiculul cu ID ${item.vehiculId} nu a fost găsit.`);
         continue;
       }
 
-      let dataInreg = new Date();
-      if (item.data && /^\d{2}\.\d{2}\.\d{4}$/.test(item.data)) {
-        const [d, m, y] = item.data.split('.').map(Number);
-        const [h, min] = (item.ora || '12:00').split(':').map(Number);
-        dataInreg = new Date(y, m - 1, d, h || 0, min || 0);
-      } else if (item.data) {
-        dataInreg = new Date(item.data);
+      // Lista tuturor alimentărilor asociate acestui vehicul din fișier
+      const alimentariList = (item.alimentari && item.alimentari.length > 0)
+        ? item.alimentari
+        : [{ valoareKm: item.valoareKm, data: item.data, ora: item.ora, litri: undefined }];
+
+      let maxValKm = Number(item.valoareKm) || 0;
+      let latestDataInreg = new Date();
+
+      // Înregistrăm fiecare alimentare individual în istoricul de contor pentru trasabilitate
+      for (const al of alimentariList) {
+        const alKm = Number(al.valoareKm);
+        if (isNaN(alKm) || alKm < 0) continue;
+
+        if (alKm > maxValKm) {
+          maxValKm = alKm;
+        }
+
+        let alDataInreg = new Date();
+        if (al.data && /^\d{2}\.\d{2}\.\d{4}$/.test(al.data)) {
+          const [d, m, y] = al.data.split('.').map(Number);
+          const [h, min] = (al.ora || '12:00').split(':').map(Number);
+          alDataInreg = new Date(y, m - 1, d, h || 0, min || 0);
+        } else if (al.data) {
+          alDataInreg = new Date(al.data);
+        }
+        if (isNaN(alDataInreg.getTime())) alDataInreg = new Date();
+
+        if (alDataInreg.getTime() >= latestDataInreg.getTime()) {
+          latestDataInreg = alDataInreg;
+        }
+
+        const obsParts = ['Alimentare pompă'];
+        if (al.litri !== undefined && al.litri !== null) {
+          obsParts.push(`${al.litri} L`);
+        }
+        if (al.data) {
+          obsParts.push(`Data: ${al.data} ${al.ora || ''}`.trim());
+        }
+        const obs = obsParts.join(' | ') + ` (Index: ${alKm.toLocaleString()} km)`;
+
+        await this.prisma.istoricContorVehicul.create({
+          data: {
+            vehiculId: v.id,
+            valoareContor: alKm,
+            dataInregistrare: alDataInreg,
+            sursa: 'ALIMENTARE',
+            operator: 'Pompă Combustibil (Import CSV)',
+            observatii: obs,
+          },
+        });
       }
 
-      const obs = item.observatii || `Alimentare pompă carburant ${item.data || ''} ${item.ora || ''} (${valKm} km)`;
-
-      await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: v.id,
-          valoareContor: valKm,
-          dataInregistrare: dataInreg,
-          sursa: 'ALIMENTARE',
-          operator: 'Pompă Combustibil (Import CSV)',
-          observatii: obs,
-        },
-      });
-
-      if (v.categorieEnum === 'CAP_TRACTOR' && valKm > v.valoareContorCurent) {
-        await this.propagaKmCuplare(v.id, v.valoareContorCurent, valKm);
+      if (maxValKm <= 0) {
+        maxValKm = v.valoareContorCurent;
       }
 
+      // Propagare kilometraj cuplare pentru cap tractor
+      if (v.categorieEnum === 'CAP_TRACTOR' && maxValKm > v.valoareContorCurent) {
+        await this.propagaKmCuplare(v.id, v.valoareContorCurent, maxValKm);
+      }
+
+      // Actualizăm contorul curent al vehiculului la cel mai recent / mai mare index
       await this.prisma.vehicul.update({
         where: { id: v.id },
         data: {
-          valoareContorCurent: valKm,
-          dataInregistrareContor: dataInreg,
+          valoareContorCurent: maxValKm,
+          dataInregistrareContor: latestDataInreg,
         },
       });
 
@@ -1193,13 +1237,14 @@ export class VehiculeService {
         numarInmatriculare: v.numarInmatriculare,
         numarIntern: v.numarIntern,
         vechiKm: v.valoareContorCurent,
-        nouKm: valKm,
-        delta: valKm - v.valoareContorCurent,
+        nouKm: maxValKm,
+        delta: maxValKm - v.valoareContorCurent,
+        numarAlimentariSalvate: alimentariList.length,
       });
     }
 
     return {
-      mesaj: `Au fost actualizate cu succes contoarele pentru ${actualizate.length} vehicule!`,
+      mesaj: `Au fost actualizate cu succes contoarele pentru ${actualizate.length} vehicule (toate alimentările au fost arhivate în istoric)!`,
       numarActualizate: actualizate.length,
       actualizate,
       erori,
