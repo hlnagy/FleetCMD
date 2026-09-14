@@ -1628,7 +1628,7 @@ function ImportKmPompaContent() {
                               <p className="text-[11px] text-emerald-400/90 mt-2 flex items-center gap-1.5">
                                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                                 <span>
-                                  <strong>Toate alimentările</strong> vor fi înregistrate în istoricul vehiculului (pentru trasabilitate completă), iar contorul principal preia cel mai recent index.
+                                  <strong>Toate alimentările și toți indexii de kilometraj</strong> din fișier vor fi salvați individual în istoricul contorului vehiculului (pentru trasabilitate și auditare completă a fiecărui rulaj), iar contorul curent al vehiculului este actualizat la cel mai recent index.
                                 </span>
                               </p>
                             </div>
@@ -1856,7 +1856,7 @@ function ImportKmPompaContent() {
         </div>
         <ul className="list-disc list-inside space-y-1 pl-1 text-slate-400">
           <li>
-            <strong>Înregistrare completă a tuturor alimentărilor:</strong> Dacă un vehicul are mai multe alimentări în fișier (pe aceeași zi sau pe mai multe zile), toate vor fi salvate individual în istoricul vehiculului (inclusiv cantitatea exactă în litri și ora) pentru trasabilitate completă.
+            <strong>Înregistrare completă a tuturor alimentărilor și indexurilor de contor:</strong> Dacă un vehicul are mai multe alimentări în fișier (pe aceeași zi sau pe mai multe zile), toate indexurile de kilometraj și toate cantitățile de combustibil vor fi salvate individual în istoricul vehiculului pentru o trasabilitate și auditare completă.
           </li>
           <li>
             <strong>Separare pe categorii:</strong> Autovehiculele rutiere (capete tractor, autoutilitare) folosesc KM. Utilajele de carieră / construcții (excavatoare, buldozere) folosesc ore de funcționare (MTH) sau tastează 0 la pompă și sunt excluse automat.
