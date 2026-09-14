@@ -11,7 +11,7 @@ import {
   Users, Building2, PackageCheck, Search, X, ChevronRight, ChevronLeft, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
   Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2,
-  Sliders, LayoutList, LayoutGrid
+  Sliders, LayoutList, LayoutGrid, Receipt, ExternalLink, HelpCircle, BookOpen, RefreshCw, Zap
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -23,18 +23,19 @@ function SetariContent() {
   const { theme, resolvedTheme, setTheme, fontSize, setFontSize } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
-    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect'
+    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect' | 'efactura'
   >('vehicule');
 
-  // Ascultăm schimbarea tab-ului din URL / Sidebar (cu protecție strictă Admin pentru utilizatori și audit)
+  // Ascultăm schimbarea tab-ului din URL / Sidebar (cu protecție strictă Admin pentru utilizatori, audit și efactura)
   useEffect(() => {
-    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit', 'aspect'].includes(tabParam)) {
-      if ((tabParam === 'utilizatori' || tabParam === 'audit') && !isAdmin) {
+    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit', 'aspect', 'efactura'].includes(tabParam)) {
+      if ((tabParam === 'utilizatori' || tabParam === 'audit' || tabParam === 'efactura') && !isAdmin) {
         setActiveTab('vehicule');
       } else {
         setActiveTab(tabParam as any);
         if (tabParam === 'utilizatori') fetchUsers();
         if (tabParam === 'audit') fetchAuditLogs();
+        if (tabParam === 'efactura') fetchEfacturaConfig();
       }
     }
   }, [tabParam, isAdmin]);
@@ -246,6 +247,184 @@ function SetariContent() {
       };
     }
   }, [activeTab, auditLogs, auditViewMode]);
+
+  // ==========================================
+  // 10. STATE & METODE ANAF E-FACTURA OAUTH2 (DOAR ADMIN)
+  // ==========================================
+  const [efacturaConfig, setEfacturaConfig] = useState<any | null>(null);
+  const [efacturaCifFirma, setEfacturaCifFirma] = useState('');
+  const [efacturaClientId, setEfacturaClientId] = useState('');
+  const [efacturaClientSecret, setEfacturaClientSecret] = useState('');
+  const [efacturaRedirectUri, setEfacturaRedirectUri] = useState('https://fleet-cmd.vercel.app/efactura');
+  const [efacturaAccessToken, setEfacturaAccessToken] = useState('');
+  const [efacturaRefreshToken, setEfacturaRefreshToken] = useState('');
+  const [efacturaStareCronAuto, setEfacturaStareCronAuto] = useState(true);
+  const [efacturaAuthCodeInput, setEfacturaAuthCodeInput] = useState('');
+  const [efacturaExchangingCode, setEfacturaExchangingCode] = useState(false);
+  const [efacturaLoading, setEfacturaLoading] = useState(false);
+  const [efacturaSaving, setEfacturaSaving] = useState(false);
+  const [efacturaSyncStatus, setEfacturaSyncStatus] = useState<any | null>(null);
+  const [efacturaSyncing, setEfacturaSyncing] = useState(false);
+  const [showEfacturaGuide, setShowEfacturaGuide] = useState(false);
+  const [showEfacturaTokens, setShowEfacturaTokens] = useState(false);
+
+  // Capturare automată ?code= din URL dacă utilizatorul este redirecționat de ANAF către /setari
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code && isAdmin) {
+        setActiveTab('efactura');
+        setEfacturaAuthCodeInput(code);
+        fetchEfacturaConfig();
+      }
+    }
+  }, [isAdmin]);
+
+  const fetchEfacturaConfig = async () => {
+    try {
+      setEfacturaLoading(true);
+      const [resConfig, resStatus] = await Promise.all([
+        fetch(`${API_BASE_URL}/efactura/config`),
+        fetch(`${API_BASE_URL}/efactura/sync/status`).catch(() => null),
+      ]);
+      if (resConfig.ok) {
+        const cfg = await resConfig.json();
+        setEfacturaConfig(cfg);
+        setEfacturaCifFirma(cfg.cifFirma || '');
+        setEfacturaClientId(cfg.clientId || '');
+        setEfacturaClientSecret(cfg.clientSecret || '');
+        setEfacturaRedirectUri(cfg.redirectUri || 'https://fleet-cmd.vercel.app/efactura');
+        setEfacturaAccessToken(cfg.accessToken || '');
+        setEfacturaRefreshToken(cfg.refreshToken || '');
+        setEfacturaStareCronAuto(cfg.stareCronAuto ?? true);
+      }
+      if (resStatus && resStatus.ok) {
+        const sData = await resStatus.json();
+        setEfacturaSyncStatus(sData);
+      }
+    } catch (e) {
+      console.error('Eroare la încărcarea configurației ANAF:', e);
+    } finally {
+      setEfacturaLoading(false);
+    }
+  };
+
+  const handleSaveEfacturaConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setEfacturaSaving(true);
+      const res = await authFetch(`${API_BASE_URL}/efactura/config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cifFirma: efacturaCifFirma.trim(),
+          clientId: efacturaClientId.trim(),
+          clientSecret: efacturaClientSecret.trim(),
+          redirectUri: efacturaRedirectUri.trim(),
+          accessToken: efacturaAccessToken.trim(),
+          refreshToken: efacturaRefreshToken.trim(),
+          stareCronAuto: efacturaStareCronAuto,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Configurația ANAF e-Factura a fost salvată cu succes în baza de date Supabase!');
+        fetchEfacturaConfig();
+      } else {
+        const err = await res.json();
+        alert(`Eroare la salvare: ${err.message || 'Eroare necunoscută'}`);
+      }
+    } catch (e: any) {
+      alert(`Eroare de comunicare: ${e.message}`);
+    } finally {
+      setEfacturaSaving(false);
+    }
+  };
+
+  const handleOpenEfacturaAuthorizeUrl = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/authorize-url`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          window.open(data.url, '_blank');
+        }
+      } else {
+        const err = await res.json();
+        alert(`Eroare URL ANAF: ${err.message}`);
+      }
+    } catch (e) {
+      alert('Eroare la obținerea URL-ului de autorizare ANAF.');
+    }
+  };
+
+  const handleExchangeEfacturaCode = async () => {
+    if (!efacturaAuthCodeInput.trim()) {
+      alert('Vă rugăm să introduceți codul de autorizare primit de la ANAF (din parametrul ?code=...)!');
+      return;
+    }
+    try {
+      setEfacturaExchangingCode(true);
+      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/exchange-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: efacturaAuthCodeInput.trim() }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || 'Token-uri obținute și salvate cu succes în Supabase!');
+        setEfacturaAuthCodeInput('');
+        fetchEfacturaConfig();
+      } else {
+        const err = await res.json();
+        alert(`Eroare la schimbul de cod: ${err.message || 'Eroare necunoscută'}`);
+      }
+    } catch (e: any) {
+      alert(`Eroare la schimbul de cod: ${e.message}`);
+    } finally {
+      setEfacturaExchangingCode(false);
+    }
+  };
+
+  const handleTriggerEfacturaSync = async () => {
+    try {
+      setEfacturaSyncing(true);
+      const res = await authFetch(`${API_BASE_URL}/efactura/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zile: 60 }),
+      });
+      if (res.ok) {
+        alert('Sincronizarea ANAF SPV a fost lansată în fundal.');
+        const poll = setInterval(async () => {
+          try {
+            const sRes = await authFetch(`${API_BASE_URL}/efactura/sync/status`);
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              setEfacturaSyncStatus(sData);
+              if (!sData.inProgress) {
+                clearInterval(poll);
+                setEfacturaSyncing(false);
+                fetchEfacturaConfig();
+              }
+            }
+          } catch (err) {
+            clearInterval(poll);
+            setEfacturaSyncing(false);
+          }
+        }, 2000);
+      } else {
+        const err = await res.json();
+        alert(`Eroare sincronizare: ${err.message}`);
+        setEfacturaSyncing(false);
+      }
+    } catch (e) {
+      alert('Eroare la pornirea sincronizării.');
+      setEfacturaSyncing(false);
+    }
+  };
 
 
   // FETCH ALL SYSTEM SETTINGS & ENTITIES
@@ -1487,6 +1666,19 @@ function SetariContent() {
             >
               <History className="w-4 h-4 text-periwinkle-700" />
               <span>Jurnal Audit ({auditTotal})</span>
+              <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('efactura'); fetchEfacturaConfig(); }}
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+                activeTab === 'efactura'
+                  ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+                  : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+              }`}
+            >
+              <Receipt className="w-4 h-4 text-emerald-600" />
+              <span>ANAF e-Factura OAuth2</span>
               <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
             </button>
           </>
@@ -3164,6 +3356,498 @@ function SetariContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 11: CONFIGURARE INTEGRARE ANAF RO E-FACTURA OAUTH2 (DOAR ADMIN) */}
+      {/* ========================================================================= */}
+      {activeTab === 'efactura' && (
+        !isAdmin ? (
+          <div className="p-12 text-center bg-white dark:bg-[#142232] border border-morning-200 dark:border-morning-200 rounded-3xl space-y-3 shadow-xs">
+            <ShieldAlert className="w-12 h-12 text-terracotta-500 mx-auto" />
+            <h3 className="text-base font-bold text-sapphire-900 dark:text-white">Acces Restricționat</h3>
+            <p className="text-xs text-sage-600 dark:text-slate-400">Configurarea integrării ANAF e-Factura este rezervată exclusiv administratorilor de sistem.</p>
+          </div>
+        ) : (
+          <div className="space-y-6 animate-fade-in">
+            {/* Header Card */}
+            <div className="pleasant-card bg-white dark:bg-[#142232] p-6 rounded-3xl border border-morning-200 dark:border-morning-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center space-x-4">
+                <div className="p-3.5 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 rounded-2xl shrink-0">
+                  <Receipt className="w-7 h-7 text-emerald-700 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2 flex-wrap">
+                    <h3 className="font-extrabold text-sapphire-900 dark:text-white text-lg">Integrare ANAF RO e-Factura SPV</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300">
+                      OAuth2 Hibrid UBL 2.1
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                      Supabase Cloud DB
+                    </span>
+                  </div>
+                  <p className="text-xs text-sage-600 dark:text-slate-400 mt-1">
+                    Gestiune securizată a credențialelor OAuth2, generare token-uri JWT calificate și sincronizare automată orară a facturilor în fundal.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowEfacturaGuide(!showEfacturaGuide)}
+                  className="px-3.5 py-2 rounded-xl bg-sapphire-50 dark:bg-sapphire-950/40 text-sapphire-700 dark:text-sapphire-300 border border-sapphire-200 dark:border-sapphire-800 font-bold text-xs hover:bg-sapphire-100 transition flex items-center space-x-1.5"
+                >
+                  <BookOpen className="w-4 h-4 text-sapphire-600" />
+                  <span>{showEfacturaGuide ? 'Ascunde Ghid' : 'Ghid Pas cu Pas (?)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={fetchEfacturaConfig}
+                  disabled={efacturaLoading}
+                  className="px-3.5 py-2 rounded-xl bg-morning-100 dark:bg-morning-100/50 hover:bg-morning-200 text-slate-700 dark:text-slate-200 border border-morning-200 dark:border-morning-200 font-bold text-xs transition flex items-center space-x-1.5 disabled:opacity-50"
+                  title="Reîncarcă datele din baza de date Supabase"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${efacturaLoading ? 'animate-spin text-sapphire-600' : ''}`} />
+                  <span>Reîmprospătează</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTriggerEfacturaSync}
+                  disabled={efacturaSyncing || efacturaSyncStatus?.inProgress}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition flex items-center space-x-1.5 disabled:opacity-50"
+                >
+                  <Zap className={`w-3.5 h-3.5 ${efacturaSyncing ? 'animate-bounce' : ''}`} />
+                  <span>{efacturaSyncing ? 'Sincronizare în curs...' : 'Sincronizează SPV Acum'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* LIVE CONNECTION STATUS OVERVIEW (4 CARDS) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              {/* Card 1: Stare Conexiune & CIF */}
+              <div className="pleasant-card bg-white dark:bg-[#142232] p-4 rounded-2xl border border-morning-200 dark:border-morning-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-sage-600 dark:text-slate-400 uppercase tracking-wider">Stare Conexiune SPV</span>
+                  {efacturaConfig?.accessToken ? (
+                    <span className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-black text-[10px] border border-emerald-300 dark:border-emerald-800">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Conectat</span>
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[10px] border border-amber-300">
+                      Neautorizat
+                    </span>
+                  )}
+                </div>
+                <p className="text-base font-black text-sapphire-900 dark:text-white font-mono">
+                  {efacturaConfig?.cifFirma || efacturaCifFirma || 'CIF Nespecificat'}
+                </p>
+                <div className="text-[11px] text-sage-600 dark:text-slate-400 flex items-center space-x-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">Stocat securizat în Supabase</span>
+                </div>
+              </div>
+
+              {/* Card 2: Access Token (90 Zile) */}
+              <div className="pleasant-card bg-white dark:bg-[#142232] p-4 rounded-2xl border border-morning-200 dark:border-morning-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-sage-600 dark:text-slate-400 uppercase tracking-wider">Access Token (90 Zile)</span>
+                  {efacturaConfig?.accessTokenExpiresAt ? (
+                    (() => {
+                      const diffDays = Math.ceil((new Date(efacturaConfig.accessTokenExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      const isExpired = diffDays <= 0;
+                      const isExpiringSoon = diffDays <= 10;
+                      return (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                          isExpired
+                            ? 'bg-red-100 text-red-800 border border-red-300'
+                            : isExpiringSoon
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}>
+                          {isExpired ? 'Expirat' : `${diffDays} zile active`}
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <span className="text-sage-400 text-[10px] font-bold">Lipsă</span>
+                  )}
+                </div>
+                <p className="text-xs font-bold text-sapphire-900 dark:text-white">
+                  {efacturaConfig?.accessTokenExpiresAt
+                    ? `Expiră la: ${new Date(efacturaConfig.accessTokenExpiresAt).toLocaleDateString('ro-RO')}`
+                    : 'Niciun token activ'}
+                </p>
+                <p className="text-[11px] text-sage-600 dark:text-slate-400">
+                  {efacturaConfig?.accessToken ? 'Semnătură JWT validă SPV' : 'Necesită autorizare prin token fizic'}
+                </p>
+              </div>
+
+              {/* Card 3: Refresh Token (365 Zile) */}
+              <div className="pleasant-card bg-white dark:bg-[#142232] p-4 rounded-2xl border border-morning-200 dark:border-morning-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-sage-600 dark:text-slate-400 uppercase tracking-wider">Refresh Token (365 Zile)</span>
+                  {efacturaConfig?.refreshTokenExpiresAt ? (
+                    (() => {
+                      const diffDays = Math.ceil((new Date(efacturaConfig.refreshTokenExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-300 font-black text-[10px]">
+                          {diffDays > 0 ? `${diffDays} zile active` : 'Expirat'}
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <span className="text-sage-400 text-[10px] font-bold">Lipsă</span>
+                  )}
+                </div>
+                <p className="text-xs font-bold text-sapphire-900 dark:text-white">
+                  {efacturaConfig?.refreshTokenExpiresAt
+                    ? `Expiră la: ${new Date(efacturaConfig.refreshTokenExpiresAt).toLocaleDateString('ro-RO')}`
+                    : 'Niciun refresh token'}
+                </p>
+                <p className="text-[11px] text-sage-600 dark:text-slate-400">
+                  Reîmprospătare automată cu 48h înainte
+                </p>
+              </div>
+
+              {/* Card 4: Sincronizare Cron & Ultimul Status */}
+              <div className="pleasant-card bg-white dark:bg-[#142232] p-4 rounded-2xl border border-morning-200 dark:border-morning-200 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-sage-600 dark:text-slate-400 uppercase tracking-wider">Sincronizare Orară</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    efacturaConfig?.stareCronAuto !== false
+                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300'
+                      : 'bg-morning-200 text-slate-700'
+                  }`}>
+                    {efacturaConfig?.stareCronAuto !== false ? 'Activă (Orară)' : 'Dezactivată'}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-sapphire-900 dark:text-white truncate">
+                  {efacturaConfig?.ultimulSyncSucces
+                    ? new Date(efacturaConfig.ultimulSyncSucces).toLocaleString('ro-RO')
+                    : 'Nicio sincronizare finalizată'}
+                </p>
+                <p className="text-[11px] text-sage-600 dark:text-slate-400">
+                  {efacturaSyncStatus?.inProgress
+                    ? 'Sync în curs în fundal...'
+                    : efacturaSyncStatus?.errorMessage
+                    ? `Eroare: ${efacturaSyncStatus.errorMessage}`
+                    : 'Sistem stabil, fără erori'}
+                </p>
+              </div>
+            </div>
+
+            {/* GHID PAS CU PAS CONECTARE ANAF SPV (COLLAPSIBLE) */}
+            {showEfacturaGuide && (
+              <div className="pleasant-card bg-white dark:bg-[#142232] border-2 border-sapphire-200 dark:border-sapphire-800 p-6 rounded-3xl shadow-sm space-y-4 animate-fade-in">
+                <div className="flex items-center justify-between border-b border-morning-200 dark:border-morning-200 pb-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-9 h-9 rounded-2xl bg-sapphire-100 dark:bg-sapphire-950/50 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-sapphire-600 dark:text-sapphire-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sapphire-900 dark:text-white text-sm">
+                        Ghid Pas cu Pas: Conectare & Autorizare OAuth2 în Portalul ANAF SPV
+                      </h4>
+                      <p className="text-xs text-sage-600 dark:text-slate-400">
+                        Urmați acești 5 pași simpli pentru a lega contul de firmă la serverele de facturare electronică ale Ministerului Finanțelor.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowEfacturaGuide(false)}
+                    className="text-sage-400 hover:text-sapphire-900 dark:hover:text-white text-xs font-bold px-2.5 py-1 rounded-lg hover:bg-morning-100"
+                  >
+                    ✕ Închide Ghidul
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                  {/* Pas 1 */}
+                  <div className="p-3.5 bg-morning-100 dark:bg-morning-100/40 rounded-2xl border border-morning-200 dark:border-morning-200 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1.5">
+                        <span className="w-6 h-6 rounded-lg bg-sapphire-600 text-white font-black text-xs flex items-center justify-center">1</span>
+                        <h5 className="font-extrabold text-sapphire-900 dark:text-white text-xs">Token USB Semnătură</h5>
+                      </div>
+                      <p className="text-sage-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                        Introduceți stick-ul USB cu certificatul digital calificat (CertSign, DigiSign, TransSped etc.) în calculator și verificați că aplicația token-ului este deschisă.
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-sapphire-700 dark:text-sapphire-300 font-bold bg-sapphire-50 dark:bg-sapphire-950/40 p-1.5 rounded-lg">
+                      Condiție: Drepturi SPV pe CIF
+                    </span>
+                  </div>
+
+                  {/* Pas 2 */}
+                  <div className="p-3.5 bg-morning-100 dark:bg-morning-100/40 rounded-2xl border border-morning-200 dark:border-morning-200 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1.5">
+                        <span className="w-6 h-6 rounded-lg bg-sapphire-600 text-white font-black text-xs flex items-center justify-center">2</span>
+                        <h5 className="font-extrabold text-sapphire-900 dark:text-white text-xs">Înregistrare ANAF OAuth</h5>
+                      </div>
+                      <p className="text-sage-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                        Accesați portalul oficial <a href="https://www.anaf.ro/InregOauth/index.xhtml" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">InregOauth</a>, autentificați-vă cu certificatul și copiați <strong>Client ID</strong> și <strong>Client Secret</strong>.
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-sage-600 font-mono bg-morning-200/60 p-1.5 rounded-lg truncate">
+                      Callback: {efacturaRedirectUri}
+                    </span>
+                  </div>
+
+                  {/* Pas 3 */}
+                  <div className="p-3.5 bg-morning-100 dark:bg-morning-100/40 rounded-2xl border border-morning-200 dark:border-morning-200 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1.5">
+                        <span className="w-6 h-6 rounded-lg bg-sapphire-600 text-white font-black text-xs flex items-center justify-center">3</span>
+                        <h5 className="font-extrabold text-sapphire-900 dark:text-white text-xs">Deschidere URL Autorizare</h5>
+                      </div>
+                      <p className="text-sage-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                        Apăsați butonul <strong>`1. Deschide URL Autorizare ANAF`</strong> din vrăjitorul de mai jos, alegeți certificatul din dialogul browserului și introduceți codul PIN al token-ului.
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 p-1.5 rounded-lg">
+                      Autorizare oficială securizată
+                    </span>
+                  </div>
+
+                  {/* Pas 4 */}
+                  <div className="p-3.5 bg-morning-100 dark:bg-morning-100/40 rounded-2xl border border-morning-200 dark:border-morning-200 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1.5">
+                        <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-black text-xs flex items-center justify-center">4</span>
+                        <h5 className="font-extrabold text-sapphire-900 dark:text-white text-xs">Schimb Cod pe Token-uri</h5>
+                      </div>
+                      <p className="text-sage-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                        Copiați parametrul <code>?code=...</code> din bara de adresă după redirecționare și apăsați <strong>`2. Schimbă pe Token-uri JWT`</strong>.
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 p-1.5 rounded-lg">
+                      Token-uri JWT generate
+                    </span>
+                  </div>
+
+                  {/* Pas 5 */}
+                  <div className="p-3.5 bg-morning-100 dark:bg-morning-100/40 rounded-2xl border border-morning-200 dark:border-morning-200 space-y-1.5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center space-x-2 mb-1.5">
+                        <span className="w-6 h-6 rounded-lg bg-purple-600 text-white font-black text-xs flex items-center justify-center">5</span>
+                        <h5 className="font-extrabold text-sapphire-900 dark:text-white text-xs">Automatizare Supabase</h5>
+                      </div>
+                      <p className="text-sage-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                        Token-urile sunt salvate în baza de date Supabase. Sistemul descarcă automat facturile la fiecare oră și reînnoiește token-ul cu 48h înainte de expirare.
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/40 p-1.5 rounded-lg">
+                      100% Autonom & Permanent
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* OAUTH2 INTERACTIVE WIZARD & CODE EXCHANGE */}
+            <div className="pleasant-card bg-gradient-to-br from-sapphire-50/70 via-white to-morning-100 dark:from-[#142232] dark:via-[#192b3f] dark:to-[#142232] border-2 border-sapphire-200 dark:border-sapphire-800 p-6 rounded-3xl shadow-sm space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-sapphire-600 text-white flex items-center justify-center">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-sapphire-900 dark:text-white">
+                      Vrăjitor Interactiv de Autorizare OAuth2 & Schimb Cod
+                    </h4>
+                    <p className="text-[11px] text-sage-600 dark:text-slate-400">
+                      Asigurați-vă că stick-ul USB este introdus în calculator înainte de a iniția pasul 1.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenEfacturaAuthorizeUrl}
+                  className="px-4 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition flex items-center space-x-2 cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>1. Deschide URL Autorizare ANAF</span>
+                </button>
+              </div>
+
+              <div className="pt-3 border-t border-sapphire-100 dark:border-sapphire-800/60">
+                <label className="text-xs font-bold text-sapphire-900 dark:text-white block mb-1.5">
+                  Introduceți Codul de Autorizare primit din redirecționare (?code=XYZ...):
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={efacturaAuthCodeInput}
+                    onChange={(e) => setEfacturaAuthCodeInput(e.target.value)}
+                    placeholder="Lipiți aici codul primit în bara browserului după autorizare..."
+                    className="flex-1 bg-white dark:bg-[#101b27] border border-sapphire-200 dark:border-sapphire-700 rounded-xl px-3.5 py-2.5 text-xs text-sapphire-900 dark:text-white font-mono font-bold placeholder-sage-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleExchangeEfacturaCode}
+                    disabled={efacturaExchangingCode || !efacturaAuthCodeInput.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{efacturaExchangingCode ? 'Se generează token-urile...' : '2. Schimbă pe Token-uri JWT'}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-sage-500 dark:text-slate-400 mt-1.5">
+                  La apăsarea butonului, codul este transmis serverului, care va descărca direct de la ANAF un <strong>Access Token (90 zile)</strong> și un <strong>Refresh Token (365 zile)</strong> și le va persista în Supabase.
+                </p>
+              </div>
+            </div>
+
+            {/* FORMULAR CONFIGURARE DATE CREDENȚIALE & SPV */}
+            <form onSubmit={handleSaveEfacturaConfig} className="pleasant-card bg-white dark:bg-[#142232] border border-morning-200 dark:border-morning-200 p-6 rounded-3xl shadow-xs space-y-5 text-xs">
+              <div className="flex items-center justify-between border-b border-morning-200 dark:border-morning-200 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Settings className="w-4 h-4 text-sapphire-600" />
+                  <h4 className="font-extrabold text-sm text-sapphire-900 dark:text-white">
+                    Parametri Aplicație SPV & Credențiale ANAF
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEfacturaTokens(!showEfacturaTokens)}
+                  className="text-sapphire-600 dark:text-sapphire-400 font-bold hover:underline flex items-center space-x-1"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>{showEfacturaTokens ? 'Ascunde Token-uri JWT' : 'Afișează / Editează Token-uri JWT'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sage-700 dark:text-slate-300 block mb-1.5 font-bold">
+                    CUI / CIF Firmă (cu sau fără prefixul RO): *
+                  </label>
+                  <input
+                    required
+                    value={efacturaCifFirma}
+                    onChange={(e) => setEfacturaCifFirma(e.target.value)}
+                    placeholder="RO25746805"
+                    className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-3 text-sapphire-900 dark:text-white font-mono font-bold text-xs"
+                  />
+                  <span className="text-[10px] text-sage-500 mt-1 block">CIF-ul firmei pentru care se recepționează facturile electronice din SPV.</span>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 dark:text-slate-300 block mb-1.5 font-bold">
+                    Redirect URI (Callback URL înregistrat în portalul SPV): *
+                  </label>
+                  <input
+                    required
+                    value={efacturaRedirectUri}
+                    onChange={(e) => setEfacturaRedirectUri(e.target.value)}
+                    placeholder="https://fleet-cmd.vercel.app/efactura"
+                    className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-3 text-sapphire-900 dark:text-white font-mono text-xs font-semibold"
+                  />
+                  <span className="text-[10px] text-sage-500 mt-1 block">Trebuie să coincidă exact cu adresa configurată în portalul ANAF InregOauth.</span>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 dark:text-slate-300 block mb-1.5 font-bold">
+                    Client ID OAuth2 ANAF:
+                  </label>
+                  <input
+                    value={efacturaClientId}
+                    onChange={(e) => setEfacturaClientId(e.target.value)}
+                    placeholder="ex: 182a45..."
+                    className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-3 text-sapphire-900 dark:text-white font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 dark:text-slate-300 block mb-1.5 font-bold">
+                    Client Secret OAuth2 ANAF:
+                  </label>
+                  <input
+                    type="password"
+                    value={efacturaClientSecret}
+                    onChange={(e) => setEfacturaClientSecret(e.target.value)}
+                    placeholder="••••••••••••••••••••••••"
+                    className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-3 text-sapphire-900 dark:text-white font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* TOKEN TEXTAREAS (COLLAPSIBLE / ADVANCED) */}
+              {showEfacturaTokens && (
+                <div className="space-y-4 pt-3 border-t border-morning-200 dark:border-morning-200 animate-fade-in">
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-sage-700 dark:text-slate-300 font-bold">Access Token ANAF (JWT 90 Zile):</label>
+                      {efacturaConfig?.accessTokenExpiresAt && (
+                        <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                          Expiră la: {new Date(efacturaConfig.accessTokenExpiresAt).toLocaleString('ro-RO')}
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={efacturaAccessToken}
+                      onChange={(e) => setEfacturaAccessToken(e.target.value)}
+                      placeholder="Access Token JWT..."
+                      className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-2.5 text-sapphire-900 dark:text-white font-mono text-[10px]"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-sage-700 dark:text-slate-300 font-bold">Refresh Token ANAF (JWT 365 Zile):</label>
+                      {efacturaConfig?.refreshTokenExpiresAt && (
+                        <span className="text-[10px] font-mono font-bold text-purple-700 dark:text-purple-400">
+                          Expiră la: {new Date(efacturaConfig.refreshTokenExpiresAt).toLocaleString('ro-RO')}
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={efacturaRefreshToken}
+                      onChange={(e) => setEfacturaRefreshToken(e.target.value)}
+                      placeholder="Refresh Token JWT..."
+                      className="w-full bg-morning-100 dark:bg-[#101b27] border border-morning-200 dark:border-morning-200 rounded-xl p-2.5 text-sapphire-900 dark:text-white font-mono text-[10px]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CRON AUTO SYNC TOGGLE */}
+              <div className="p-4 bg-morning-100 dark:bg-[#101b27] rounded-2xl border border-morning-200 dark:border-morning-200 flex items-center justify-between">
+                <label className="flex items-center space-x-3 text-xs font-bold text-sapphire-900 dark:text-white cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={efacturaStareCronAuto}
+                    onChange={(e) => setEfacturaStareCronAuto(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded"
+                  />
+                  <span>Sincronizare automată orară în fundal (Cron Job) cu reîmprospătare token la fiecare 90 zile</span>
+                </label>
+                <span className="text-[10px] text-sage-500 font-mono hidden sm:inline">Rulează automat 24/7 pe server</span>
+              </div>
+
+              {/* FOOTER ACTIONS */}
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={efacturaSaving}
+                  className="px-6 py-3 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{efacturaSaving ? 'Se salvează în Supabase...' : 'Salvează Configurația în Supabase'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )
       )}
 
       {/* ========================================================================= */}

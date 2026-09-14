@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   FileText, RefreshCw, CheckCircle2, AlertTriangle, Download, Plus, Search,
   Settings, Clock, Building2, Layers, Check, X, ShieldCheck, ArrowRight,
@@ -235,6 +235,7 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
 
 function EFacturaContent() {
   const { user: authUser, isAdmin, authFetch } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
 
@@ -310,8 +311,6 @@ function EFacturaContent() {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   // MODALS
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showHelpGuideModal, setShowHelpGuideModal] = useState(false);
   const [showFurnizoriExclusiModal, setShowFurnizoriExclusiModal] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState<any>(null);
   const [showRawXml, setShowRawXml] = useState(false);
@@ -325,6 +324,35 @@ function EFacturaContent() {
   const [newExclusAplicaRetroactiv, setNewExclusAplicaRetroactiv] = useState(true);
   const [savingExclus, setSavingExclus] = useState(false);
   const [searchExclus, setSearchExclus] = useState('');
+  const [preiaRapidSearch, setPreiaRapidSearch] = useState('');
+  const [preiaRapidOpen, setPreiaRapidOpen] = useState(false);
+
+  // Furnizori unici din facturi sortați strict în ordine alfabetică (A-Z)
+  const availableSuppliersABC = useMemo(() => {
+    const map = new Map<string, { cif: string; nume: string }>();
+    (facturi || []).forEach((f) => {
+      const cifRaw = (f.cifVanzator || '').trim();
+      const cleanCif = cifRaw.replace(/[^0-9]/g, '');
+      const nume = (f.numeVanzator || '').trim();
+      if (cleanCif && nume) {
+        if (!furnizoriExclusiList.some((fe) => fe.cif === cleanCif)) {
+          map.set(cleanCif, { cif: cifRaw, nume });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.nume.localeCompare(b.nume, 'ro', { sensitivity: 'base' })
+    );
+  }, [facturi, furnizoriExclusiList]);
+
+  // Filtrare live în lista A-Z după textul introdus în căutare
+  const filteredSuppliersABC = useMemo(() => {
+    if (!preiaRapidSearch.trim()) return availableSuppliersABC;
+    const q = preiaRapidSearch.toLowerCase().trim();
+    return availableSuppliersABC.filter(
+      (s) => s.nume.toLowerCase().includes(q) || s.cif.toLowerCase().includes(q)
+    );
+  }, [availableSuppliersABC, preiaRapidSearch]);
 
   // IMPORT ITEM TO STOCK MODAL
   const [importingItem, setImportingItem] = useState<any>(null);
@@ -382,19 +410,6 @@ function EFacturaContent() {
       }
     }
   };
-
-  // CONFIG FORM STATE
-  const [cifFirma, setCifFirma] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [redirectUri, setRedirectUri] = useState('http://localhost:3000/efactura');
-  const [accessToken, setAccessToken] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const [stareCronAuto, setStareCronAuto] = useState(true);
-
-  // OAUTH2 CODE EXCHANGE STATE
-  const [authCodeInput, setAuthCodeInput] = useState('');
-  const [exchangingCode, setExchangingCode] = useState(false);
 
   // DIRECT XML / ZIP UPLOAD STATE
   const [uploadingFiles, setUploadingFiles] = useState(false);
@@ -458,13 +473,6 @@ function EFacturaContent() {
         const cfg = await resConfig.json();
         loadedConfig = cfg;
         setConfig(cfg);
-        setCifFirma(cfg.cifFirma || '');
-        setClientId(cfg.clientId || '');
-        setClientSecret(cfg.clientSecret || '');
-        setRedirectUri(cfg.redirectUri || 'http://localhost:3000/efactura');
-        setAccessToken(cfg.accessToken || '');
-        setRefreshToken(cfg.refreshToken || '');
-        setStareCronAuto(cfg.stareCronAuto ?? true);
       }
 
       const resFact = await fetch(`${API_BASE_URL}/efactura/facturi`);
@@ -737,66 +745,12 @@ function EFacturaContent() {
         });
       } else if (code) {
         if (isAdmin) {
-          setAuthCodeInput(code);
-          setShowConfigModal(true);
-          setUrlDiagnostic({
-            type: 'success',
-            title: 'Cod de Autorizare Capturat',
-            details: `Codul autorizare (${code.substring(0, 15)}...) a fost extras automat din URL și introdus în formular.`,
-            actionHint: 'Finalizați autorizarea prin schimbul codului pe token-uri JWT.',
-          });
+          router.push(`/setari?tab=efactura&code=${encodeURIComponent(code)}`);
+          return;
         }
       }
     }
-  }, [isAdmin]);
-
-  // HANDLER: OPEN AUTHORIZE URL (Pasul 2)
-  const handleOpenAuthorizeUrl = async () => {
-    try {
-      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/authorize-url`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          window.open(data.url, '_blank');
-        }
-      } else {
-        const err = await res.json();
-        alert(`Eroare: ${err.message}`);
-      }
-    } catch (e) {
-      alert('Eroare la generarea URL-ului de autorizare ANAF.');
-    }
-  };
-
-  // HANDLER: EXCHANGE CODE FOR JWT TOKENS (Pasul 3)
-  const handleExchangeCode = async () => {
-    if (!authCodeInput.trim()) {
-      alert('Vă rugăm să introduceți codul de autorizare primit de la ANAF (din parametrul ?code=...)!');
-      return;
-    }
-    try {
-      setExchangingCode(true);
-      const res = await authFetch(`${API_BASE_URL}/efactura/oauth/exchange-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: authCodeInput.trim() }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        alert(data.mesaj || 'Token-uri actualizate cu succes!');
-        setAuthCodeInput('');
-        fetchData();
-      } else {
-        const err = await res.json();
-        alert(`Eroare Schimb Cod: ${err.message}`);
-      }
-    } catch (e) {
-      alert('Eroare la schimbul de cod pe token-uri JWT.');
-    } finally {
-      setExchangingCode(false);
-    }
-  };
+  }, [isAdmin, router]);
 
   // FORCE SYNC HANDLER (MANUAL SYNCHRONIZATION WITH ANAF SPV)
   const handleForceSync = async (customZile?: number) => {
@@ -839,37 +793,6 @@ function EFacturaContent() {
     } catch (e) {
       alert('Eroare la pornirea sincronizării cu ANAF SPV.');
       setSyncing(false);
-    }
-  };
-
-  // UPDATE CONFIG HANDLER
-  const handleSaveConfig = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await authFetch(`${API_BASE_URL}/efactura/config`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cifFirma,
-          clientId,
-          clientSecret,
-          redirectUri,
-          accessToken,
-          refreshToken,
-          stareCronAuto,
-        }),
-      });
-
-      if (res.ok) {
-        alert('Configurația ANAF e-Factura a fost salvată cu succes!');
-        setShowConfigModal(false);
-        fetchData();
-      } else {
-        const err = await res.json();
-        alert(`Eroare: ${err.message}`);
-      }
-    } catch (e) {
-      alert('Eroare la salvarea configurației.');
     }
   };
 
@@ -1472,16 +1395,6 @@ function EFacturaContent() {
             />
           </label>
 
-          {isAdmin && (
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition cursor-pointer"
-            >
-              <Settings className="w-4 h-4 text-sage-500" />
-              <span>Configurare Token OAuth2</span>
-            </button>
-          )}
-
           <button
             onClick={() => { setShowFurnizoriExclusiModal(true); fetchFurnizoriExclusi(); }}
             className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-roseash-100 border border-terracotta-300 text-xs font-bold text-terracotta-700 shadow-xs transition cursor-pointer"
@@ -1538,14 +1451,15 @@ function EFacturaContent() {
               <span className="font-normal">{urlDiagnostic.actionHint}</span>
             </p>
 
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className={`px-4 py-2 rounded-xl font-bold text-xs shadow-xs text-white ${
+            <Link
+              href="/setari?tab=efactura"
+              className={`px-4 py-2 rounded-xl font-bold text-xs shadow-xs text-white flex items-center space-x-1.5 ${
                 urlDiagnostic.type === 'error' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
               }`}
             >
-               Deschide Configurare Token-uri
-            </button>
+              <Settings className="w-3.5 h-3.5" />
+              <span>Deschide Setări Sistem (ANAF OAuth2)</span>
+            </Link>
           </div>
         </div>
       )}
@@ -3181,170 +3095,6 @@ function EFacturaContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: CONFIGURARE OAUTH2 & TOKEN ANAF (DOAR PENTRU ADMINISTRATOR) */}
-      {/* ========================================================================= */}
-      {showConfigModal && isAdmin && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="pleasant-card bg-white border border-morning-200 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col max-h-[92vh] my-auto overflow-hidden animate-fade-in">
-            {/* ANTET FIXAT (STICKY HEADER) */}
-            <div className="flex items-center justify-between border-b border-morning-200 px-6 py-4 bg-white shrink-0">
-              <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
-                <Settings className="w-5 h-5 text-sapphire-500" />
-                <span>Configurare Token OAuth2 ANAF SPV</span>
-              </h3>
-
-              {/* BUTON DE AJUTOR ? LÂNGĂ BUTONUL DE ÎNCHIDERE X */}
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setShowHelpGuideModal(true)}
-                  title="Ghid pas cu pas: Cum te conectezi la ANAF SPV OAuth2"
-                  className="w-8 h-8 rounded-xl bg-sapphire-100 hover:bg-sapphire-200 text-sapphire-700 flex items-center justify-center font-bold text-sm transition shadow-xs border border-sapphire-200"
-                >
-                  <HelpCircle className="w-5 h-5 text-sapphire-600" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowConfigModal(false)}
-                  className="w-8 h-8 rounded-xl bg-morning-100 hover:bg-morning-200 text-sage-600 hover:text-sapphire-900 flex items-center justify-center transition cursor-pointer"
-                  title="Închide fereastra"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveConfig} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-6 overflow-y-auto space-y-3.5 flex-1 text-xs">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">CUI / CIF Firmă (ex: RO12345678): *</label>
-                <input required value={cifFirma} onChange={(e) => setCifFirma(e.target.value)} placeholder="RO12345678" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold font-mono" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Client ID OAuth2 ANAF:</label>
-                  <input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono text-[11px]" />
-                </div>
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Client Secret OAuth2:</label>
-                  <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client Secret" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono text-[11px]" />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Redirect URI (Callback URL înregistrat în SPV):</label>
-                <input value={redirectUri} onChange={(e) => setRedirectUri(e.target.value)} placeholder="http://localhost:3000/efactura" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono text-[11px]" />
-              </div>
-
-              {/* OAUTH2 CODE EXCHANGE WIZARD */}
-              <div className="p-3 bg-sapphire-50 border border-sapphire-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="font-extrabold text-sapphire-900 text-xs flex items-center space-x-1">
-                    <ExternalLink className="w-4 h-4 text-sapphire-600" />
-                    <span>Wizard Generare Token-uri JWT (Pasul 2 & Pasul 3)</span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowHelpGuideModal(true)}
-                    className="text-[11px] font-bold text-sapphire-600 underline hover:text-sapphire-800"
-                  >
-                    Vezi Ghid Detaliat (?)
-                  </button>
-                </div>
-                <p className="text-[11px] text-sage-600">
-                  Cu token-ul fizic USB introdus în calculator, obțineți codul de autorizare și schimbați-l pe Token-uri Access (90 zile) & Refresh (365 zile).
-                </p>
-
-                <div className="flex items-center space-x-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleOpenAuthorizeUrl}
-                    className="flex-1 px-3 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-[11px] shadow-xs transition flex items-center justify-center space-x-1.5"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>1. Deschide URL Autorizare ANAF</span>
-                  </button>
-                </div>
-
-                <div className="pt-2 space-y-1.5 border-t border-sapphire-200">
-                  <label className="text-sage-700 block font-bold text-[11px]">Introduceți Codul de Autorizare (?code=XYZ...):</label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="text"
-                      value={authCodeInput}
-                      onChange={(e) => setAuthCodeInput(e.target.value)}
-                      placeholder="Lipește codul scurt din URL..."
-                      className="flex-1 bg-white border border-sapphire-200 rounded-xl px-2.5 py-1.5 text-sapphire-900 font-mono text-[11px]"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleExchangeCode}
-                      disabled={exchangingCode}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition shadow-xs disabled:opacity-50"
-                    >
-                      {exchangingCode ? 'Se schimbă...' : '2. Schimbă pe Token-uri JWT'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-sage-700 font-bold">Access Token ANAF (90 Zile):</label>
-                  {config?.accessTokenExpiresAt && (
-                    <span className="text-[10px] font-mono font-bold text-emerald-700">
-                      Expiră la: {new Date(config.accessTokenExpiresAt).toLocaleDateString('ro-RO')}
-                    </span>
-                  )}
-                </div>
-                <textarea rows={2} value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="Access Token JWT..." className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono text-[10px]" />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-sage-700 font-bold">Refresh Token ANAF (365 Zile):</label>
-                  {config?.refreshTokenExpiresAt && (
-                    <span className="text-[10px] font-mono font-bold text-purple-700">
-                      Expiră la: {new Date(config.refreshTokenExpiresAt).toLocaleDateString('ro-RO')}
-                    </span>
-                  )}
-                </div>
-                <textarea rows={2} value={refreshToken} onChange={(e) => setRefreshToken(e.target.value)} placeholder="Refresh Token..." className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono text-[10px]" />
-              </div>
-
-              <div className="p-3 bg-morning-100 rounded-xl border border-morning-200 flex items-center justify-between">
-                <label className="flex items-center space-x-2 text-xs font-bold text-sapphire-900 cursor-pointer">
-                  <input type="checkbox" checked={stareCronAuto} onChange={(e) => setStareCronAuto(e.target.checked)} className="w-4 h-4 text-sapphire-500 rounded" />
-                  <span>Sincronizare automată Orară (Cron Job + Auto-refresh 48h în prealabil)</span>
-                </label>
-              </div>
-
-              </div>
-
-              {/* BARA BUTOANE FIXATĂ LA BAZĂ (STICKY FOOTER) */}
-              <div className="flex items-center justify-end space-x-3 px-6 py-3.5 border-t border-morning-200 bg-morning-50/90 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowConfigModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-slate-700 font-bold text-xs transition cursor-pointer"
-                >
-                  Anulează
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition cursor-pointer"
-                >
-                  Salvează Configurația Token
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* MODAL NOU: REGULI EXCLUDERE AUTOMATĂ FURNIZORI (SERVICII, UTILITĂȚI, ETC.) */}
       {/* ========================================================================= */}
       {showFurnizoriExclusiModal && (
@@ -3389,37 +3139,76 @@ function EFacturaContent() {
                     <span>Adaugă Furnizor în Lista de Excludere Permanentă</span>
                   </h4>
 
-                  {/* SELECTARE RAPIDĂ DIN FACTURI EXISTENTE */}
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[11px] text-sage-600 dark:text-slate-400 font-medium">Preia rapid:</span>
-                    <select
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (!val) return;
-                        const [cifVal, ...rest] = val.split('___');
-                        const numeVal = rest.join('___');
-                        setNewExclusCif(cifVal);
-                        setNewExclusNume(numeVal);
-                      }}
-                      className="bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl px-2.5 py-1 text-xs text-sapphire-900 dark:text-white font-bold"
-                    >
-                      <option value="">-- Alege furnizor din facturile existente --</option>
-                      {Array.from(new Set(facturi.map((f) => `${f.cifVanzator}___${f.numeVanzator}`)))
-                        .filter((key) => {
-                          const [c] = key.split('___');
-                          const clean = c.replace(/[^0-9]/g, '');
-                          return !furnizoriExclusiList.some((fe) => fe.cif === clean);
-                        })
-                        .slice(0, 50)
-                        .map((key) => {
-                          const [c, n] = key.split('___');
-                          return (
-                            <option key={key} value={key}>
-                              {n} (CUI: {c})
-                            </option>
-                          );
-                        })}
-                    </select>
+                  {/* SELECTARE RAPIDĂ DIN FACTURI EXISTENTE CU CĂUTARE ȘI ORDINE ALFABETICĂ (A-Z) */}
+                  <div className="relative flex items-center space-x-2">
+                    <span className="text-[11px] text-sage-600 dark:text-slate-400 font-bold shrink-0">Preia rapid:</span>
+                    <div className="relative">
+                      <div className="flex items-center bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl px-2.5 py-1 text-xs shadow-xs">
+                        <Search className="w-3.5 h-3.5 text-sage-400 mr-1.5 shrink-0" />
+                        <input
+                          type="text"
+                          placeholder="Caută firmă din facturi (A-Z)..."
+                          value={preiaRapidSearch}
+                          onChange={(e) => {
+                            setPreiaRapidSearch(e.target.value);
+                            setPreiaRapidOpen(true);
+                          }}
+                          onFocus={() => setPreiaRapidOpen(true)}
+                          className="bg-transparent border-none outline-none text-xs text-sapphire-900 dark:text-white font-bold w-52 sm:w-72"
+                        />
+                        {preiaRapidSearch && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreiaRapidSearch('');
+                              setPreiaRapidOpen(false);
+                            }}
+                            className="text-sage-400 hover:text-sage-600 ml-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {preiaRapidOpen && (
+                        <>
+                          {/* Backdrop for closing dropdown */}
+                          <div className="fixed inset-0 z-40" onClick={() => setPreiaRapidOpen(false)} />
+                          <div className="absolute right-0 top-full mt-1.5 w-80 sm:w-96 max-h-64 overflow-y-auto bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-2xl shadow-2xl z-50 divide-y divide-morning-100 dark:divide-morning-300/30 animate-fade-in">
+                            <div className="p-2.5 text-[10px] font-bold text-sapphire-700 dark:text-sapphire-300 uppercase tracking-wider bg-sapphire-50 dark:bg-sapphire-950/40 flex items-center justify-between sticky top-0 backdrop-blur-md">
+                              <span>{filteredSuppliersABC.length} firme în ordine alfabetică (A-Z)</span>
+                              <span className="text-sage-500 font-normal">Click pentru preluare</span>
+                            </div>
+                            {filteredSuppliersABC.length > 0 ? (
+                              filteredSuppliersABC.map((item) => (
+                                <button
+                                  key={item.cif}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewExclusCif(item.cif);
+                                    setNewExclusNume(item.nume);
+                                    setPreiaRapidSearch('');
+                                    setPreiaRapidOpen(false);
+                                  }}
+                                  className="w-full text-left px-3.5 py-2.5 text-xs hover:bg-sapphire-50 dark:hover:bg-sapphire-950/40 transition flex items-center justify-between group"
+                                >
+                                  <span className="font-bold text-sapphire-900 dark:text-white truncate pr-2 group-hover:text-sapphire-600" title={item.nume}>
+                                    {item.nume}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-sage-600 dark:text-slate-400 bg-morning-100 dark:bg-morning-100/40 px-2 py-0.5 rounded-md font-bold shrink-0">
+                                    {item.cif}
+                                  </span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-4 text-center text-xs text-sage-500 italic">
+                                Nicio firmă găsită conform căutării.
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -3612,112 +3401,6 @@ function EFacturaContent() {
                 className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 transition cursor-pointer"
               >
                 Gata / Închide Fereastra
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 4: GHID PAS CU PAS CONECTARE ANAF SPV (DOAR PENTRU ADMINISTRATOR) */}
-      {/* ========================================================================= */}
-      {showHelpGuideModal && isAdmin && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-9 h-9 rounded-xl bg-sapphire-100 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-sapphire-600" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-sapphire-900">
-                    Ghid Pas cu Pas: Conectare & Autentificare ANAF SPV OAuth2
-                  </h3>
-                  <p className="text-xs text-sage-600 font-medium">
-                    Procedura completă pentru obținerea și configurarea token-urilor JWT e-Factura.
-                  </p>
-                </div>
-              </div>
-
-              <button onClick={() => setShowHelpGuideModal(false)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs text-slate-700 leading-relaxed">
-              {/* PASUL 1 */}
-              <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 rounded-lg bg-sapphire-500 text-white font-extrabold text-xs flex items-center justify-center">1</span>
-                  <h4 className="font-extrabold text-sapphire-900 text-xs">Pregătire Token Fizic USB (Certificat Digital Calificat)</h4>
-                </div>
-                <p className="pl-8 text-sage-700">
-                  Introduceți stick-ul USB cu semnătura electronică calificată (eliberată de CertSign, DigiSign, TransSped etc.) în calculator. Asigurați-vă că driver-ul token-ului este activ.
-                </p>
-              </div>
-
-              {/* PASUL 2 */}
-              <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 rounded-lg bg-sapphire-500 text-white font-extrabold text-xs flex items-center justify-center">2</span>
-                  <h4 className="font-extrabold text-sapphire-900 text-xs">Înregistrare Aplicație pe Portalul ANAF OAuth</h4>
-                </div>
-                <p className="pl-8 text-sage-700">
-                  Accesați portalul oficial ANAF: <a href="https://www.anaf.ro/InregOauth/index.xhtml" target="_blank" rel="noreferrer" className="text-sapphire-600 underline font-bold">https://www.anaf.ro/InregOauth/index.xhtml</a> cu token-ul conectat și înregistrați aplicația FleetCMD.<br />
-                  <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block my-1">
-                     Notă: Pentru utilizatorii cu cont SPV existent (username/parolă), utilizați opțiunea dedicată de autentificare de pe portalul ANAF.
-                  </span><br />
-                  Setați <strong>Redirect URI</strong> la <code>http://localhost:3000/efactura</code> (sau adresa dvs. din browser).<br />
-                  Veți primi un <strong>Client ID</strong> și un <strong>Client Secret</strong> pe care le introduceți în câmpurile din stânga.
-                </p>
-              </div>
-
-              {/* PASUL 3 */}
-              <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 rounded-lg bg-sapphire-500 text-white font-extrabold text-xs flex items-center justify-center">3</span>
-                  <h4 className="font-extrabold text-sapphire-900 text-xs">Autorizare în SPV și Copiere Cod</h4>
-                </div>
-                <p className="pl-8 text-sage-700">
-                  Deschideți <strong>`1. Deschide URL Autorizare ANAF`</strong> pentru confirmarea autentificării pe pagina securizată ANAF cu certificatul digital calificat (token USB).<br />
-                  După autorizare, ANAF va redirecționa către FleetCMD generând codul de autorizare în URL:<br />
-                  <code className="bg-white px-2 py-0.5 border border-morning-300 rounded font-mono text-[10px] text-sapphire-900 block mt-1">
-                    http://localhost:3000/efactura?code=<b>XYZ123456789...</b>
-                  </code>
-                </p>
-              </div>
-
-              {/* PASUL 4 */}
-              <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center">4</span>
-                  <h4 className="font-extrabold text-sapphire-900 text-xs">Generare Token-uri JWT (Access & Refresh)</h4>
-                </div>
-                <p className="pl-8 text-sage-700">
-                  Introduceți codul obținut în caseta <code>Introduceți Codul de Autorizare</code> și confirmați prin <strong>`2. Schimbă pe Token-uri JWT`</strong>.<br />
-                  Sistemul va genera și salva automat un <strong>Access Token (valabil 90 zile)</strong> și un <strong>Refresh Token (valabil 365 zile)</strong>.
-                </p>
-              </div>
-
-              {/* PASUL 5 - AUTOMATIZARE */}
-              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                  <h4 className="font-extrabold text-emerald-900 text-xs">Reînnoire Automată (Fără intervenție manuală ulterioară!)</h4>
-                </div>
-                <p className="pl-7 text-emerald-800 text-[11px]">
-                  Cron Job-ul din FleetCMD va reînnoi automat Access Token-ul cu <strong>48 de ore înainte de expirarea celor 90 de zile</strong> folosind Refresh Token-ul. Nu va mai fi nevoie să conectați stick-ul USB timp de 1 an întreg!
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-morning-200">
-              <button
-                type="button"
-                onClick={() => setShowHelpGuideModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20"
-              >
-                Am înțeles ghidul
               </button>
             </div>
           </div>
