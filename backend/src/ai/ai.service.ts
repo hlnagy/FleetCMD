@@ -1049,7 +1049,7 @@ export class AiService {
     if (/[áéíóöőúüű]/i.test(lower)) {
       return 'hu';
     }
-    const huWordRegex = /\b(szia|hogy|mennyi|melyik|kocsi|autó|auto|jármű|jarmu|akta|akták|aktak|lejárt|lejart|raktár|raktar|szerviz|költség|koltseg|segíts|segits|köszönöm|koszonom|hali|munkalap|okmány|okmany|jelentés|jelentes|állapot|allapot|kérlek|kerlek|vannak|készlet|keszlet|alkatrész|alkatresz|számla|szamla|számlák|szamlak|mennyibe|keress|keresd|érdekel|rdekelnek)\b/i;
+    const huWordRegex = /\b(szia|hogy|mennyi|mennyit|melyik|kocsi|autó|auto|jármű|jarmu|kamion|dömper|domper|kotró|kotro|gép|gep|sofőr|sofor|szerelő|szerelo|flotta|akta|akták|aktak|lejárt|lejart|raktár|raktar|szerviz|költség|koltseg|segíts|segits|köszönöm|koszonom|hali|munkalap|okmány|okmany|jelentés|jelentes|állapot|allapot|kérlek|kerlek|van|vannak|nincs|nincsenek|készlet|keszlet|alkatrész|alkatresz|számla|szamla|számlák|szamlak|mennyibe|keress|keresd|érdekel|erdekel|erdekelnek|ki|kicsoda|hol|hova|hová|merre|mikor|miért|miert|milyen|mit|mivel|kivel|kirol|kiről|tudod|ismered|emlékszel|emlekszel|mondd|mesélj|meselj|lajos|nagy)\b/i;
     return huWordRegex.test(lower) ? 'hu' : 'ro';
   }
 
@@ -1669,6 +1669,35 @@ ${memoryInfo}
   ): { answer: string; mood: RobotMood } {
     const q = message.toLowerCase().trim();
     const isPureGreeting = /^(szia|hello|hali|üdv|buna|salut|servus)[\s!.]*$/i.test(q);
+
+    // 0. Memorie învățată (AiMemory) - Ha a kérdés egy korábban megtanult tényre vonatkozik
+    if (memories && memories.length > 0) {
+      const qClean = q.replace(/[^a-záéíóöőúüű0-9]/gi, ' ').toLowerCase();
+      const stopWords = new Set(['ki', 'kicsoda', 'mi', 'mit', 'hol', 'hogy', 'az', 'ez', 'egy', 'van', 'vannak', 'cine', 'ce', 'este', 'cineva', 'despre', 'care', 'stii', 'tudod', 'tudsz', 'mondd', 'meg']);
+      const qWords = qClean.split(/\s+/).filter(w => w.length >= 2 && !stopWords.has(w));
+
+      if (qWords.length > 0) {
+        const matchedMemory = memories.find((m: any) => {
+          const valClean = (m.valoare || '').toLowerCase();
+          const keyClean = (m.cheie || '').toLowerCase();
+          return qWords.some(w => valClean.includes(w) || keyClean.includes(w));
+        });
+
+        if (matchedMemory) {
+          if (lang === 'hu') {
+            return {
+              answer: `🧠 **Erre emlékszem / ezt tanultam meg róla:**\n\n${matchedMemory.valoare}\n\n*(Típus: ${matchedMemory.tip} | Rögzítve: ${new Date(matchedMemory.createdAt).toLocaleDateString('hu-HU')})*`,
+              mood: 'happy',
+            };
+          } else {
+            return {
+              answer: `🧠 **Iată ce am reținut despre acest subiect:**\n\n${matchedMemory.valoare}\n\n*(Tip: ${matchedMemory.tip} | Înregistrat: ${new Date(matchedMemory.createdAt).toLocaleDateString('ro-RO')})*`,
+              mood: 'happy',
+            };
+          }
+        }
+      }
+    }
 
     // ==========================================
     // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU)
