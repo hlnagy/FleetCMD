@@ -256,6 +256,35 @@ html.dark .text-terracotta-600 {
   color: #F87171 !important;
 }
 
+/* Category Pill & Color High-Contrast Overrides in Dark Mode */
+html.dark .text-rose-950, html.dark .text-rose-900, html.dark .text-rose-800 { color: #FECDD3 !important; }
+html.dark .text-amber-950, html.dark .text-amber-900, html.dark .text-amber-800 { color: #FDE68A !important; }
+html.dark .text-emerald-950, html.dark .text-emerald-900, html.dark .text-emerald-800 { color: #A7F3D0 !important; }
+html.dark .text-teal-950, html.dark .text-teal-900, html.dark .text-teal-800 { color: #99F6E4 !important; }
+html.dark .text-blue-950, html.dark .text-blue-900, html.dark .text-blue-800 { color: #BFDBFE !important; }
+html.dark .text-purple-950, html.dark .text-purple-900, html.dark .text-purple-800 { color: #E9D5FF !important; }
+html.dark .text-indigo-950, html.dark .text-indigo-900, html.dark .text-indigo-800 { color: #C7D2FE !important; }
+html.dark .text-orange-950, html.dark .text-orange-900, html.dark .text-orange-800 { color: #FED7AA !important; }
+html.dark .text-yellow-950, html.dark .text-yellow-900, html.dark .text-yellow-800 { color: #FEF08A !important; }
+html.dark .text-lime-950, html.dark .text-lime-900, html.dark .text-lime-800 { color: #D9F99D !important; }
+html.dark .text-cyan-950, html.dark .text-cyan-900, html.dark .text-cyan-800 { color: #A5F3FC !important; }
+html.dark .text-sky-950, html.dark .text-sky-900, html.dark .text-sky-800 { color: #BAE6FD !important; }
+html.dark .text-violet-950, html.dark .text-violet-900, html.dark .text-violet-800 { color: #DDD6FE !important; }
+html.dark .text-fuchsia-950, html.dark .text-fuchsia-900, html.dark .text-fuchsia-800 { color: #F5D0FE !important; }
+html.dark .text-pink-950, html.dark .text-pink-900, html.dark .text-pink-800 { color: #FBCFE8 !important; }
+
+/* Dark mode pill backgrounds and badges */
+html.dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.22) !important; color: #FECDD3 !important; border-color: rgba(244, 63, 94, 0.4) !important; }
+html.dark .bg-orange-100 { background-color: rgba(249, 115, 22, 0.22) !important; color: #FED7AA !important; border-color: rgba(249, 115, 22, 0.4) !important; }
+html.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.22) !important; color: #FEF08A !important; border-color: rgba(234, 179, 8, 0.4) !important; }
+html.dark .bg-lime-100 { background-color: rgba(132, 204, 22, 0.22) !important; color: #D9F99D !important; border-color: rgba(132, 204, 22, 0.4) !important; }
+html.dark .bg-teal-100 { background-color: rgba(20, 184, 166, 0.22) !important; color: #99F6E4 !important; border-color: rgba(20, 184, 166, 0.4) !important; }
+html.dark .bg-cyan-100 { background-color: rgba(6, 182, 212, 0.22) !important; color: #A5F3FC !important; border-color: rgba(6, 182, 212, 0.4) !important; }
+html.dark .bg-indigo-100 { background-color: rgba(99, 102, 241, 0.22) !important; color: #C7D2FE !important; border-color: rgba(99, 102, 241, 0.4) !important; }
+html.dark .bg-violet-100 { background-color: rgba(139, 92, 246, 0.22) !important; color: #DDD6FE !important; border-color: rgba(139, 92, 246, 0.4) !important; }
+html.dark .bg-fuchsia-100 { background-color: rgba(217, 70, 239, 0.22) !important; color: #F5D0FE !important; border-color: rgba(217, 70, 239, 0.4) !important; }
+html.dark .bg-pink-100 { background-color: rgba(236, 72, 153, 0.22) !important; color: #FBCFE8 !important; border-color: rgba(236, 72, 153, 0.4) !important; }
+
 /* Form Controls: Inputs, Textareas, Selects */
 html.dark input:not([type="checkbox"]):not([type="radio"]),
 html.dark select,

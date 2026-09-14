@@ -68,6 +68,7 @@ export class AiService {
       latestInvoices,
       activeCouplings,
       recentOilItemsRaw,
+      recentOdometerRaw,
     ] = await Promise.all([
       // 1. Járművek
       this.prisma.vehicul.findMany({
@@ -247,6 +248,25 @@ export class AiService {
         },
         orderBy: { factura: { dataFactura: 'desc' } },
         take: 8,
+      }),
+
+      // 14. Legutóbbi contor és tankolási index előzmények
+      this.prisma.istoricContorVehicul.findMany({
+        take: 80,
+        orderBy: { dataInregistrare: 'desc' },
+        include: {
+          vehicul: {
+            select: {
+              id: true,
+              numarIntern: true,
+              numarInmatriculare: true,
+              marca: true,
+              model: true,
+              tipMasurare: true,
+              valoareContorCurent: true,
+            },
+          },
+        },
       }),
     ]);
 
@@ -434,6 +454,22 @@ export class AiService {
           cantitate: it.cantitate,
           um: it.unitateMasura,
         })),
+      recentOdometerRecords: (recentOdometerRaw || []).map((r: any) => {
+        const d = new Date(r.dataInregistrare);
+        const dataStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return {
+          id: r.id,
+          vehiculId: r.vehiculId,
+          vehicul: r.vehicul?.numarInmatriculare || r.vehicul?.numarIntern || '-',
+          numarIntern: r.vehicul?.numarIntern,
+          numarInmatriculare: r.vehicul?.numarInmatriculare,
+          valoareContor: r.valoareContor,
+          tipMasurare: r.vehicul?.tipMasurare || 'KM',
+          data: dataStr,
+          sursa: r.sursa,
+          observatii: r.observatii || '-',
+        };
+      }),
     };
 
     this.cachedSnapshot = result;
@@ -866,7 +902,8 @@ export class AiService {
       lang,
       invoiceData,
       priceCompData,
-      memories
+      memories,
+      history
     );
     return {
       answer: ruleResponse.answer,
@@ -1100,6 +1137,17 @@ export class AiService {
       sarcinamentenanta: 'sarcinaMentenanta',
       efacturafactura: 'eFacturaFactura',
       efacturaitem: 'eFacturaItem',
+      istoriccontorvehicul: 'istoricContorVehicul',
+      istoriccontor: 'istoricContorVehicul',
+      istoricindexkm: 'istoricContorVehicul',
+      istoricindex: 'istoricContorVehicul',
+      alimentarecombustibil: 'istoricContorVehicul',
+      alimentari: 'istoricContorVehicul',
+      alimentare: 'istoricContorVehicul',
+      contorvehicul: 'istoricContorVehicul',
+      indexkm: 'istoricContorVehicul',
+      vehicle: 'vehicul',
+      vehicles: 'vehicul',
       aimemory: 'aiMemory',
       auditlog: 'auditLog',
     };
@@ -1108,12 +1156,15 @@ export class AiService {
     const prismaModelName = allowedModels[modelKey];
     if (!prismaModelName || !(this.prisma as any)[prismaModelName]) {
       return {
-        error: `Model necunoscut sau nepermis: "${params.model}". Modele permise: ${Object.keys(allowedModels).slice(0, 10).join(', ')}...`,
+        error: `Model necunoscut sau nepermis: "${params.model}". Modele permise: ${Object.keys(allowedModels).slice(0, 15).join(', ')}...`,
       };
     }
 
     const prismaDelegate = (this.prisma as any)[prismaModelName];
-    const action = params.action;
+    let action = (params.action || 'findMany') as string;
+    if (action === 'find_many') action = 'findMany';
+    if (action === 'find_first') action = 'findFirst';
+
     const allowedActions = ['findMany', 'findFirst', 'count', 'aggregate', 'groupBy'];
     if (!allowedActions.includes(action)) {
       return {
@@ -1122,11 +1173,16 @@ export class AiService {
     }
 
     try {
-      const safeTake = Math.min(Math.max(params.take || 10, 1), 30);
+      const safeTake = Math.min(Math.max(params.take || 20, 1), 60);
       const queryOptions: any = {};
 
       if (params.where && typeof params.where === 'object') {
-        queryOptions.where = params.where;
+        let cleanWhere = JSON.parse(JSON.stringify(params.where));
+        if (prismaModelName === 'vehicul') {
+          const str = JSON.stringify(cleanWhere).replace(/"nume"/g, '"numarIntern"');
+          cleanWhere = JSON.parse(str);
+        }
+        queryOptions.where = cleanWhere;
       }
       if (params.orderBy && typeof params.orderBy === 'object') {
         queryOptions.orderBy = params.orderBy;
@@ -1142,6 +1198,18 @@ export class AiService {
           queryOptions.select = cleanSelect;
         } else if (params.include && typeof params.include === 'object') {
           queryOptions.include = params.include;
+        } else if (prismaModelName === 'istoricContorVehicul') {
+          queryOptions.include = {
+            vehicul: {
+              select: {
+                numarIntern: true,
+                numarInmatriculare: true,
+                marca: true,
+                model: true,
+                tipMasurare: true,
+              },
+            },
+          };
         }
       } else if (action === 'groupBy') {
         if (!Array.isArray(params.by) || params.by.length === 0) {
@@ -1403,6 +1471,21 @@ MODELE PRISMA PRINCIPALE DISPONIBILE ÎN SISTEM:
 13. EFacturaItem: { id, facturaId, codArticolFurnizor, descrierePiesa, cantitate, unitateMasura, pretUnitar, valoareNeta }
 14. RegulaAlertaMentenanta: { id, denumire, tipInterval, intervalKm, intervalZile }
 15. AiMemory: { id, cheie, valoare, tip, context }
+16. IstoricContorVehicul: { id, vehiculId, valoareContor, dataInregistrare, sursa, operator, observatii, vehicul }
+- CRITIC PENTRU CONTOR ȘI TANKOLÁSOK: Toate indexurile kilometrice (KM/MTH), istoricul de contor și toate alimentările de la pompă (litri, dată, index) sunt salvate în tabela 'IstoricContorVehicul'!
+- Câmpul observatii conține detalii despre alimentare (ex: „Alimentare pompă | 71.87 L | Data: ... (Index: 389,548 km)”).
+- Când utilizatorul întreabă despre „indexei”, „km állások”, „óraállások”, „tankolások”, „alimentări”, „istoric contor”, „km történet”, „mentett indexek”, folosește EXCLUSIV tabela 'IstoricContorVehicul'!
+- Câmpurile din Vehicul sunt: { id, numarIntern, numarInmatriculare, serieSasiu, marca, model, categorieEnum, valoareContorCurent, tipMasurare }. Nu căuta câmpul 'nume' pe Vehicul, ci numarIntern sau numarInmatriculare!
+
+REGULĂ STRICTĂ DE CONTINUITATE ȘI CONTEXT (CRITIC):
+- Dacă utilizatorul a întrebat anterior despre un anumit vehicul (de exemplu: „a ZVU jármű indexei...”), iar următorul mesaj este scurt sau eliptic, precum:
+  * „az összes km állás dátum szerint”
+  * „és a tankolások?”
+  * „mindegyik index”
+  * „mutasd mindet”
+  * „mikor volt az utolsó?”
+  ATUNCI SUBIECTUL RĂMÂNE ACELAȘI VEHICUL (în acest caz CV 06 ZVU)! NICIODATĂ nu trece la alte vehicule (precum CRA sau utilaje) și nu căuta în alt modul (precum comenzi de lucru globale), ci prezintă istoricul cronologic din 'IstoricContorVehicul' PENTRU ACEL VEHICUL!
+- Când prezinți indexurile dintr-un vehicul, afișează o listă clară ordonată cronologic (dată, valoare index contor, cantitate litri dacă a fost alimentare).
 
 CUNOAȘTEREA SISTEMULUI ȘI A CODULUI FLEETCMD:
 1. „/” (Vezérlőpult / Tablou de bord): Indicatori globali flotă, alerte rapide, grafice de activitate.
@@ -1436,6 +1519,7 @@ DATE OPERAȚIONALE RAPIDE DIN BAZA DE DATE:
 - Piese montate recent pe vehicule (cu contor montaj, km rulați de la montaj, dată și mecanic): ${JSON.stringify(snap.pieseMontateRecent || [])}
 - Ultimele operațiuni de ulei și fluide (cu contor km, km rulați, dată și mecanic): ${JSON.stringify(snap.recentFluids || [])}
 - Ultimele achiziții de ulei / lubrifianți din e-Factura: ${JSON.stringify(snap.recentOilPurchases || [])}
+- Ultimele indexuri contor și alimentări flotă (IstoricContorVehicul): ${JSON.stringify((snap.recentOdometerRecords || []).slice(0, 30))}
 ${priceCompInfo}
 ${invoiceInfo}
 ${memoryInfo}
@@ -1474,14 +1558,14 @@ ${memoryInfo}
           {
             name: 'queryFleetDatabase',
             description:
-              'Safe read-only query on FleetCMD database tables (Mecanic, Vehicul, EFacturaFactura, EFacturaItem, ComandaLucru, ElementComandaLucru, ArticolStoc, MiscareStoc, CompletareLichid, Anvelopa, IstoricCuplare, DocumentVehicul, User, RegulaAlertaMentenanta, AiMemory). Supports findMany, findFirst, count, aggregate, groupBy. Use this whenever you need specific details about mechanics, invoices, rankings, tires, fluids, trailers, or stock.',
+              'Safe read-only query on FleetCMD database tables (IstoricContorVehicul, Vehicul, Mecanic, EFacturaFactura, EFacturaItem, ComandaLucru, ElementComandaLucru, ArticolStoc, MiscareStoc, CompletareLichid, Anvelopa, IstoricCuplare, DocumentVehicul, User, RegulaAlertaMentenanta, AiMemory). NOTE: Use IstoricContorVehicul for all vehicle odometer indices, fuelings (alimentări pompă), recorded km/mTH readings, dates, and liters.',
             parameters: {
               type: 'OBJECT',
               properties: {
                 model: {
                   type: 'STRING',
                   description:
-                    'Prisma model name, e.g. Mecanic, Vehicul, EFacturaFactura, EFacturaItem, ComandaLucru, ElementComandaLucru, ArticolStoc, IstoricCuplare, CompletareLichid, Anvelopa, DocumentVehicul, User',
+                    'Prisma model name, e.g. IstoricContorVehicul, Vehicul, Mecanic, EFacturaFactura, EFacturaItem, ComandaLucru, ElementComandaLucru, ArticolStoc, IstoricCuplare, CompletareLichid, Anvelopa, DocumentVehicul, User',
                 },
                 action: {
                   type: 'STRING',
@@ -1557,22 +1641,11 @@ ${memoryInfo}
       },
     ];
 
-    const payload = {
-      system_instruction: {
-        parts: [{ text: systemPrompt }],
-      },
-      contents: cleanContents,
-      tools,
-      generationConfig: {
-        maxOutputTokens: 450,
-        temperature: 0.2,
-      },
-    };
-
     const modelsToTry = [
       'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
       'gemini-flash-lite-latest',
-      'gemini-3.1-flash-lite',
       'gemini-flash-latest',
     ];
 
@@ -1580,28 +1653,46 @@ ${memoryInfo}
     for (const modelName of modelsToTry) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-        const res = await axios.post(url, payload, { timeout: 12000 });
-        const candidate = res.data?.candidates?.[0]?.content;
+        let currentContents = [...cleanContents];
+        let loopCount = 0;
+        const maxLoops = 4;
 
-        // Ellenőrizzük, hogy a modell Function Call-t kért-e
-        const fnCallPart = candidate?.parts?.find((p: any) => p.functionCall);
-        if (fnCallPart && fnCallPart.functionCall) {
-          const fnCall = fnCallPart.functionCall;
-          let toolResult: any = null;
+        while (loopCount < maxLoops) {
+          loopCount++;
+          const loopPayload = {
+            system_instruction: {
+              parts: [{ text: systemPrompt }],
+            },
+            contents: currentContents,
+            tools,
+            generationConfig: {
+              maxOutputTokens: 800,
+              temperature: 0.2,
+            },
+          };
 
-          if (fnCall.name === 'queryFleetDatabase') {
-            toolResult = await this.executeSafeFleetQuery(fnCall.args || {});
-          } else if (fnCall.name === 'saveMemory') {
-            toolResult = await this.saveLearnedMemory(fnCall.args || {});
-          } else {
-            toolResult = { error: `Funcție necunoscută: ${fnCall.name}` };
-          }
+          const res = await axios.post(url, loopPayload, { timeout: 25000 });
+          const candidate = res.data?.candidates?.[0]?.content;
+          if (!candidate) break;
 
-          // 2. kör: visszaküldjük a lekért adatokat a modellnek
-          const turn2Contents = [
-            ...cleanContents,
-            candidate,
-            {
+          currentContents.push(candidate);
+
+          // Ellenőrizzük, hogy a modell Function Call-t kért-e
+          const fnCallPart = candidate?.parts?.find((p: any) => p.functionCall);
+          if (fnCallPart && fnCallPart.functionCall) {
+            const fnCall = fnCallPart.functionCall;
+            let toolResult: any = null;
+
+            if (fnCall.name === 'queryFleetDatabase') {
+              toolResult = await this.executeSafeFleetQuery(fnCall.args || {});
+            } else if (fnCall.name === 'saveMemory') {
+              toolResult = await this.saveLearnedMemory(fnCall.args || {});
+            } else {
+              toolResult = { error: `Funcție necunoscută: ${fnCall.name}` };
+            }
+
+            // Visszaküldjük a lekért adatokat a modellnek a következő lépéshez
+            currentContents.push({
               role: 'user',
               parts: [
                 {
@@ -1614,37 +1705,19 @@ ${memoryInfo}
                   },
                 },
               ],
-            },
-          ];
-
-          const turn2Payload = {
-            system_instruction: {
-              parts: [{ text: systemPrompt }],
-            },
-            contents: turn2Contents,
-            tools,
-            generationConfig: {
-              maxOutputTokens: 450,
-              temperature: 0.2,
-            },
-          };
-
-          const turn2Res = await axios.post(url, turn2Payload, { timeout: 25000 });
-          const finalText = turn2Res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (finalText && finalText.trim()) {
-            return {
-              answer: finalText,
-              mood: this.determineMood(finalText, 'analyzing'),
-            };
+            });
+            // Folytatjuk a ciklust a kapott adatok kiértékeléséhez
+          } else {
+            // Nincs több function call: megkaptuk a végső szöveges választ
+            const text = candidate?.parts?.find((p: any) => p.text)?.text || candidate?.parts?.[0]?.text;
+            if (text && text.trim()) {
+              return {
+                answer: text,
+                mood: this.determineMood(text, 'happy'),
+              };
+            }
+            break;
           }
-        }
-
-        const text = candidate?.parts?.[0]?.text;
-        if (text && text.trim()) {
-          return {
-            answer: text,
-            mood: this.determineMood(text, 'happy'),
-          };
         }
       } catch (err: any) {
         lastError = err;
@@ -1665,7 +1738,8 @@ ${memoryInfo}
     lang: 'ro' | 'hu',
     invoiceData?: any,
     priceCompData?: PriceComparisonResult | null,
-    memories?: any[]
+    memories?: any[],
+    history: ChatMessage[] = []
   ): { answer: string; mood: RobotMood } {
     const q = message.toLowerCase().trim();
     const isPureGreeting = /^(szia|hello|hali|üdv|buna|salut|servus)[\s!.]*$/i.test(q);
@@ -1699,6 +1773,67 @@ ${memoryInfo}
       }
     }
 
+    // Jármű keresése az üzenetből vagy a korábbi előzményekből (kontextus folytonosság)
+    const resolveVehicle = (text: string, hist: ChatMessage[] = []) => {
+      const matchInString = (s: string) => {
+        if (!s) return null;
+        const cleanS = s.toLowerCase();
+        // 1. vehiculeSample keresés
+        for (const v of snap.vehiculeSample || []) {
+          const intern = (v.intern || '').toLowerCase().trim();
+          const inmClean = (v.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (intern && cleanS.includes(intern)) return v;
+          if (inmClean && cleanS.replace(/[^a-z0-9]/g, '').includes(inmClean)) return v;
+        }
+        // 2. recentOdometerRecords keresés
+        for (const o of snap.recentOdometerRecords || []) {
+          const intern = (o.numarIntern || '').toLowerCase().trim();
+          const inmClean = (o.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (intern && cleanS.includes(intern)) {
+            return {
+              intern: o.numarIntern,
+              inm: o.numarInmatriculare,
+              marca: o.vehicul,
+              model: '',
+              km: o.valoareContor,
+              cat: 'VEHICUL',
+              id: o.vehiculId,
+              tipMasurare: o.tipMasurare,
+            };
+          }
+          if (inmClean && cleanS.replace(/[^a-z0-9]/g, '').includes(inmClean)) {
+            return {
+              intern: o.numarIntern,
+              inm: o.numarInmatriculare,
+              marca: o.vehicul,
+              model: '',
+              km: o.valoareContor,
+              cat: 'VEHICUL',
+              id: o.vehiculId,
+              tipMasurare: o.tipMasurare,
+            };
+          }
+        }
+        return null;
+      };
+
+      // Közvetlen üzenetben
+      let found = matchInString(text);
+      if (found) return found;
+
+      // Előzményekben visszafelé keresés (ha pl. az előző körben volt szó ZVU-ról)
+      if (hist && hist.length > 0) {
+        for (let i = hist.length - 1; i >= 0; i--) {
+          const prevMsg = hist[i];
+          const histText = prevMsg.content || (prevMsg as any).text || '';
+          found = matchInString(histText);
+          if (found) return found;
+        }
+      }
+
+      return null;
+    };
+
     // ==========================================
     // 1. RĂSPUNSURI ÎN LIMBA MAGHIARĂ (HU)
     // ==========================================
@@ -1709,6 +1844,54 @@ ${memoryInfo}
 Flotta státusz: **${snap.totalVehicule} jármű**, **${snap.docExpirateCount} lejárt okmány**, **${snap.comenziDeschiseCount} munkalap** és **${snap.totalFacturiCount} rögzített számla**. Miben segíthetek?`,
           mood: 'happy',
         };
+      }
+
+      // 1.00 Jármű kilométer / üzemóra indexek & tankolási előzmények (IstoricContorVehicul)
+      const isOdometerQuery =
+        /index|indexek|indexei|indexe|contor|km\b|km.*állás|km.*allas|óraállás|oraallas|óra.*állás|ora.*allas|kilométer|kilometer|üzemóra|uzemora|tankolás|tankolas|tankolások|tankolasok/i.test(q);
+
+      if (isOdometerQuery) {
+        const targetVeh = resolveVehicle(q, history);
+        if (targetVeh) {
+          const vIntern = (targetVeh.intern || '').toLowerCase();
+          const vInm = (targetVeh.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const matchedRecords = (snap.recentOdometerRecords || []).filter((r: any) => {
+            const rIntern = (r.numarIntern || '').toLowerCase();
+            const rInm = (r.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const rVeh = (r.vehicul || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return (
+              (vIntern && rIntern === vIntern) ||
+              (vInm && (rInm.includes(vInm) || rVeh.includes(vInm))) ||
+              (targetVeh.id && r.vehiculId === targetVeh.id)
+            );
+          });
+
+          if (matchedRecords.length > 0) {
+            let resp = `🛣️ **${targetVeh.inm || targetVeh.intern} rögzített indexei és óraállásai (${matchedRecords.length} db rekord):**\n\n`;
+            matchedRecords.slice(0, 38).forEach((r: any, idx: number) => {
+              const sursaLabel = r.sursa ? `[${r.sursa}]` : '';
+              const obs = r.observatii && r.observatii !== '-' ? ` – *${r.observatii}*` : '';
+              resp += `${idx + 1}. 📅 **${r.data}**: **${Number(r.valoareContor).toLocaleString('ro-RO')} ${r.tipMasurare}** ${sursaLabel}${obs}\n`;
+            });
+            if (matchedRecords.length > 38) {
+              resp += `\n*(További ${matchedRecords.length - 38} régebbi rekord a jármű adatlapján)*\n`;
+            }
+            resp += `\nAktuális műszerfal állás: **${Number(targetVeh.km || matchedRecords[0].valoareContor).toLocaleString('ro-RO')} ${targetVeh.tipMasurare || 'KM'}**`;
+            return { answer: resp, mood: 'analyzing' };
+          } else {
+            return {
+              answer: `🚗 A(z) **${targetVeh.inm || targetVeh.intern}** jármű jelenlegi óraállása: **${Number(targetVeh.km || 0).toLocaleString('ro-RO')} ${targetVeh.tipMasurare || 'KM'}**, de részletes korábbi index-történet nem található az adatbázisban.`,
+              mood: 'thinking',
+            };
+          }
+        } else if ((snap.recentOdometerRecords || []).length > 0) {
+          let resp = `🛣️ **Legutóbb rögzített jármű indexek a rendszerben:**\n\n`;
+          (snap.recentOdometerRecords || []).slice(0, 10).forEach((r: any, idx: number) => {
+            resp += `${idx + 1}. **${r.vehicul}**: **${Number(r.valoareContor).toLocaleString('ro-RO')} ${r.tipMasurare}** (${r.data})${r.observatii && r.observatii !== '-' ? ` – ${r.observatii}` : ''}\n`;
+          });
+          resp += `\nAdj meg egy konkrét járművet (pl. *„a ZVU indexei”* vagy *„CV 06 ZVU km állásai”*)!`;
+          return { answer: resp, mood: 'happy' };
+        }
       }
 
       // 1.0 Jármű és Tengely Gumiabroncs keresés (pl. CRA 1. tengely gumi, mennyi km-t ment ez a gumi)
@@ -2139,6 +2322,54 @@ Az **„e-Factura” (/efactura)** menüpontban az ANAF felhőből gombnyomásra
 În sistem: **${snap.totalVehicule} vehicule**, **${snap.docExpirateCount} acte expirate**, **${snap.comenziDeschiseCount} comenzi deschise** și **${snap.totalFacturiCount} facturi**. Cu ce te pot ajuta?`,
         mood: 'happy',
       };
+    }
+
+    // 2.00 Istoric index contor și alimentări (IstoricContorVehicul)
+    const isRoOdometerQuery =
+      /index|indexuri|istoric.*contor|contor|km\b|kilometraj|ore.*functionare|alimentare|alimentari|plinuri|combustibil/i.test(q);
+
+    if (isRoOdometerQuery) {
+      const targetVeh = resolveVehicle(q, history);
+      if (targetVeh) {
+        const vIntern = (targetVeh.intern || '').toLowerCase();
+        const vInm = (targetVeh.inm || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const matchedRecords = (snap.recentOdometerRecords || []).filter((r: any) => {
+          const rIntern = (r.numarIntern || '').toLowerCase();
+          const rInm = (r.numarInmatriculare || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const rVeh = (r.vehicul || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          return (
+            (vIntern && rIntern === vIntern) ||
+            (vInm && (rInm.includes(vInm) || rVeh.includes(vInm))) ||
+            (targetVeh.id && r.vehiculId === targetVeh.id)
+          );
+        });
+
+        if (matchedRecords.length > 0) {
+          let resp = `🛣️ **Istoric index contor pentru ${targetVeh.inm || targetVeh.intern} (${matchedRecords.length} înregistrări):**\n\n`;
+          matchedRecords.slice(0, 38).forEach((r: any, idx: number) => {
+            const sursaLabel = r.sursa ? `[${r.sursa}]` : '';
+            const obs = r.observatii && r.observatii !== '-' ? ` – *${r.observatii}*` : '';
+            resp += `${idx + 1}. 📅 **${r.data}**: **${Number(r.valoareContor).toLocaleString('ro-RO')} ${r.tipMasurare}** ${sursaLabel}${obs}\n`;
+          });
+          if (matchedRecords.length > 38) {
+            resp += `\n*(Încă ${matchedRecords.length - 38} înregistrări mai vechi în fișa vehiculului)*\n`;
+          }
+          resp += `\nIndex contor curent: **${Number(targetVeh.km || matchedRecords[0].valoareContor).toLocaleString('ro-RO')} ${targetVeh.tipMasurare || 'KM'}**`;
+          return { answer: resp, mood: 'analyzing' };
+        } else {
+          return {
+            answer: `🚗 Vehiculul **${targetVeh.inm || targetVeh.intern}** are înregistrat contorul curent la **${Number(targetVeh.km || 0).toLocaleString('ro-RO')} ${targetVeh.tipMasurare || 'KM'}**, dar nu are alte indexuri istorice înregistrate.`,
+            mood: 'thinking',
+          };
+        }
+      } else if ((snap.recentOdometerRecords || []).length > 0) {
+        let resp = `🛣️ **Ultimele indexuri de contor înregistrate în sistem:**\n\n`;
+        (snap.recentOdometerRecords || []).slice(0, 10).forEach((r: any, idx: number) => {
+          resp += `${idx + 1}. **${r.vehicul}**: **${Number(r.valoareContor).toLocaleString('ro-RO')} ${r.tipMasurare}** (${r.data})${r.observatii && r.observatii !== '-' ? ` – ${r.observatii}` : ''}\n`;
+        });
+        resp += `\nSpecifică un vehicul anume (ex: *„indexuri pentru ZVU”*)!`;
+        return { answer: resp, mood: 'happy' };
+      }
     }
 
     // 2.0 Căutare anvelopă după vehicul și axă
