@@ -3,14 +3,15 @@
 import { API_BASE_URL } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
   Clock, Truck, RotateCcw, AlertTriangle, Calendar, Layers, ShieldCheck, Edit,
-  Users, Building2, PackageCheck, Search, X, ChevronRight, UserCheck, Wrench,
+  Users, Building2, PackageCheck, Search, X, ChevronRight, ChevronLeft, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
-  Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2
+  Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2,
+  Sliders, LayoutList, LayoutGrid
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -199,6 +200,52 @@ function SetariContent() {
   const [auditSearch, setAuditSearch] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
+  const [auditViewMode, setAuditViewMode] = useState<'table' | 'cards'>('table');
+  const [auditScrollPercent, setAuditScrollPercent] = useState(0);
+  const [auditCanScroll, setAuditCanScroll] = useState(false);
+  const auditTableContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleAuditTableScroll = () => {
+    if (auditTableContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = auditTableContainerRef.current;
+      const maxScroll = scrollWidth - clientWidth;
+      if (maxScroll > 5) {
+        setAuditCanScroll(true);
+        setAuditScrollPercent(Math.min(100, Math.max(0, (scrollLeft / maxScroll) * 100)));
+      } else {
+        setAuditCanScroll(false);
+      }
+    }
+  };
+
+  const handleAuditSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setAuditScrollPercent(val);
+    if (auditTableContainerRef.current) {
+      const { scrollWidth, clientWidth } = auditTableContainerRef.current;
+      const maxScroll = scrollWidth - clientWidth;
+      auditTableContainerRef.current.scrollLeft = (val / 100) * maxScroll;
+    }
+  };
+
+  const scrollAuditBy = (delta: number) => {
+    if (auditTableContainerRef.current) {
+      auditTableContainerRef.current.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      const timer = setTimeout(() => {
+        handleAuditTableScroll();
+      }, 150);
+      window.addEventListener('resize', handleAuditTableScroll);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('resize', handleAuditTableScroll);
+      };
+    }
+  }, [activeTab, auditLogs, auditViewMode]);
 
 
   // FETCH ALL SYSTEM SETTINGS & ENTITIES
@@ -2323,12 +2370,38 @@ function SetariContent() {
             </div>
 
             <div className="flex items-center space-x-2">
+              {/* Nézetváltó Gombok: Táblázat vs Kártyák */}
+              <div className="flex items-center bg-morning-100 p-1 rounded-xl border border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setAuditViewMode('table')}
+                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    auditViewMode === 'table' ? 'bg-white text-sapphire-900 shadow-xs' : 'text-sage-600 hover:text-sapphire-900'
+                  }`}
+                  title="Tabel clasic cu oldalcsúszka (vízszintes görgetősáv)"
+                >
+                  <LayoutList className="w-3.5 h-3.5 text-sapphire-600" />
+                  <span>Tabel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuditViewMode('cards')}
+                  className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                    auditViewMode === 'cards' ? 'bg-white text-sapphire-900 shadow-xs' : 'text-sage-600 hover:text-sapphire-900'
+                  }`}
+                  title="Carduri compacte optimizate pentru ecran mic și mobil"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-periwinkle-600" />
+                  <span>Carduri / Mobil</span>
+                </button>
+              </div>
+
               <button
                 onClick={fetchAuditLogs}
                 className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold border border-morning-200 transition"
               >
                 <RotateCcw className={`w-4 h-4 text-sapphire-600 ${auditLoading ? 'animate-spin' : ''}`} />
-                <span>Reîmprospătează Jurnal</span>
+                <span>Reîmprospătează</span>
               </button>
             </div>
           </div>
@@ -2348,7 +2421,7 @@ function SetariContent() {
                 />
               </div>
 
-              <div className="flex items-center space-x-2 overflow-x-auto text-xs font-bold">
+              <div className="flex items-center space-x-2 overflow-x-auto text-xs font-bold pb-1">
                 {['TOATE', 'VEHICULE', 'MENTENANTA', 'ALERTE_FLUIDE', 'ANVELOPE', 'STOCURI', 'UTILIZATORI', 'AUTENTIFICARE'].map((m) => (
                   <button
                     key={m}
@@ -2369,97 +2442,288 @@ function SetariContent() {
             </div>
           </div>
 
-          {/* Tabel Jurnal Audit */}
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
-            <table className="w-full text-left border-collapse text-xs min-w-[900px]">
-              <thead>
-                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
-                  <th className="p-3">Dată & Oră</th>
-                  <th className="p-3">Utilizator / Autor</th>
-                  <th className="p-3">Rol</th>
-                  <th className="p-3">Acțiune</th>
-                  <th className="p-3">Modul</th>
-                  <th className="p-3">Detalii Modificare</th>
-                  <th className="p-3 text-right">Inspecție</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
-                {auditLogs.length > 0 ? (
-                  auditLogs.map((log) => {
-                    const isCreate = log.actiune.includes('CREARE') || log.actiune.includes('POST');
-                    const isDelete = log.actiune.includes('STERGERE') || log.actiune.includes('DELETE');
-                    const isUpdate = log.actiune.includes('MODIFICARE') || log.actiune.includes('PATCH') || log.actiune.includes('PUT');
-                    const isLogin = log.actiune.includes('LOGIN');
+          {/* ========================================================= */}
+          {/* NÉZET 1: TÁBLÁZAT OLDALCSÚSZKÁVAL (TABLE WITH SLIDER) */}
+          {/* ========================================================= */}
+          {auditViewMode === 'table' ? (
+            <div className="space-y-2">
+              {/* VÍZSZINTES OLDALCSÚSZKA VEZÉRLŐSÁV */}
+              <div className="p-3 bg-gradient-to-r from-sapphire-50 via-white to-sapphire-50 rounded-2xl border border-sapphire-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 text-xs text-sapphire-900 font-extrabold shrink-0">
+                  <Sliders className="w-4 h-4 text-sapphire-600 shrink-0" />
+                  <span>Oldalcsúszka (Vízszintes görgetés):</span>
+                  <span className="text-[11px] font-medium text-sage-600 hidden md:inline">
+                    Húzza a csúszkát vagy kattintson a nyilakra az összes oszlop eléréséhez
+                  </span>
+                </div>
 
-                    return (
-                      <tr key={log.id} className="hover:bg-morning-50 transition">
-                        <td className="p-3 font-mono text-[11px] text-sage-600 whitespace-nowrap font-bold">
-                          {new Date(log.createdAt).toLocaleString('ro-RO')}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-7 h-7 rounded-lg bg-sapphire-100 text-sapphire-800 font-black text-xs flex items-center justify-center">
-                              {log.userNume ? log.userNume.charAt(0) : 'U'}
-                            </div>
-                            <div>
-                              <p className="font-extrabold text-sapphire-900 leading-tight">{log.userNume || 'Sistem'}</p>
-                              <p className="text-[10px] text-sage-500 font-mono">{log.userEmail || '-'}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                              log.userRol === 'ADMIN'
-                                ? 'bg-sapphire-100 text-sapphire-800'
-                                : log.userRol === 'OPERATOR'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {log.userRol || 'OPERATOR'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase whitespace-nowrap ${
-                              isCreate
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : isDelete
-                                ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
-                                : isLogin
-                                ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                                : 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
-                            }`}
-                          >
-                            {log.actiune}
-                          </span>
-                        </td>
-                        <td className="p-3 font-extrabold text-slate-800 text-[11px]">{log.modul}</td>
-                        <td className="p-3 text-[11px] text-slate-700 max-w-xs truncate" title={log.detalii || ''}>
-                          {log.detalii || '-'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => setSelectedAuditLog(log)}
-                            className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-600 text-slate-700 font-extrabold text-[11px] transition"
-                          >
-                            Detalii
-                          </button>
+                <div className="flex items-center space-x-2 w-full sm:w-auto flex-1 max-w-lg justify-end">
+                  <button
+                    type="button"
+                    onClick={() => scrollAuditBy(-250)}
+                    className="p-2 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900 transition shrink-0 shadow-xs active:scale-95"
+                    title="Görgetés balra"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <div className="relative flex-1 flex items-center px-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={auditScrollPercent}
+                      onChange={handleAuditSliderChange}
+                      className="w-full h-2.5 bg-morning-200 rounded-lg appearance-none cursor-pointer accent-sapphire-600 transition"
+                      aria-label="Oldalcsúszka táblázat görgetéséhez"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollAuditBy(250)}
+                    className="p-2 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900 transition shrink-0 shadow-xs active:scale-95"
+                    title="Görgetés jobbra"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (auditTableContainerRef.current) {
+                        const target = auditScrollPercent > 50 ? 0 : auditTableContainerRef.current.scrollWidth;
+                        auditTableContainerRef.current.scrollTo({ left: target, behavior: 'smooth' });
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-sapphire-100 hover:bg-sapphire-200 text-sapphire-900 font-extrabold text-[11px] shrink-0 transition"
+                  >
+                    {auditScrollPercent > 50 ? '⏮ Bal szél' : 'Jobb szél ⏭'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabel Jurnal Audit */}
+              <div
+                ref={auditTableContainerRef}
+                onScroll={handleAuditTableScroll}
+                className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs"
+                style={{
+                  scrollbarWidth: 'auto',
+                  scrollbarColor: '#2563eb #f1f5f9',
+                  WebkitOverflowScrolling: 'touch',
+                }}
+              >
+                <table className="w-full text-left border-collapse text-xs min-w-[950px]">
+                  <thead>
+                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                      <th className="p-3 whitespace-nowrap">Dată & Oră</th>
+                      <th className="p-3 whitespace-nowrap">Utilizator / Autor</th>
+                      <th className="p-3 whitespace-nowrap">Rol</th>
+                      <th className="p-3 whitespace-nowrap">Acțiune</th>
+                      <th className="p-3 whitespace-nowrap">Modul</th>
+                      <th className="p-3 min-w-[320px]">Detalii Modificare</th>
+                      <th className="p-3 text-right whitespace-nowrap">Inspecție</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                    {auditLogs.length > 0 ? (
+                      auditLogs.map((log) => {
+                        const isCreate = log.actiune.includes('CREARE') || log.actiune.includes('POST');
+                        const isDelete = log.actiune.includes('STERGERE') || log.actiune.includes('DELETE');
+                        const isUpdate = log.actiune.includes('MODIFICARE') || log.actiune.includes('PATCH') || log.actiune.includes('PUT');
+                        const isLogin = log.actiune.includes('LOGIN');
+
+                        return (
+                          <tr key={log.id} className="hover:bg-morning-50 transition">
+                            <td className="p-3 font-mono text-[11px] text-sage-600 whitespace-nowrap font-bold">
+                              {new Date(log.createdAt).toLocaleString('ro-RO')}
+                            </td>
+                            <td className="p-3 whitespace-nowrap">
+                              <div className="flex items-center space-x-2">
+                                <div className="w-7 h-7 rounded-lg bg-sapphire-100 text-sapphire-800 font-black text-xs flex items-center justify-center shrink-0">
+                                  {log.userNume ? log.userNume.charAt(0) : 'U'}
+                                </div>
+                                <div>
+                                  <p className="font-extrabold text-sapphire-900 leading-tight">{log.userNume || 'Sistem'}</p>
+                                  <p className="text-[10px] text-sage-500 font-mono">{log.userEmail || '-'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-3 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                  log.userRol === 'ADMIN'
+                                    ? 'bg-sapphire-100 text-sapphire-800'
+                                    : log.userRol === 'OPERATOR'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {log.userRol || 'OPERATOR'}
+                              </span>
+                            </td>
+                            <td className="p-3 whitespace-nowrap">
+                              <span
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase whitespace-nowrap ${
+                                  isCreate
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : isDelete
+                                    ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
+                                    : isLogin
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                    : 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                                }`}
+                              >
+                                {log.actiune}
+                              </span>
+                            </td>
+                            <td className="p-3 font-extrabold text-slate-800 text-[11px] whitespace-nowrap">{log.modul}</td>
+                            <td className="p-3 text-[11px] text-slate-700 break-words leading-relaxed max-w-md" title={log.detalii || ''}>
+                              {log.detalii || '-'}
+                            </td>
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => setSelectedAuditLog(log)}
+                                className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-600 text-slate-700 font-extrabold text-[11px] transition shadow-xs"
+                              >
+                                Detalii
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-xs text-sage-500 italic">
+                          Nicio înregistrare de audit găsită conform filtrelor selectate.
                         </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-xs text-sage-500 italic">
-                      Nicio înregistrare de audit găsită conform filtrelor selectate.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ALSÓ OLDALCSÚSZKA (Hosszú lista esetén kéznél van lent is) */}
+              {auditLogs.length > 5 && (
+                <div className="p-2.5 bg-morning-50 rounded-xl border border-morning-200 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-[11px] font-bold text-sage-600 flex items-center space-x-1">
+                    <Sliders className="w-3.5 h-3.5 text-sapphire-600" />
+                    <span>Alsó oldalcsúszka:</span>
+                  </span>
+                  <div className="flex items-center space-x-2 flex-1 max-w-sm">
+                    <button
+                      type="button"
+                      onClick={() => scrollAuditBy(-200)}
+                      className="p-1 rounded bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={auditScrollPercent}
+                      onChange={handleAuditSliderChange}
+                      className="w-full h-2 bg-morning-200 rounded-lg appearance-none cursor-pointer accent-sapphire-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => scrollAuditBy(200)}
+                      className="p-1 rounded bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ========================================================= */
+            /* NÉZET 2: KÁRTYA / MOBILBARÁT NÉZET (RESPONSIVE CARDS) */
+            /* ========================================================= */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {auditLogs.length > 0 ? (
+                auditLogs.map((log) => {
+                  const isCreate = log.actiune.includes('CREARE') || log.actiune.includes('POST');
+                  const isDelete = log.actiune.includes('STERGERE') || log.actiune.includes('DELETE');
+                  const isLogin = log.actiune.includes('LOGIN');
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="bg-white p-4 rounded-2xl border border-morning-200 hover:border-sapphire-300 hover:shadow-md transition space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-morning-100 pb-2.5">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-sapphire-100 text-sapphire-800 font-black text-xs flex items-center justify-center shrink-0">
+                            {log.userNume ? log.userNume.charAt(0) : 'U'}
+                          </div>
+                          <div>
+                            <p className="font-extrabold text-sapphire-900 text-xs leading-tight">{log.userNume || 'Sistem'}</p>
+                            <p className="text-[10px] text-sage-500 font-mono">{log.userEmail || '-'}</p>
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                            log.userRol === 'ADMIN'
+                              ? 'bg-sapphire-100 text-sapphire-800'
+                              : log.userRol === 'OPERATOR'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {log.userRol || 'OPERATOR'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase ${
+                            isCreate
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : isDelete
+                              ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
+                              : isLogin
+                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                              : 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                          }`}
+                        >
+                          {log.actiune}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-morning-100 text-slate-800 text-[11px] font-bold">
+                          Modul: {log.modul}
+                        </span>
+                        <span className="text-[11px] text-sage-500 font-mono ml-auto font-bold">
+                          {new Date(log.createdAt).toLocaleString('ro-RO')}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-morning-50 border border-morning-200/70 text-slate-700 text-xs font-mono leading-relaxed break-words">
+                        {log.detalii || 'Fără detalii suplimentare'}
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() => setSelectedAuditLog(log)}
+                          className="px-3.5 py-1.5 rounded-xl bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-800 font-extrabold text-xs transition flex items-center space-x-1 shadow-xs"
+                        >
+                          <span>Detalii Complete</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-full p-8 text-center text-xs text-sage-500 italic bg-white rounded-2xl border border-morning-200">
+                  Nicio înregistrare de audit găsită conform filtrelor selectate.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
 
