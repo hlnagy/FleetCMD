@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
+import { getCategoryColor } from '@/lib/categoryColors';
 
 function SetariContent() {
   const searchParams = useSearchParams();
@@ -1823,19 +1824,21 @@ function SetariContent() {
             {categoriiVehicul.map((c) => {
               const count = vehicule.filter(v => (v.categorieEnum || '').toUpperCase() === c.nume.toUpperCase()).length;
               const isSelected = selectedCatFilter.toUpperCase() === c.nume.toUpperCase();
+              const catColor = getCategoryColor(c.nume);
               return (
                 <button
                   key={c.id || c.nume}
                   onClick={() => setSelectedCatFilter(isSelected ? 'TOATE' : c.nume)}
-                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap flex items-center space-x-1.5 ${
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap flex items-center space-x-2 border shadow-2xs ${
                     isSelected
-                      ? 'bg-sapphire-500 text-white shadow-sm'
-                      : 'bg-white text-slate-700 border border-morning-200 hover:bg-morning-100 hover:text-sapphire-900'
+                      ? catColor.chipActive
+                      : catColor.chipInactive
                   }`}
                 >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-white' : catColor.dot}`} />
                   <span>{c.nume}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-700'
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                    isSelected ? catColor.countActive : catColor.countInactive
                   }`}>
                     {count}
                   </span>
@@ -1960,8 +1963,8 @@ function SetariContent() {
 
                       {/* CATEGORIE & MODEL */}
                       <td className="p-3.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sapphire-100 text-sapphire-900 border border-sapphire-200 inline-block">
-                          {v.categorieEnum || 'Nealocat'}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border inline-block ${getCategoryColor(v.categorieEnum).badge}`}>
+                          {v.categorieEnum || 'NEALOCAT'}
                         </span>
                         <div className="text-xs font-bold text-slate-800 mt-1">
                           {v.marca} {v.model} <span className="text-sage-500 font-normal">({v.anFabricatie || '-'})</span>
@@ -4285,12 +4288,14 @@ function SetariContent() {
                 ) : (
                   categoriiVehicul.map((c) => {
                     const count = vehicule.filter(v => (v.categorieEnum || '').toUpperCase() === c.nume.toUpperCase()).length;
+                    const catColor = getCategoryColor(c.nume);
                     return (
                       <div key={c.id || c.nume} className="p-3 bg-white hover:bg-morning-50 flex items-center justify-between transition">
                         <div className="space-y-0.5 min-w-0 pr-3">
                           <div className="flex items-center space-x-2">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${catColor.dot}`} />
                             <span className="font-extrabold text-sapphire-900 text-xs truncate">{c.nume}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sapphire-100 text-sapphire-900 border border-sapphire-200 shrink-0">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 ${catColor.badge}`}>
                               {count} {count === 1 ? 'vehicul' : 'vehicule'}
                             </span>
                           </div>

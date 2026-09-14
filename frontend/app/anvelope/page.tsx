@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { getLabelPozitie } from '@/lib/tirePositions';
+import { getCategoryColor } from '@/lib/categoryColors';
 
 export default function AnvelopePage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -626,7 +627,7 @@ export default function AnvelopePage() {
                 <span className="text-xs px-2 py-0.5 rounded-full bg-sapphire-100 text-sapphire-900 font-mono">
                   {currentVehicul?.numarInmatriculare}
                 </span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-morning-200 text-slate-700">
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border ${getCategoryColor(currentVehicul?.categorieEnum).badge}`}>
                   {currentVehicul?.categorieEnum || 'CAMION'}
                 </span>
               </h2>

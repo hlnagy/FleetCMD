@@ -12,6 +12,7 @@ import {
 import VehicleSelector from '../../components/VehicleSelector';
 import VehicleOdometerModal from '../../components/VehicleOdometerModal';
 import { getLabelPozitie } from '@/lib/tirePositions';
+import { getCategoryColor } from '@/lib/categoryColors';
 
 export default function FisaTehnicaPage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -659,17 +660,30 @@ export default function FisaTehnicaPage() {
                 Toate Categoriile ({vehicule.length})
               </button>
 
-              {categoriiDisponibile.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCatFilter(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                    selectedCatFilter === cat ? 'bg-sapphire-500 text-white shadow-xs' : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
-                  }`}
-                >
-                  {cat} ({vehicule.filter(v => v.categorieEnum === cat).length})
-                </button>
-              ))}
+              {categoriiDisponibile.map((cat) => {
+                const count = vehicule.filter(v => v.categorieEnum === cat).length;
+                const catColor = getCategoryColor(cat);
+                const isSelected = selectedCatFilter === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCatFilter(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center space-x-1.5 border ${
+                      isSelected
+                        ? catColor.chipActive
+                        : catColor.chipInactive
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : catColor.dot}`} />
+                    <span>{cat}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                      isSelected ? catColor.countActive : catColor.countInactive
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="relative w-full md:w-64">
@@ -707,7 +721,11 @@ export default function FisaTehnicaPage() {
                       <td className="p-3 font-bold font-mono text-slate-800">{v.numarInmatriculare}</td>
                       <td className="p-3">
                         <span className="font-extrabold text-sapphire-900">{v.marca} {v.model}</span>
-                        <span className="block text-[10px] text-sage-600 font-bold">{v.categorieEnum}</span>
+                        <div className="mt-0.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${getCategoryColor(v.categorieEnum).badge}`}>
+                            {v.categorieEnum}
+                          </span>
+                        </div>
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-700">
                         <div className="flex items-center space-x-1.5">
@@ -766,7 +784,7 @@ export default function FisaTehnicaPage() {
             <div>
               <div className="flex items-center space-x-3">
                 <h2 className="text-2xl font-extrabold text-sapphire-900 tracking-tight">{vehicul.numarIntern}</h2>
-                <span className="px-3 py-1 rounded-xl bg-sapphire-50 border border-sapphire-100 text-sapphire-600 text-xs font-extrabold uppercase">
+                <span className={`px-3 py-1 rounded-xl text-xs font-extrabold uppercase border ${getCategoryColor(vehicul.categorieEnum).badge}`}>
                   {vehicul.categorieEnum}
                 </span>
                 <span className="px-3 py-1 rounded-xl bg-sage-100 text-sage-700 text-xs font-bold flex items-center space-x-1">

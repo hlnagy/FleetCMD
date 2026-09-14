@@ -4,6 +4,7 @@ import { API_BASE_URL } from '@/lib/api';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Truck, Search, ChevronDown, Check, X } from 'lucide-react';
+import { getCategoryColor } from '@/lib/categoryColors';
 
 export interface VehicleData {
   id: string;
@@ -127,7 +128,7 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
                 {currentVehicul?.numarIntern || '— SELECTAȚI UTILAJ —'}
               </span>
               {currentVehicul && (
-                <span className="px-2 py-0.5 rounded-full bg-sapphire-50 border border-sapphire-100 text-sapphire-600 text-[10px] font-extrabold uppercase flex-shrink-0">
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border flex-shrink-0 ${getCategoryColor(currentVehicul.categorieEnum).badge}`}>
                   {currentVehicul.categorieEnum}
                 </span>
               )}
@@ -201,19 +202,30 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
                   >
                     Toate ({vehicule.length})
                   </button>
-                  {categoriiDisponibile.map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setSelectedCatFilter(cat)}
-                      className={`px-3 py-1 rounded-lg font-bold text-[11px] transition whitespace-nowrap ${
-                        selectedCatFilter === cat
-                          ? 'bg-sapphire-500 text-white'
-                          : 'bg-morning-100 text-slate-700 hover:bg-morning-200'
-                      }`}
-                    >
-                      {cat} ({vehicule.filter((v) => v.categorieEnum === cat).length})
-                    </button>
-                  ))}
+                  {categoriiDisponibile.map((cat) => {
+                    const count = vehicule.filter((v) => v.categorieEnum === cat).length;
+                    const catColor = getCategoryColor(cat);
+                    const isSelected = selectedCatFilter === cat;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedCatFilter(cat)}
+                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition whitespace-nowrap flex items-center space-x-1.5 border ${
+                          isSelected
+                            ? catColor.chipActive
+                            : catColor.chipInactive
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : catColor.dot}`} />
+                        <span>{cat}</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          isSelected ? catColor.countActive : catColor.countInactive
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -249,7 +261,7 @@ export default function VehicleSelector({ onSelect, selectedId, vehicule: extern
                       <div className="min-w-0">
                         <div className="flex items-center space-x-2">
                           <span className="font-extrabold text-xs text-sapphire-900 font-mono">{v.numarIntern}</span>
-                          <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-morning-200 text-sage-700 flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border flex-shrink-0 ${getCategoryColor(v.categorieEnum).badge}`}>
                             {v.categorieEnum}
                           </span>
                         </div>
