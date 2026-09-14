@@ -898,6 +898,44 @@ export class VehiculeService {
     return result.map((s) => s.trim().replace(/^"|"$/g, '').trim());
   }
 
+  /**
+   * Recunoaște și ajustează automat trecerea de 1.000.000 km (odometer rollover / trunchiere cifră milioane de către șofer).
+   * Ex: În sistem vehiculul are 999.958 km, iar șoferul tastează la pompă 14.898 km (în loc de 1.014.898 km).
+   */
+  public adjustOdometerRollover(
+    rawKm: number,
+    curKm: number
+  ): { adjustedKm: number; isRollover: boolean; delta: number } {
+    if (!curKm || curKm <= 0 || !rawKm || rawKm <= 0) {
+      return { adjustedKm: rawKm, isRollover: false, delta: rawKm - (curKm || 0) };
+    }
+
+    if (rawKm >= curKm) {
+      return { adjustedKm: rawKm, isRollover: false, delta: rawKm - curKm };
+    }
+
+    const remainder = rawKm % 1_000_000;
+    const currentMillions = Math.floor(curKm / 1_000_000) * 1_000_000;
+
+    // Cazul 1: Vehiculul este deja înregistrat la 1M+ (ex: curKm = 1.005.000 km, șoferul scrie 14.898 km -> 1.014.898 km)
+    if (currentMillions >= 1_000_000) {
+      const candidateSame = currentMillions + remainder;
+      const deltaSame = candidateSame - curKm;
+      if (deltaSame >= 0 && deltaSame <= 60_000) {
+        return { adjustedKm: candidateSame, isRollover: true, delta: deltaSame };
+      }
+    }
+
+    // Cazul 2: Vehiculul trece pragul de 1M (ex: curKm = 999.958 km, șoferul scrie 14.898 km -> 1.014.898 km)
+    const candidateNext = currentMillions + 1_000_000 + remainder;
+    const deltaNext = candidateNext - curKm;
+    if (curKm >= 750_000 && deltaNext >= 0 && deltaNext <= 60_000) {
+      return { adjustedKm: candidateNext, isRollover: true, delta: deltaNext };
+    }
+
+    return { adjustedKm: rawKm, isRollover: false, delta: rawKm - curKm };
+  }
+
   async previewCsvPompa(csvContent: string, selectedCategories?: string[]) {
     if (!csvContent || !csvContent.trim()) {
       throw new BadRequestException('Fișierul CSV furnizat este gol.');
@@ -1035,6 +1073,10 @@ export class VehiculeService {
       let status = 'VALID';
       const anomaliiMesaje: string[] = [];
 
+      const curKm = vehicul?.valoareContorCurent || 0;
+      let effectiveNewKm = ultima.valoareKm;
+      let isRolloverDetected = false;
+
       if (!vehicul) {
         status = 'VEHICUL_NEGASIȚ';
         anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în baza de date.`);
@@ -1049,16 +1091,24 @@ export class VehiculeService {
           status = 'CATEGORIE_IGNORATA';
           anomaliiMesaje.push(`Vehiculul este pe Ore de Funcționare (MTH), nu pe Kilometri.`);
         } else {
-          const curKm = vehicul.valoareContorCurent || 0;
-          const newKm = ultima.valoareKm;
-          const delta = newKm - curKm;
+          // Verificare rollover (trecere peste 1.000.000 km)
+          const rCheck = this.adjustOdometerRollover(effectiveNewKm, curKm);
+          if (rCheck.isRollover) {
+            effectiveNewKm = rCheck.adjustedKm;
+            isRolloverDetected = true;
+          }
 
-          if (newKm === 0) {
+          const delta = effectiveNewKm - curKm;
+
+          if (effectiveNewKm === 0) {
             status = 'KM_ZERO';
             anomaliiMesaje.push('Indexul introdus la pompă este 0 km.');
-          } else if (curKm > 0 && newKm < curKm) {
+          } else if (curKm > 0 && effectiveNewKm < curKm) {
             status = 'REGRESSIE_KM';
-            anomaliiMesaje.push(`Indexul nou (${newKm} km) este mai mic decât contorul curent (${curKm} km).`);
+            anomaliiMesaje.push(`Indexul nou (${effectiveNewKm.toLocaleString()} km) este mai mic decât contorul curent (${curKm.toLocaleString()} km).`);
+          } else if (isRolloverDetected) {
+            status = 'VALID';
+            anomaliiMesaje.push(`Trecere peste 1.000.000 km recunoscută automat (+${delta.toLocaleString()} km).`);
           } else if (curKm > 0 && delta > 5000) {
             status = 'DELTA_EXCESIV';
             anomaliiMesaje.push(`Salt mare de kilometraj (+${delta.toLocaleString()} km). Posibilă cifră în plus.`);
@@ -1066,9 +1116,35 @@ export class VehiculeService {
         }
       }
 
-      const curKm = vehicul?.valoareContorCurent || 0;
-      const newKm = ultima.valoareKm;
-      const delta = vehicul ? newKm - curKm : 0;
+      // Ajustăm toate alimentările individuale dacă vehiculul a trecut de 1.000.000 km
+      const istoricAlimentariFisier = item.toateAlimentarile.map((a) => {
+        let aKm = a.valoareKm;
+        let subRollover = false;
+        if (vehicul && vehicul.tipMasurare !== 'MTH' && curKm > 0) {
+          const subRCheck = this.adjustOdometerRollover(aKm, curKm);
+          if (subRCheck.isRollover) {
+            aKm = subRCheck.adjustedKm;
+            subRollover = true;
+          }
+        }
+        return {
+          data: a.dataStr,
+          ora: a.oraStr,
+          km: aKm,
+          rawKm: a.valoareKm,
+          litri: a.cantitateLitri,
+          isRollover: subRollover,
+        };
+      });
+
+      if (istoricAlimentariFisier.length > 0) {
+        const maxFromAlim = Math.max(...istoricAlimentariFisier.map((a) => a.km));
+        if (maxFromAlim > effectiveNewKm) {
+          effectiveNewKm = maxFromAlim;
+        }
+      }
+
+      const finalDelta = vehicul ? effectiveNewKm - curKm : 0;
 
       previewRows.push({
         idTemp: `${normUnit}_${ultima.dataStr}`,
@@ -1078,10 +1154,10 @@ export class VehiculeService {
         data: ultima.dataStr,
         ora: ultima.oraStr,
         timestamp: ultima.timestamp,
-        valoareKmInitiala: newKm,
-        valoareKmPropusa: newKm,
+        valoareKmInitiala: ultima.valoareKm,
+        valoareKmPropusa: effectiveNewKm,
         contorCurent: curKm,
-        deltaKm: delta,
+        deltaKm: finalDelta,
         tipMasurare: vehicul?.tipMasurare || 'KM',
         vehiculId: vehicul?.id || null,
         numarInmatriculare: vehicul?.numarInmatriculare || ultima.cleanUnit,
@@ -1090,12 +1166,8 @@ export class VehiculeService {
         status,
         anomaliiMesaje,
         aprobat: status === 'VALID',
-        istoricAlimentariFisier: item.toateAlimentarile.map((a) => ({
-          data: a.dataStr,
-          ora: a.oraStr,
-          km: a.valoareKm,
-          litri: a.cantitateLitri,
-        })),
+        isRollover: isRolloverDetected,
+        istoricAlimentariFisier,
       });
     }
 
@@ -1170,10 +1242,24 @@ export class VehiculeService {
       let maxValKm = Number(item.valoareKm) || 0;
       let latestDataInreg = new Date();
 
+      if (v.tipMasurare !== 'MTH' && v.valoareContorCurent > 0) {
+        const rCheck = this.adjustOdometerRollover(maxValKm, v.valoareContorCurent);
+        if (rCheck.isRollover) {
+          maxValKm = rCheck.adjustedKm;
+        }
+      }
+
       // Înregistrăm fiecare alimentare individual în istoricul de contor pentru trasabilitate
       for (const al of alimentariList) {
-        const alKm = Number(al.valoareKm);
+        let alKm = Number(al.valoareKm);
         if (isNaN(alKm) || alKm < 0) continue;
+
+        if (v.tipMasurare !== 'MTH' && v.valoareContorCurent > 0) {
+          const rSubCheck = this.adjustOdometerRollover(alKm, v.valoareContorCurent);
+          if (rSubCheck.isRollover) {
+            alKm = rSubCheck.adjustedKm;
+          }
+        }
 
         if (alKm > maxValKm) {
           maxValKm = alKm;

@@ -111,11 +111,51 @@ class SafeImportErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundar
   }
 }
 
+/**
+ * Recunoaște și ajustează automat trecerea de 1.000.000 km (odometer rollover / trunchiere cifră milioane de către șofer).
+ * Ex: În sistem vehiculul are 999.958 km, iar șoferul tastează la pompă 14.898 km (în loc de 1.014.898 km).
+ */
+function adjustOdometerRollover(
+  rawKm: number,
+  curKm: number
+): { adjustedKm: number; isRollover: boolean; delta: number } {
+  if (!curKm || curKm <= 0 || !rawKm || rawKm <= 0) {
+    return { adjustedKm: rawKm, isRollover: false, delta: rawKm - (curKm || 0) };
+  }
+
+  if (rawKm >= curKm) {
+    return { adjustedKm: rawKm, isRollover: false, delta: rawKm - curKm };
+  }
+
+  const remainder = rawKm % 1_000_000;
+  const currentMillions = Math.floor(curKm / 1_000_000) * 1_000_000;
+
+  // Cazul 1: Vehiculul este deja înregistrat la 1M+ (ex: curKm = 1.005.000 km, șoferul scrie 14.898 km -> 1.014.898 km)
+  if (currentMillions >= 1_000_000) {
+    const candidateSame = currentMillions + remainder;
+    const deltaSame = candidateSame - curKm;
+    if (deltaSame >= 0 && deltaSame <= 60_000) {
+      return { adjustedKm: candidateSame, isRollover: true, delta: deltaSame };
+    }
+  }
+
+  // Cazul 2: Vehiculul trece pragul de 1M (ex: curKm = 999.958 km, șoferul scrie 14.898 km -> 1.014.898 km)
+  const candidateNext = currentMillions + 1_000_000 + remainder;
+  const deltaNext = candidateNext - curKm;
+  if (curKm >= 750_000 && deltaNext >= 0 && deltaNext <= 60_000) {
+    return { adjustedKm: candidateNext, isRollover: true, delta: deltaNext };
+  }
+
+  return { adjustedKm: rawKm, isRollover: false, delta: rawKm - curKm };
+}
+
 interface FuelHistory {
   data: string;
   ora: string;
   km: number;
+  rawKm?: number;
   litri?: number;
+  isRollover?: boolean;
 }
 
 interface PreviewRow {
@@ -138,6 +178,7 @@ interface PreviewRow {
   status: 'VALID' | 'KM_ZERO' | 'REGRESSIE_KM' | 'DELTA_EXCESIV' | 'VEHICUL_NEGASIȚ' | 'CATEGORIE_IGNORATA';
   anomaliiMesaje: string[];
   aprobat: boolean;
+  isRollover?: boolean;
   istoricAlimentariFisier: FuelHistory[];
 }
 
@@ -389,6 +430,10 @@ function ImportKmPompaContent() {
 
       let status: PreviewRow['status'] = 'VALID';
       const anomaliiMesaje: string[] = [];
+      let isRolloverDetected = false;
+      const curKm = vehicul?.valoareContorCurent || 0;
+      let effectiveNewKm = ultima.valoareKm;
+      let effectiveDelta = vehicul ? effectiveNewKm - curKm : 0;
 
       if (!vehicul) {
         status = 'VEHICUL_NEGASIȚ';
@@ -404,26 +449,57 @@ function ImportKmPompaContent() {
           status = 'CATEGORIE_IGNORATA';
           anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" este debifată în selectorul de categorii.`);
         } else {
-          const curKm = vehicul.valoareContorCurent || 0;
-          const newKm = ultima.valoareKm;
-          const delta = newKm - curKm;
+          const rCheck = adjustOdometerRollover(effectiveNewKm, curKm);
+          if (rCheck.isRollover) {
+            effectiveNewKm = rCheck.adjustedKm;
+            effectiveDelta = rCheck.delta;
+            isRolloverDetected = true;
+          } else {
+            effectiveDelta = effectiveNewKm - curKm;
+          }
 
-          if (newKm === 0) {
+          if (effectiveNewKm === 0) {
             status = 'KM_ZERO';
             anomaliiMesaje.push('Index 0 km raportat la pompă.');
-          } else if (curKm > 0 && newKm < curKm) {
+          } else if (curKm > 0 && effectiveNewKm < curKm) {
             status = 'REGRESSIE_KM';
-            anomaliiMesaje.push(`Indexul nou (${formatKm(newKm)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
-          } else if (curKm > 0 && delta > 5000) {
+            anomaliiMesaje.push(`Indexul nou (${formatKm(effectiveNewKm)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+          } else if (isRolloverDetected) {
+            status = 'VALID';
+          } else if (curKm > 0 && effectiveDelta > 5000) {
             status = 'DELTA_EXCESIV';
-            anomaliiMesaje.push(`Salt mare de kilometraj (+${formatKm(delta)} km).`);
+            anomaliiMesaje.push(`Salt mare de kilometraj (+${formatKm(effectiveDelta)} km).`);
           }
         }
       }
 
-      const curKm = vehicul?.valoareContorCurent || 0;
-      const newKm = ultima.valoareKm;
-      const delta = vehicul ? newKm - curKm : 0;
+      const istoricAlimentariFisier = item.toateAlimentarile.map((a) => {
+        let aKm = a.valoareKm;
+        let subRollover = false;
+        if (vehicul && vehicul.tipMasurare !== 'MTH' && curKm > 0) {
+          const subRCheck = adjustOdometerRollover(aKm, curKm);
+          if (subRCheck.isRollover) {
+            aKm = subRCheck.adjustedKm;
+            subRollover = true;
+          }
+        }
+        return {
+          data: a.dataStr,
+          ora: a.oraStr,
+          km: aKm,
+          rawKm: a.valoareKm,
+          litri: a.cantitateLitri,
+          isRollover: subRollover,
+        };
+      });
+
+      if (istoricAlimentariFisier.length > 0) {
+        const maxFromAlim = Math.max(...istoricAlimentariFisier.map((a) => a.km));
+        if (maxFromAlim > effectiveNewKm) {
+          effectiveNewKm = maxFromAlim;
+          effectiveDelta = vehicul ? effectiveNewKm - curKm : 0;
+        }
+      }
 
       rows.push({
         idTemp: `${normUnit}_${ultima.dataStr}`,
@@ -433,10 +509,10 @@ function ImportKmPompaContent() {
         data: ultima.dataStr,
         ora: ultima.oraStr,
         timestamp: ultima.timestamp.getTime(),
-        valoareKmInitiala: newKm,
-        valoareKmPropusa: newKm,
+        valoareKmInitiala: effectiveNewKm,
+        valoareKmPropusa: effectiveNewKm,
         contorCurent: curKm,
-        deltaKm: delta,
+        deltaKm: effectiveDelta,
         tipMasurare: vehicul?.tipMasurare || 'KM',
         vehiculId: vehicul?.id || null,
         numarInmatriculare: vehicul?.numarInmatriculare || ultima.cleanUnit,
@@ -445,12 +521,8 @@ function ImportKmPompaContent() {
         status,
         anomaliiMesaje,
         aprobat: status === 'VALID',
-        istoricAlimentariFisier: item.toateAlimentarile.map((a) => ({
-          data: a.dataStr,
-          ora: a.oraStr,
-          km: a.valoareKm,
-          litri: a.cantitateLitri,
-        })),
+        isRollover: isRolloverDetected,
+        istoricAlimentariFisier,
       });
     });
 
@@ -559,7 +631,13 @@ function ImportKmPompaContent() {
         if (row.idTemp !== idTemp) return row;
         const safeVal = isNaN(newVal) ? 0 : newVal;
         const curKm = row.contorCurent || 0;
-        const newDelta = row.vehiculId ? safeVal - curKm : 0;
+        const rolloverCheck = row.vehiculId && row.tipMasurare !== 'MTH'
+          ? adjustOdometerRollover(safeVal, curKm)
+          : { adjustedKm: safeVal, isRollover: false, delta: safeVal - curKm };
+
+        const effectiveVal = rolloverCheck.adjustedKm;
+        const newDelta = row.vehiculId ? rolloverCheck.delta : 0;
+        const isRollover = rolloverCheck.isRollover;
 
         let newStatus = row.status;
         const newAnomalii: string[] = [];
@@ -569,12 +647,14 @@ function ImportKmPompaContent() {
           newAnomalii.push(`Vehiculul "${row.cleanUnit}" nu a fost identificat.`);
         } else if (row.status === 'CATEGORIE_IGNORATA') {
           // Păstrează categoria ignorată dacă este nebifată
-        } else if (safeVal === 0) {
+        } else if (effectiveVal === 0) {
           newStatus = 'KM_ZERO';
           newAnomalii.push('Contor 0 km raportat.');
-        } else if (safeVal < curKm) {
+        } else if (curKm > 0 && effectiveVal < curKm) {
           newStatus = 'REGRESSIE_KM';
-          newAnomalii.push(`Indexul nou (${formatKm(safeVal)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+          newAnomalii.push(`Indexul nou (${formatKm(effectiveVal)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+        } else if (isRollover) {
+          newStatus = 'VALID';
         } else if (curKm > 0 && newDelta > 5000) {
           newStatus = 'DELTA_EXCESIV';
           newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
@@ -584,11 +664,12 @@ function ImportKmPompaContent() {
 
         return {
           ...row,
-          valoareKmPropusa: safeVal,
+          valoareKmPropusa: effectiveVal,
           deltaKm: newDelta,
           status: newStatus,
           anomaliiMesaje: newAnomalii,
           aprobat: newStatus === 'VALID',
+          isRollover,
         };
       })
     );
@@ -603,17 +684,25 @@ function ImportKmPompaContent() {
       prev.map((row) => {
         if (row.idTemp !== idTemp) return row;
         const curKm = veh.valoareContorCurent || 0;
-        const newDelta = row.valoareKmPropusa - curKm;
+        const rolloverCheck = veh.tipMasurare !== 'MTH'
+          ? adjustOdometerRollover(row.valoareKmPropusa, curKm)
+          : { adjustedKm: row.valoareKmPropusa, isRollover: false, delta: row.valoareKmPropusa - curKm };
+
+        const effectiveVal = rolloverCheck.adjustedKm;
+        const newDelta = rolloverCheck.delta;
+        const isRollover = rolloverCheck.isRollover;
 
         let newStatus: PreviewRow['status'] = 'VALID';
         const newAnomalii: string[] = [];
 
-        if (row.valoareKmPropusa === 0) {
+        if (effectiveVal === 0) {
           newStatus = 'KM_ZERO';
           newAnomalii.push('Contor 0 km raportat.');
-        } else if (row.valoareKmPropusa < curKm) {
+        } else if (curKm > 0 && effectiveVal < curKm) {
           newStatus = 'REGRESSIE_KM';
-          newAnomalii.push(`Index nou (${formatKm(row.valoareKmPropusa)} km) mai mic decât înregistrarea din sistem (${formatKm(curKm)} km).`);
+          newAnomalii.push(`Index nou (${formatKm(effectiveVal)} km) mai mic decât înregistrarea din sistem (${formatKm(curKm)} km).`);
+        } else if (isRollover) {
+          newStatus = 'VALID';
         } else if (curKm > 0 && newDelta > 5000) {
           newStatus = 'DELTA_EXCESIV';
           newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
@@ -626,10 +715,12 @@ function ImportKmPompaContent() {
           numarIntern: veh.numarIntern || null,
           categorieEnum: extractCatName(veh.categorieEnum) || 'CAP_TRACTOR',
           contorCurent: curKm,
+          valoareKmPropusa: effectiveVal,
           deltaKm: newDelta,
           status: newStatus,
           anomaliiMesaje: newAnomalii,
           aprobat: newStatus === 'VALID',
+          isRollover,
         };
       })
     );
@@ -647,18 +738,26 @@ function ImportKmPompaContent() {
         const updatedAlimentari = [...row.istoricAlimentariFisier];
         if (!updatedAlimentari[fuelingIndex]) return row;
 
+        const curKm = row.contorCurent || 0;
+        const rollCheck = (row.vehiculId && row.tipMasurare !== 'MTH' && curKm > 0)
+          ? adjustOdometerRollover(safeKm, curKm)
+          : { adjustedKm: safeKm, isRollover: false, delta: safeKm - curKm };
+
         updatedAlimentari[fuelingIndex] = {
           ...updatedAlimentari[fuelingIndex],
-          km: safeKm,
+          km: rollCheck.adjustedKm,
+          rawKm: safeKm,
+          isRollover: rollCheck.isRollover,
         };
 
         // Recalculăm valoareKmPropusa ca fiind maximul dintre alimentări (sau cel mai recent)
         let maxKm = 0;
+        let anyRollover = false;
         for (const al of updatedAlimentari) {
           if (al.km > maxKm) maxKm = al.km;
+          if (al.isRollover) anyRollover = true;
         }
 
-        const curKm = row.contorCurent || 0;
         const newDelta = row.vehiculId ? maxKm - curKm : 0;
 
         let newStatus = row.status;
@@ -675,6 +774,8 @@ function ImportKmPompaContent() {
         } else if (curKm > 0 && maxKm < curKm) {
           newStatus = 'REGRESSIE_KM';
           newAnomalii.push(`Indexul nou (${formatKm(maxKm)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
+        } else if (anyRollover) {
+          newStatus = 'VALID';
         } else if (curKm > 0 && newDelta > 5000) {
           newStatus = 'DELTA_EXCESIV';
           newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
@@ -690,6 +791,7 @@ function ImportKmPompaContent() {
           status: newStatus,
           anomaliiMesaje: newAnomalii,
           aprobat: newStatus === 'VALID',
+          isRollover: anyRollover,
         };
       })
     );
@@ -1510,10 +1612,22 @@ function ImportKmPompaContent() {
                         {/* STATUS & DIAGNOSTIC */}
                         <td className="p-3">
                           {row.status === 'VALID' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
-                              <CheckCircle2 className="w-3 h-3" />
-                              Valid (+{formatKm(deltaKmVal)} km)
-                            </span>
+                            row.isRollover ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded text-[11px] font-semibold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Rollover 1M (+{formatKm(deltaKmVal)} km)
+                                </span>
+                                <p className="text-[10px] text-cyan-400/90 mt-0.5">
+                                  Trecere &gt; 1.000.000 km recunoscută
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Valid (+{formatKm(deltaKmVal)} km)
+                              </span>
+                            )
                           )}
                           {row.status === 'KM_ZERO' && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700/60 text-slate-300 border border-slate-600 rounded text-[11px] font-medium">
@@ -1631,6 +1745,11 @@ function ImportKmPompaContent() {
                                           title="Editează acest index dacă a fost tastat greșit la pompă"
                                         />
                                         <span className="text-slate-500 text-[10px]">km</span>
+                                        {al.isRollover && al.rawKm !== undefined && (
+                                          <span className="text-[10px] text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap" title={`Tastat la pompă: ${formatKm(al.rawKm)} km`}>
+                                            pompă: {formatKm(al.rawKm)}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
