@@ -85,6 +85,16 @@ export class MentenantaController {
     return this.mentenantaService.anuleazaSauStergeComanda(id);
   }
 
+  @Patch('comanda-lucru/:id/redeschide')
+  redeschideComandaLucru(@Param('id') id: string) {
+    return this.mentenantaService.redeschideComandaLucru(id);
+  }
+
+  @Delete('comanda-lucru/:id')
+  deleteComandaLucru(@Param('id') id: string) {
+    return this.mentenantaService.deleteComandaLucru(id);
+  }
+
   @Patch('comanda-lucru/:id/devalideaza')
   devalideazaComandaLucru(@Param('id') id: string) {
     return this.mentenantaService.devalideazaComandaLucru(id);

@@ -400,8 +400,24 @@ export class MentenantaService {
       });
     }
 
-    const count = await this.prisma.comandaLucru.count();
-    const numarComanda = `CL-${(count + 1).toString().padStart(5, '0')}`;
+    // Generare număr comandă fără riscul de coliziune cu numere existente
+    const allComenzi = await this.prisma.comandaLucru.findMany({
+      select: { numarComanda: true },
+    });
+    let maxNum = 0;
+    for (const c of allComenzi) {
+      const match = c.numarComanda?.match(/CL-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    let nextNum = maxNum + 1;
+    let numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
+    while (await this.prisma.comandaLucru.findUnique({ where: { numarComanda } })) {
+      nextNum++;
+      numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
+    }
 
     const elementeData = data.elemente || [];
 
@@ -445,7 +461,7 @@ export class MentenantaService {
           })),
         },
       },
-      include: { elementeComanda: true },
+      include: { elementeComanda: true, vehicul: true },
     });
 
     return comanda;
@@ -617,6 +633,49 @@ export class MentenantaService {
       where: { id: comandaId },
       data: { stare: 'ANULAT' },
     });
+  }
+
+  // REDESCHIDERE COMANDĂ DE LUCRU ANULATĂ (Reactivare în stare IN_LUCRU)
+  async redeschideComandaLucru(comandaId: string) {
+    const comanda = await this.prisma.comandaLucru.findUnique({
+      where: { id: comandaId },
+      include: { elementeComanda: true, vehicul: true },
+    });
+    if (!comanda) throw new NotFoundException('Comanda nu există.');
+
+    return this.prisma.comandaLucru.update({
+      where: { id: comandaId },
+      data: {
+        stare: 'IN_LUCRU',
+        dataFinalizare: null,
+      },
+      include: { elementeComanda: true, vehicul: true },
+    });
+  }
+
+  // ȘTERGERE DEFINITIVĂ COMANDĂ DE LUCRU (pentru comenzi anulate)
+  async deleteComandaLucru(comandaId: string) {
+    const comanda = await this.prisma.comandaLucru.findUnique({
+      where: { id: comandaId },
+      include: { elementeComanda: true },
+    });
+    if (!comanda) throw new NotFoundException('Comanda nu există.');
+
+    if (comanda.stare === 'FINALIZAT') {
+      for (const elem of comanda.elementeComanda) {
+        if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+          const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
+          if (articol) {
+            await this.prisma.articolStoc.update({
+              where: { id: elem.articolStocId },
+              data: { stocCurent: articol.stocCurent + elem.cantitate },
+            });
+          }
+        }
+      }
+    }
+
+    return this.prisma.comandaLucru.delete({ where: { id: comandaId } });
   }
 
   // DEVALIDARE COMANDĂ DE LUCRU: Trecere din FINALIZAT în DEVALIDAT, restaurare stoc pentru re-editare

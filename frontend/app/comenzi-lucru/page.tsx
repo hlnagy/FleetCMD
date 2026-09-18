@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
-  Unlock, RotateCcw, Calendar, Truck
+  Unlock, RotateCcw, Calendar, Truck, Loader2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 
@@ -15,6 +15,7 @@ export default function ComenziLucruPage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [stocuri, setStocuri] = useState<any[]>([]);
   const [mecaniciList, setMecaniciList] = useState<any[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Filtre
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,13 +90,15 @@ export default function ComenziLucruPage() {
           }))
         );
 
-        setComenzi(
-          allCL.sort((a: any, b: any) => {
-            if (a.stare === 'IN_LUCRU' && b.stare !== 'IN_LUCRU') return -1;
-            if (a.stare !== 'IN_LUCRU' && b.stare === 'IN_LUCRU') return 1;
-            return new Date(b.dataDeschidere).getTime() - new Date(a.dataDeschidere).getTime();
-          })
-        );
+        // Întotdeauna cele mai noi comenzi în capul listei
+        allCL.sort((a: any, b: any) => {
+          const timeA = new Date(a.createdAt || a.dataDeschidere).getTime();
+          const timeB = new Date(b.createdAt || b.dataDeschidere).getTime();
+          if (timeB !== timeA) return timeB - timeA;
+          return (b.numarComanda || '').localeCompare(a.numarComanda || '', undefined, { numeric: true });
+        });
+
+        setComenzi(allCL);
       }
 
       // Fetch Stocuri
@@ -238,6 +241,7 @@ export default function ComenziLucruPage() {
       });
     }
 
+    setIsCreating(true);
     try {
       const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru`, {
         method: 'POST',
@@ -253,19 +257,37 @@ export default function ComenziLucruPage() {
 
       if (res.ok) {
         const com = await res.json();
+        const selV = vehicule.find((v) => v.id === selectedVehiculId);
+        const enrichedCom = {
+          ...com,
+          vehiculNumarIntern: com.vehicul?.numarIntern || selV?.numarIntern,
+          vehiculInmatriculare: com.vehicul?.numarInmatriculare || selV?.numarInmatriculare,
+          vehiculMarca: com.vehicul?.marca || selV?.marca,
+          vehiculModel: com.vehicul?.model || selV?.model,
+          vehiculSerieSasiu: com.vehicul?.serieSasiu || com.vehicul?.vin || selV?.serieSasiu || 'N/A',
+          vehiculValoareContor: com.vehicul?.valoareContorCurent || selV?.valoareContorCurent || 0,
+          vehiculTipMasurare: com.vehicul?.tipMasurare || selV?.tipMasurare || 'KM',
+        };
+
+        setShowAddModal(false);
+        await fetchData();
 
         if (autoFinalize) {
           await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${com.id}/finalizeaza`, { method: 'PATCH' });
-          alert(`Comandă de lucru ${com.numarComanda} creată și FINALIZATĂ direct!`);
+          await fetchData();
+          setShowViewModal(enrichedCom);
         } else {
-          alert(`Comandă de lucru ${com.numarComanda} deschisă în atelier pe starea ÎN LUCRU (Dată deschidere: ${new Date().toLocaleDateString('ro-RO')})! Puteți adăuga piese suplimentare mai jos.`);
+          // Deschide imediat comanda de lucru nou creată în modalul de editare/completare
+          openEditModal(enrichedCom);
         }
-
-        setShowAddModal(false);
-        fetchData();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Eroare la crearea comenzii de lucru: ${errData.message || res.statusText || 'Verificați datele introduse.'}`);
       }
-    } catch (e) {
-      alert('Eroare la crearea comandei de lucru.');
+    } catch (e: any) {
+      alert(`Eroare la crearea comenzii de lucru: ${e.message || e}`);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -344,6 +366,65 @@ export default function ComenziLucruPage() {
       }
     } catch (e) {
       alert('Eroare la anularea comandei.');
+    }
+  };
+
+  // Re-deschide comanda anulată (reactivare în stare IN_LUCRU)
+  const handleRedeschideComanda = async (id: string, numarComanda: string) => {
+    const confirmed = await showConfirm(
+      'Re-deschidere Comandă de Lucru',
+      `Doriți să reactivați comanda de lucru ${numarComanda} în starea ÎN LUCRU?`,
+      'Da, reactivează comanda',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}/redeschide`, { method: 'PATCH' });
+      if (res.ok) {
+        const comUpdated = await res.json();
+        await fetchData();
+        const v = vehicule.find((vh) => vh.id === comUpdated.vehiculId);
+        const enriched = {
+          ...comUpdated,
+          vehiculNumarIntern: comUpdated.vehicul?.numarIntern || v?.numarIntern,
+          vehiculInmatriculare: comUpdated.vehicul?.numarInmatriculare || v?.numarInmatriculare,
+          vehiculMarca: comUpdated.vehicul?.marca || v?.marca,
+          vehiculModel: comUpdated.vehicul?.model || v?.model,
+          vehiculSerieSasiu: comUpdated.vehicul?.serieSasiu || v?.serieSasiu || 'N/A',
+          vehiculValoareContor: comUpdated.vehicul?.valoareContorCurent || v?.valoareContorCurent || 0,
+          vehiculTipMasurare: comUpdated.vehicul?.tipMasurare || v?.tipMasurare || 'KM',
+        };
+        openEditModal(enriched);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la reactivarea comenzii: ${err.message || 'Eroare necunoscută'}`);
+      }
+    } catch (e: any) {
+      alert(`Eroare la reactivarea comenzii de lucru: ${e.message || e}`);
+    }
+  };
+
+  // Ștergere comandă de lucru anulată
+  const handleDeleteComanda = async (id: string, numarComanda: string) => {
+    const confirmed = await showConfirm(
+      'Ștergere Comandă de Lucru Anulată',
+      `Sigur doriți să ștergeți definitiv Comanda de Lucru ${numarComanda} din baza de date? Această acțiune nu poate fi revocată!`,
+      'Da, șterge definitiv',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la ștergere: ${err.message || 'Eroare necunoscută'}`);
+      }
+    } catch (e: any) {
+      alert(`Eroare la ștergerea comenzii de lucru: ${e.message || e}`);
     }
   };
 
@@ -824,6 +905,29 @@ export default function ComenziLucruPage() {
                           </button>
                         </>
                       )}
+
+                      {/* ACȚIUNI PENTRU COMENZI ANULATE */}
+                      {cl.stare === 'ANULAT' && (
+                        <>
+                          <button
+                            onClick={() => handleRedeschideComanda(cl.id, cl.numarComanda)}
+                            title="Re-deschide și reactivează această comandă de lucru în starea ÎN LUCRU"
+                            className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[11px] font-bold border border-emerald-300 flex items-center space-x-1 transition"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Re-deschide</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteComanda(cl.id, cl.numarComanda)}
+                            title="Șterge definitiv această comandă anulată din registru"
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-roseash-100 text-slate-600 hover:text-terracotta-700 text-[11px] font-bold border border-slate-300 flex items-center space-x-1 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Șterge</span>
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 );
@@ -841,6 +945,11 @@ export default function ComenziLucruPage() {
               <div className="flex items-center space-x-2 text-sapphire-900 font-bold">
                 <Edit3 className="w-5 h-5 text-sapphire-500" />
                 <span>Editare Comandă de Lucru {showEditModal.numarComanda}</span>
+                {(showEditModal.vehiculNumarIntern || showEditModal.vehiculInmatriculare) && (
+                  <span className="text-xs text-sage-600 font-semibold ml-2">
+                    — {showEditModal.vehiculNumarIntern || showEditModal.vehiculInmatriculare} ({showEditModal.vehiculMarca || ''} {showEditModal.vehiculModel || ''})
+                  </span>
+                )}
               </div>
               <button onClick={() => setShowEditModal(null)} className="text-sage-500 hover:text-sapphire-900">
                 <X className="w-5 h-5" />
@@ -1492,7 +1601,20 @@ export default function ComenziLucruPage() {
 
               <div className="flex justify-end space-x-3 pt-3">
                 <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Deschide comanda de lucru</button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 disabled:opacity-50 text-white font-bold shadow-md shadow-sapphire-500/20 flex items-center space-x-2 transition"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Se deschide comanda...</span>
+                    </>
+                  ) : (
+                    <span>Deschide comanda de lucru</span>
+                  )}
+                </button>
               </div>
             </form>
           </div>
