@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react';
 import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
-  Unlock, RotateCcw, Calendar, Truck, Loader2
+  Unlock, RotateCcw, Calendar, Truck, Loader2, Package, Minus, AlertCircle, Info,
+  ShoppingCart, RefreshCw
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 
@@ -64,6 +65,17 @@ export default function ComenziLucruPage() {
   const [editMecanici, setEditMecanici] = useState<string[]>([]);
   const [editObservatii, setEditObservatii] = useState('');
   const [editElemente, setEditElemente] = useState<any[]>([]);
+
+  // Quick-Add Bar State pentru Editor Munkalap & Alkatrész Kereső
+  const [quickPilonCost, setQuickPilonCost] = useState<'PIESA_STOC' | 'PIESA_DEZMEMBRATA' | 'PIESA_DIRECTA' | 'MANOPERA_INTERNA' | 'PRESTATIE_EXTERNA'>('PIESA_STOC');
+  const [quickSearchQuery, setQuickSearchQuery] = useState('');
+  const [quickSelectedCategory, setQuickSelectedCategory] = useState('TOATE');
+  const [quickSelectedArticol, setQuickSelectedArticol] = useState<any | null>(null);
+  const [quickDescriere, setQuickDescriere] = useState('');
+  const [quickCantitate, setQuickCantitate] = useState<number>(1);
+  const [quickPretUnitar, setQuickPretUnitar] = useState<number>(0);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const [isSavingAndFinalizing, setIsSavingAndFinalizing] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -485,11 +497,20 @@ export default function ComenziLucruPage() {
     setEditMecanici(mecArr);
     setEditObservatii(cl.observatii || '');
     setEditElemente((cl.elementeComanda || []).map((el: any) => ({ ...el })));
+    // Reset quick-add state
+    setQuickPilonCost('PIESA_STOC');
+    setQuickSearchQuery('');
+    setQuickSelectedCategory('TOATE');
+    setQuickSelectedArticol(null);
+    setQuickDescriere('');
+    setQuickCantitate(1);
+    setQuickPretUnitar(0);
+    setIsSearchDropdownOpen(false);
   };
 
   // Save Edit Work Order
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEdit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!showEditModal) return;
 
     try {
@@ -511,7 +532,7 @@ export default function ComenziLucruPage() {
 
       if (res.ok) {
         setShowEditModal(null);
-        fetchData();
+        await fetchData();
         alert('Modificările pe comanda de lucru au fost salvate cu succes!');
       } else {
         alert('Eroare la salvarea modificărilor.');
@@ -521,23 +542,186 @@ export default function ComenziLucruPage() {
     }
   };
 
-  // Add Element in Edit Modal
-  const handleAddEditElement = () => {
-    setEditElemente([
-      ...editElemente,
-      {
-        pilonCost: 'PIESA_STOC',
-        descriere: 'Piesă nouă adăugată',
-        cantitate: 1,
-        pretUnitar: 0,
-        articolStocId: stocuri.length > 0 ? stocuri[0].id : null,
-      },
-    ]);
+  // Add Quick Element in Edit Modal
+  const handleAddQuickElement = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (quickPilonCost === 'PIESA_STOC') {
+      if (!quickSelectedArticol) {
+        alert('Vă rugăm să alegeți un articol din stoc din lista de căutare!');
+        return;
+      }
+      if (Number(quickCantitate) <= 0) {
+        alert('Cantitatea trebuie să fie de minim 1!');
+        return;
+      }
+      if (Number(quickCantitate) > Number(quickSelectedArticol.stocCurent || 0)) {
+        alert(`Stoc Insuficient!\n\nArticolul "${quickSelectedArticol.denumire}" are doar ${quickSelectedArticol.stocCurent} ${quickSelectedArticol.unitateMasura || 'buc'} disponibile în stoc.`);
+        return;
+      }
+      setEditElemente([
+        ...editElemente,
+        {
+          pilonCost: 'PIESA_STOC',
+          descriere: quickSelectedArticol.denumire,
+          cantitate: Number(quickCantitate),
+          pretUnitar: Number(quickPretUnitar !== undefined && quickPretUnitar !== null ? quickPretUnitar : (quickSelectedArticol.pretUnitar || 0)),
+          articolStocId: quickSelectedArticol.id,
+          codArticol: quickSelectedArticol.codArticol,
+          unitateMasura: quickSelectedArticol.unitateMasura || 'buc',
+          provenienta: quickSelectedArticol.depozit?.nume || 'Magazie Centrală',
+        },
+      ]);
+    } else if (quickPilonCost === 'PIESA_DEZMEMBRATA') {
+      if (!quickDescriere.trim()) {
+        alert('Vă rugăm să introduceți denumirea piesei din dezmembrări!');
+        return;
+      }
+      setEditElemente([
+        ...editElemente,
+        {
+          pilonCost: 'PIESA_DEZMEMBRATA',
+          descriere: quickDescriere.trim(),
+          cantitate: Number(quickCantitate) || 1,
+          pretUnitar: 0,
+          articolStocId: null,
+          unitateMasura: 'buc',
+          provenienta: 'Dezmembrări Parcul Propriu',
+        },
+      ]);
+    } else {
+      if (!quickDescriere.trim()) {
+        alert('Vă rugăm să introduceți denumirea piesei sau a operațiunii de manoperă!');
+        return;
+      }
+      setEditElemente([
+        ...editElemente,
+        {
+          pilonCost: quickPilonCost,
+          descriere: quickDescriere.trim(),
+          cantitate: Number(quickCantitate) || 1,
+          pretUnitar: Number(quickPretUnitar) || 0,
+          articolStocId: null,
+          unitateMasura: quickPilonCost === 'MANOPERA_INTERNA' ? 'ore' : 'buc',
+          provenienta:
+            quickPilonCost === 'PIESA_DIRECTA'
+              ? 'Achiziție Directă'
+              : quickPilonCost === 'MANOPERA_INTERNA'
+              ? 'Manoperă Atelier'
+              : 'Prestație Externă',
+        },
+      ]);
+    }
+
+    // Reset quick add form smoothly
+    setQuickSearchQuery('');
+    setQuickSelectedArticol(null);
+    setQuickDescriere('');
+    setQuickCantitate(1);
+    setQuickPretUnitar(0);
+    setIsSearchDropdownOpen(false);
+  };
+
+  // Inline table updates
+  const handleUpdateEditElementQty = (idx: number, delta: number) => {
+    const updated = [...editElemente];
+    const current = Number(updated[idx].cantitate) || 1;
+    const next = Math.max(1, current + delta);
+    if (updated[idx].pilonCost === 'PIESA_STOC' && updated[idx].articolStocId) {
+      const item = stocuri.find((s) => s.id === updated[idx].articolStocId);
+      if (item && next > item.stocCurent) {
+        alert(`Atenție: Stocul maxim disponibil pentru "${item.denumire}" este ${item.stocCurent} ${item.unitateMasura || 'buc'}`);
+        return;
+      }
+    }
+    updated[idx].cantitate = next;
+    setEditElemente(updated);
+  };
+
+  const handleUpdateEditElementPrice = (idx: number, price: number) => {
+    const updated = [...editElemente];
+    updated[idx].pretUnitar = Math.max(0, price);
+    setEditElemente(updated);
+  };
+
+  const handleUpdateEditElementDesc = (idx: number, desc: string) => {
+    const updated = [...editElemente];
+    updated[idx].descriere = desc;
+    setEditElemente(updated);
   };
 
   // Remove Element in Edit Modal
   const handleRemoveEditElement = (index: number) => {
     setEditElemente(editElemente.filter((_, i) => i !== index));
+  };
+
+  // Save and Finalize in 1-Click
+  const handleSaveAndFinalize = async () => {
+    if (!showEditModal) return;
+
+    for (const el of editElemente) {
+      if (el.pilonCost === 'PIESA_STOC' && el.articolStocId) {
+        const item = stocuri.find((s) => s.id === el.articolStocId);
+        if (item && Number(el.cantitate) > item.stocCurent) {
+          alert(
+            `Nu se poate finaliza comanda!\n\nPiesa "${item.denumire}" depășește stocul disponibil: solicitat ${el.cantitate}, disponibil în magazie ${item.stocCurent} ${item.unitateMasura || 'buc'}.`
+          );
+          return;
+        }
+      }
+    }
+
+    const confirmed = await showConfirm(
+      'Salvare & Finalizare Imediată',
+      `Doriți să salvați toate modificările și să FINALIZEZI imediat Comanda de Lucru ${showEditModal.numarComanda}?\n\n• Se vor scădea automat piesele din stoc conform metodei FIFO.\n• Comanda va primi starea FINALIZAT.\n• Se vor actualiza costurile de mentenanță.`,
+      'Da, salvează și finalizează',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    setIsSavingAndFinalizing(true);
+    try {
+      // 1. Update command
+      const resUpdate = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${showEditModal.id}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mecanicResponsabil: editMecanici.join(', '),
+          observatii: editObservatii,
+          elementeComanda: editElemente.map((el) => ({
+            pilonCost: el.pilonCost || 'PIESA_STOC',
+            descriere: el.descriere || 'Piesă / Serviciu',
+            cantitate: Number(el.cantitate || 1),
+            pretUnitar: Number(el.pretUnitar || 0),
+            articolStocId: el.articolStocId || null,
+          })),
+        }),
+      });
+
+      if (!resUpdate.ok) {
+        alert('Eroare la salvarea modificărilor comenzii.');
+        setIsSavingAndFinalizing(false);
+        return;
+      }
+
+      // 2. Finalize
+      const resFinalize = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${showEditModal.id}/finalizeaza`, {
+        method: 'PATCH',
+      });
+
+      if (resFinalize.ok) {
+        setShowEditModal(null);
+        await fetchData();
+        alert(`Comanda de Lucru ${showEditModal.numarComanda} a fost salvată și FINALIZATĂ cu succes!\n\nPiesele au fost scăzute din stoc FIFO.`);
+      } else {
+        const err = await resFinalize.json().catch(() => ({}));
+        alert(`Comanda a fost salvată, dar finalizarea a eșuat: ${err.message || 'Verificați datele.'}`);
+        await fetchData();
+      }
+    } catch (e: any) {
+      alert(`Eroare la procesare: ${e.message || e}`);
+    } finally {
+      setIsSavingAndFinalizing(false);
+    }
   };
 
   // Print A4 Document
@@ -591,6 +775,64 @@ export default function ComenziLucruPage() {
 
   const comenziInLucruCount = comenzi.filter((c) => c.stare === 'IN_LUCRU' || c.stare === 'DEVALIDAT').length;
   const comenziFinalizateCount = comenzi.filter((c) => c.stare === 'FINALIZAT').length;
+
+  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor
+  const availableStockCategories = [
+    'TOATE',
+    ...Array.from(new Set(stocuri.map((s: any) => s.categorie).filter(Boolean))),
+  ];
+
+  const filteredStockList = stocuri
+    .filter((item: any) => {
+      if (quickSelectedCategory !== 'TOATE') {
+        if ((item.categorie || '').toLowerCase() !== quickSelectedCategory.toLowerCase()) {
+          return false;
+        }
+      }
+      if (quickSearchQuery.trim()) {
+        const q = quickSearchQuery.toLowerCase().trim();
+        const mCod = (item.codArticol || '').toLowerCase().includes(q);
+        const mDen = (item.denumire || '').toLowerCase().includes(q);
+        const mCat = (item.categorie || '').toLowerCase().includes(q);
+        const mSub = (item.subcategorie || '').toLowerCase().includes(q);
+        const mDep = (item.depozit?.nume || '').toLowerCase().includes(q);
+        if (!mCod && !mDen && !mCat && !mSub && !mDep) return false;
+      }
+      return true;
+    })
+    .sort((a: any, b: any) => {
+      const stockA = Number(a.stocCurent || 0);
+      const stockB = Number(b.stocCurent || 0);
+      if (stockA > 0 && stockB <= 0) return -1;
+      if (stockB > 0 && stockA <= 0) return 1;
+      return (a.denumire || '').localeCompare(b.denumire || '');
+    });
+
+  // Calcul Deviz în Timp Real pentru Munkalap Editor
+  const totalDevizPieseStoc = editElemente
+    .filter((el) => el.pilonCost === 'PIESA_STOC')
+    .reduce((acc, el) => acc + (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0), 0);
+
+  const bucatiDevizStoc = editElemente
+    .filter((el) => el.pilonCost === 'PIESA_STOC')
+    .reduce((acc, el) => acc + (Number(el.cantitate) || 0), 0);
+
+  const bucatiDevizDezmembrari = editElemente
+    .filter((el) => el.pilonCost === 'PIESA_DEZMEMBRATA')
+    .reduce((acc, el) => acc + (Number(el.cantitate) || 0), 0);
+
+  const totalDevizDirecte = editElemente
+    .filter((el) => el.pilonCost === 'PIESA_DIRECTA')
+    .reduce((acc, el) => acc + (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0), 0);
+
+  const totalDevizManopera = editElemente
+    .filter((el) => el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA')
+    .reduce((acc, el) => acc + (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0), 0);
+
+  const totalGeneralDeviz = editElemente.reduce(
+    (acc, el) => acc + (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0),
+    0
+  );
 
   return (
     <div className="space-y-6">
@@ -846,19 +1088,11 @@ export default function ComenziLucruPage() {
 
                         {esteInLucru && (
                           <button
-                            onClick={() => {
-                              setShowAddElementModal(cl);
-                              setElemDescriere('');
-                              if (stocuri.length > 0) {
-                                setElemArticolStocId(stocuri[0].id);
-                                setElemPretUnitar(stocuri[0].pretUnitar || 0);
-                                setElemDescriere(stocuri[0].denumire);
-                              }
-                            }}
+                            onClick={() => openEditModal(cl)}
                             className="text-[10px] font-bold text-sapphire-600 hover:underline flex items-center space-x-1 pt-1"
                           >
                             <Plus className="w-3 h-3 text-sapphire-500" />
-                            <span>+ Adaugă piesă</span>
+                            <span>+ Adaugă piesă / deviz</span>
                           </button>
                         )}
                       </div>
@@ -964,33 +1198,100 @@ export default function ComenziLucruPage() {
         </div>
       </div>
 
-      {/* ─── MODAL EDITARE COMANDĂ DE LUCRU ─── */}
+      {/* ─── MODAL EDITARE COMANDĂ DE LUCRU (MODERN WORKSHOP DEVIZ EDITOR) ─── */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-2xl bg-white max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
-              <div className="flex items-center space-x-2 text-sapphire-900 font-bold">
-                <Edit3 className="w-5 h-5 text-sapphire-500" />
-                <span>Editare Comandă de Lucru {showEditModal.numarComanda}</span>
-                {(showEditModal.vehiculNumarIntern || showEditModal.vehiculInmatriculare) && (
-                  <span className="text-xs text-sage-600 font-semibold ml-2">
-                    — {showEditModal.vehiculNumarIntern || showEditModal.vehiculInmatriculare} ({showEditModal.vehiculMarca || ''} {showEditModal.vehiculModel || ''})
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="pleasant-card p-5 sm:p-7 rounded-3xl w-full max-w-5xl space-y-5 shadow-2xl bg-white max-h-[94vh] overflow-y-auto border border-morning-200">
+            
+            {/* TOP HEADER: WORK ORDER & VEHICLE INFO */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-morning-200 gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2.5 flex-wrap">
+                  <div className="p-2 rounded-xl bg-sapphire-50 text-sapphire-600 border border-sapphire-100">
+                    <Wrench className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-xl font-black text-sapphire-900 tracking-tight">
+                    Comandă de Lucru {showEditModal.numarComanda}
+                  </h2>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                    showEditModal.stare === 'FINALIZAT' ? 'bg-sapphire-50 text-sapphire-700 border border-sapphire-200' :
+                    showEditModal.stare === 'DEVALIDAT' ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300' :
+                    'bg-periwinkle-100 text-periwinkle-700 border border-periwinkle-300'
+                  }`}>
+                    {showEditModal.stare === 'IN_LUCRU' ? '● ÎN LUCRU' : showEditModal.stare}
                   </span>
-                )}
+                </div>
+
+                {/* VEHICLE QUICK BADGE */}
+                <div className="flex items-center space-x-2 text-xs font-semibold text-slate-600 flex-wrap pt-0.5">
+                  <span className="px-2 py-0.5 rounded-lg bg-morning-200 text-sapphire-900 font-extrabold">
+                    🚜 {showEditModal.vehiculNumarIntern || showEditModal.vehiculInmatriculare || 'Utilaj'}
+                  </span>
+                  {showEditModal.vehiculInmatriculare && showEditModal.vehiculNumarIntern && (
+                    <span className="text-slate-500 font-mono">({showEditModal.vehiculInmatriculare})</span>
+                  )}
+                  {(showEditModal.vehiculMarca || showEditModal.vehiculModel) && (
+                    <span className="text-slate-700 font-bold">
+                      {showEditModal.vehiculMarca} {showEditModal.vehiculModel}
+                    </span>
+                  )}
+                  {showEditModal.valoareContorLaExecutie > 0 && (
+                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono font-bold border border-emerald-200">
+                      ⚡ Contor: {showEditModal.valoareContorLaExecutie.toLocaleString('ro-RO')} {showEditModal.vehiculTipMasurare || 'KM'}
+                    </span>
+                  )}
+                </div>
               </div>
-              <button onClick={() => setShowEditModal(null)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* QUICK HEADER ACTIONS */}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowViewModal({
+                      ...showEditModal,
+                      mecanicResponsabil: editMecanici.join(', '),
+                      observatii: editObservatii,
+                      elementeComanda: editElemente,
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold border border-morning-300 flex items-center space-x-1.5 transition shadow-2xs"
+                  title="Previzualizează fișa de atelier A4"
+                >
+                  <Printer className="w-3.5 h-3.5 text-sapphire-600" />
+                  <span>Previzualizare A4</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(null)}
+                  className="p-1.5 rounded-xl text-sage-500 hover:text-slate-800 hover:bg-morning-200 transition"
+                  title="Închide fereastra"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-              {/* MECANICI SELECTION */}
-              <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-2">
-                <label className="text-sapphire-900 font-extrabold flex items-center space-x-1">
-                  <Users className="w-4 h-4 text-sapphire-500" />
-                  <span>Modifică Mecanici Responsabili:</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5">
+            {/* MECANICI & OBSERVAȚII ACCORDION / BOX */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+              {/* MECANICI */}
+              <div className="lg:col-span-5 p-3.5 bg-morning-100/70 border border-morning-200 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sapphire-900 font-black text-xs flex items-center space-x-1.5">
+                    <Users className="w-4 h-4 text-sapphire-500" />
+                    <span>Mecanici Responsabili:</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMecanicModal(true)}
+                    className="text-[10px] text-sapphire-600 hover:underline font-bold flex items-center space-x-1"
+                  >
+                    <UserPlus className="w-3 h-3" />
+                    <span>+ Mecanic</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                   {mecaniciList.map((m) => {
                     const isSelected = editMecanici.includes(m.nume);
                     return (
@@ -998,11 +1299,13 @@ export default function ComenziLucruPage() {
                         type="button"
                         key={m.id}
                         onClick={() => toggleEditMecanicSelection(m.nume)}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition ${
-                          isSelected ? 'bg-sapphire-500 text-white' : 'bg-white text-slate-700 border border-morning-200'
+                        className={`px-2.5 py-1 rounded-xl font-bold text-[11px] flex items-center space-x-1 transition shadow-2xs ${
+                          isSelected
+                            ? 'bg-sapphire-500 text-white'
+                            : 'bg-white text-slate-700 border border-morning-200 hover:bg-morning-200'
                         }`}
                       >
-                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                        {isSelected && <Check className="w-3 h-3" />}
                         <span>{m.nume}</span>
                       </button>
                     );
@@ -1011,175 +1314,637 @@ export default function ComenziLucruPage() {
               </div>
 
               {/* OBSERVAȚII */}
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Observații / Descriere Intervenție:</label>
+              <div className="lg:col-span-7 p-3.5 bg-morning-100/70 border border-morning-200 rounded-2xl space-y-1.5">
+                <label className="text-sapphire-900 font-black text-xs block">
+                  Descriere Lucrare / Observații Intervenție:
+                </label>
                 <textarea
                   rows={2}
                   value={editObservatii}
                   onChange={(e) => setEditObservatii(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-medium"
+                  placeholder="ex: Schimb filtre și ulei, verificare frâne, constatare joc articulație dreapta..."
+                  className="w-full bg-white border border-morning-200 rounded-xl p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sapphire-400 placeholder:text-sage-400"
                 />
               </div>
+            </div>
 
-              {/* TABEL PIESE / ELEMENTE DE EDITAT CU PILON COST & SELECȚIE STOC */}
-              <div className="space-y-3 pt-2 border-t border-morning-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sapphire-900 font-extrabold text-xs block">
-                      Piese de Schimb & Elemente pe Comandă ({editElemente.length}):
-                    </label>
-                    <span className="text-[11px] text-sage-600 font-medium">
-                      Puteți adăuga piese noi, alege pilonul de cost și conecta articole din stocul intern
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddEditElement}
-                    className="px-3 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs flex items-center space-x-1 transition"
-                  >
+            {/* ─── BARA RAPIDĂ DE ADĂUGARE (QUICK-ADD TOOLBAR) ─── */}
+            <div className="p-4 bg-gradient-to-br from-morning-100 via-white to-morning-100 border-2 border-sapphire-200/60 rounded-3xl space-y-3 shadow-sm">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center space-x-2">
+                  <span className="p-1 rounded-lg bg-sapphire-500 text-white">
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Felszerelés / Adaugă Piesă</span>
-                  </button>
+                  </span>
+                  <span className="text-xs font-black text-sapphire-900 uppercase tracking-wider">
+                    Adaugă Rapid Piese sau Manoperă pe Munkalap
+                  </span>
                 </div>
+                <span className="text-[11px] text-sage-600 font-medium">
+                  Selectați sursa, tastați denumirea și apăsați Enter sau „+ Adaugă”
+                </span>
+              </div>
 
-                <div className="space-y-3 max-h-72 overflow-y-auto p-1 pr-1">
-                  {editElemente.length > 0 ? (
-                    editElemente.map((el, idx) => (
-                      <div key={idx} className="p-3 bg-morning-100 rounded-2xl border border-morning-200 space-y-2 text-xs shadow-2xs">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-                          {/* TIP PILON COST */}
-                          <div className="md:col-span-5">
-                            <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Tip Pilon Cost / Proveniență:</label>
-                            <select
-                              value={el.pilonCost || 'PIESA_STOC'}
-                              onChange={(e) => {
-                                const updated = [...editElemente];
-                                updated[idx].pilonCost = e.target.value;
-                                if (e.target.value === 'PIESA_DEZMEMBRATA') {
-                                  updated[idx].pretUnitar = 0;
-                                  updated[idx].provenienta = 'Dezmembrări Parcul Propriu';
+              {/* TABS SURSĂ / PILON COST */}
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPilonCost('PIESA_STOC');
+                    setQuickPretUnitar(quickSelectedArticol?.pretUnitar || 0);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 transition ${
+                    quickPilonCost === 'PIESA_STOC'
+                      ? 'bg-sapphire-500 text-white shadow-sm shadow-sapphire-500/20'
+                      : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>📦 Piesă din Stoc (FIFO)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPilonCost('PIESA_DEZMEMBRATA');
+                    setQuickSelectedArticol(null);
+                    setQuickPretUnitar(0);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 transition ${
+                    quickPilonCost === 'PIESA_DEZMEMBRATA'
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                      : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                  }`}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>♻️ Dezmembrări (0 RON)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPilonCost('PIESA_DIRECTA');
+                    setQuickSelectedArticol(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 transition ${
+                    quickPilonCost === 'PIESA_DIRECTA'
+                      ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/20'
+                      : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                  }`}
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>🛒 Achiziție Directă</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPilonCost('MANOPERA_INTERNA');
+                    setQuickSelectedArticol(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 transition ${
+                    quickPilonCost === 'MANOPERA_INTERNA'
+                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                      : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                  }`}
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>👨‍🔧 Manoperă Atelier</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickPilonCost('PRESTATIE_EXTERNA');
+                    setQuickSelectedArticol(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1.5 transition ${
+                    quickPilonCost === 'PRESTATIE_EXTERNA'
+                      ? 'bg-slate-700 text-white shadow-sm shadow-slate-700/20'
+                      : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                  }`}
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>🏢 Prestație Externă</span>
+                </button>
+              </div>
+
+              {/* INPUT BAR ROW */}
+              <div className="space-y-2">
+                {/* Category Chips when in Stock mode */}
+                {quickPilonCost === 'PIESA_STOC' && (
+                  <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px]">
+                    <span className="text-sage-600 font-bold flex-shrink-0 mr-1">Categorie:</span>
+                    {availableStockCategories.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setQuickSelectedCategory(cat)}
+                        className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition ${
+                          quickSelectedCategory === cat
+                            ? 'bg-sapphire-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+                  {/* MAIN INPUT / SEARCH COMBOBOX */}
+                  <div className="md:col-span-6 relative">
+                    <label className="text-[11px] font-bold text-sapphire-900 block mb-1">
+                      {quickPilonCost === 'PIESA_STOC' ? '🔍 Caută Piesă în Magazia de Stoc:' :
+                       quickPilonCost === 'PIESA_DEZMEMBRATA' ? '♻️ Denumire Piesă din Dezmembrări:' :
+                       quickPilonCost === 'PIESA_DIRECTA' ? '🛒 Denumire Piesă Achiziționată Direct:' :
+                       quickPilonCost === 'MANOPERA_INTERNA' ? '👨‍🔧 Denumire Operațiune / Lucrare:' :
+                       '🏢 Denumire Serviciu Extern:'}
+                    </label>
+
+                    {quickPilonCost === 'PIESA_STOC' ? (
+                      <div className="relative">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sage-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={quickSearchQuery}
+                            onChange={(e) => {
+                              setQuickSearchQuery(e.target.value);
+                              setIsSearchDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsSearchDropdownOpen(true)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (filteredStockList.length > 0) {
+                                  const topItem = filteredStockList[0];
+                                  setQuickSelectedArticol(topItem);
+                                  setQuickDescriere(topItem.denumire);
+                                  setQuickPretUnitar(topItem.pretUnitar || 0);
+                                  setQuickSearchQuery(`${topItem.codArticol} — ${topItem.denumire}`);
+                                  setIsSearchDropdownOpen(false);
                                 }
-                                setEditElemente(updated);
-                              }}
-                              className="w-full bg-white border border-morning-200 rounded-xl p-1.5 font-bold text-sapphire-900 text-[11px]"
-                            >
-                              <option value="PIESA_STOC">1. PIESĂ STOC INTERN (Scade din stoc FIFO)</option>
-                              <option value="PIESA_DEZMEMBRATA">1b. PIESĂ DEZMEMBRĂRI (0 RON / 0 stoc scăzut)</option>
-                              <option value="PIESA_DIRECTA">2. ACHIZIȚIE DIRECTĂ PIESĂ</option>
-                              <option value="MANOPERA_INTERNA">3. MANOPERĂ INTERNĂ ATELIER</option>
-                              <option value="PRESTATIE_EXTERNA">4. PRESTAȚIE EXTERNĂ SERVICE</option>
-                            </select>
-                          </div>
-
-                          {/* SELECȚIE ARTICOL STOC (când pilonCost === 'PIESA_STOC') */}
-                          <div className="md:col-span-7">
-                            {el.pilonCost === 'PIESA_STOC' ? (
-                              <div>
-                                <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Alege Din Depozit Intern:</label>
-                                <select
-                                  value={el.articolStocId || ''}
-                                  onChange={(e) => {
-                                    const updated = [...editElemente];
-                                    const selectedId = e.target.value;
-                                    updated[idx].articolStocId = selectedId;
-                                    const item = stocuri.find((s) => s.id === selectedId);
-                                    if (item) {
-                                      updated[idx].descriere = item.denumire;
-                                      updated[idx].pretUnitar = item.pretUnitar || 0;
-                                    }
-                                    setEditElemente(updated);
-                                  }}
-                                  className="w-full bg-white border border-morning-200 rounded-xl p-1.5 font-bold text-sapphire-900 text-[11px]"
-                                >
-                                  <option value="">-- Alege articol din stoc --</option>
-                                  {stocuri.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.codArticol} - {s.denumire} (Stoc: {s.stocCurent} {s.unitateMasura} • {s.pretUnitar} RON/buc)
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-                          {/* DESCRIERE PIESĂ */}
-                          <div className="md:col-span-5">
-                            <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Descriere Operațiune / Piesă:</label>
-                            <input
-                              type="text"
-                              value={el.descriere}
-                              onChange={(e) => {
-                                const updated = [...editElemente];
-                                updated[idx].descriere = e.target.value;
-                                setEditElemente(updated);
-                              }}
-                              placeholder="ex: Filtru ulei, Plăcuțe frână..."
-                              className="w-full bg-white border border-morning-200 rounded-xl p-1.5 text-sapphire-900 font-bold"
-                            />
-                          </div>
-
-                          {/* CANTITATE */}
-                          <div className="md:col-span-2">
-                            <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Cantitate:</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={el.cantitate}
-                              onChange={(e) => {
-                                const updated = [...editElemente];
-                                updated[idx].cantitate = Number(e.target.value);
-                                setEditElemente(updated);
-                              }}
-                              className="w-full bg-white border border-morning-200 rounded-xl p-1.5 text-sapphire-900 font-mono font-bold"
-                            />
-                          </div>
-
-                          {/* PREȚ UNITAR */}
-                          <div className="md:col-span-3">
-                            <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Preț Unitar (RON):</label>
-                            <input
-                              type="number"
-                              disabled={el.pilonCost === 'PIESA_DEZMEMBRATA'}
-                              value={el.pretUnitar}
-                              onChange={(e) => {
-                                const updated = [...editElemente];
-                                updated[idx].pretUnitar = Number(e.target.value);
-                                setEditElemente(updated);
-                              }}
-                              className="w-full bg-white border border-morning-200 rounded-xl p-1.5 text-sapphire-900 font-mono font-bold disabled:bg-slate-100"
-                            />
-                          </div>
-
-                          {/* BUTON ȘTERGERE */}
-                          <div className="md:col-span-2 text-right pt-3">
+                              }
+                            }}
+                            placeholder="Gépelj be nevet vagy cikkszámot (pl: LF16015, ulei, plăcuțe)..."
+                            className="w-full pl-9 pr-8 py-2 bg-white border border-morning-300 rounded-xl text-xs font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 placeholder:text-sage-400 shadow-2xs"
+                          />
+                          {quickSearchQuery && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveEditElement(idx)}
-                              className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-xl transition flex items-center space-x-1 justify-end ml-auto"
-                              title="Șterge rând"
+                              onClick={() => {
+                                setQuickSearchQuery('');
+                                setQuickSelectedArticol(null);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sage-400 hover:text-slate-700"
                             >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="text-[10px] font-bold">Șterge</span>
+                              <X className="w-3.5 h-3.5" />
                             </button>
-                          </div>
+                          )}
                         </div>
+
+                        {/* FLOATING SMART AUTOCOMPLETE DROPDOWN */}
+                        {isSearchDropdownOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setIsSearchDropdownOpen(false)}
+                            />
+                            <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-morning-200 rounded-2xl shadow-2xl max-h-72 overflow-y-auto divide-y divide-morning-100">
+                              {filteredStockList.length > 0 ? (
+                                filteredStockList.slice(0, 30).map((st) => {
+                                  const inStock = Number(st.stocCurent || 0) > 0;
+                                  const isSelected = quickSelectedArticol?.id === st.id;
+                                  return (
+                                    <div
+                                      key={st.id}
+                                      onClick={() => {
+                                        setQuickSelectedArticol(st);
+                                        setQuickDescriere(st.denumire);
+                                        setQuickPretUnitar(st.pretUnitar || 0);
+                                        setQuickSearchQuery(`${st.codArticol} — ${st.denumire}`);
+                                        setIsSearchDropdownOpen(false);
+                                      }}
+                                      className={`p-2.5 cursor-pointer transition flex items-center justify-between hover:bg-sapphire-50/70 ${
+                                        isSelected ? 'bg-sapphire-50 border-l-4 border-sapphire-500' : ''
+                                      }`}
+                                    >
+                                      <div className="min-w-0 flex-1 mr-3 space-y-0.5">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono font-black text-[10px] border border-slate-200">
+                                            {st.codArticol}
+                                          </span>
+                                          <span className="font-bold text-sapphire-900 text-xs truncate">
+                                            {st.denumire}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center space-x-2 text-[10px] text-sage-600">
+                                          <span className="bg-morning-200 px-1.5 py-0.2 rounded font-medium">
+                                            {st.categorie} {st.subcategorie ? `▸ ${st.subcategorie}` : ''}
+                                          </span>
+                                          {st.depozit?.nume && (
+                                            <span>📍 {st.depozit.nume}</span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="text-right flex-shrink-0 space-y-0.5">
+                                        <div>
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                            inStock
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                          }`}>
+                                            {inStock ? `🟢 ${st.stocCurent} ${st.unitateMasura || 'buc'}` : '🔴 Epuizat (0)'}
+                                          </span>
+                                        </div>
+                                        <div className="text-[11px] font-mono font-bold text-slate-700">
+                                          {Number(st.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <div className="p-4 text-center text-xs text-sage-500 font-medium">
+                                  Nu s-au găsit piese în stoc pentru căutarea selectată.
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl text-center text-xs text-sage-600 font-semibold">
-                      Nu există piese sau consumabile asociate acestei comenzi.
+                    ) : (
+                      <input
+                        type="text"
+                        value={quickDescriere}
+                        onChange={(e) => setQuickDescriere(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddQuickElement();
+                          }
+                        }}
+                        placeholder={
+                          quickPilonCost === 'PIESA_DEZMEMBRATA' ? 'ex: Pompă servo recuperată din parc' :
+                          quickPilonCost === 'PIESA_DIRECTA' ? 'ex: Set garnituri chiulasă (factură Bardi)' :
+                          quickPilonCost === 'MANOPERA_INTERNA' ? 'ex: Înlocuire garnituri + aerisire sistem' :
+                          'ex: Rectificare chiulasă atelier extern'
+                        }
+                        className="w-full px-3 py-2 bg-white border border-morning-300 rounded-xl text-xs font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 placeholder:text-sage-400 shadow-2xs"
+                      />
+                    )}
+                  </div>
+
+                  {/* CANTITATE STEPPER */}
+                  <div className="md:col-span-2">
+                    <label className="text-[11px] font-bold text-sapphire-900 block mb-1">
+                      Cantitate:
+                    </label>
+                    <div className="flex items-center bg-white border border-morning-300 rounded-xl shadow-2xs overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setQuickCantitate((prev) => Math.max(1, prev - 1))}
+                        className="px-2 py-2 text-slate-500 hover:bg-morning-200 hover:text-slate-800 transition"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={quickCantitate}
+                        onChange={(e) => setQuickCantitate(Math.max(1, Number(e.target.value)))}
+                        className="w-full text-center py-1.5 font-mono font-extrabold text-xs text-sapphire-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (quickPilonCost === 'PIESA_STOC' && quickSelectedArticol) {
+                            if (quickCantitate >= quickSelectedArticol.stocCurent) {
+                              alert(`Stoc maxim atins: ${quickSelectedArticol.stocCurent} ${quickSelectedArticol.unitateMasura || 'buc'}`);
+                              return;
+                            }
+                          }
+                          setQuickCantitate((prev) => prev + 1);
+                        }}
+                        className="px-2 py-2 text-slate-500 hover:bg-morning-200 hover:text-slate-800 transition"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  )}
+                  </div>
+
+                  {/* PREȚ UNITAR */}
+                  <div className="md:col-span-2">
+                    <label className="text-[11px] font-bold text-sapphire-900 block mb-1">
+                      Preț (RON):
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        disabled={quickPilonCost === 'PIESA_DEZMEMBRATA'}
+                        value={quickPilonCost === 'PIESA_DEZMEMBRATA' ? 0 : quickPretUnitar}
+                        onChange={(e) => setQuickPretUnitar(Number(e.target.value))}
+                        className="w-full py-2 pl-2.5 pr-8 bg-white border border-morning-300 rounded-xl text-xs font-mono font-extrabold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 disabled:bg-slate-100 disabled:text-slate-400 shadow-2xs"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-sage-500 pointer-events-none">
+                        RON
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* SUBMIT QUICK ADD BUTTON */}
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuickElement()}
+                      className="w-full py-2 px-3 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-black text-xs shadow-md shadow-sapphire-500/20 flex items-center justify-center space-x-1.5 transition active:scale-98"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Adaugă</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── TABEL DEVIZ / ELEMENTE DE LUCRU ─── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-4 h-4 text-sapphire-600" />
+                  <h3 className="text-xs font-black text-sapphire-900 uppercase tracking-wider">
+                    Deviz Munkalap & Elemente Înregistrate ({editElemente.length})
+                  </h3>
+                </div>
+                <span className="text-[11px] text-sage-600 font-semibold">
+                  Toate elementele pot fi ajustate inline (cantitate, preț sau descriere)
+                </span>
+              </div>
+
+              <div className="border border-morning-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-morning-100/90 sticky top-0 z-10 border-b border-morning-200 text-slate-700 font-extrabold">
+                      <tr>
+                        <th className="p-2.5 w-10 text-center">#</th>
+                        <th className="p-2.5 w-44">Tip / Proveniență</th>
+                        <th className="p-2.5">Descriere Piesă & Operațiune</th>
+                        <th className="p-2.5 w-32 text-center">Cantitate</th>
+                        <th className="p-2.5 w-28 text-right">Preț Unitar</th>
+                        <th className="p-2.5 w-32 text-right">Total Rând</th>
+                        <th className="p-2.5 w-12 text-center">Șterge</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-morning-100">
+                      {editElemente.length > 0 ? (
+                        editElemente.map((el, idx) => {
+                          const stockItem = el.articolStocId ? stocuri.find((s) => s.id === el.articolStocId) : null;
+                          const isExceeded = el.pilonCost === 'PIESA_STOC' && stockItem && el.cantitate > stockItem.stocCurent;
+                          const rowTotal = (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0);
+
+                          return (
+                            <tr
+                              key={idx}
+                              className={`hover:bg-morning-50/80 transition ${
+                                isExceeded ? 'bg-rose-50/60' : ''
+                              }`}
+                            >
+                              <td className="p-2.5 text-center font-bold text-slate-400 text-[11px]">
+                                {idx + 1}
+                              </td>
+
+                              {/* PILON COST BADGE */}
+                              <td className="p-2.5">
+                                {el.pilonCost === 'PIESA_STOC' && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-sapphire-50 text-sapphire-700 border border-sapphire-200 inline-flex items-center space-x-1">
+                                    <span>📦 Stoc Intern</span>
+                                  </span>
+                                )}
+                                {el.pilonCost === 'PIESA_DEZMEMBRATA' && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center space-x-1">
+                                    <span>♻️ Dezmembrări (0 RON)</span>
+                                  </span>
+                                )}
+                                {el.pilonCost === 'PIESA_DIRECTA' && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center space-x-1">
+                                    <span>🛒 Achiziție Directă</span>
+                                  </span>
+                                )}
+                                {el.pilonCost === 'MANOPERA_INTERNA' && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 inline-flex items-center space-x-1">
+                                    <span>👨‍🔧 Manoperă Atelier</span>
+                                  </span>
+                                )}
+                                {el.pilonCost === 'PRESTATIE_EXTERNA' && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center space-x-1">
+                                    <span>🏢 Service Extern</span>
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* DESCRIERE */}
+                              <td className="p-2.5">
+                                <div className="space-y-0.5">
+                                  <input
+                                    type="text"
+                                    value={el.descriere}
+                                    onChange={(e) => handleUpdateEditElementDesc(idx, e.target.value)}
+                                    className="w-full font-bold text-sapphire-900 bg-transparent border-b border-transparent hover:border-morning-300 focus:border-sapphire-400 focus:outline-none text-xs"
+                                  />
+                                  {stockItem && (
+                                    <div className="flex items-center space-x-2 text-[10px] text-sage-600">
+                                      <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                        COD: {stockItem.codArticol}
+                                      </span>
+                                      <span>📍 {stockItem.depozit?.nume || 'Magazie Centrală'}</span>
+                                      <span className={stockItem.stocCurent > 0 ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
+                                        (Disponibil: {stockItem.stocCurent} {stockItem.unitateMasura || 'buc'})
+                                      </span>
+                                    </div>
+                                  )}
+                                  {isExceeded && (
+                                    <p className="text-[10px] text-rose-600 font-extrabold">
+                                      ⚠️ Atenție: Cantitatea solicitată depășește stocul disponibil ({stockItem?.stocCurent})!
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* CANTITATE STEPPER INLINE */}
+                              <td className="p-2.5 text-center">
+                                <div className="inline-flex items-center bg-white border border-morning-300 rounded-lg overflow-hidden shadow-2xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateEditElementQty(idx, -1)}
+                                    className="px-1.5 py-1 text-slate-500 hover:bg-morning-200 transition"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={el.cantitate}
+                                    onChange={(e) => {
+                                      const updated = [...editElemente];
+                                      updated[idx].cantitate = Math.max(1, Number(e.target.value));
+                                      setEditElemente(updated);
+                                    }}
+                                    className="w-12 text-center py-1 font-mono font-bold text-xs text-sapphire-900 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateEditElementQty(idx, 1)}
+                                    className="px-1.5 py-1 text-slate-500 hover:bg-morning-200 transition"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </td>
+
+                              {/* PREȚ UNITAR */}
+                              <td className="p-2.5 text-right">
+                                {el.pilonCost === 'PIESA_DEZMEMBRATA' ? (
+                                  <span className="text-[11px] font-mono text-slate-400 font-bold">0,00 RON</span>
+                                ) : (
+                                  <div className="inline-flex items-center space-x-1 justify-end">
+                                    <input
+                                      type="number"
+                                      value={el.pretUnitar}
+                                      onChange={(e) => handleUpdateEditElementPrice(idx, Number(e.target.value))}
+                                      className="w-20 text-right py-1 px-1.5 bg-white border border-morning-200 rounded-lg text-xs font-mono font-bold text-sapphire-900 focus:outline-none focus:ring-1 focus:ring-sapphire-400"
+                                    />
+                                    <span className="text-[10px] text-sage-500 font-bold">RON</span>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* TOTAL RÂND */}
+                              <td className="p-2.5 text-right font-mono font-black text-sapphire-900 text-xs whitespace-nowrap">
+                                {rowTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                              </td>
+
+                              {/* TRASH BUTTON */}
+                              <td className="p-2.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveEditElement(idx)}
+                                  className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition"
+                                  title="Șterge tétel din deviz"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-sage-500 space-y-2">
+                            <Package className="w-8 h-8 text-sage-300 mx-auto" />
+                            <p className="font-bold text-xs">Nicio piesă sau manoperă adăugată pe acest munkalap.</p>
+                            <p className="text-[11px] text-sage-400">
+                              Folosiți bara rapidă de mai sus pentru a adăuga piese din depozit, piese din dezmembrări sau manoperă.
+                            </p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── TOTAL DEVIZ ÖSSZESÍTŐ SÁV (REAL-TIME SUMMARY) ─── */}
+            <div className="p-4 bg-morning-100/90 border border-morning-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-morning-200">
+                  <span className="text-[10px] text-sage-600 font-bold block uppercase tracking-wider">📦 Piese Stoc ({bucatiDevizStoc} buc):</span>
+                  <span className="font-mono font-black text-sapphire-900 text-xs">
+                    {totalDevizPieseStoc.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                  </span>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-morning-200">
+                  <span className="text-[10px] text-sage-600 font-bold block uppercase tracking-wider">♻️ Dezmembrări ({bucatiDevizDezmembrari} buc):</span>
+                  <span className="font-mono font-black text-emerald-700 text-xs">
+                    0,00 RON <span className="text-[10px] font-normal text-emerald-600">(Recuperat)</span>
+                  </span>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-morning-200">
+                  <span className="text-[10px] text-sage-600 font-bold block uppercase tracking-wider">🛒 Achiziții Directe:</span>
+                  <span className="font-mono font-black text-amber-800 text-xs">
+                    {totalDevizDirecte.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                  </span>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-morning-200">
+                  <span className="text-[10px] text-sage-600 font-bold block uppercase tracking-wider">👨‍🔧 Manoperă Atelier:</span>
+                  <span className="font-mono font-black text-indigo-900 text-xs">
+                    {totalDevizManopera.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                  </span>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowEditModal(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Modificările</button>
+              {/* VÉGÖSSZEG KIEMELT DOBOZ */}
+              <div className="bg-sapphire-900 text-white px-5 py-3 rounded-2xl shadow-md text-right w-full md:w-auto flex-shrink-0 flex md:flex-col items-center md:end justify-between">
+                <span className="text-[10px] text-sapphire-200 font-extrabold uppercase tracking-widest block">
+                  Total General Comandă:
+                </span>
+                <span className="text-xl font-black font-mono tracking-tight text-white">
+                  {totalGeneralDeviz.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                </span>
               </div>
-            </form>
+            </div>
+
+            {/* ─── LÁBLÉC MŰVELETI GOMBOK (FOOTER ACTIONS) ─── */}
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-3 border-t border-morning-200 gap-3">
+              <div className="text-[11px] text-sage-600 font-medium">
+                {editElemente.length > 0
+                  ? `Comanda conține ${editElemente.length} poziții în deviz.`
+                  : 'Nicio poziție înregistrată încă.'}
+              </div>
+
+              <div className="flex items-center space-x-2.5 w-full sm:w-auto justify-end flex-wrap gap-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 hover:bg-morning-300 text-slate-700 font-bold text-xs transition"
+                >
+                  Anulează
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="px-4 py-2 rounded-xl bg-white border border-sapphire-400 text-sapphire-700 hover:bg-sapphire-50 font-black text-xs shadow-2xs flex items-center space-x-1.5 transition"
+                >
+                  <span>💾 Salvează ca Piszkozat</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingAndFinalizing}
+                  onClick={handleSaveAndFinalize}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 transition active:scale-98"
+                >
+                  {isSavingAndFinalizing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Se finalizează...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Salvează & Finalizează (FIFO)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
