@@ -158,11 +158,12 @@ export default function MentenantaPage() {
         alert(data.mesaj || 'Comandă de lucru deschisă în atelier!');
         setSelectedSarcina(null);
         fetchData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la deschiderea comenzii: ${err.message || res.statusText || 'Verificați datele introduse.'}`);
       }
-    } catch (e) {
-      alert('Comandă de Lucru deschisă cu succes!');
-      setSelectedSarcina(null);
-      fetchData();
+    } catch (e: any) {
+      alert(`Eroare de rețea la deschiderea comenzii: ${e.message || e}`);
     }
   };
 

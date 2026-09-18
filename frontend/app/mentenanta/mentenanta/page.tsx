@@ -100,10 +100,12 @@ export default function MentenantaPage() {
         alert(data.mesaj);
         setSelectedSarcina(null);
         fetchSarcini(selectedId);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la deschiderea comenzii: ${err.message || res.statusText || 'Verificați datele introduse.'}`);
       }
-    } catch (e) {
-      alert('Sarcina a fost convertită cu succes!');
-      setSelectedSarcina(null);
+    } catch (e: any) {
+      alert(`Eroare de rețea la deschiderea comenzii: ${e.message || e}`);
     }
   };
 
