@@ -350,22 +350,38 @@ export default function ComenziLucruPage() {
     }
   };
 
-  const handleAnuleazaComanda = async (id: string) => {
+  const handleAnuleazaComanda = async (cl: any) => {
+    const pieseStoc = (cl.elementeComanda || []).filter(
+      (el: any) => el.pilonCost === 'PIESA_STOC' && el.articolStocId
+    );
+
+    let pieseMsg = '';
+    if (pieseStoc.length > 0) {
+      const lista = pieseStoc.map((el: any) => `• ${el.cantitate} buc — ${el.descriere}`).join('\n');
+      pieseMsg = `\n\nA munkalapon nyilvántartott alábbi raktári alkatrészek visszakerülnek a raktárba / felszabadulnak a készletben:\n${lista}\n\nA tételek azonnal újra elérhetővé válnak a raktárkészletben!`;
+    } else {
+      pieseMsg = '\n\nA munkalap nem tartalmaz raktárból levont alkatrészt.';
+    }
+
     const confirmed = await showConfirm(
-      'Anulare Comandă de Lucru',
-      'Anularea acestei comenzi de lucru va RESTAURA automat stocul pieselor în magazie. Continuați?',
+      `Anulare Comandă de Lucru ${cl.numarComanda}`,
+      `Biztosan ANULÁLNI (érvényteleníteni) szeretné a(z) ${cl.numarComanda} munkalapot?${pieseMsg}`,
       'Da, anulează comanda',
-      'Înapoi'
+      'Mégse'
     );
     if (!confirmed) return;
+
     try {
-      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}/anuleaza`, { method: 'PATCH' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${cl.id}/anuleaza`, { method: 'PATCH' });
       if (res.ok) {
-        fetchData();
-        alert('Comandă anulată. Stocul a fost restaurat cu succes în gestiunea internă!');
+        await fetchData();
+        alert(`Comanda ${cl.numarComanda} a fost ANULATĂ cu succes!\n\nA lefoglalt/felhasznált alkatrészek visszakerültek a raktárba.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la anularea comandei: ${err.message || 'Eroare necunoscută'}`);
       }
-    } catch (e) {
-      alert('Eroare la anularea comandei.');
+    } catch (e: any) {
+      alert(`Eroare la anularea comandei: ${e.message || e}`);
     }
   };
 
@@ -405,26 +421,37 @@ export default function ComenziLucruPage() {
     }
   };
 
-  // Ștergere comandă de lucru anulată
-  const handleDeleteComanda = async (id: string, numarComanda: string) => {
+  // Ștergere comandă de lucru
+  const handleDeleteComanda = async (cl: any) => {
+    const pieseStoc = (cl.elementeComanda || []).filter(
+      (el: any) => el.pilonCost === 'PIESA_STOC' && el.articolStocId
+    );
+
+    let pieseMsg = '';
+    if (pieseStoc.length > 0) {
+      const lista = pieseStoc.map((el: any) => `• ${el.cantitate} buc — ${el.descriere}`).join('\n');
+      pieseMsg = `\n\nFIGYELEM: A munkalapon nyilvántartott raktári alkatrészek visszakerülnek a raktárba:\n${lista}`;
+    }
+
     const confirmed = await showConfirm(
-      'Ștergere Comandă de Lucru Anulată',
-      `Sigur doriți să ștergeți definitiv Comanda de Lucru ${numarComanda} din baza de date? Această acțiune nu poate fi revocată!`,
+      `Ștergere Definitivă ${cl.numarComanda}`,
+      `Biztosan VÉGLEGESEN TÖRÖLNI szeretné a(z) ${cl.numarComanda} munkalapot az adatbázisból?${pieseMsg}\n\nEz a művelet visszafordíthatatlan, a munkalap törlődik a jármű történetéből!`,
       'Da, șterge definitiv',
-      'Anulează'
+      'Mégse'
     );
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${cl.id}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchData();
+        alert(`Comanda ${cl.numarComanda} a fost ștearsă definitiv din baza de date.`);
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Eroare la ștergere: ${err.message || 'Eroare necunoscută'}`);
       }
     } catch (e: any) {
-      alert(`Eroare la ștergerea comenzii de lucru: ${e.message || e}`);
+      alert(`Eroare la ștergerea comenzii: ${e.message || e}`);
     }
   };
 
@@ -889,7 +916,7 @@ export default function ComenziLucruPage() {
                           </button>
 
                           <button
-                            onClick={() => handleAnuleazaComanda(cl.id)}
+                            onClick={() => handleAnuleazaComanda(cl)}
                             title="Anulare Comandă & Restaurează Stoc"
                             className="px-2.5 py-1 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 text-[11px] font-bold border border-roseash-300 transition"
                           >
@@ -919,7 +946,7 @@ export default function ComenziLucruPage() {
                           </button>
 
                           <button
-                            onClick={() => handleDeleteComanda(cl.id, cl.numarComanda)}
+                            onClick={() => handleDeleteComanda(cl)}
                             title="Șterge definitiv această comandă anulată din registru"
                             className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-roseash-100 text-slate-600 hover:text-terracotta-700 text-[11px] font-bold border border-slate-300 flex items-center space-x-1 transition"
                           >
