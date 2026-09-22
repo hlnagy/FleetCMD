@@ -93,6 +93,33 @@ export default function FisaTehnicaPage() {
   // ALERTE CENTRALIZATE (FOR FLEET OVERVIEW COUNTERS)
   const [alerteMap, setAlerteMap] = useState<{ [vehId: string]: number }>({});
 
+  const getProvenientaSuffix = (el: any) => {
+    if (!el) return null;
+    const isStock =
+      el.pilonCost === 'PIESA_STOC' ||
+      (!el.pilonCost && (!el.provenienta || el.provenienta === 'Stoc Intern' || el.provenienta === 'Magazie'));
+    if (isStock) return null;
+
+    let prov = '';
+    if (el.provenienta && el.provenienta !== 'Stoc Intern' && el.provenienta !== 'Magazie') {
+      prov = el.provenienta;
+    } else if (el.pilonCost === 'PIESA_DEZMEMBRATA') {
+      prov = 'Dezmembrări';
+    } else if (el.pilonCost === 'PIESA_DIRECTA') {
+      prov = 'Achiziție Directă';
+    } else if (el.pilonCost === 'MANOPERA_INTERNA') {
+      prov = 'Manoperă Atelier';
+    } else if (el.pilonCost === 'PRESTATIE_EXTERNA') {
+      prov = 'Prestație Externă';
+    }
+
+    if (prov && el.descriere && el.descriere.toLowerCase().includes(prov.toLowerCase())) {
+      return null;
+    }
+
+    return prov || null;
+  };
+
   const fetchVehicule = async () => {
     try {
       setLoading(true);
@@ -1539,25 +1566,34 @@ export default function FisaTehnicaPage() {
                 <table className="w-full text-left text-xs border border-slate-300 divide-y divide-slate-300">
                   <thead className="bg-slate-100 text-slate-800 font-bold uppercase text-[10px]">
                     <tr>
-                      <th className="p-2 border-r border-slate-300">#</th>
-                      <th className="p-2 border-r border-slate-300">Pilon Cost / Proveniență</th>
+                      <th className="p-2 border-r border-slate-300 w-10 text-center">#</th>
                       <th className="p-2 border-r border-slate-300">Descriere Operațiune / Piesă</th>
-                      <th className="p-2 border-r border-slate-300 text-center">Cant.</th>
-                      <th className="p-2 border-r border-slate-300 text-right">Preț Unitar</th>
-                      <th className="p-2 text-right">Total (RON)</th>
+                      <th className="p-2 border-r border-slate-300 w-24 text-center">Cant.</th>
+                      <th className="p-2 border-r border-slate-300 w-32 text-right">Preț Unitar</th>
+                      <th className="p-2 w-32 text-right">Total (RON)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {(showViewModal.elementeComanda || []).map((el: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="p-2 border-r border-slate-200 font-mono text-center">{idx + 1}</td>
-                        <td className="p-2 border-r border-slate-200 font-semibold">{el.pilonCost || 'PIESA_STOC'}</td>
-                        <td className="p-2 border-r border-slate-200">{el.descriere}</td>
-                        <td className="p-2 border-r border-slate-200 font-mono text-center">{el.cantitate}</td>
-                        <td className="p-2 border-r border-slate-200 font-mono text-right">{el.pretUnitar} RON</td>
-                        <td className="p-2 font-mono font-bold text-right">{el.costTotal} RON</td>
-                      </tr>
-                    ))}
+                    {(showViewModal.elementeComanda || []).map((el: any, idx: number) => {
+                      const prov = getProvenientaSuffix(el);
+                      const unitPrice = Number(el.pretUnitar || 0);
+                      const lineTotal = Number(el.costTotal != null ? el.costTotal : (Number(el.cantitate || 1) * unitPrice));
+
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="p-2 border-r border-slate-200 font-mono text-center">{idx + 1}</td>
+                          <td className="p-2 border-r border-slate-200">
+                            <span className="font-semibold text-slate-900">{el.descriere}</span>
+                            {prov && (
+                              <span className="text-slate-500 font-normal ml-1.5">({prov})</span>
+                            )}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 font-mono text-center font-bold">{el.cantitate}</td>
+                          <td className="p-2 border-r border-slate-200 font-mono text-right">{unitPrice.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
+                          <td className="p-2 font-mono font-bold text-right text-slate-900">{lineTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
