@@ -198,6 +198,7 @@ function ImportKmPompaContent() {
   const { user } = useAuth();
   const [csvContent, setCsvContent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [loadedFiles, setLoadedFiles] = useState<Array<{ name: string; size: number; rowsCount: number }>>([]);
   const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
   const [pasteText, setPasteText] = useState<string>('');
 
@@ -616,18 +617,60 @@ function ImportKmPompaContent() {
     }
   };
 
-  // Handler fișier CSV (Auto-procesare la selectare)
+  // Citire și îmbinare multiplă a fișierelor CSV (Batch Import)
+  const readCsvFiles = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    const validFiles = files.filter((f) => {
+      const lower = f.name.toLowerCase();
+      return lower.endsWith('.csv') || lower.endsWith('.txt') || f.type.includes('csv') || f.type.includes('text');
+    });
+
+    if (validFiles.length === 0) {
+      setErrorMessage('Nu a fost selectat niciun fișier CSV valid.');
+      return;
+    }
+
+    try {
+      const results = await Promise.all(
+        validFiles.map((f) => {
+          return new Promise<{ name: string; size: number; content: string; rowsCount: number }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const text = (e.target?.result as string) || '';
+              const rowsCount = text.split(/\r?\n/).filter((l) => l.trim().length > 0).length;
+              resolve({ name: f.name, size: f.size, content: text, rowsCount });
+            };
+            reader.onerror = reject;
+            reader.readAsText(f);
+          });
+        })
+      );
+
+      setLoadedFiles(results.map((r) => ({ name: r.name, size: r.size, rowsCount: r.rowsCount })));
+
+      const combinedContent = results.map((r) => r.content).join('\n');
+      setCsvContent(combinedContent);
+
+      if (results.length === 1) {
+        setFileName(results[0].name);
+      } else {
+        const totalRows = results.reduce((acc, r) => acc + r.rowsCount, 0);
+        setFileName(`${results.length} fișiere CSV (${totalRows} rânduri cumulate)`);
+      }
+
+      processCsvContent(combinedContent);
+    } catch (err: any) {
+      console.error('Eroare la citirea fișierelor CSV:', err);
+      setErrorMessage(`Eroare la citirea fișierelor: ${err.message || err}`);
+    }
+  };
+
+  // Handler fișiere CSV (Upload multiplu)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = (event.target?.result as string) || '';
-      setCsvContent(text);
-      processCsvContent(text);
-    };
-    reader.readAsText(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      readCsvFiles(files);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -636,16 +679,10 @@ function ImportKmPompaContent() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = (event.target?.result as string) || '';
-      setCsvContent(text);
-      processCsvContent(text);
-    };
-    reader.readAsText(file);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length > 0) {
+      readCsvFiles(files);
+    }
   };
 
   // Handler lipire directă text
@@ -654,6 +691,7 @@ function ImportKmPompaContent() {
       setErrorMessage('Vă rugăm să introduceți sau să lipiți textul CSV.');
       return;
     }
+    setLoadedFiles([]);
     setFileName('Text lipit direct (Pompă)');
     setCsvContent(pasteText);
     processCsvContent(pasteText);
@@ -1173,12 +1211,39 @@ function ImportKmPompaContent() {
                 <input
                   type="file"
                   id="csvInput"
+                  multiple
                   accept=".csv,text/csv,text/plain"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
                 <label htmlFor="csvInput" className="cursor-pointer block">
-                  {fileName && fileName !== 'Text lipit direct (Pompă)' ? (
+                  {loadedFiles.length > 1 ? (
+                    <div className="flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-2 shadow-sm">
+                        <Layers className="w-6 h-6" />
+                      </div>
+                      <span className="text-sm font-semibold text-white">
+                        {loadedFiles.length} fișiere CSV încărcate simultan
+                      </span>
+                      <span className="text-xs text-slate-400 mt-1">
+                        {loadedFiles.reduce((acc, f) => acc + f.rowsCount, 0)} rânduri cumulate detectate
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 justify-center mt-2.5 max-h-24 overflow-y-auto px-2">
+                        {loadedFiles.map((f, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1 text-[10px] bg-slate-800 text-slate-200 border border-slate-700 px-2 py-0.5 rounded-full"
+                          >
+                            <FileText className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span className="max-w-[130px] truncate">{f.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-xs text-emerald-400 mt-2.5 hover:underline font-medium">
+                        Apasă pentru a alege alte fișiere sau adaugă prin drag &amp; drop
+                      </span>
+                    </div>
+                  ) : fileName && fileName !== 'Text lipit direct (Pompă)' ? (
                     <div className="flex flex-col items-center">
                       <FileText className="w-10 h-10 text-emerald-400 mb-2" />
                       <span className="text-sm font-medium text-white break-all">{fileName}</span>
@@ -1186,17 +1251,17 @@ function ImportKmPompaContent() {
                         {csvContent.split('\n').filter(Boolean).length} rânduri detectate
                       </span>
                       <span className="text-xs text-emerald-400 mt-2 hover:underline">
-                        Click pentru a schimba fișierul
+                        Click pentru a schimba fișierul (poți selecta mai multe simultan)
                       </span>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center">
                       <UploadCloud className="w-10 h-10 text-slate-400 mb-2 group-hover:text-blue-400" />
                       <span className="text-sm font-medium text-slate-200">
-                        Trage fișierul CSV aici sau apasă pentru a alege
+                        Trage fișierele CSV aici sau apasă pentru a alege
                       </span>
                       <span className="text-xs text-slate-500 mt-1">
-                        Export din sistemul pompei (ex: 11.csv)
+                        Poți selecta simultan oricâte fișiere CSV (ex: 10 zile deodată)
                       </span>
                     </div>
                   )}

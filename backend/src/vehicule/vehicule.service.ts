@@ -1012,6 +1012,7 @@ export class VehiculeService {
     }
 
     const alimentari: RawAlimentare[] = [];
+    const seenFuelingKeys = new Set<string>();
 
     for (let idx = 0; idx < lines.length; idx++) {
       const cols = this.parseCsvLine(lines[idx]);
@@ -1062,6 +1063,11 @@ export class VehiculeService {
           }
         }
       }
+
+      // Evităm duplicatele exacte de alimentare apărute din multiple fișiere CSV sau linii repetate
+      const dedupeKey = `${normUnit}_${dataCol}_${oraCol}_${valKm}_${cantitateLitri || 0}`;
+      if (seenFuelingKeys.has(dedupeKey)) continue;
+      seenFuelingKeys.add(dedupeKey);
 
       alimentari.push({
         dataStr: dataCol,
@@ -1437,16 +1443,28 @@ export class VehiculeService {
         }
         const obs = obsParts.join(' | ') + ` (Index: ${alKm.toLocaleString()} km)`;
 
-        await this.prisma.istoricContorVehicul.create({
-          data: {
+        // Verificăm dacă această alimentare nu a fost deja salvată anterior (pentru a evita duplicatele)
+        const alreadyExists = await this.prisma.istoricContorVehicul.findFirst({
+          where: {
             vehiculId: v.id,
             valoareContor: alKm,
             dataInregistrare: alDataInreg,
             sursa: 'ALIMENTARE',
-            operator: 'Pompă Combustibil (Import CSV)',
-            observatii: obs,
           },
         });
+
+        if (!alreadyExists) {
+          await this.prisma.istoricContorVehicul.create({
+            data: {
+              vehiculId: v.id,
+              valoareContor: alKm,
+              dataInregistrare: alDataInreg,
+              sursa: 'ALIMENTARE',
+              operator: 'Pompă Combustibil (Import CSV)',
+              observatii: obs,
+            },
+          });
+        }
       }
 
       // Căutăm înregistrarea absolut cea mai recentă din întregul istoric al vehiculului
