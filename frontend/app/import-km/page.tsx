@@ -1057,11 +1057,44 @@ function ImportKmPompaContent() {
 
       const result = await res.json();
       setApplyResult(result);
-      setPreviewRows((prev) => prev.filter((r) => !approved.some((a) => a.idTemp === r.idTemp)));
+
+      // Reset complet al listei și al stării pentru a reveni la afișajul inițial
+      handleResetAll();
+
+      // Reîmprospătare flotă în fundal pentru a avea contoarele actualizate
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null;
+        const h: Record<string, string> = {};
+        if (token) h['Authorization'] = `Bearer ${token}`;
+        const resVeh = await fetch(`${API_BASE_URL}/vehicule`, { headers: h });
+        if (resVeh.ok) {
+          const vehData = await resVeh.json();
+          setAllVehicule(Array.isArray(vehData) ? vehData : []);
+        }
+      } catch (reloadErr) {
+        console.warn('Eroare reîmprospătare vehicule:', reloadErr);
+      }
     } catch (err: any) {
       alert(`Eroare la salvare: ${err.message}`);
     } finally {
       setIsApplying(false);
+    }
+  };
+
+  // Resetare completă a listei și revenire la starea inițială
+  const handleResetAll = () => {
+    setPreviewRows([]);
+    setStatistici(null);
+    setCsvContent('');
+    setFileName('');
+    setLoadedFiles([]);
+    setPasteText('');
+    setSearchQuery('');
+    setActiveFilter('toate');
+    setExpandedRowId(null);
+    if (typeof document !== 'undefined') {
+      const fileInput = document.getElementById('csvInput') as HTMLInputElement | null;
+      if (fileInput) fileInput.value = '';
     }
   };
 
@@ -1122,6 +1155,14 @@ function ImportKmPompaContent() {
             >
               <RefreshCw className={`w-4 h-4 ${loadingPreview ? 'animate-spin' : ''}`} />
               Reanalizează
+            </button>
+            <button
+              onClick={handleResetAll}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-rose-900/30 text-slate-300 hover:text-rose-300 rounded-lg text-sm border border-slate-600 hover:border-rose-500/40 transition"
+              title="Curăță selecția și revino la starea inițială"
+            >
+              <X className="w-4 h-4" />
+              Curăță Selecția
             </button>
           </div>
         )}
