@@ -65,6 +65,12 @@ export class VehiculeController {
   }
 
   @Public()
+  @Post('ore-functionare/baza-initiala')
+  setBazaInitialaContorMth(@Body() body: { vehiculId: string; valoareBaza: number; dataInitiala?: string }) {
+    return this.vehiculeService.setBazaInitialaContorMth(body);
+  }
+
+  @Public()
   @Patch('ore-functionare/perioada/:id')
   actualizeazaPerioadaMth(@Param('id') id: string, @Body() body: any) {
     return this.vehiculeService.actualizeazaPerioadaMth(id, body);

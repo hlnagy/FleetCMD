@@ -104,6 +104,12 @@ export default function OreFunctionarePage() {
   const [editObservatii, setEditObservatii] = useState('');
   const [editInProgress, setEditInProgress] = useState(false);
 
+  // Modal setare bază inițială contor (mTH la punere în funcțiune)
+  const [modalBazaOpen, setModalBazaOpen] = useState(false);
+  const [valoareBazaInput, setValoareBazaInput] = useState<string>('');
+  const [dataBazaInput, setDataBazaInput] = useState<string>('');
+  const [salvareBazaInProgress, setSalvareBazaInProgress] = useState(false);
+
   // Headers autorizare
   const getHeaders = useCallback(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -364,6 +370,50 @@ export default function OreFunctionarePage() {
     }
   };
 
+  // Salvare bază inițială contor utilaj la punerea în funcțiune
+  const handleSalveazaBazaInitiala = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVehiculId) return;
+
+    const val = parseFloat(valoareBazaInput);
+    if (isNaN(val) || val < 0) {
+      setNotificare({ tip: 'error', mesaj: 'Vă rugăm să introduceți o valoare numerică validă pentru baza inițială!' });
+      return;
+    }
+
+    try {
+      setSalvareBazaInProgress(true);
+      const res = await fetch(`${API_BASE_URL}/vehicule/ore-functionare/baza-initiala`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          vehiculId: selectedVehiculId,
+          valoareBaza: val,
+          dataInitiala: dataBazaInput || undefined,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setNotificare({ tip: 'error', mesaj: json.message || 'Eroare la salvarea bazei inițiale!' });
+        return;
+      }
+
+      setNotificare({
+        tip: 'success',
+        mesaj: `Contorul inițial de pornire a fost setat la ${val.toLocaleString('ro-RO')} mTH! Toate perioadele GPS se adaugă la această bază.`,
+      });
+
+      setModalBazaOpen(false);
+      await loadPerioade(selectedVehiculId);
+      await loadUtilaje(selectedVehiculId);
+    } catch (err: any) {
+      setNotificare({ tip: 'error', mesaj: err.message || 'Eroare la salvarea bazei inițiale!' });
+    } finally {
+      setSalvareBazaInProgress(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-4 md:p-6 lg:p-8 space-y-6">
       {/* HEADER PRINCIPAL */}
@@ -603,12 +653,26 @@ export default function OreFunctionarePage() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
-                  <div className="text-xs text-slate-500 font-medium">Bază Contor Inițial</div>
-                  <div className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {selectedVehicul.valoareContorInitial || 0}
+                <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-700/60 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 font-medium">Bază Contor Inițial</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValoareBazaInput(String(selectedVehicul.valoareContorInitial || 0));
+                        setDataBazaInput('');
+                        setModalBazaOpen(true);
+                      }}
+                      className="px-2 py-0.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md transition border border-indigo-200 dark:border-indigo-800"
+                    >
+                      ✏️ {selectedVehicul.valoareContorInitial > 0 ? 'Modifică' : 'Setează'}
+                    </button>
                   </div>
-                  <div className="text-[10px] text-slate-400">mTH la pornire flotă</div>
+                  <div className="text-xl font-bold text-slate-800 dark:text-slate-200 mt-1">
+                    {Number(selectedVehicul.valoareContorInitial || 0).toLocaleString('ro-RO')}
+                    <span className="text-xs font-normal text-slate-400 ml-1">mTH</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">contor bord la punere în funcțiune</div>
                 </div>
               </div>
             </div>
@@ -712,8 +776,29 @@ export default function OreFunctionarePage() {
               </div>
             </div>
 
-            {/* DACA ESTE PRIMA INREGISTRARE SI CONTORUL E 0: BAZA INITIALA OPTIONALA */}
-            {(!selectedVehicul.ultimaPerioada && selectedVehicul.valoareContorCurent === 0) && (
+            {/* INFORMARE SAU SETARE BAZĂ INIȚIALĂ CONTOR */}
+            {selectedVehicul.valoareContorInitial > 0 ? (
+              <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                  <span>
+                    Bază contor inițial stabilită la <strong>{Number(selectedVehicul.valoareContorInitial).toLocaleString('ro-RO')} mTH</strong>. Perioadele GPS introduse se adaugă cumulativ la acest index de pornire.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValoareBazaInput(String(selectedVehicul.valoareContorInitial || 0));
+                    setDataBazaInput('');
+                    setModalBazaOpen(true);
+                  }}
+                  className="px-3 py-1.5 font-bold bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-700 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5 self-start sm:self-auto shadow-sm"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  Modifică Baza Inițială
+                </button>
+              </div>
+            ) : (!selectedVehicul.ultimaPerioada && selectedVehicul.valoareContorCurent === 0) ? (
               <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
                   <Info className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -733,9 +818,20 @@ export default function OreFunctionarePage() {
                     onChange={(e) => setIndexContorStartPersonalizat(e.target.value)}
                     className="w-48 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg font-mono font-bold"
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValoareBazaInput('0');
+                      setDataBazaInput('');
+                      setModalBazaOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 underline"
+                  >
+                    sau configurează baza detaliată
+                  </button>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* CARD CONSILIER CONTINUITATE (LIVE CONTINUITY ADVISOR) */}
             {validare && (
@@ -1165,6 +1261,109 @@ export default function OreFunctionarePage() {
                 {editInProgress ? 'Se recalculează...' : 'Salvează și Recalculează'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SETARE / MODIFICARE BAZĂ INIȚIALĂ CONTOR */}
+      {modalBazaOpen && selectedVehicul && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-slate-900 dark:text-slate-100">
+                    Bază Inițială Contor (Pornire mTH)
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Utilaj: <strong className="text-indigo-600 dark:text-indigo-400">{selectedVehicul.numarIntern}</strong> ({selectedVehicul.marca} {selectedVehicul.model})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalBazaOpen(false)}
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalveazaBazaInitiala} className="space-y-4 text-xs">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                  <Info className="w-4 h-4 flex-shrink-0" />
+                  Cum funcționează baza inițială?
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Deoarece utilajele au lucrat deja înainte de implementarea sistemului, introduceți contorul de bord de la care începe evidența. Toate perioadele de funcționare din GPS se vor adăuga cumulativ peste această bază.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Valoare Contor Inițial de Pornire (mTH) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  required
+                  placeholder="ex: 3450 sau 0 dacă e utilaj nou"
+                  value={valoareBazaInput}
+                  onChange={(e) => setValoareBazaInput(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-black text-base text-slate-900 dark:text-slate-100"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Indexul afișat pe ceasul/bordul utilajului la momentul intrării în sistem.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                  Data Înregistrării Bazei (Opțional)
+                </label>
+                <input
+                  type="date"
+                  value={dataBazaInput}
+                  onChange={(e) => setDataBazaInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                />
+              </div>
+
+              {selectedVehicul.numarPerioade > 0 && (
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-900 dark:text-indigo-200 text-[11px]">
+                  <strong>🔄 Recalculare automată:</strong> Utilajul are deja <strong>{selectedVehicul.numarPerioade}</strong> perioade GPS înregistrate. Modificarea acestei baze va transpune și recalcula automat toate indexurile perioadelor existente, actualizând contorul curent.
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalBazaOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvareBazaInProgress || !valoareBazaInput}
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-md shadow-indigo-600/20 flex items-center gap-1.5"
+                >
+                  {salvareBazaInProgress ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Se salvează...
+                    </>
+                  ) : (
+                    'Salvează Baza și Recalculează'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

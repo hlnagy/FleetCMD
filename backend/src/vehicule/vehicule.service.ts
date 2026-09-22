@@ -1745,7 +1745,7 @@ export class VehiculeService {
     // Calcul index contor estimat
     const startContorEstimat = prevPeriod
       ? prevPeriod.indexContorEnd
-      : (vehicul.valoareContorCurent > 0 ? vehicul.valoareContorCurent : vehicul.valoareContorInitial);
+      : (vehicul.valoareContorInitial || vehicul.valoareContorCurent || 0);
     const endContorEstimat = Number((startContorEstimat + ore).toFixed(2));
 
     // 3. Verificare CONTINUITATE sau GOL (Gap)
@@ -1911,6 +1911,77 @@ export class VehiculeService {
   }
 
   /**
+   * Setează contorul de pornire (baza inițială de lucru în mTH) la punerea în funcțiune
+   * și recalculează automat toate perioadele GPS ulterioare adăugate peste această bază.
+   */
+  async setBazaInitialaContorMth(data: {
+    vehiculId: string;
+    valoareBaza: number;
+    dataInitiala?: string;
+  }) {
+    const vehicul = await this.prisma.vehicul.findUnique({
+      where: { id: data.vehiculId },
+    });
+    if (!vehicul) {
+      throw new NotFoundException('Vehiculul nu a fost găsit.');
+    }
+
+    const valBaza = Number(data.valoareBaza);
+    if (isNaN(valBaza) || valBaza < 0) {
+      throw new BadRequestException('Valoarea contorului de pornire trebuie să fie un număr pozitiv!');
+    }
+
+    const dInit = data.dataInitiala ? new Date(data.dataInitiala) : new Date();
+
+    const countPerioade = await this.prisma.perioadaFunctionareMth.count({
+      where: { vehiculId: data.vehiculId },
+    });
+
+    // Actualizăm baza inițială pe vehicul
+    await this.prisma.vehicul.update({
+      where: { id: data.vehiculId },
+      data: {
+        valoareContorInitial: valBaza,
+        ...(countPerioade === 0
+          ? { valoareContorCurent: valBaza, dataInregistrareContor: dInit }
+          : {}),
+      },
+    });
+
+    // Curățăm vechea intrare de BAZA_INITIALA din istoric contor și adăugăm noua bază
+    await this.prisma.istoricContorVehicul.deleteMany({
+      where: {
+        vehiculId: data.vehiculId,
+        sursa: 'BAZA_INITIALA',
+      },
+    });
+
+    await this.prisma.istoricContorVehicul.create({
+      data: {
+        vehiculId: data.vehiculId,
+        valoareContor: valBaza,
+        dataInregistrare: dInit,
+        sursa: 'BAZA_INITIALA',
+        observatii: `Contor inițial de pornire setat manual la punerea în funcțiune (${valBaza} mTH)`,
+      },
+    });
+
+    // Recalculăm toate perioadele GPS dacă există
+    if (countPerioade > 0) {
+      await this.recalculeazaCronologieMth(data.vehiculId, valBaza);
+    }
+
+    const vehiculActualizat = await this.prisma.vehicul.findUnique({
+      where: { id: data.vehiculId },
+    });
+
+    return {
+      mesaj: `Baza inițială a fost setată la ${valBaza} mTH! Toate perioadele GPS ulterioare se adaugă la această valoare.`,
+      vehicul: vehiculActualizat,
+    };
+  }
+
+  /**
    * Recalculează în lanț cronologic toate perioadele unui vehicul și actualizează contorul curent
    */
   async recalculeazaCronologieMth(vehiculId: string, customInitialBase?: number) {
@@ -1934,11 +2005,13 @@ export class VehiculeService {
     // Baza inițială a contorului
     let contorRulant = customInitialBase !== undefined && customInitialBase !== null
       ? Number(customInitialBase)
-      : (vehicul.valoareContorInitial > 0 ? vehicul.valoareContorInitial : 0);
+      : (vehicul.valoareContorInitial || 0);
 
-    // Dacă există deja o bază setată pe prima perioadă și nu este specificată o altă bază:
-    if (contorRulant === 0 && perioade[0].indexContorStart > 0 && customInitialBase === undefined) {
-      contorRulant = perioade[0].indexContorStart;
+    if (customInitialBase !== undefined && customInitialBase !== null) {
+      await this.prisma.vehicul.update({
+        where: { id: vehiculId },
+        data: { valoareContorInitial: contorRulant },
+      });
     }
 
     for (let i = 0; i < perioade.length; i++) {
