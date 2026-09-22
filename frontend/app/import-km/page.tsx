@@ -446,11 +446,11 @@ function ImportKmPompaContent() {
         anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în parcul auto.`);
       } else {
         const catUpper = (vehicul.categorieEnum || '').toUpperCase();
-        const isMth = vehicul.tipMasurare === 'MTH';
+        const isMth = (vehicul.tipMasurare || '').toUpperCase().includes('MTH');
 
         if (isMth) {
           status = 'CATEGORIE_IGNORATA';
-          anomaliiMesaje.push('Vehiculul este configurat pe Ore de Funcționare (MTH).');
+          anomaliiMesaje.push('Vehiculul este configurat pe Ore de Funcționare (MTH). Indexul de la pompă este exclus automat și nu se importă ca ore.');
         } else if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
           status = 'CATEGORIE_IGNORATA';
           anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" este debifată în selectorul de categorii.`);
@@ -709,7 +709,7 @@ function ImportKmPompaContent() {
         const kmPost = row.fereastraIstoric?.posterior?.km ?? null;
 
         const baselineForRollover = kmPost !== null ? kmPost : (kmAnt !== null ? kmAnt : curKm);
-        const rolloverCheck = row.vehiculId && row.tipMasurare !== 'MTH'
+        const rolloverCheck = row.vehiculId && !(row.tipMasurare || '').toUpperCase().includes('MTH')
           ? adjustOdometerRollover(safeVal, baselineForRollover)
           : { adjustedKm: safeVal, isRollover: false, delta: safeVal - curKm };
 
@@ -779,10 +779,22 @@ function ImportKmPompaContent() {
     setPreviewRows((prev) =>
       prev.map((row) => {
         if (row.idTemp !== idTemp) return row;
+        const isVehMth = (veh.tipMasurare || '').toUpperCase().includes('MTH');
+        if (isVehMth) {
+          return {
+            ...row,
+            vehiculId: veh.id,
+            numarInmatriculare: veh.numarInmatriculare,
+            numarIntern: veh.numarIntern,
+            categorieEnum: veh.categorieEnum,
+            tipMasurare: veh.tipMasurare,
+            status: 'CATEGORIE_IGNORATA',
+            anomalii: ['Vehiculul este configurat pe Ore de Funcționare (MTH). Indexul de la pompă este exclus automat și nu se importă ca ore.'],
+            aprobat: false,
+          };
+        }
         const curKm = veh.valoareContorCurent || 0;
-        const rolloverCheck = veh.tipMasurare !== 'MTH'
-          ? adjustOdometerRollover(row.valoareKmPropusa, curKm)
-          : { adjustedKm: row.valoareKmPropusa, isRollover: false, delta: row.valoareKmPropusa - curKm };
+        const rolloverCheck = adjustOdometerRollover(row.valoareKmPropusa, curKm);
 
         const effectiveVal = rolloverCheck.adjustedKm;
         const newDelta = rolloverCheck.delta;
@@ -835,7 +847,7 @@ function ImportKmPompaContent() {
         if (!updatedAlimentari[fuelingIndex]) return row;
 
         const curKm = row.contorCurent || 0;
-        const rollCheck = (row.vehiculId && row.tipMasurare !== 'MTH' && curKm > 0)
+        const rollCheck = (row.vehiculId && !(row.tipMasurare || '').toUpperCase().includes('MTH') && curKm > 0)
           ? adjustOdometerRollover(safeKm, curKm)
           : { adjustedKm: safeKm, isRollover: false, delta: safeKm - curKm };
 
@@ -1003,7 +1015,9 @@ function ImportKmPompaContent() {
   };
 
   const handleApplyUpdates = async () => {
-    const approved = previewRows.filter((r) => r.aprobat && r.vehiculId && r.valoareKmPropusa > 0);
+    const approved = previewRows.filter(
+      (r) => r.aprobat && r.vehiculId && r.valoareKmPropusa > 0 && !(r.tipMasurare || '').toUpperCase().includes('MTH')
+    );
     if (approved.length === 0) {
       alert('Niciun rând valid nu este selectat pentru aplicare.');
       return;
@@ -1647,7 +1661,7 @@ function ImportKmPompaContent() {
                           <input
                             type="checkbox"
                             checked={Boolean(row.aprobat)}
-                            disabled={!row.vehiculId || row.tipMasurare === 'MTH'}
+                            disabled={!row.vehiculId || (row.tipMasurare || '').toUpperCase().includes('MTH')}
                             onChange={() => toggleRowApproval(row.idTemp)}
                             className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-30"
                           />
@@ -1881,10 +1895,12 @@ function ImportKmPompaContent() {
                           {row.status === 'CATEGORIE_IGNORATA' && (
                             <div>
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[11px]">
-                                {row.tipMasurare === 'MTH' ? 'Utilaj MTH (Ore)' : 'Categorie nebifată'}
+                                {(row.tipMasurare || '').toUpperCase().includes('MTH') ? 'Utilaj MTH (Exclus de la KM)' : 'Categorie nebifată'}
                               </span>
                               <p className="text-[10px] text-slate-400/80 mt-0.5">
-                                {row.tipMasurare === 'MTH' ? 'Configurat pe ore (MTH)' : `Bifează ${row.categorieEnum} sus`}
+                                {(row.tipMasurare || '').toUpperCase().includes('MTH')
+                                  ? 'Exclus automat (MTH funcționează exclusiv pe ore GPS)'
+                                  : `Bifează ${row.categorieEnum} sus`}
                               </p>
                             </div>
                           )}

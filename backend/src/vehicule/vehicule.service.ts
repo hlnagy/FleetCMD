@@ -1162,14 +1162,14 @@ export class VehiculeService {
         anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în baza de date.`);
       } else {
         const catUpper = (vehicul.categorieEnum || '').toUpperCase();
-        const isMth = vehicul.tipMasurare === 'MTH';
+        const isMth = (vehicul.tipMasurare || '').toUpperCase().includes('MTH');
 
-        if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
+        if (isMth) {
+          status = 'CATEGORIE_IGNORATA';
+          anomaliiMesaje.push(`Vehiculul este configurat pe Ore de Funcționare (MTH). Indexul KM de la pompă este exclus automat și nu se importă.`);
+        } else if (allowedCatsSet && !allowedCatsSet.has(catUpper)) {
           status = 'CATEGORIE_IGNORATA';
           anomaliiMesaje.push(`Categoria "${vehicul.categorieEnum}" nu este selectată pentru actualizare.`);
-        } else if (isMth) {
-          status = 'CATEGORIE_IGNORATA';
-          anomaliiMesaje.push(`Vehiculul este pe Ore de Funcționare (MTH), nu pe Kilometri.`);
         } else {
           // Verificare rollover (trecere peste 1.000.000 km)
           const baselineForRollover = kmPost !== null ? kmPost : (kmAnt !== null ? kmAnt : curKm);
@@ -1255,7 +1255,7 @@ export class VehiculeService {
       const istoricAlimentariFisier = item.toateAlimentarile.map((a) => {
         let aKm = a.valoareKm;
         let subRollover = false;
-        if (vehicul && vehicul.tipMasurare !== 'MTH' && curKm > 0) {
+        if (vehicul && !(vehicul.tipMasurare || '').toUpperCase().includes('MTH') && curKm > 0) {
           const subRCheck = this.adjustOdometerRollover(aKm, curKm);
           if (subRCheck.isRollover) {
             aKm = subRCheck.adjustedKm;
@@ -1386,6 +1386,13 @@ export class VehiculeService {
       const v = await this.prisma.vehicul.findUnique({ where: { id: item.vehiculId } });
       if (!v) {
         erori.push(`Vehiculul cu ID ${item.vehiculId} nu a fost găsit.`);
+        continue;
+      }
+
+      // REGULĂ STRICTĂ: Utilajele/Vehiculele pe MTH (ore de funcționare) NU importă indexul KM de la pompă!
+      const isMth = (v.tipMasurare || '').toUpperCase().includes('MTH');
+      if (isMth) {
+        erori.push(`Vehiculul ${v.numarIntern} (${v.numarInmatriculare}) este configurat pe Ore de Funcționare (MTH) și este exclus de la actualizarea indexului din pompă.`);
         continue;
       }
 
