@@ -36,6 +36,46 @@ export class VehiculeController {
     return this.vehiculeService.createVehicul(body);
   }
 
+  // ==========================================
+  // ORE DE FUNCȚIONARE MTH (GPS)
+  // ==========================================
+
+  @Public()
+  @Get('ore-functionare/utilaje')
+  getUtilajeMth(@Query('all') all?: string) {
+    return this.vehiculeService.getUtilajeMth(all === 'true');
+  }
+
+  @Public()
+  @Get('ore-functionare/perioade')
+  getPerioadeMth(@Query('vehiculId') vehiculId: string) {
+    return this.vehiculeService.getPerioadeMth(vehiculId);
+  }
+
+  @Public()
+  @Post('ore-functionare/verifica-continuitate')
+  verificaContinuitateMth(@Body() body: any) {
+    return this.vehiculeService.verificaContinuitateMth(body);
+  }
+
+  @Public()
+  @Post('ore-functionare/inregistrare')
+  inregistreazaPerioadaMth(@Body() body: any) {
+    return this.vehiculeService.inregistreazaPerioadaMth(body);
+  }
+
+  @Public()
+  @Patch('ore-functionare/perioada/:id')
+  actualizeazaPerioadaMth(@Param('id') id: string, @Body() body: any) {
+    return this.vehiculeService.actualizeazaPerioadaMth(id, body);
+  }
+
+  @Public()
+  @Delete('ore-functionare/perioada/:id')
+  stergePerioadaMth(@Param('id') id: string) {
+    return this.vehiculeService.stergePerioadaMth(id);
+  }
+
   @Patch(':id')
   updateVehicul(@Param('id') id: string, @Body() body: any) {
     return this.vehiculeService.updateVehicul(id, body);

@@ -1521,5 +1521,577 @@ export class VehiculeService {
       erori,
     };
   }
+
+  // ==========================================
+  // GESTIUNE ORE DE FUNCȚIONARE MTH (GPS)
+  // ==========================================
+
+  /**
+   * Returnează toate utilajele (sau toate vehiculele dacă allVehicles=true)
+   * cu sumarul orelor GPS înregistrate
+   */
+  async getUtilajeMth(allVehicles = false) {
+    const whereClause: any = {};
+    if (!allVehicles) {
+      whereClause.OR = [
+        { tipMasurare: { contains: 'MTH', mode: 'insensitive' } },
+        { tipMasurare: { contains: 'mTH' } },
+        { categorieEnum: { in: ['EXCAVATOR', 'BASCULA_8X4', 'INCARCATOR', 'BULLDOZER', 'COMPACTOR', 'UTILAJ', 'UTILAJ_GREU', 'INCARCATOR_FRONTAL', 'AUTOVALT', 'UTILAJ_SPECIAL'] } }
+      ];
+    }
+
+    const vehicule = await this.prisma.vehicul.findMany({
+      where: whereClause,
+      include: {
+        perioadeMth: {
+          orderBy: { dataStart: 'desc' },
+          take: 1,
+        },
+        _count: {
+          select: { perioadeMth: true },
+        },
+      },
+      orderBy: [
+        { numarIntern: 'asc' },
+        { numarInmatriculare: 'asc' },
+      ],
+    });
+
+    return vehicule.map((v) => {
+      const ultimaPerioada = v.perioadeMth[0] || null;
+      return {
+        id: v.id,
+        numarIntern: v.numarIntern,
+        numarInmatriculare: v.numarInmatriculare,
+        marca: v.marca,
+        model: v.model,
+        anFabricatie: v.anFabricatie,
+        categorieEnum: v.categorieEnum,
+        tipMasurare: v.tipMasurare,
+        valoareContorCurent: v.valoareContorCurent,
+        valoareContorInitial: v.valoareContorInitial,
+        dataInregistrareContor: v.dataInregistrareContor,
+        stare: v.stare,
+        numarPerioade: v._count.perioadeMth,
+        ultimaPerioada: ultimaPerioada
+          ? {
+              id: ultimaPerioada.id,
+              dataStart: ultimaPerioada.dataStart,
+              dataEnd: ultimaPerioada.dataEnd,
+              oreFunctionare: ultimaPerioada.oreFunctionare,
+              indexContorEnd: ultimaPerioada.indexContorEnd,
+              stareContinuitate: ultimaPerioada.stareContinuitate,
+            }
+          : null,
+      };
+    });
+  }
+
+  /**
+   * Returnează istoricul perioadelor de funcționare mTH pentru un vehicul
+   */
+  async getPerioadeMth(vehiculId: string) {
+    const vehicul = await this.prisma.vehicul.findUnique({
+      where: { id: vehiculId },
+    });
+    if (!vehicul) {
+      throw new NotFoundException(`Vehiculul cu ID-ul ${vehiculId} nu a fost găsit.`);
+    }
+
+    const perioade = await this.prisma.perioadaFunctionareMth.findMany({
+      where: { vehiculId },
+      orderBy: { dataStart: 'desc' },
+    });
+
+    const totalOre = perioade.reduce((acc, p) => acc + p.oreFunctionare, 0);
+
+    return {
+      vehicul: {
+        id: vehicul.id,
+        numarIntern: vehicul.numarIntern,
+        numarInmatriculare: vehicul.numarInmatriculare,
+        marca: vehicul.marca,
+        model: vehicul.model,
+        categorieEnum: vehicul.categorieEnum,
+        tipMasurare: vehicul.tipMasurare,
+        valoareContorCurent: vehicul.valoareContorCurent,
+        valoareContorInitial: vehicul.valoareContorInitial,
+        dataInregistrareContor: vehicul.dataInregistrareContor,
+      },
+      statistici: {
+        numarPerioade: perioade.length,
+        totalOreInregistrate: Number(totalOre.toFixed(2)),
+        primaData: perioade.length > 0 ? perioade[perioade.length - 1].dataStart : null,
+        ultimaData: perioade.length > 0 ? perioade[0].dataEnd : null,
+      },
+      perioade,
+    };
+  }
+
+  /**
+   * Verifică continuitatea și analizează golurile/suprapunerile pentru o perioadă propusă
+   */
+  async verificaContinuitateMth(data: {
+    vehiculId: string;
+    dataStart: string;
+    dataEnd: string;
+    oreFunctionare: number;
+    excludePerioadaId?: string;
+  }) {
+    const vehicul = await this.prisma.vehicul.findUnique({
+      where: { id: data.vehiculId },
+    });
+    if (!vehicul) {
+      throw new NotFoundException(`Vehiculul nu a fost găsit.`);
+    }
+
+    const dStart = new Date(data.dataStart);
+    const dEnd = new Date(data.dataEnd);
+
+    if (isNaN(dStart.getTime()) || isNaN(dEnd.getTime())) {
+      throw new BadRequestException('Datele introduse sunt invalide.');
+    }
+
+    // Normalizare calendaristică (doar zile: YYYY-MM-DD)
+    const dStartDay = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate());
+    const dEndDay = new Date(dEnd.getFullYear(), dEnd.getMonth(), dEnd.getDate());
+
+    if (dStartDay > dEndDay) {
+      return {
+        valid: false,
+        status: 'EROARE',
+        mesaj: 'Data de început nu poate fi ulterioară datei de sfârșit!',
+      };
+    }
+
+    const diffMs = dEndDay.getTime() - dStartDay.getTime();
+    const nrZile = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+    const maxOreTeoretic = nrZile * 24;
+
+    const ore = Number(data.oreFunctionare || 0);
+    if (ore < 0) {
+      return {
+        valid: false,
+        status: 'EROARE',
+        mesaj: 'Orele de funcționare nu pot fi negative!',
+      };
+    }
+
+    if (ore > maxOreTeoretic) {
+      return {
+        valid: false,
+        status: 'EROARE',
+        mesaj: `Valoare fizic imposibilă: ${ore} ore în ${nrZile} ${nrZile === 1 ? 'zi' : 'zile'} (maximul teoretic este de ${maxOreTeoretic} ore)!`,
+      };
+    }
+
+    const medieOrePeZi = nrZile > 0 ? Number((ore / nrZile).toFixed(2)) : 0;
+
+    // Căutăm perioadele existente ale vehiculului
+    const existing = await this.prisma.perioadaFunctionareMth.findMany({
+      where: {
+        vehiculId: data.vehiculId,
+        ...(data.excludePerioadaId ? { id: { not: data.excludePerioadaId } } : {}),
+      },
+      orderBy: { dataStart: 'asc' },
+    });
+
+    // 1. Verificare SUPRAPUNERE (Overlap)
+    const suprapunere = existing.find((p) => {
+      const pStart = new Date(p.dataStart.getFullYear(), p.dataStart.getMonth(), p.dataStart.getDate());
+      const pEnd = new Date(p.dataEnd.getFullYear(), p.dataEnd.getMonth(), p.dataEnd.getDate());
+      return dStartDay <= pEnd && dEndDay >= pStart;
+    });
+
+    if (suprapunere) {
+      const pStartStr = suprapunere.dataStart.toISOString().split('T')[0];
+      const pEndStr = suprapunere.dataEnd.toISOString().split('T')[0];
+      const nextAvailableDay = new Date(suprapunere.dataEnd);
+      nextAvailableDay.setDate(nextAvailableDay.getDate() + 1);
+      const sugestieDataStart = nextAvailableDay.toISOString().split('T')[0];
+
+      return {
+        valid: false,
+        status: 'SUPRAPUNERE',
+        nrZile,
+        medieOrePeZi,
+        mesaj: `Perioada selectată se suprapune cu perioada deja înregistrată (${pStartStr} - ${pEndStr}). Risc de dublare a orelor!`,
+        perioadaSuprapusa: {
+          id: suprapunere.id,
+          dataStart: pStartStr,
+          dataEnd: pEndStr,
+          ore: suprapunere.oreFunctionare,
+        },
+        sugestieDataStart,
+      };
+    }
+
+    // 2. Găsire perioadă anterioară și posterioară
+    let prevPeriod: any = null;
+    for (const p of existing) {
+      const pEnd = new Date(p.dataEnd.getFullYear(), p.dataEnd.getMonth(), p.dataEnd.getDate());
+      if (pEnd < dStartDay) {
+        prevPeriod = p;
+      }
+    }
+
+    // Calcul index contor estimat
+    const startContorEstimat = prevPeriod
+      ? prevPeriod.indexContorEnd
+      : (vehicul.valoareContorCurent > 0 ? vehicul.valoareContorCurent : vehicul.valoareContorInitial);
+    const endContorEstimat = Number((startContorEstimat + ore).toFixed(2));
+
+    // 3. Verificare CONTINUITATE sau GOL (Gap)
+    if (!prevPeriod) {
+      // Este prima perioadă înregistrată (sau cea mai timpurie)
+      return {
+        valid: true,
+        status: 'PRIMA_INREGISTRARE',
+        nrZile,
+        medieOrePeZi,
+        mesaj: 'Aceasta este prima perioadă înregistrată pe acest utilaj.',
+        indexContorStartEstimat: startContorEstimat,
+        indexContorEndEstimat: endContorEstimat,
+        estePrimaPerioada: true,
+      };
+    }
+
+    const prevEndDay = new Date(prevPeriod.dataEnd.getFullYear(), prevPeriod.dataEnd.getMonth(), prevPeriod.dataEnd.getDate());
+    const gapDiffMs = dStartDay.getTime() - prevEndDay.getTime();
+    const gapTotalZile = Math.round(gapDiffMs / (1000 * 60 * 60 * 24)); // Dacă dStartDay e fix a doua zi => gapTotalZile = 1
+
+    if (gapTotalZile === 1) {
+      // Fix a doua zi => Continuitate perfectă!
+      const prevEndStr = prevPeriod.dataEnd.toISOString().split('T')[0];
+      return {
+        valid: true,
+        status: 'CONTINUU',
+        nrZile,
+        medieOrePeZi,
+        mesaj: `Continuitate perfectă: Perioada continuă direct de unde s-a oprit ultima înregistrare (${prevEndStr}).`,
+        indexContorStartEstimat: startContorEstimat,
+        indexContorEndEstimat: endContorEstimat,
+      };
+    }
+
+    if (gapTotalZile > 1) {
+      // Există un gol (gap) de n zile lipsă!
+      const zileGol = gapTotalZile - 1;
+      const dataGolStart = new Date(prevEndDay);
+      dataGolStart.setDate(dataGolStart.getDate() + 1);
+      const dataGolEnd = new Date(dStartDay);
+      dataGolEnd.setDate(dataGolEnd.getDate() - 1);
+
+      const dataGolStartStr = dataGolStart.toISOString().split('T')[0];
+      const dataGolEndStr = dataGolEnd.toISOString().split('T')[0];
+      const prevEndStr = prevPeriod.dataEnd.toISOString().split('T')[0];
+
+      return {
+        valid: true, // Valid dar necesită confirmare sau corectare
+        status: 'GOL_DETECTAT',
+        nrZile,
+        medieOrePeZi,
+        zileGol,
+        dataGolInceput: dataGolStartStr,
+        dataGolSfarsit: dataGolEndStr,
+        sugestieDataStart: dataGolStartStr, // 1-click button to eliminate gap!
+        mesaj: `Interval lipsă de ${zileGol} ${zileGol === 1 ? 'zi' : 'zile'} (${dataGolStartStr} - ${dataGolEndStr}) între ultima perioadă salvată (${prevEndStr}) și perioada curentă.`,
+        indexContorStartEstimat: startContorEstimat,
+        indexContorEndEstimat: endContorEstimat,
+      };
+    }
+
+    return {
+      valid: true,
+      status: 'CONTINUU',
+      nrZile,
+      medieOrePeZi,
+      mesaj: 'Perioada este validă.',
+      indexContorStartEstimat: startContorEstimat,
+      indexContorEndEstimat: endContorEstimat,
+    };
+  }
+
+  /**
+   * Înregistrează o perioadă nouă de funcționare mTH și recalculează lanțul cronologic
+   */
+  async inregistreazaPerioadaMth(data: {
+    vehiculId: string;
+    dataStart: string;
+    dataEnd: string;
+    oreFunctionare: number;
+    confirmaInactivDacaGol?: boolean;
+    observatii?: string;
+    operator?: string;
+    indexContorStartPersonalizat?: number;
+  }) {
+    const validare = await this.verificaContinuitateMth({
+      vehiculId: data.vehiculId,
+      dataStart: data.dataStart,
+      dataEnd: data.dataEnd,
+      oreFunctionare: data.oreFunctionare,
+    });
+
+    if (!validare.valid && validare.status === 'EROARE') {
+      throw new BadRequestException(validare.mesaj);
+    }
+
+    if (validare.status === 'SUPRAPUNERE') {
+      throw new BadRequestException(validare.mesaj);
+    }
+
+    let stareContinuitate = validare.status === 'GOL_DETECTAT' ? 'GOL_CONFIRMAT_INACTIV' : (validare.status || 'CONTINUU');
+    let areGol = false;
+    let zileGol = 0;
+    let dataGolInceput: Date | null = null;
+    let dataGolSfarsit: Date | null = null;
+    let explicatieGol: string | null = null;
+
+    if (validare.status === 'GOL_DETECTAT') {
+      if (!data.confirmaInactivDacaGol) {
+        throw new BadRequestException(
+          `Există un interval lipsă de ${validare.zileGol} zile. Confirmați că utilajul a fost inactiv sau corectați data de început.`
+        );
+      }
+      areGol = true;
+      zileGol = validare.zileGol || 0;
+      dataGolInceput = validare.dataGolInceput ? new Date(validare.dataGolInceput) : null;
+      dataGolSfarsit = validare.dataGolSfarsit ? new Date(validare.dataGolSfarsit) : null;
+      explicatieGol = `Utilaj inactiv confirmat (${zileGol} ${zileGol === 1 ? 'zi' : 'zile'} pauză: ${validare.dataGolInceput} - ${validare.dataGolSfarsit})`;
+      stareContinuitate = 'GOL_CONFIRMAT_INACTIV';
+    }
+
+    const dStart = new Date(data.dataStart);
+    const dEnd = new Date(data.dataEnd);
+
+    // Salvăm temporar perioada
+    const nouaPerioada = await this.prisma.perioadaFunctionareMth.create({
+      data: {
+        vehiculId: data.vehiculId,
+        dataStart: dStart,
+        dataEnd: dEnd,
+        oreFunctionare: Number(data.oreFunctionare),
+        indexContorStart: validare.indexContorStartEstimat || 0,
+        indexContorEnd: validare.indexContorEndEstimat || 0,
+        areGol,
+        zileGol,
+        dataGolInceput,
+        dataGolSfarsit,
+        stareContinuitate,
+        explicatieGol,
+        observatii: data.observatii || null,
+        operator: data.operator || null,
+        sursa: 'GPS_MANUAL',
+      },
+    });
+
+    // Rulăm recalcularea cronologică completă a timpului pentru a asigura integritatea contorului
+    await this.recalculeazaCronologieMth(data.vehiculId, data.indexContorStartPersonalizat);
+
+    // Returnăm perioada actualizată și starea curentă a utilajului
+    const perioadaActualizata = await this.prisma.perioadaFunctionareMth.findUnique({
+      where: { id: nouaPerioada.id },
+    });
+    const vehicul = await this.prisma.vehicul.findUnique({
+      where: { id: data.vehiculId },
+    });
+
+    return {
+      mesaj: `Perioada de funcționare a fost salvată cu succes! Contor utilaj: ${vehicul?.valoareContorCurent} mTH.`,
+      perioada: perioadaActualizata,
+      vehicul,
+    };
+  }
+
+  /**
+   * Recalculează în lanț cronologic toate perioadele unui vehicul și actualizează contorul curent
+   */
+  async recalculeazaCronologieMth(vehiculId: string, customInitialBase?: number) {
+    const vehicul = await this.prisma.vehicul.findUnique({
+      where: { id: vehiculId },
+    });
+    if (!vehicul) return;
+
+    const perioade = await this.prisma.perioadaFunctionareMth.findMany({
+      where: { vehiculId },
+      orderBy: [
+        { dataStart: 'asc' },
+        { dataEnd: 'asc' },
+      ],
+    });
+
+    if (perioade.length === 0) {
+      return;
+    }
+
+    // Baza inițială a contorului
+    let contorRulant = customInitialBase !== undefined && customInitialBase !== null
+      ? Number(customInitialBase)
+      : (vehicul.valoareContorInitial > 0 ? vehicul.valoareContorInitial : 0);
+
+    // Dacă există deja o bază setată pe prima perioadă și nu este specificată o altă bază:
+    if (contorRulant === 0 && perioade[0].indexContorStart > 0 && customInitialBase === undefined) {
+      contorRulant = perioade[0].indexContorStart;
+    }
+
+    for (let i = 0; i < perioade.length; i++) {
+      const p = perioade[i];
+      const startVal = Number(contorRulant.toFixed(2));
+      const endVal = Number((startVal + p.oreFunctionare).toFixed(2));
+
+      // Verificăm golul față de perioada precedentă
+      let areGol = false;
+      let zileGol = 0;
+      let dataGolInceput: Date | null = null;
+      let dataGolSfarsit: Date | null = null;
+      let stareContinuitate = p.stareContinuitate;
+
+      if (i > 0) {
+        const prevP = perioade[i - 1];
+        const prevEndDay = new Date(prevP.dataEnd.getFullYear(), prevP.dataEnd.getMonth(), prevP.dataEnd.getDate());
+        const curStartDay = new Date(p.dataStart.getFullYear(), p.dataStart.getMonth(), p.dataStart.getDate());
+        const diffDays = Math.round((curStartDay.getTime() - prevEndDay.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 1) {
+          areGol = true;
+          zileGol = diffDays - 1;
+          const dGStart = new Date(prevEndDay);
+          dGStart.setDate(dGStart.getDate() + 1);
+          const dGEnd = new Date(curStartDay);
+          dGEnd.setDate(dGEnd.getDate() - 1);
+          dataGolInceput = dGStart;
+          dataGolSfarsit = dGEnd;
+          if (stareContinuitate !== 'GOL_CONFIRMAT_INACTIV') {
+            stareContinuitate = 'GOL_CONFIRMAT_INACTIV';
+          }
+        } else {
+          areGol = false;
+          zileGol = 0;
+          stareContinuitate = 'CONTINUU';
+        }
+      } else {
+        stareContinuitate = 'PRIMA_INREGISTRARE';
+      }
+
+      await this.prisma.perioadaFunctionareMth.update({
+        where: { id: p.id },
+        data: {
+          indexContorStart: startVal,
+          indexContorEnd: endVal,
+          areGol,
+          zileGol,
+          dataGolInceput,
+          dataGolSfarsit,
+          stareContinuitate,
+        },
+      });
+
+      contorRulant = endVal;
+    }
+
+    // Ultima perioadă cronologică devine contorul curent al utilajului
+    const ultimaPerioada = perioade[perioade.length - 1];
+    const valoareFinala = contorRulant;
+
+    await this.prisma.vehicul.update({
+      where: { id: vehiculId },
+      data: {
+        valoareContorCurent: valoareFinala,
+        dataInregistrareContor: ultimaPerioada.dataEnd,
+      },
+    });
+
+    // Înregistrăm intrarea în IstoricContorVehicul pentru ultima perioadă
+    await this.prisma.istoricContorVehicul.create({
+      data: {
+        vehiculId,
+        valoareContor: valoareFinala,
+        dataInregistrare: ultimaPerioada.dataEnd,
+        sursa: 'GPS',
+        observatii: `Sincronizare ore GPS mTH (Perioada ${ultimaPerioada.dataStart.toISOString().split('T')[0]} - ${ultimaPerioada.dataEnd.toISOString().split('T')[0]}, +${ultimaPerioada.oreFunctionare} ore)`,
+      },
+    });
+  }
+
+  /**
+   * Șterge o perioadă și recalculează lanțul cronologic
+   */
+  async stergePerioadaMth(id: string) {
+    const perioada = await this.prisma.perioadaFunctionareMth.findUnique({
+      where: { id },
+    });
+    if (!perioada) {
+      throw new NotFoundException(`Perioada cu ID-ul ${id} nu a fost găsită.`);
+    }
+
+    const vehiculId = perioada.vehiculId;
+    await this.prisma.perioadaFunctionareMth.delete({
+      where: { id },
+    });
+
+    // Recalculăm lanțul
+    await this.recalculeazaCronologieMth(vehiculId);
+
+    // Dacă nu mai există perioade, resetăm la contor inițial
+    const remaining = await this.prisma.perioadaFunctionareMth.count({
+      where: { vehiculId },
+    });
+    if (remaining === 0) {
+      const v = await this.prisma.vehicul.findUnique({ where: { id: vehiculId } });
+      if (v) {
+        await this.prisma.vehicul.update({
+          where: { id: vehiculId },
+          data: {
+            valoareContorCurent: v.valoareContorInitial,
+          },
+        });
+      }
+    }
+
+    return {
+      mesaj: 'Perioada de funcționare a fost ștearsă cu succes, iar contorul a fost recalculat.',
+    };
+  }
+
+  /**
+   * Actualizează o perioadă existentă și recalculează lanțul cronologic
+   */
+  async actualizeazaPerioadaMth(id: string, data: {
+    dataStart?: string;
+    dataEnd?: string;
+    oreFunctionare?: number;
+    observatii?: string;
+    confirmaInactivDacaGol?: boolean;
+  }) {
+    const existenta = await this.prisma.perioadaFunctionareMth.findUnique({
+      where: { id },
+    });
+    if (!existenta) {
+      throw new NotFoundException(`Perioada nu a fost găsită.`);
+    }
+
+    const updateData: any = {};
+    if (data.observatii !== undefined) updateData.observatii = data.observatii;
+    if (data.oreFunctionare !== undefined) updateData.oreFunctionare = Number(data.oreFunctionare);
+    if (data.dataStart) updateData.dataStart = new Date(data.dataStart);
+    if (data.dataEnd) updateData.dataEnd = new Date(data.dataEnd);
+
+    await this.prisma.perioadaFunctionareMth.update({
+      where: { id },
+      data: updateData,
+    });
+
+    await this.recalculeazaCronologieMth(existenta.vehiculId);
+
+    const updated = await this.prisma.perioadaFunctionareMth.findUnique({
+      where: { id },
+    });
+
+    return {
+      mesaj: 'Perioada a fost modificată cu succes, iar contorul a fost recalculat.',
+      perioada: updated,
+    };
+  }
 }
+
 

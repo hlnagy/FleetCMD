@@ -52,6 +52,7 @@ model Vehicul {
   anvelope               Anvelopa[]
   istoricPermutari       IstoricPermutareAnvelopa[]
   istoricContor          IstoricContorVehicul[]
+  perioadeMth            PerioadaFunctionareMth[]
   completariLichid       CompletareLichid[]
   configurariUlei        ConfigurareUleiVehicul[]
 
@@ -101,6 +102,36 @@ model IstoricContorVehicul {
   observatii       String?
 
   @@index([vehiculId, dataInregistrare])
+}
+
+model PerioadaFunctionareMth {
+  id                 String    @id @default(uuid())
+  vehiculId          String
+  vehicul            Vehicul   @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+
+  dataStart          DateTime
+  dataEnd            DateTime
+  oreFunctionare     Float     // Ore lucrate raportate de GPS
+
+  indexContorStart   Float     // Index mTH calculat la dataStart
+  indexContorEnd     Float     // Index mTH calculat la dataEnd (indexContorStart + oreFunctionare)
+
+  areGol             Boolean   @default(false)
+  zileGol            Int       @default(0)
+  dataGolInceput     DateTime?
+  dataGolSfarsit     DateTime?
+  stareContinuitate  String    @default("CONTINUU") // CONTINUU | GOL_CONFIRMAT_INACTIV | SUPRAPUNERE | PRIMA_INREGISTRARE
+  explicatieGol      String?
+
+  sursa              String    @default("GPS_MANUAL")
+  operator           String?
+  observatii         String?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([vehiculId, dataStart])
+  @@index([vehiculId, dataEnd])
 }
 
 model ConfigurareUleiVehicul {
