@@ -41,12 +41,12 @@ export default function ComenziLucruPage() {
   const [observatii, setObservatii] = useState('');
   const [autoFinalize, setAutoFinalize] = useState(false);
 
-  // Stare Căutare & Filtrare Járművek (Vehicle Selection)
+  // Stare Căutare & Filtrare Vehicule (Vehicle Selection)
   const [vehiculSearchQuery, setVehiculSearchQuery] = useState('');
   const [vehiculCategoryFilter, setVehiculCategoryFilter] = useState('TOATE');
   const [isVehiculSearchOpen, setIsVehiculSearchOpen] = useState(false);
 
-  // Single initial element state (Alapértelmezetten false - tiszta deviz indul)
+  // Single initial element state (Implicit false - deviz curat)
   const [hasInitialPart, setHasInitialPart] = useState(false);
   const [pilonCost, setPilonCost] = useState('PIESA_STOC');
   const [descrierePiesa, setDescrierePiesa] = useState('');
@@ -67,12 +67,12 @@ export default function ComenziLucruPage() {
   const [functieMecanicNou, setFunctieMecanicNou] = useState('Mecanic Atelier');
   const [telefonMecanicNou, setTelefonMecanicNou] = useState('');
 
-  // Form State Editare Comandă Lucru (SZERKESZTÉS)
+  // Form State Editare Comandă Lucru
   const [editMecanici, setEditMecanici] = useState<string[]>([]);
   const [editObservatii, setEditObservatii] = useState('');
   const [editElemente, setEditElemente] = useState<any[]>([]);
 
-  // Quick-Add Bar State pentru Editor Munkalap & Alkatrész Kereső
+  // Quick-Add Bar State pentru Editor Comandă & Căutare Piese
   const [quickPilonCost, setQuickPilonCost] = useState<'PIESA_STOC' | 'PIESA_DEZMEMBRATA' | 'PIESA_DIRECTA' | 'MANOPERA_INTERNA' | 'PRESTATIE_EXTERNA'>('PIESA_STOC');
   const [quickSearchQuery, setQuickSearchQuery] = useState('');
   const [quickSelectedCategory, setQuickSelectedCategory] = useState('TOATE');
@@ -415,16 +415,16 @@ export default function ComenziLucruPage() {
     let pieseMsg = '';
     if (pieseStoc.length > 0) {
       const lista = pieseStoc.map((el: any) => `• ${el.cantitate} buc — ${el.descriere}`).join('\n');
-      pieseMsg = `\n\nA munkalapon nyilvántartott alábbi raktári alkatrészek visszakerülnek a raktárba / felszabadulnak a készletben:\n${lista}\n\nA tételek azonnal újra elérhetővé válnak a raktárkészletben!`;
+      pieseMsg = `\n\nUrmătoarele piese din stoc înregistrate pe comandă vor fi returnate în depozit / eliberate din stoc:\n${lista}\n\nArticolele redevin imediat disponibile în stocul magazinului!`;
     } else {
-      pieseMsg = '\n\nA munkalap nem tartalmaz raktárból levont alkatrészt.';
+      pieseMsg = '\n\nComanda nu conține piese scăzute din stoc.';
     }
 
     const confirmed = await showConfirm(
       `Anulare Comandă de Lucru ${cl.numarComanda}`,
-      `Biztosan ANULÁLNI (érvényteleníteni) szeretné a(z) ${cl.numarComanda} munkalapot?${pieseMsg}`,
+      `Sigur doriți să ANULAȚI comanda de lucru ${cl.numarComanda}?${pieseMsg}`,
       'Da, anulează comanda',
-      'Mégse'
+      'Renunță'
     );
     if (!confirmed) return;
 
@@ -432,7 +432,7 @@ export default function ComenziLucruPage() {
       const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${cl.id}/anuleaza`, { method: 'PATCH' });
       if (res.ok) {
         await fetchData();
-        alert(`Comanda ${cl.numarComanda} a fost ANULATĂ cu succes!\n\nA lefoglalt/felhasznált alkatrészek visszakerültek a raktárba.`);
+        alert(`Comanda ${cl.numarComanda} a fost ANULATĂ cu succes!\n\nPiesele consumate au fost returnate în gestiunea de stoc.`);
       } else {
         const err = await res.json().catch(() => ({}));
         alert(`Eroare la anularea comandei: ${err.message || 'Eroare necunoscută'}`);
@@ -487,14 +487,14 @@ export default function ComenziLucruPage() {
     let pieseMsg = '';
     if (pieseStoc.length > 0) {
       const lista = pieseStoc.map((el: any) => `• ${el.cantitate} buc — ${el.descriere}`).join('\n');
-      pieseMsg = `\n\nFIGYELEM: A munkalapon nyilvántartott raktári alkatrészek visszakerülnek a raktárba:\n${lista}`;
+      pieseMsg = `\n\nATENȚIE: Piesele înregistrate din stoc vor fi returnate în magazie:\n${lista}`;
     }
 
     const confirmed = await showConfirm(
       `Ștergere Definitivă ${cl.numarComanda}`,
-      `Biztosan VÉGLEGESEN TÖRÖLNI szeretné a(z) ${cl.numarComanda} munkalapot az adatbázisból?${pieseMsg}\n\nEz a művelet visszafordíthatatlan, a munkalap törlődik a jármű történetéből!`,
+      `Sigur doriți să ȘTERGEȚI DEFINITIV comanda de lucru ${cl.numarComanda} din baza de date?${pieseMsg}\n\nAceastă acțiune este ireversibilă, comanda va fi ștearsă complet din istoricul utilajului!`,
       'Da, șterge definitiv',
-      'Mégse'
+      'Renunță'
     );
     if (!confirmed) return;
 
@@ -853,7 +853,7 @@ export default function ComenziLucruPage() {
       return (a.denumire || '').localeCompare(b.denumire || '');
     });
 
-  // Calcul Deviz în Timp Real pentru Munkalap Editor
+  // Calcul Deviz în Timp Real pentru Editor Comandă
   const totalDevizPieseStoc = editElemente
     .filter((el) => el.pilonCost === 'PIESA_STOC')
     .reduce((acc, el) => acc + (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0), 0);
@@ -879,7 +879,7 @@ export default function ComenziLucruPage() {
     0
   );
 
-  // Calcul Categorii Járművek & Listă Utilaje Filtrate pentru Deschidere Comandă Nouă
+  // Calcul Categorii Vehicule & Listă Utilaje Filtrate pentru Deschidere Comandă Nouă
   const availableVehiculeCategories = [
     'TOATE',
     ...Array.from(new Set(vehicule.map((v) => v.categorieEnum).filter(Boolean))),
@@ -1434,7 +1434,7 @@ export default function ComenziLucruPage() {
                     <Plus className="w-3.5 h-3.5" />
                   </span>
                   <span className="text-xs font-black text-sapphire-900 uppercase tracking-wider">
-                    Adaugă Rapid Piese sau Manoperă pe Munkalap
+                    Adaugă Rapid Piese sau Manoperă pe Comandă
                   </span>
                 </div>
                 <span className="text-[11px] text-sage-600 font-medium">
@@ -1585,7 +1585,7 @@ export default function ComenziLucruPage() {
                                 }
                               }
                             }}
-                            placeholder="Gépelj be nevet vagy cikkszámot (pl: LF16015, ulei, plăcuțe)..."
+                            placeholder="Tastează denumire sau cod piesă (ex: LF16015, ulei, plăcuțe)..."
                             className="w-full pl-9 pr-8 py-2 bg-white border border-morning-300 rounded-xl text-xs font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 placeholder:text-sage-400 shadow-2xs"
                           />
                           {quickSearchQuery && (
@@ -1773,7 +1773,7 @@ export default function ComenziLucruPage() {
                 <div className="flex items-center space-x-2">
                   <FileText className="w-4 h-4 text-sapphire-600" />
                   <h3 className="text-xs font-black text-sapphire-900 uppercase tracking-wider">
-                    Deviz Munkalap & Elemente Înregistrate ({editElemente.length})
+                    Deviz Comandă & Elemente Înregistrate ({editElemente.length})
                   </h3>
                 </div>
                 <span className="text-[11px] text-sage-600 font-semibold">
@@ -1941,7 +1941,7 @@ export default function ComenziLucruPage() {
                         <tr>
                           <td colSpan={7} className="p-8 text-center text-sage-500 space-y-2">
                             <Package className="w-8 h-8 text-sage-300 mx-auto" />
-                            <p className="font-bold text-xs">Nicio piesă sau manoperă adăugată pe acest munkalap.</p>
+                            <p className="font-bold text-xs">Nicio piesă sau manoperă adăugată pe această comandă.</p>
                             <p className="text-[11px] text-sage-400">
                               Folosiți bara rapidă de mai sus pentru a adăuga piese din depozit, piese din dezmembrări sau manoperă.
                             </p>
@@ -1954,7 +1954,7 @@ export default function ComenziLucruPage() {
               </div>
             </div>
 
-            {/* ─── TOTAL DEVIZ ÖSSZESÍTŐ SÁV (REAL-TIME SUMMARY) ─── */}
+            {/* ─── SUMAR TOTAL DEVIZ ÎN TIMP REAL (REAL-TIME SUMMARY) ─── */}
             <div className="p-4 bg-morning-100/90 border border-morning-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto text-xs">
                 <div className="bg-white p-2.5 rounded-xl border border-morning-200">
@@ -1986,7 +1986,7 @@ export default function ComenziLucruPage() {
                 </div>
               </div>
 
-              {/* VÉGÖSSZEG KIEMELT DOBOZ */}
+              {/* CASETA TOTAL GENERAL */}
               <div className="bg-sapphire-900 text-white px-5 py-3 rounded-2xl shadow-md text-right w-full md:w-auto flex-shrink-0 flex md:flex-col items-center md:end justify-between">
                 <span className="text-[10px] text-sapphire-200 font-extrabold uppercase tracking-widest block">
                   Total General Comandă:
@@ -1997,7 +1997,7 @@ export default function ComenziLucruPage() {
               </div>
             </div>
 
-            {/* ─── LÁBLÉC MŰVELETI GOMBOK (FOOTER ACTIONS) ─── */}
+            {/* ─── ACȚIUNI SUBSOL DEVIZ (FOOTER ACTIONS) ─── */}
             <div className="flex flex-col sm:flex-row items-center justify-between pt-3 border-t border-morning-200 gap-3">
               <div className="text-[11px] text-sage-600 font-medium">
                 {editElemente.length > 0
@@ -2019,7 +2019,7 @@ export default function ComenziLucruPage() {
                   onClick={handleSaveEdit}
                   className="px-4 py-2 rounded-xl bg-white border border-sapphire-400 text-sapphire-700 hover:bg-sapphire-50 font-black text-xs shadow-2xs flex items-center space-x-1.5 transition"
                 >
-                  <span>💾 Salvează ca Piszkozat</span>
+                  <span>💾 Salvează Ciornă</span>
                 </button>
 
                 <button
@@ -2331,12 +2331,12 @@ export default function ComenziLucruPage() {
                       )}
                     </div>
 
-                    {/* KÁRTYA: KIVÁLASZTOTT JÁRMŰ (ha nincs megnyitva a kereső) */}
+                    {/* CARD: VEHICUL SELECTAT (când căutarea este închisă) */}
                     {selectedVehicul && !isVehiculSearchOpen ? (
                       <div
                         onClick={() => setIsVehiculSearchOpen(true)}
                         className="p-3 bg-white border border-morning-300 hover:border-sapphire-400 rounded-xl flex items-center justify-between shadow-2xs cursor-pointer transition group"
-                        title="Kattintson az utilaj módosításához"
+                        title="Faceți clic pentru a schimba utilajul"
                       >
                         <div className="flex items-center space-x-3 min-w-0">
                           <div className="w-10 h-10 rounded-xl bg-sapphire-50 group-hover:bg-sapphire-100 text-sapphire-600 border border-sapphire-200 flex items-center justify-center text-xl flex-shrink-0 transition">
@@ -2374,9 +2374,9 @@ export default function ComenziLucruPage() {
                         </div>
                       </div>
                     ) : (
-                      /* KERESŐ ÉS KATEGÓRIA VÁLASZTÓ DOBOZ */
+                      /* CASETA CĂUTARE ȘI SELECTARE CATEGORIE */
                       <div className="space-y-2.5 pt-1">
-                        {/* Kategória gyorsszűrő gombok */}
+                        {/* Butoane filtrare rapidă categorie */}
                         <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px]">
                           <span className="text-sage-600 font-bold flex-shrink-0 mr-1">Categorie:</span>
                           {availableVehiculeCategories.map((cat) => (
@@ -2395,7 +2395,7 @@ export default function ComenziLucruPage() {
                           ))}
                         </div>
 
-                        {/* Élő kereső mező */}
+                        {/* Câmp căutare în timp real */}
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sage-400 pointer-events-none" />
                           <input

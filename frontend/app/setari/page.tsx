@@ -2624,7 +2624,7 @@ function SetariContent() {
                   className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                     auditViewMode === 'table' ? 'bg-white text-sapphire-900 shadow-xs' : 'text-sage-600 hover:text-sapphire-900'
                   }`}
-                  title="Tabel clasic cu oldalcsúszka (vízszintes görgetősáv)"
+                  title="Tabel clasic cu bară de derulare orizontală"
                 >
                   <LayoutList className="w-3.5 h-3.5 text-sapphire-600" />
                   <span>Tabel</span>
@@ -3382,7 +3382,7 @@ function SetariContent() {
 
               <div className="p-4 rounded-2xl bg-morning-100 border border-morning-200 space-y-1">
                 <span className="text-[10px] font-bold text-sage-600 uppercase tracking-wider">Comenzi Deschise</span>
-                <p className="text-xl font-black text-sapphire-900 font-mono">3 Munkalap</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">3 Comenzi de lucru</p>
                 <span className="text-[10px] text-sapphire-700 font-semibold">2 mecanici alocați</span>
               </div>
 
