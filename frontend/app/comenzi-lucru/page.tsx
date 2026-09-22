@@ -7,9 +7,10 @@ import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
   Unlock, RotateCcw, Calendar, Truck, Loader2, Package, Minus, AlertCircle, Info,
-  ShoppingCart, RefreshCw
+  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import DraggableModal from '@/components/DraggableModal';
 
 export default function ComenziLucruPage() {
   const [comenzi, setComenzi] = useState<any[]>([]);
@@ -45,8 +46,8 @@ export default function ComenziLucruPage() {
   const [vehiculCategoryFilter, setVehiculCategoryFilter] = useState('TOATE');
   const [isVehiculSearchOpen, setIsVehiculSearchOpen] = useState(false);
 
-  // Single initial element state (Opțional)
-  const [hasInitialPart, setHasInitialPart] = useState(true);
+  // Single initial element state (Alapértelmezetten false - tiszta deviz indul)
+  const [hasInitialPart, setHasInitialPart] = useState(false);
   const [pilonCost, setPilonCost] = useState('PIESA_STOC');
   const [descrierePiesa, setDescrierePiesa] = useState('');
   const [selectedArticolStocId, setSelectedArticolStocId] = useState('');
@@ -123,11 +124,6 @@ export default function ComenziLucruPage() {
       if (resStoc.ok) {
         const stData = await resStoc.json();
         setStocuri(stData);
-        if (stData.length > 0 && !selectedArticolStocId) {
-          setSelectedArticolStocId(stData[0].id);
-          setPretUnitar(stData[0].pretUnitar || 0);
-          setDescrierePiesa(stData[0].denumire || '');
-        }
       }
 
       // Fetch Mecanici
@@ -299,24 +295,8 @@ export default function ComenziLucruPage() {
     const mecanicFinal = selectedMecanici.join(', ');
     const elemente: any[] = [];
 
-    if (hasInitialPart) {
-      if (pilonCost === 'PIESA_STOC' && selectedArticolStocId) {
-        const itemStoc = stocuri.find((s) => s.id === selectedArticolStocId);
-        if (itemStoc && Number(cantitate) > itemStoc.stocCurent) {
-          alert(` Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
-          return;
-        }
-      }
-
-      elemente.push({
-        pilonCost,
-        descriere: descrierePiesa || (pilonCost === 'PIESA_DEZMEMBRATA' ? 'Piesă din dezmembrări / Parc Propriu' : 'Schimb piesă'),
-        cantitate: Number(cantitate),
-        pretUnitar: Number(pretUnitar),
-        provenienta: pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : provenienta,
-        articolStocId: pilonCost === 'PIESA_STOC' ? selectedArticolStocId : null,
-      });
-    }
+    // Notă: Comanda nouă pornește cu deviz curat (elemente: []).
+    // Piesele și manopera se adaugă direct în editorul comenzi-lucru prin bara Quick-Add.
 
     setIsCreating(true);
     try {
@@ -1299,17 +1279,24 @@ export default function ComenziLucruPage() {
 
       {/* ─── MODAL EDITARE COMANDĂ DE LUCRU (MODERN WORKSHOP DEVIZ EDITOR) ─── */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="pleasant-card p-5 sm:p-7 rounded-3xl w-full max-w-5xl space-y-5 shadow-2xl bg-white max-h-[94vh] overflow-y-auto border border-morning-200">
-            
-            {/* TOP HEADER: WORK ORDER & VEHICLE INFO */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-morning-200 gap-3">
-              <div className="space-y-1">
+        <DraggableModal
+          isOpen={!!showEditModal}
+          onClose={() => setShowEditModal(null)}
+          defaultWidth={1150}
+          defaultHeight={820}
+          minWidth={550}
+          minHeight={420}
+          customHeader={({ isMaximized, toggleMaximize, onClose }) => (
+            <div className="flex flex-col md:flex-row md:items-center justify-between p-4 sm:p-5 border-b border-morning-200 gap-3 bg-gradient-to-r from-morning-50 via-white to-morning-50 select-none">
+              <div className="space-y-1 min-w-0">
                 <div className="flex items-center space-x-2.5 flex-wrap">
+                  <div className="p-1 text-slate-400 hover:text-sapphire-600 transition flex items-center" title="Trage pentru a muta fereastra (Dublu-click pentru mărire)">
+                    <GripHorizontal className="w-4 h-4" />
+                  </div>
                   <div className="p-2 rounded-xl bg-sapphire-50 text-sapphire-600 border border-sapphire-100">
                     <Wrench className="w-5 h-5" />
                   </div>
-                  <h2 className="text-xl font-black text-sapphire-900 tracking-tight">
+                  <h2 className="text-xl font-black text-sapphire-900 tracking-tight truncate">
                     Comandă de Lucru {showEditModal.numarComanda}
                   </h2>
                   <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
@@ -1343,7 +1330,7 @@ export default function ComenziLucruPage() {
               </div>
 
               {/* QUICK HEADER ACTIONS */}
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1358,19 +1345,31 @@ export default function ComenziLucruPage() {
                   title="Previzualizează fișa de atelier A4"
                 >
                   <Printer className="w-3.5 h-3.5 text-sapphire-600" />
-                  <span>Previzualizare A4</span>
+                  <span className="hidden sm:inline">Previzualizare A4</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(null)}
+                  onClick={toggleMaximize}
                   className="p-1.5 rounded-xl text-sage-500 hover:text-slate-800 hover:bg-morning-200 transition"
+                  title={isMaximized ? 'Restaurează dimensiunea inițială' : 'Maximizează pe tot ecranul'}
+                >
+                  {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-1.5 rounded-xl text-sage-500 hover:text-rose-600 hover:bg-rose-50 transition"
                   title="Închide fereastra"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
+          )}
+          bodyClassName="p-4 sm:p-6 space-y-5"
+        >
 
             {/* MECANICI & OBSERVAȚII ACCORDION / BOX */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
@@ -2043,174 +2042,170 @@ export default function ComenziLucruPage() {
                 </button>
               </div>
             </div>
-
-          </div>
-        </div>
+        </DraggableModal>
       )}
 
       {/* ─── MODAL VIZUALIZARE & NYOMTATÁS A4 (PDF PRINT TEMPLATE) ─── */}
       {showViewModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl p-6 space-y-6 my-8 no-print-wrapper max-h-[92vh] overflow-y-auto">
-            {/* TOP ACTIONS (Screen Only) */}
-            <div className="flex items-center justify-between border-b border-morning-200 pb-3 no-print">
-              <div className="flex items-center space-x-2 text-sapphire-900 font-bold">
-                <FileText className="w-5 h-5 text-sapphire-500" />
-                <span>Previzualizare Fișă A4 (Comandă {showViewModal.numarComanda})</span>
+        <DraggableModal
+          isOpen={!!showViewModal}
+          onClose={() => setShowViewModal(null)}
+          defaultWidth={960}
+          defaultHeight={820}
+          minWidth={550}
+          minHeight={400}
+          title={`Previzualizare Fișă A4 (Comandă ${showViewModal.numarComanda})`}
+          icon={<FileText className="w-5 h-5 text-sapphire-500" />}
+          headerActions={
+            <button
+              type="button"
+              onClick={handlePrintDocument}
+              className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 flex items-center space-x-2 transition"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Printează / Salvează PDF</span>
+            </button>
+          }
+          bodyClassName="p-4 sm:p-6 bg-slate-100/60"
+        >
+          {/*  PRINTABLE A4 SHEET VIEW  */}
+          <div id="printable-a4-area" className="p-8 bg-white border border-slate-200 rounded-xl space-y-6 text-slate-800 font-sans shadow-xs">
+            {/* Document Header */}
+            <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-wider text-slate-900 uppercase">FleetCMD CMMS Enterprise</h2>
+                <p className="text-xs font-semibold text-slate-600">Sistem de Gestiune Flotă, Mentenanță & Atelier Intern</p>
+                <p className="text-[11px] text-slate-500 mt-1">Departament Tehnic | Șantier Central</p>
               </div>
 
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={handlePrintDocument}
-                  className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 flex items-center space-x-2 transition"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Printează / Salvează PDF</span>
-                </button>
-
-                <button onClick={() => setShowViewModal(null)} className="text-sage-500 hover:text-sapphire-900">
-                  <X className="w-6 h-6" />
-                </button>
+              <div className="text-right">
+                <div className="inline-block px-3 py-1 rounded bg-slate-100 border border-slate-300 text-slate-900 font-mono font-extrabold text-lg">
+                  {showViewModal.numarComanda}
+                </div>
+                <p className="text-xs font-bold text-slate-700 mt-1">
+                  Stare: <span className="uppercase">{showViewModal.stare}</span>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Dată Emitere: {new Date(showViewModal.dataDeschidere).toLocaleDateString('ro-RO')}
+                </p>
               </div>
             </div>
 
-            {/*  PRINTABLE A4 SHEET VIEW  */}
-            <div id="printable-a4-area" className="p-8 bg-white border border-slate-200 rounded-xl space-y-6 text-slate-800 font-sans">
-              {/* Document Header */}
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
-                <div>
-                  <h2 className="text-2xl font-extrabold tracking-wider text-slate-900 uppercase">FleetCMD CMMS Enterprise</h2>
-                  <p className="text-xs font-semibold text-slate-600">Sistem de Gestiune Flotă, Mentenanță & Atelier Intern</p>
-                  <p className="text-[11px] text-slate-500 mt-1">Departament Tehnic | Șantier Central</p>
-                </div>
+            <div className="text-center my-2">
+              <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 inline-block">
+                FIȘĂ COMANDĂ DE LUCRU & DEVIZ SERVIZ
+              </h3>
+            </div>
 
-                <div className="text-right">
-                  <div className="inline-block px-3 py-1 rounded bg-slate-100 border border-slate-300 text-slate-900 font-mono font-extrabold text-lg">
-                    {showViewModal.numarComanda}
-                  </div>
-                  <p className="text-xs font-bold text-slate-700 mt-1">
-                    Stare: <span className="uppercase">{showViewModal.stare}</span>
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Dată Emitere: {new Date(showViewModal.dataDeschidere).toLocaleDateString('ro-RO')}
-                  </p>
-                </div>
+            {/* Section I: Date Utilaj */}
+            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200">
+              <div>
+                <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">I. Date Utilaj / Vehicul</p>
+                <p><strong>Număr Intern:</strong> {showViewModal.vehiculNumarIntern}</p>
+                <p><strong>Număr Înmatriculare:</strong> {showViewModal.vehiculInmatriculare}</p>
+                <p><strong>Marcă & Model:</strong> {showViewModal.vehiculMarca} {showViewModal.vehiculModel}</p>
               </div>
 
-              <div className="text-center my-2">
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest border-b border-slate-300 pb-1 inline-block">
-                  FIȘĂ COMANDĂ DE LUCRU & DEVIZ SERVIZ
-                </h3>
+              <div>
+                <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">Date Tehnice Execuție</p>
+                <p><strong>Serie Șasiu / VIN:</strong> {showViewModal.vehiculSerieSasiu}</p>
+                <p><strong>Contor la Execuție:</strong> {showViewModal.valoareContorLaExecutie} {showViewModal.vehiculTipMasurare}</p>
+                <p><strong>Dată Finalizare:</strong> {showViewModal.dataFinalizare ? new Date(showViewModal.dataFinalizare).toLocaleDateString('ro-RO') : 'În Desfășurare'}</p>
               </div>
+            </div>
 
-              {/* Section I: Date Utilaj */}
-              <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <div>
-                  <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">I. Date Utilaj / Vehicul</p>
-                  <p><strong>Număr Intern:</strong> {showViewModal.vehiculNumarIntern}</p>
-                  <p><strong>Număr Înmatriculare:</strong> {showViewModal.vehiculInmatriculare}</p>
-                  <p><strong>Marcă & Model:</strong> {showViewModal.vehiculMarca} {showViewModal.vehiculModel}</p>
-                </div>
+            {/* Section II: Echipa Atelier */}
+            <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">II. Informații Atelier & Mecanici Responsabili</p>
+              <p><strong>Mecanic(i) Responsabil(i):</strong> {showViewModal.mecanicResponsabil || 'Atelier Intern'}</p>
+              {showViewModal.observatii && <p className="mt-1"><strong>Observații / Motiv Intervenție:</strong> {showViewModal.observatii}</p>}
+            </div>
 
-                <div>
-                  <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">Date Tehnice Execuție</p>
-                  <p><strong>Serie Șasiu / VIN:</strong> {showViewModal.vehiculSerieSasiu}</p>
-                  <p><strong>Contor la Execuție:</strong> {showViewModal.valoareContorLaExecutie} {showViewModal.vehiculTipMasurare}</p>
-                  <p><strong>Dată Finalizare:</strong> {showViewModal.dataFinalizare ? new Date(showViewModal.dataFinalizare).toLocaleDateString('ro-RO') : 'În Desfășurare'}</p>
-                </div>
-              </div>
+            {/* Section III: Tabel Elemente & Piese Consumate */}
+            <div className="space-y-2">
+              <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider">III. Desfășurător Elemente, Piese Schimb & Manoperă</p>
 
-              {/* Section II: Echipa Atelier */}
-              <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">II. Informații Atelier & Mecanici Responsabili</p>
-                <p><strong>Mecanic(i) Responsabil(i):</strong> {showViewModal.mecanicResponsabil || 'Atelier Intern'}</p>
-                {showViewModal.observatii && <p className="mt-1"><strong>Observații / Motiv Intervenție:</strong> {showViewModal.observatii}</p>}
-              </div>
-
-              {/* Section III: Tabel Elemente & Piese Consumate */}
-              <div className="space-y-2">
-                <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider">III. Desfășurător Elemente, Piese Schimb & Manoperă</p>
-
-                <table className="w-full text-left text-xs border border-slate-300 divide-y divide-slate-300">
-                  <thead className="bg-slate-100 text-slate-800 font-bold uppercase text-[10px]">
-                    <tr>
-                      <th className="p-2 border-r border-slate-300">#</th>
-                      <th className="p-2 border-r border-slate-300">Pilon Cost / Proveniență</th>
-                      <th className="p-2 border-r border-slate-300">Descriere Operațiune / Piesă</th>
-                      <th className="p-2 border-r border-slate-300 text-center">Cant.</th>
-                      <th className="p-2 border-r border-slate-300 text-right">Preț Unitar</th>
-                      <th className="p-2 text-right">Total (RON)</th>
+              <table className="w-full text-left text-xs border border-slate-300 divide-y divide-slate-300">
+                <thead className="bg-slate-100 text-slate-800 font-bold uppercase text-[10px]">
+                  <tr>
+                    <th className="p-2 border-r border-slate-300">#</th>
+                    <th className="p-2 border-r border-slate-300">Pilon Cost / Proveniență</th>
+                    <th className="p-2 border-r border-slate-300">Descriere Operațiune / Piesă</th>
+                    <th className="p-2 border-r border-slate-300 text-center">Cant.</th>
+                    <th className="p-2 border-r border-slate-300 text-right">Preț Unitar</th>
+                    <th className="p-2 text-right">Total (RON)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {(showViewModal.elementeComanda || []).map((el: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-2 border-r border-slate-200 font-mono text-center">{idx + 1}</td>
+                      <td className="p-2 border-r border-slate-200 font-semibold">{el.pilonCost || 'PIESA_STOC'}</td>
+                      <td className="p-2 border-r border-slate-200">{el.descriere}</td>
+                      <td className="p-2 border-r border-slate-200 font-mono text-center">{el.cantitate}</td>
+                      <td className="p-2 border-r border-slate-200 font-mono text-right">{el.pretUnitar} RON</td>
+                      <td className="p-2 font-mono font-bold text-right">{el.costTotal} RON</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {(showViewModal.elementeComanda || []).map((el: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="p-2 border-r border-slate-200 font-mono text-center">{idx + 1}</td>
-                        <td className="p-2 border-r border-slate-200 font-semibold">{el.pilonCost || 'PIESA_STOC'}</td>
-                        <td className="p-2 border-r border-slate-200">{el.descriere}</td>
-                        <td className="p-2 border-r border-slate-200 font-mono text-center">{el.cantitate}</td>
-                        <td className="p-2 border-r border-slate-200 font-mono text-right">{el.pretUnitar} RON</td>
-                        <td className="p-2 font-mono font-bold text-right">{el.costTotal} RON</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-              {/* Section IV: Total Deviz */}
-              <div className="flex justify-end pt-2">
-                <div className="w-64 bg-slate-100 p-3 rounded-lg border border-slate-300 text-xs space-y-1 text-right">
-                  <div className="flex justify-between">
-                    <span className="font-bold text-slate-700">Subtotal Piese & Servicii:</span>
-                    <span className="font-mono font-bold">
-                      {showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0} RON
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-slate-600 text-[11px]">
-                    <span>TVA (0% scurtcircuit intern):</span>
-                    <span>0 RON</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-400 pt-1 text-sm font-extrabold text-slate-900">
-                    <span>TOTAL GENERAL DEVIZ:</span>
-                    <span className="font-mono text-sapphire-900">
-                      {Number(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
-                        .toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
-                    </span>
-                  </div>
+            {/* Section IV: Total Deviz */}
+            <div className="flex justify-end pt-2">
+              <div className="w-64 bg-slate-100 p-3 rounded-lg border border-slate-300 text-xs space-y-1 text-right">
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-700">Subtotal Piese & Servicii:</span>
+                  <span className="font-mono font-bold">
+                    {showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0} RON
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>TVA (0% scurtcircuit intern):</span>
+                  <span>0 RON</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-400 pt-1 text-sm font-extrabold text-slate-900">
+                  <span>TOTAL GENERAL DEVIZ:</span>
+                  <span className="font-mono text-sapphire-900">
+                    {Number(showViewModal.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0)
+                      .toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Section V: Semnături */}
-              <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-300 text-xs text-center">
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-800">Semnătură Executant / Mecanic Responsabil</p>
-                  <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
-                  <p className="text-[10px] text-slate-500">Data: ____ / ____ / ________</p>
-                </div>
+            {/* Section V: Semnături */}
+            <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-300 text-xs text-center">
+              <div className="space-y-8">
+                <p className="font-bold text-slate-800">Semnătură Executant / Mecanic Responsabil</p>
+                <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
+                <p className="text-[10px] text-slate-500">Data: ____ / ____ / ________</p>
+              </div>
 
-                <div className="space-y-8">
-                  <p className="font-bold text-slate-800">Semnătură Receptionat / Șef Flotă & Atelier</p>
-                  <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
-                  <p className="text-[10px] text-slate-500">Data: ____ / ____ / ________</p>
-                </div>
+              <div className="space-y-8">
+                <p className="font-bold text-slate-800">Semnătură Receptionat / Șef Flotă & Atelier</p>
+                <div className="border-b border-dashed border-slate-400 w-3/4 mx-auto"></div>
+                <p className="text-[10px] text-slate-500">Data: ____ / ____ / ________</p>
               </div>
             </div>
           </div>
-        </div>
+        </DraggableModal>
       )}
 
       {/* MODAL ADĂUGARE PIESĂ SUPLIMENTARĂ */}
       {showAddElementModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900">Adăugare Piesă pe Comanda {showAddElementModal.numarComanda}</h3>
-              <button onClick={() => setShowAddElementModal(null)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddElementToOrder} className="space-y-3 text-xs">
+        <DraggableModal
+          isOpen={!!showAddElementModal}
+          onClose={() => setShowAddElementModal(null)}
+          defaultWidth={520}
+          defaultHeight={540}
+          minWidth={380}
+          minHeight={320}
+          title={`Adăugare Piesă pe Comanda ${showAddElementModal.numarComanda}`}
+          icon={<Package className="w-5 h-5 text-sapphire-600" />}
+          bodyClassName="p-5"
+        >
+          <form onSubmit={handleAddElementToOrder} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Tip Pilon Cost / Proveniență:</label>
                 <select
@@ -2297,22 +2292,23 @@ export default function ComenziLucruPage() {
                 <button type="submit" className="px-4 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Piesă pe Comandă</button>
               </div>
             </form>
-          </div>
-        </div>
+        </DraggableModal>
       )}
 
       {/* Modal Adaugă Comandă de Lucru Nouă */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-3xl w-full max-w-xl sm:max-w-2xl space-y-4 shadow-2xl bg-white max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900">Deschidere Comandă de Lucru Nouă</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateComanda} className="space-y-3 text-xs">
+        <DraggableModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          defaultWidth={720}
+          defaultHeight={780}
+          minWidth={440}
+          minHeight={380}
+          title="Deschidere Comandă de Lucru Nouă"
+          icon={<Truck className="w-5 h-5 text-sapphire-600" />}
+          bodyClassName="p-5 sm:p-6"
+        >
+          <form onSubmit={handleCreateComanda} className="space-y-3 text-xs">
               {/* ─── SELECTOR INTELIGENT UTILAJ (SMART VEHICLE SELECTOR) ─── */}
               {(() => {
                 const selectedVehicul = vehicule.find((v) => v.id === selectedVehiculId);
@@ -2662,50 +2658,50 @@ export default function ComenziLucruPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </DraggableModal>
       )}
 
       {/* Modal Adaugă Mecanic Nou */}
       {showAddMecanicModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900">Adăugare Mecanic Nou</h3>
-              <button onClick={() => setShowAddMecanicModal(false)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
+        <DraggableModal
+          isOpen={showAddMecanicModal}
+          onClose={() => setShowAddMecanicModal(false)}
+          defaultWidth={460}
+          defaultHeight={360}
+          minWidth={360}
+          minHeight={280}
+          title="Adăugare Mecanic Nou"
+          icon={<UserPlus className="w-5 h-5 text-sapphire-600" />}
+          bodyClassName="p-5"
+        >
+          <form onSubmit={handleCreateMecanic} className="space-y-3 text-xs">
+            <div>
+              <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume Mecanic:</label>
+              <input
+                required
+                value={numeMecanicNou}
+                onChange={(e) => setNumeMecanicNou(e.target.value)}
+                placeholder="ex: Ion Popescu (Atelier)"
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+              />
             </div>
 
-            <form onSubmit={handleCreateMecanic} className="space-y-3 text-xs">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Nume & Prenume Mecanic:</label>
-                <input
-                  required
-                  value={numeMecanicNou}
-                  onChange={(e) => setNumeMecanicNou(e.target.value)}
-                  placeholder="ex: Ion Popescu (Atelier)"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
+            <div>
+              <label className="text-sage-700 block mb-1 font-bold">Funcție / Specializare:</label>
+              <input
+                value={functieMecanicNou}
+                onChange={(e) => setFunctieMecanicNou(e.target.value)}
+                placeholder="ex: Mecanică Grea / Electrician Auto"
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
+              />
+            </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Funcție / Specializare:</label>
-                <input
-                  value={functieMecanicNou}
-                  onChange={(e) => setFunctieMecanicNou(e.target.value)}
-                  placeholder="ex: Mecanică Grea / Electrician Auto"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3">
-                <button type="button" onClick={() => setShowAddMecanicModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-4 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end space-x-3 pt-3">
+              <button type="button" onClick={() => setShowAddMecanicModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
+              <button type="submit" className="px-4 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
+            </div>
+          </form>
+        </DraggableModal>
       )}
     </div>
   );
