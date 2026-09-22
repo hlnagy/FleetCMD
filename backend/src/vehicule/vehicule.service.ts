@@ -946,6 +946,16 @@ export class VehiculeService {
     return { adjustedKm: rawKm, isRollover: false, delta: rawKm - curKm };
   }
 
+  private formatDateRo(d: Date | string): string {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(dateObj.getTime())) return String(d);
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}.${month}.${year}`;
+  }
+
   async previewCsvPompa(csvContent: string, selectedCategories?: string[]) {
     if (!csvContent || !csvContent.trim()) {
       throw new BadRequestException('Fișierul CSV furnizat este gol.');
@@ -961,6 +971,31 @@ export class VehiculeService {
     for (const v of vehiculeDb) {
       vehiculeMap.set(this.normalizeCodVehicul(v.numarInmatriculare), v);
       vehiculeMap.set(this.normalizeCodVehicul(v.numarIntern), v);
+    }
+
+    // Încărcăm întregul istoric de contor pentru vehiculele din parcul auto
+    const matchedVehicleIds = Array.from(
+      new Set(Array.from(vehiculeMap.values()).map((v) => v.id))
+    );
+
+    const istoricDb = await this.prisma.istoricContorVehicul.findMany({
+      where: { vehiculId: { in: matchedVehicleIds } },
+      orderBy: { dataInregistrare: 'asc' },
+      select: {
+        id: true,
+        vehiculId: true,
+        valoareContor: true,
+        dataInregistrare: true,
+        sursa: true,
+        observatii: true,
+      },
+    });
+
+    const istoricByVehicul = new Map<string, typeof istoricDb>();
+    for (const rec of istoricDb) {
+      const list = istoricByVehicul.get(rec.vehiculId) || [];
+      list.push(rec);
+      istoricByVehicul.set(rec.vehiculId, list);
     }
 
     interface RawAlimentare {
@@ -1063,7 +1098,7 @@ export class VehiculeService {
       }
     }
 
-    // Sortăm alimentările fiecărui vehicul cronologic și selectăm ultima
+    // Sortăm alimentările fiecărui vehicul cronologic și selectăm ultima din fișier
     for (const item of vehiculeAlimentariMap.values()) {
       item.toateAlimentarile.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
       if (item.toateAlimentarile.length > 0) {
@@ -1087,6 +1122,35 @@ export class VehiculeService {
       let effectiveNewKm = ultima.valoareKm;
       let isRolloverDetected = false;
 
+      // Determinare fereastră istorică (anterior / posterior)
+      const vehHistory = vehicul ? (istoricByVehicul.get(vehicul.id) || []) : [];
+      const targetTime = ultima.timestamp.getTime();
+
+      // Înregistrări strict anterioare sau egale
+      const anterioare = vehHistory.filter((r) => r.dataInregistrare.getTime() <= targetTime);
+      const recPrev = anterioare.length > 0 ? anterioare[anterioare.length - 1] : null;
+
+      // Înregistrări strict posterioare
+      const posterioare = vehHistory.filter((r) => r.dataInregistrare.getTime() > targetTime);
+      let recNext = posterioare.length > 0 ? posterioare[0] : null;
+
+      // Dacă nu există un record posterior în istoric, dar pe vehicul există o dată ulterioară
+      const vehCurDate = vehicul?.dataInregistrareContor ? new Date(vehicul.dataInregistrareContor) : null;
+      if (!recNext && vehCurDate && vehCurDate.getTime() > targetTime && curKm > 0) {
+        recNext = {
+          id: 'CURRENT_DB',
+          vehiculId: vehicul.id,
+          valoareContor: curKm,
+          dataInregistrare: vehCurDate,
+          sursa: 'CONTOR_CURENT',
+          observatii: 'Contor curent salvat pe vehicul',
+        };
+      }
+
+      const kmAnt = recPrev ? recPrev.valoareContor : null;
+      const kmPost = recNext ? recNext.valoareContor : null;
+      const esteInIstoricTrecut = kmPost !== null;
+
       if (!vehicul) {
         status = 'VEHICUL_NEGASIȚ';
         anomaliiMesaje.push(`Vehiculul "${ultima.cleanUnit}" nu a fost găsit în baza de date.`);
@@ -1102,26 +1166,81 @@ export class VehiculeService {
           anomaliiMesaje.push(`Vehiculul este pe Ore de Funcționare (MTH), nu pe Kilometri.`);
         } else {
           // Verificare rollover (trecere peste 1.000.000 km)
-          const rCheck = this.adjustOdometerRollover(effectiveNewKm, curKm);
+          const baselineForRollover = kmPost !== null ? kmPost : (kmAnt !== null ? kmAnt : curKm);
+          const rCheck = this.adjustOdometerRollover(effectiveNewKm, baselineForRollover);
           if (rCheck.isRollover) {
             effectiveNewKm = rCheck.adjustedKm;
             isRolloverDetected = true;
           }
 
-          const delta = effectiveNewKm - curKm;
-
           if (effectiveNewKm === 0) {
             status = 'KM_ZERO';
             anomaliiMesaje.push('Indexul introdus la pompă este 0 km.');
-          } else if (curKm > 0 && effectiveNewKm < curKm) {
+          } else if (kmAnt !== null && effectiveNewKm < kmAnt) {
+            // Regresie față de indexul anterior
             status = 'REGRESSIE_KM';
-            anomaliiMesaje.push(`Indexul nou (${effectiveNewKm.toLocaleString()} km) este mai mic decât contorul curent (${curKm.toLocaleString()} km).`);
-          } else if (isRolloverDetected) {
-            status = 'VALID';
-            anomaliiMesaje.push(`Trecere peste 1.000.000 km recunoscută automat (+${delta.toLocaleString()} km).`);
-          } else if (curKm > 0 && delta > 5000) {
-            status = 'DELTA_EXCESIV';
-            anomaliiMesaje.push(`Salt mare de kilometraj (+${delta.toLocaleString()} km). Posibilă cifră în plus.`);
+            anomaliiMesaje.push(
+              `Indexul nou (${effectiveNewKm.toLocaleString()} km) este mai mic decât indexul anterior din ${this.formatDateRo(recPrev!.dataInregistrare)} (${kmAnt.toLocaleString()} km).`
+            );
+          } else if (kmPost !== null && effectiveNewKm > kmPost) {
+            // Regresie față de indexul posterior (viitor)
+            status = 'REGRESSIE_KM';
+            anomaliiMesaje.push(
+              `Indexul nou (${effectiveNewKm.toLocaleString()} km) depășește indexul ulterior din ${this.formatDateRo(recNext!.dataInregistrare)} (${kmPost.toLocaleString()} km).`
+            );
+          } else {
+            // Valoarea este între limitele ferestrei istorice!
+            // Verificăm ritmul zilnic (km / zi) pentru a depista eventuale greșeli evidente de tastare
+            let saltSuspect = false;
+
+            if (kmAnt !== null) {
+              const msDiff = Math.abs(targetTime - recPrev!.dataInregistrare.getTime());
+              const daysDiff = Math.max(1, msDiff / (1000 * 60 * 60 * 24));
+              const deltaAnt = effectiveNewKm - kmAnt;
+              const dailyRate = deltaAnt / daysDiff;
+
+              if (dailyRate > 2500) {
+                status = 'DELTA_EXCESIV';
+                anomaliiMesaje.push(
+                  `Ritm zilnic neobișnuit de mare: +${deltaAnt.toLocaleString()} km în ${Math.round(daysDiff)} zile (~${Math.round(dailyRate).toLocaleString()} km/zi). Verificați tastarea.`
+                );
+                saltSuspect = true;
+              }
+            }
+
+            if (!saltSuspect && kmPost !== null) {
+              const msDiff = Math.abs(recNext!.dataInregistrare.getTime() - targetTime);
+              const daysDiff = Math.max(1, msDiff / (1000 * 60 * 60 * 24));
+              const deltaPost = kmPost - effectiveNewKm;
+              const dailyRate = deltaPost / daysDiff;
+
+              if (dailyRate > 2500) {
+                status = 'DELTA_EXCESIV';
+                anomaliiMesaje.push(
+                  `Ritm zilnic neobișnuit de mare către indexul următor: +${deltaPost.toLocaleString()} km în ${Math.round(daysDiff)} zile (~${Math.round(dailyRate).toLocaleString()} km/zi).`
+                );
+                saltSuspect = true;
+              }
+            }
+
+            if (!saltSuspect) {
+              status = 'VALID';
+              if (isRolloverDetected) {
+                anomaliiMesaje.push(`Trecere peste 1.000.000 km recunoscută automat.`);
+              } else if (kmAnt !== null && kmPost !== null) {
+                anomaliiMesaje.push(
+                  `Se încadrează în intervalul istoric (${kmAnt.toLocaleString()} km [${this.formatDateRo(recPrev!.dataInregistrare)}] ➔ ${kmPost.toLocaleString()} km [${this.formatDateRo(recNext!.dataInregistrare)}]).`
+                );
+              } else if (kmPost !== null) {
+                anomaliiMesaje.push(
+                  `Înregistrare istorică validă anterioară datei de ${this.formatDateRo(recNext!.dataInregistrare)} (${kmPost.toLocaleString()} km).`
+                );
+              } else if (kmAnt !== null) {
+                anomaliiMesaje.push(
+                  `Continuă cronologic după data de ${this.formatDateRo(recPrev!.dataInregistrare)} (+${(effectiveNewKm - kmAnt).toLocaleString()} km).`
+                );
+              }
+            }
           }
         }
       }
@@ -1154,7 +1273,10 @@ export class VehiculeService {
         }
       }
 
-      const finalDelta = vehicul ? effectiveNewKm - curKm : 0;
+      // Delta reală raportată la indexul anterior (sau la contor curent dacă nu există anterior)
+      const finalDelta = vehicul
+        ? (kmAnt !== null ? effectiveNewKm - kmAnt : effectiveNewKm - curKm)
+        : 0;
 
       previewRows.push({
         idTemp: `${normUnit}_${ultima.dataStr}`,
@@ -1178,6 +1300,23 @@ export class VehiculeService {
         aprobat: status === 'VALID',
         isRollover: isRolloverDetected,
         istoricAlimentariFisier,
+        fereastraIstoric: {
+          anterior: recPrev
+            ? {
+                km: recPrev.valoareContor,
+                data: this.formatDateRo(recPrev.dataInregistrare),
+                timestamp: new Date(recPrev.dataInregistrare).getTime(),
+              }
+            : null,
+          posterior: recNext
+            ? {
+                km: recNext.valoareContor,
+                data: this.formatDateRo(recNext.dataInregistrare),
+                timestamp: new Date(recNext.dataInregistrare).getTime(),
+              }
+            : null,
+          esteInIstoricTrecut,
+        },
       });
     }
 
@@ -1310,37 +1449,55 @@ export class VehiculeService {
         });
       }
 
-      if (maxValKm <= 0) {
-        maxValKm = v.valoareContorCurent;
-      }
-
-      // Propagare kilometraj cuplare pentru cap tractor
-      if (v.categorieEnum === 'CAP_TRACTOR' && maxValKm > v.valoareContorCurent) {
-        await this.propagaKmCuplare(v.id, v.valoareContorCurent, maxValKm);
-      }
-
-      // Actualizăm contorul curent al vehiculului la cel mai recent / mai mare index
-      await this.prisma.vehicul.update({
-        where: { id: v.id },
-        data: {
-          valoareContorCurent: maxValKm,
-          dataInregistrareContor: latestDataInreg,
-        },
+      // Căutăm înregistrarea absolut cea mai recentă din întregul istoric al vehiculului
+      const latestOverall = await this.prisma.istoricContorVehicul.findFirst({
+        where: { vehiculId: v.id },
+        orderBy: [
+          { dataInregistrare: 'desc' },
+          { valoareContor: 'desc' },
+        ],
       });
+
+      const currentDbDateMs = v.dataInregistrareContor ? new Date(v.dataInregistrareContor).getTime() : 0;
+      const latestHistDateMs = latestOverall?.dataInregistrare ? new Date(latestOverall.dataInregistrare).getTime() : 0;
+
+      let contorCurentActualizat = false;
+      let nouKmFinal = v.valoareContorCurent;
+
+      // Actualizăm contorul curent al vehiculului NUMAI DACĂ cel mai recent record din istoric
+      // este la fel de recent sau mai recent decât data înregistrată pe vehicul
+      if (latestOverall && latestHistDateMs >= currentDbDateMs) {
+        nouKmFinal = latestOverall.valoareContor;
+
+        // Propagare kilometraj cuplare pentru cap tractor (dacă contorul a crescut efectiv)
+        if (v.categorieEnum === 'CAP_TRACTOR' && nouKmFinal > v.valoareContorCurent) {
+          await this.propagaKmCuplare(v.id, v.valoareContorCurent, nouKmFinal);
+        }
+
+        await this.prisma.vehicul.update({
+          where: { id: v.id },
+          data: {
+            valoareContorCurent: nouKmFinal,
+            dataInregistrareContor: latestOverall.dataInregistrare,
+          },
+        });
+        contorCurentActualizat = true;
+      }
 
       actualizate.push({
         id: v.id,
         numarInmatriculare: v.numarInmatriculare,
         numarIntern: v.numarIntern,
         vechiKm: v.valoareContorCurent,
-        nouKm: maxValKm,
-        delta: maxValKm - v.valoareContorCurent,
+        nouKm: nouKmFinal,
+        delta: nouKmFinal - v.valoareContorCurent,
         numarAlimentariSalvate: alimentariList.length,
+        contorCurentActualizat,
       });
     }
 
     return {
-      mesaj: `Au fost actualizate cu succes contoarele pentru ${actualizate.length} vehicule (toate alimentările au fost arhivate în istoric)!`,
+      mesaj: `Au fost procesate cu succes alimentările pentru ${actualizate.length} vehicule (toate alimentările au fost arhivate în istoric)!`,
       numarActualizate: actualizate.length,
       actualizate,
       erori,

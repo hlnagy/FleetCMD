@@ -180,6 +180,11 @@ interface PreviewRow {
   aprobat: boolean;
   isRollover?: boolean;
   istoricAlimentariFisier: FuelHistory[];
+  fereastraIstoric?: {
+    anterior: { km: number; data: string; timestamp?: number } | null;
+    posterior: { km: number; data: string; timestamp?: number } | null;
+    esteInIstoricTrecut: boolean;
+  };
 }
 
 interface Statistici {
@@ -550,8 +555,8 @@ function ImportKmPompaContent() {
     return { previewRows: rows, statistici: stats };
   };
 
-  // Funcție de procesare CSV (locală rapidă, cu fallback opțional la server)
-  const processCsvContent = (rawCsv: string, categoriesToUse?: string[]) => {
+  // Funcție de procesare CSV (apel server cu reconciliere pe fereastră istorică + fallback local)
+  const processCsvContent = async (rawCsv: string, categoriesToUse?: string[]) => {
     if (!rawCsv || !rawCsv.trim()) {
       setErrorMessage('Conținutul CSV este gol.');
       return;
@@ -564,7 +569,32 @@ function ImportKmPompaContent() {
     const cats = categoriesToUse !== undefined ? categoriesToUse : selectedCategories;
 
     try {
-      // Reconciliere locală instantanee
+      const token = typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API_BASE_URL}/vehicule/import-km-pompa/preview`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          csvContent: rawCsv,
+          selectedCategories: cats,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.previewRows)) {
+          setPreviewRows(data.previewRows);
+          setStatistici(data.statistici || null);
+          if (data.previewRows.length === 0) {
+            setErrorMessage('Nu s-au putut extrage date valide de alimentare din CSV. Verificați formatul fișierului.');
+          }
+          return;
+        }
+      }
+
+      // Fallback local dacă endpointul serverului nu răspunde
       const { previewRows: rows, statistici: stats } = parseAndReconcileLocal(rawCsv, cats, allVehicule);
       setPreviewRows(rows);
       setStatistici(stats);
@@ -573,8 +603,14 @@ function ImportKmPompaContent() {
         setErrorMessage('Nu s-au putut extrage date valide de alimentare din CSV. Verificați formatul fișierului.');
       }
     } catch (err: any) {
-      console.error('Eroare parsare CSV:', err);
-      setErrorMessage(`Eroare la parsarea datelor: ${err.message || err}`);
+      console.warn('Eroare preview server, utilizăm reconcilierea locală:', err);
+      try {
+        const { previewRows: rows, statistici: stats } = parseAndReconcileLocal(rawCsv, cats, allVehicule);
+        setPreviewRows(rows);
+        setStatistici(stats);
+      } catch (localErr: any) {
+        setErrorMessage(`Eroare la parsarea datelor: ${localErr.message || localErr}`);
+      }
     } finally {
       setLoadingPreview(false);
     }
@@ -631,12 +667,15 @@ function ImportKmPompaContent() {
         if (row.idTemp !== idTemp) return row;
         const safeVal = isNaN(newVal) ? 0 : newVal;
         const curKm = row.contorCurent || 0;
+        const kmAnt = row.fereastraIstoric?.anterior?.km ?? null;
+        const kmPost = row.fereastraIstoric?.posterior?.km ?? null;
+
+        const baselineForRollover = kmPost !== null ? kmPost : (kmAnt !== null ? kmAnt : curKm);
         const rolloverCheck = row.vehiculId && row.tipMasurare !== 'MTH'
-          ? adjustOdometerRollover(safeVal, curKm)
+          ? adjustOdometerRollover(safeVal, baselineForRollover)
           : { adjustedKm: safeVal, isRollover: false, delta: safeVal - curKm };
 
         const effectiveVal = rolloverCheck.adjustedKm;
-        const newDelta = row.vehiculId ? rolloverCheck.delta : 0;
         const isRollover = rolloverCheck.isRollover;
 
         let newStatus = row.status;
@@ -650,22 +689,41 @@ function ImportKmPompaContent() {
         } else if (effectiveVal === 0) {
           newStatus = 'KM_ZERO';
           newAnomalii.push('Contor 0 km raportat.');
-        } else if (curKm > 0 && effectiveVal < curKm) {
+        } else if (kmAnt !== null && effectiveVal < kmAnt) {
           newStatus = 'REGRESSIE_KM';
-          newAnomalii.push(`Indexul nou (${formatKm(effectiveVal)} km) este mai mic decât contorul curent (${formatKm(curKm)} km).`);
-        } else if (isRollover) {
-          newStatus = 'VALID';
-        } else if (curKm > 0 && newDelta > 5000) {
-          newStatus = 'DELTA_EXCESIV';
-          newAnomalii.push(`Salt mare de kilometraj (+${formatKm(newDelta)} km).`);
+          newAnomalii.push(
+            `Indexul nou (${formatKm(effectiveVal)} km) este mai mic decât indexul anterior din ${row.fereastraIstoric?.anterior?.data || 'DB'} (${formatKm(kmAnt)} km).`
+          );
+        } else if (kmPost !== null && effectiveVal > kmPost) {
+          newStatus = 'REGRESSIE_KM';
+          newAnomalii.push(
+            `Indexul nou (${formatKm(effectiveVal)} km) depășește indexul ulterior din ${row.fereastraIstoric?.posterior?.data || 'DB'} (${formatKm(kmPost)} km).`
+          );
         } else {
           newStatus = 'VALID';
+          if (kmAnt !== null && kmPost !== null) {
+            newAnomalii.push(
+              `Se încadrează în intervalul istoric (${formatKm(kmAnt)} km ➔ ${formatKm(kmPost)} km).`
+            );
+          } else if (kmPost !== null) {
+            newAnomalii.push(
+              `Înregistrare istorică validă anterioară datei de ${row.fereastraIstoric?.posterior?.data} (${formatKm(kmPost)} km).`
+            );
+          } else if (kmAnt !== null) {
+            newAnomalii.push(
+              `Continuă cronologic după data de ${row.fereastraIstoric?.anterior?.data} (+${formatKm(effectiveVal - kmAnt)} km).`
+            );
+          }
         }
+
+        const effectiveDelta = row.vehiculId
+          ? (kmAnt !== null ? effectiveVal - kmAnt : effectiveVal - curKm)
+          : 0;
 
         return {
           ...row,
           valoareKmPropusa: effectiveVal,
-          deltaKm: newDelta,
+          deltaKm: effectiveDelta,
           status: newStatus,
           anomaliiMesaje: newAnomalii,
           aprobat: newStatus === 'VALID',
@@ -1447,7 +1505,7 @@ function ImportKmPompaContent() {
                   <th className="p-3">Vehicul CSV</th>
                   <th className="p-3">Vehicul Asociat Flotă</th>
                   <th className="p-3">Ultima Alimentare</th>
-                  <th className="p-3 text-right">Contor Curent (DB)</th>
+                  <th className="p-3 text-right">Fereastră Istoric (Referință)</th>
                   <th className="p-3 text-right">Contor Nou (CSV / Editabil)</th>
                   <th className="p-3 text-right">Diferență (Delta)</th>
                   <th className="p-3">Diagnostic / Status</th>
@@ -1563,9 +1621,39 @@ function ImportKmPompaContent() {
                           )}
                         </td>
 
-                        {/* CONTOR CURENT DB */}
-                        <td className="p-3 text-right font-mono text-slate-300">
-                          {curContorStr}
+                        {/* FEREASTRĂ ISTORIC / CONTOR REFERINȚĂ */}
+                        <td className="p-3 text-right">
+                          {row.fereastraIstoric ? (
+                            <div className="space-y-0.5 inline-block text-right">
+                              {row.fereastraIstoric.esteInIstoricTrecut ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded text-[9px] font-semibold uppercase tracking-wider mb-1">
+                                  📁 Înregistrare în trecut
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-semibold uppercase tracking-wider mb-1">
+                                  ⚡ Index Curent
+                                </span>
+                              )}
+                              <div className="text-[11px] text-slate-300">
+                                <span className="text-slate-500 font-normal">Ant: </span>
+                                <span className="font-mono font-semibold">
+                                  {row.fereastraIstoric.anterior
+                                    ? `${formatKm(row.fereastraIstoric.anterior.km)} km (${row.fereastraIstoric.anterior.data})`
+                                    : '-'}
+                                </span>
+                              </div>
+                              {row.fereastraIstoric.posterior && (
+                                <div className="text-[10px] text-slate-400">
+                                  <span className="text-slate-500 font-normal">Post: </span>
+                                  <span className="font-mono">
+                                    {`${formatKm(row.fereastraIstoric.posterior.km)} km (${row.fereastraIstoric.posterior.data})`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="font-mono text-slate-300">{curContorStr}</span>
+                          )}
                         </td>
 
                         {/* CONTOR NOU CSV EDITABIL */}
@@ -1622,11 +1710,30 @@ function ImportKmPompaContent() {
                                   Trecere &gt; 1.000.000 km recunoscută
                                 </p>
                               </div>
+                            ) : row.fereastraIstoric?.esteInIstoricTrecut ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded text-[11px] font-medium">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  În fereastra istorică (+{formatKm(deltaKmVal)} km)
+                                </span>
+                                {row.anomaliiMesaje && row.anomaliiMesaje[0] && (
+                                  <p className="text-[10px] text-indigo-300/80 mt-0.5 max-w-[240px]">
+                                    {row.anomaliiMesaje[0]}
+                                  </p>
+                                )}
+                              </div>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
-                                <CheckCircle2 className="w-3 h-3" />
-                                Valid (+{formatKm(deltaKmVal)} km)
-                              </span>
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Valid (+{formatKm(deltaKmVal)} km)
+                                </span>
+                                {row.anomaliiMesaje && row.anomaliiMesaje[0] && (
+                                  <p className="text-[10px] text-emerald-300/80 mt-0.5 max-w-[240px]">
+                                    {row.anomaliiMesaje[0]}
+                                  </p>
+                                )}
+                              </div>
                             )
                           )}
                           {row.status === 'KM_ZERO' && (
@@ -1640,8 +1747,10 @@ function ImportKmPompaContent() {
                                 <XCircle className="w-3 h-3" />
                                 Regresie index
                               </span>
-                              <p className="text-[10px] text-rose-400/90 mt-0.5">
-                                Nou ({formatKm(row.valoareKmPropusa)}) &lt; Curent ({formatKm(row.contorCurent)})
+                              <p className="text-[10px] text-rose-400/90 mt-0.5 max-w-[240px]">
+                                {row.anomaliiMesaje && row.anomaliiMesaje[0]
+                                  ? row.anomaliiMesaje[0]
+                                  : `Nou (${formatKm(row.valoareKmPropusa)}) în afara limitelor`}
                               </p>
                             </div>
                           )}
@@ -1651,8 +1760,10 @@ function ImportKmPompaContent() {
                                 <AlertTriangle className="w-3 h-3" />
                                 Salt excesiv
                               </span>
-                              <p className="text-[10px] text-amber-400/90 mt-0.5">
-                                +{formatKm(deltaKmVal)} km (posibilă tastare greșită)
+                              <p className="text-[10px] text-amber-400/90 mt-0.5 max-w-[240px]">
+                                {row.anomaliiMesaje && row.anomaliiMesaje[0]
+                                  ? row.anomaliiMesaje[0]
+                                  : `+${formatKm(deltaKmVal)} km (ritm zilnic nerealist)`}
                               </p>
                             </div>
                           )}
