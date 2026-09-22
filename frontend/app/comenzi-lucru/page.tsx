@@ -40,6 +40,11 @@ export default function ComenziLucruPage() {
   const [observatii, setObservatii] = useState('');
   const [autoFinalize, setAutoFinalize] = useState(false);
 
+  // Stare Căutare & Filtrare Járművek (Vehicle Selection)
+  const [vehiculSearchQuery, setVehiculSearchQuery] = useState('');
+  const [vehiculCategoryFilter, setVehiculCategoryFilter] = useState('TOATE');
+  const [isVehiculSearchOpen, setIsVehiculSearchOpen] = useState(false);
+
   // Single initial element state (Opțional)
   const [hasInitialPart, setHasInitialPart] = useState(true);
   const [pilonCost, setPilonCost] = useState('PIESA_STOC');
@@ -142,6 +147,66 @@ export default function ComenziLucruPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const formatContorDate = (dateVal: string | Date | undefined | null) => {
+    if (!dateVal) return null;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('ro-RO', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
+
+  const getVehiculContorDate = (v: any) => {
+    if (!v) return null;
+    const rawDate = v.istoricContor?.[0]?.dataInregistrare || v.dataInregistrareContor || v.updatedAt;
+    return formatContorDate(rawDate);
+  };
+
+  const getCategoryLabel = (catEnum: string) => {
+    const c = (catEnum || '').toUpperCase();
+    if (c.includes('CAP_TRACTOR') || c.includes('TRACTOR')) return 'Cap Tractor';
+    if (c.includes('SEMIREMORCA') || c.includes('REMORCA')) return 'Semiremorcă';
+    if (c.includes('BASCULANT') || c.includes('BASCULA')) return 'Basculantă';
+    if (c.includes('EXCAVATOR')) return 'Excavator';
+    if (c.includes('INCARCATOR')) return 'Încărcător';
+    if (c.includes('BULLDOZER')) return 'Bulldozer';
+    if (c.includes('AUTOVALT') || c.includes('COMPACTOR')) return 'Compactor';
+    if (c.includes('AUTOUTILITARA') || c.includes('VAN')) return 'Autoutilitară';
+    if (c.includes('TURISM') || c.includes('AUTO')) return 'Turism';
+    return catEnum || 'Utilaj';
+  };
+
+  const getCategoryIcon = (catEnum: string) => {
+    const c = (catEnum || '').toUpperCase();
+    if (c.includes('CAP_TRACTOR') || c.includes('TRACTOR')) return '🚛';
+    if (c.includes('SEMIREMORCA') || c.includes('REMORCA')) return '🏁';
+    if (c.includes('BASCULANT') || c.includes('BASCULA')) return '🚚';
+    if (c.includes('EXCAVATOR') || c.includes('INCARCATOR') || c.includes('BULLDOZER')) return '🚜';
+    if (c.includes('AUTOUTILITARA') || c.includes('TURISM') || c.includes('AUTO')) return '🚗';
+    return '⚙️';
+  };
+
+  const handleSelectVehicul = (vId: string) => {
+    setSelectedVehiculId(vId);
+    const sel = vehicule.find((v) => v.id === vId);
+    if (sel) {
+      const isTrailer = sel.categorieEnum === 'REMORCA' || sel.categorieEnum === 'SEMIREMORCA' || sel.categorieEnum?.includes('REMORCA');
+      if (isTrailer) {
+        const coupled = sel.cuplariSemiremorca?.[0]?.capTractor;
+        if (coupled) {
+          setValoareContorExecutie(coupled.valoareContorCurent || 0);
+        } else {
+          const firstTractor = vehicule.find((v) => v.categorieEnum === 'CAP_TRACTOR');
+          setValoareContorExecutie(firstTractor ? firstTractor.valoareContorCurent : 0);
+        }
+      } else {
+        setValoareContorExecutie(sel.valoareContorCurent || 0);
+      }
+    }
+  };
 
   const handleSelectArticolStoc = (articolId: string) => {
     setSelectedArticolStocId(articolId);
@@ -834,6 +899,31 @@ export default function ComenziLucruPage() {
     0
   );
 
+  // Calcul Categorii Járművek & Listă Utilaje Filtrate pentru Deschidere Comandă Nouă
+  const availableVehiculeCategories = [
+    'TOATE',
+    ...Array.from(new Set(vehicule.map((v) => v.categorieEnum).filter(Boolean))),
+  ];
+
+  const filteredVehiculeList = vehicule.filter((v: any) => {
+    if (vehiculCategoryFilter !== 'TOATE') {
+      if ((v.categorieEnum || '').toUpperCase() !== vehiculCategoryFilter.toUpperCase()) {
+        return false;
+      }
+    }
+    if (vehiculSearchQuery.trim()) {
+      const q = vehiculSearchQuery.toLowerCase().trim();
+      const mPlate = (v.numarInmatriculare || '').toLowerCase().includes(q);
+      const mIntern = (v.numarIntern || '').toLowerCase().includes(q);
+      const mMarca = (v.marca || '').toLowerCase().includes(q);
+      const mModel = (v.model || '').toLowerCase().includes(q);
+      const mCat = (v.categorieEnum || '').toLowerCase().includes(q);
+      const mCatLabel = getCategoryLabel(v.categorieEnum).toLowerCase().includes(q);
+      if (!mPlate && !mIntern && !mMarca && !mModel && !mCat && !mCatLabel) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       {/* ─── PRINT ONLY STYLES ─── */}
@@ -873,7 +963,12 @@ export default function ComenziLucruPage() {
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setShowAddModal(true);
+            setVehiculSearchQuery('');
+            setVehiculCategoryFilter('TOATE');
+            setIsVehiculSearchOpen(false);
+          }}
           className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
         >
           <Plus className="w-4 h-4" />
@@ -973,11 +1068,15 @@ export default function ComenziLucruPage() {
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
             >
               <option value="TOATE">Utilaj: Toate Flota</option>
-              {vehicule.map((v) => (
-                <option key={v.id} value={v.id}>
-                   {v.numarIntern} ({v.numarInmatriculare})
-                </option>
-              ))}
+              {vehicule.map((v) => {
+                const hasDiff = v.numarIntern && v.numarIntern !== v.numarInmatriculare;
+                const plateStr = hasDiff ? `${v.numarIntern} (${v.numarInmatriculare})` : (v.numarInmatriculare || v.numarIntern);
+                return (
+                  <option key={v.id} value={v.id}>
+                    {getCategoryIcon(v.categorieEnum)} {plateStr} {v.marca ? `— ${v.marca}` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -2205,7 +2304,7 @@ export default function ComenziLucruPage() {
       {/* Modal Adaugă Comandă de Lucru Nouă */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-xl">
+          <div className="pleasant-card p-6 rounded-3xl w-full max-w-xl sm:max-w-2xl space-y-4 shadow-2xl bg-white max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-sapphire-900">Deschidere Comandă de Lucru Nouă</h3>
               <button onClick={() => setShowAddModal(false)} className="text-sage-500 hover:text-sapphire-900">
@@ -2214,38 +2313,177 @@ export default function ComenziLucruPage() {
             </div>
 
             <form onSubmit={handleCreateComanda} className="space-y-3 text-xs">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Selectează Utilaj:</label>
-                <select
-                  value={selectedVehiculId}
-                  onChange={(e) => {
-                    const vId = e.target.value;
-                    setSelectedVehiculId(vId);
-                    const sel = vehicule.find((v) => v.id === vId);
-                    if (sel) {
-                      const isTrailer = sel.categorieEnum === 'REMORCA' || sel.categorieEnum === 'SEMIREMORCA' || sel.categorieEnum?.includes('REMORCA');
-                      if (isTrailer) {
-                        const coupled = sel.cuplariSemiremorca?.[0]?.capTractor;
-                        if (coupled) {
-                          setValoareContorExecutie(coupled.valoareContorCurent || 0);
-                        } else {
-                          const firstTractor = vehicule.find((v) => v.categorieEnum === 'CAP_TRACTOR');
-                          setValoareContorExecutie(firstTractor ? firstTractor.valoareContorCurent : 0);
-                        }
-                      } else {
-                        setValoareContorExecutie(sel.valoareContorCurent || 0);
-                      }
-                    }
-                  }}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  {vehicule.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.numarIntern} ({v.numarInmatriculare}) - {v.marca} {v.model}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* ─── SELECTOR INTELIGENT UTILAJ (SMART VEHICLE SELECTOR) ─── */}
+              {(() => {
+                const selectedVehicul = vehicule.find((v) => v.id === selectedVehiculId);
+                return (
+                  <div className="p-3.5 bg-morning-100/90 border border-morning-200 rounded-2xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sapphire-900 font-extrabold flex items-center space-x-1.5 text-xs">
+                        <Truck className="w-4 h-4 text-sapphire-500" />
+                        <span>Selectează Utilaj din Flotă:</span>
+                      </label>
+                      {selectedVehicul && (
+                        <button
+                          type="button"
+                          onClick={() => setIsVehiculSearchOpen(!isVehiculSearchOpen)}
+                          className="text-[11px] font-bold text-sapphire-600 hover:text-sapphire-800 hover:underline flex items-center space-x-1"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                          <span>{isVehiculSearchOpen ? 'Închide căutarea' : 'Schimbă utilajul'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* KÁRTYA: KIVÁLASZTOTT JÁRMŰ (ha nincs megnyitva a kereső) */}
+                    {selectedVehicul && !isVehiculSearchOpen ? (
+                      <div
+                        onClick={() => setIsVehiculSearchOpen(true)}
+                        className="p-3 bg-white border border-morning-300 hover:border-sapphire-400 rounded-xl flex items-center justify-between shadow-2xs cursor-pointer transition group"
+                        title="Kattintson az utilaj módosításához"
+                      >
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-sapphire-50 group-hover:bg-sapphire-100 text-sapphire-600 border border-sapphire-200 flex items-center justify-center text-xl flex-shrink-0 transition">
+                            {getCategoryIcon(selectedVehicul.categorieEnum)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-2 flex-wrap">
+                              <span className="font-black text-sapphire-900 text-sm">
+                                {selectedVehicul.numarInmatriculare || selectedVehicul.numarIntern}
+                              </span>
+                              {selectedVehicul.numarIntern && selectedVehicul.numarIntern !== selectedVehicul.numarInmatriculare && (
+                                <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 border border-slate-200 rounded text-slate-600 font-mono font-bold">
+                                  Nr. {selectedVehicul.numarIntern}
+                                </span>
+                              )}
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-morning-200 text-slate-700">
+                                {getCategoryLabel(selectedVehicul.categorieEnum)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-sage-600 font-medium truncate">
+                              {selectedVehicul.marca} {selectedVehicul.model} {selectedVehicul.anFabricatie ? `(${selectedVehicul.anFabricatie})` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right flex-shrink-0 ml-3 space-y-0.5">
+                          <div className="text-xs font-mono font-black text-sapphire-900">
+                            {Number(selectedVehicul.valoareContorCurent || 0).toLocaleString('ro-RO')} {selectedVehicul.tipMasurare || 'KM'}
+                          </div>
+                          {getVehiculContorDate(selectedVehicul) && (
+                            <div className="text-[10px] text-sage-600 font-bold">
+                              (înregistrat: {getVehiculContorDate(selectedVehicul)})
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* KERESŐ ÉS KATEGÓRIA VÁLASZTÓ DOBOZ */
+                      <div className="space-y-2.5 pt-1">
+                        {/* Kategória gyorsszűrő gombok */}
+                        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px]">
+                          <span className="text-sage-600 font-bold flex-shrink-0 mr-1">Categorie:</span>
+                          {availableVehiculeCategories.map((cat) => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setVehiculCategoryFilter(cat)}
+                              className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition ${
+                                vehiculCategoryFilter === cat
+                                  ? 'bg-sapphire-600 text-white shadow-2xs'
+                                  : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
+                              }`}
+                            >
+                              {cat === 'TOATE' ? 'Toate Flota' : `${getCategoryIcon(cat)} ${getCategoryLabel(cat)}`}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Élő kereső mező */}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sage-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={vehiculSearchQuery}
+                            onChange={(e) => setVehiculSearchQuery(e.target.value)}
+                            placeholder="Caută după număr înmatriculare, număr intern sau marcă (ex: CV 06 BNW, MAN, Fabia)..."
+                            autoFocus
+                            className="w-full pl-9 pr-8 py-2 bg-white border border-morning-300 rounded-xl text-xs font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 placeholder:text-sage-400 shadow-2xs"
+                          />
+                          {vehiculSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setVehiculSearchQuery('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sage-400 hover:text-slate-700"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Találati lista */}
+                        <div className="max-h-52 overflow-y-auto divide-y divide-morning-100 bg-white border border-morning-200 rounded-xl shadow-inner">
+                          {filteredVehiculeList.length > 0 ? (
+                            filteredVehiculeList.map((v) => {
+                              const isSelected = v.id === selectedVehiculId;
+                              const vDate = getVehiculContorDate(v);
+                              return (
+                                <div
+                                  key={v.id}
+                                  onClick={() => {
+                                    handleSelectVehicul(v.id);
+                                    setIsVehiculSearchOpen(false);
+                                  }}
+                                  className={`p-2.5 cursor-pointer transition flex items-center justify-between hover:bg-sapphire-50/70 ${
+                                    isSelected ? 'bg-sapphire-50 border-l-4 border-sapphire-500 font-bold' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2.5 min-w-0 mr-2">
+                                    <span className="text-lg flex-shrink-0">{getCategoryIcon(v.categorieEnum)}</span>
+                                    <div className="min-w-0 space-y-0.5">
+                                      <div className="flex items-center space-x-2">
+                                        <span className="font-black text-sapphire-900 text-xs">
+                                          {v.numarInmatriculare || v.numarIntern}
+                                        </span>
+                                        {v.numarIntern && v.numarIntern !== v.numarInmatriculare && (
+                                          <span className="text-[10px] px-1 py-0.2 bg-slate-100 border border-slate-200 rounded text-slate-600 font-mono font-bold">
+                                            Nr. {v.numarIntern}
+                                          </span>
+                                        )}
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-morning-200 text-slate-700">
+                                          {getCategoryLabel(v.categorieEnum)}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-sage-600 font-medium truncate">
+                                        {v.marca} {v.model}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right flex-shrink-0 space-y-0.5">
+                                    <div className="font-mono font-extrabold text-sapphire-900 text-xs">
+                                      {Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')} {v.tipMasurare || 'KM'}
+                                    </div>
+                                    {vDate && (
+                                      <div className="text-[10px] text-sage-500 font-medium">
+                                        ({vDate})
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="p-4 text-center text-xs text-sage-500 font-medium">
+                              Nu s-a găsit niciun utilaj conform căutării.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* INDEX KM / ORE FUNCȚIONARE CÂMP OBLIGATORIU (CU SUPORT DEDICAT SEMIREMORCI) */}
               {(() => {
@@ -2253,6 +2491,7 @@ export default function ComenziLucruPage() {
                 const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
                 const coupledTractor = selV?.cuplariSemiremorca?.[0]?.capTractor;
                 const currentContor = selV?.valoareContorCurent || 0;
+                const selVDate = getVehiculContorDate(selV);
                 const isLower = selV && !isTrailer && valoareContorExecutie > 0 && Number(valoareContorExecutie) < currentContor;
 
                 return (
@@ -2269,15 +2508,18 @@ export default function ComenziLucruPage() {
                             <div>
                               <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider"> Cuplat Activ la Cap Tractor:</p>
                               <p className="font-extrabold text-sapphire-900">
-                                {coupledTractor.numarIntern} ({coupledTractor.numarInmatriculare}) - {coupledTractor.marca}
+                                {coupledTractor.numarInmatriculare || coupledTractor.numarIntern} {coupledTractor.numarIntern && coupledTractor.numarIntern !== coupledTractor.numarInmatriculare ? `(Nr. ${coupledTractor.numarIntern})` : ''} — {coupledTractor.marca} {coupledTractor.model}
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => setValoareContorExecutie(coupledTractor.valoareContorCurent || 0)}
-                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-xs transition"
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-xs transition flex items-center space-x-1"
                             >
-                              Preia KM: {coupledTractor.valoareContorCurent} KM
+                              <span>Preia KM: {Number(coupledTractor.valoareContorCurent || 0).toLocaleString('ro-RO')} KM</span>
+                              {getVehiculContorDate(coupledTractor) && (
+                                <span className="opacity-90 font-normal">({getVehiculContorDate(coupledTractor)})</span>
+                              )}
                             </button>
                           </div>
                         ) : (
@@ -2300,11 +2542,17 @@ export default function ComenziLucruPage() {
                             <option value="">-- Selectează Cap Tractor --</option>
                             {vehicule
                               .filter((v) => v.categorieEnum === 'CAP_TRACTOR')
-                              .map((tr) => (
-                                <option key={tr.id} value={tr.id}>
-                                   {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
-                                </option>
-                              ))}
+                              .map((tr) => {
+                                const trDate = getVehiculContorDate(tr);
+                                const trPlate = tr.numarIntern && tr.numarIntern !== tr.numarInmatriculare
+                                  ? `${tr.numarInmatriculare} (Nr. ${tr.numarIntern})`
+                                  : (tr.numarInmatriculare || tr.numarIntern);
+                                return (
+                                  <option key={tr.id} value={tr.id}>
+                                    {trPlate} — {tr.marca} {tr.model} • Contor: {Number(tr.valoareContorCurent || 0).toLocaleString('ro-RO')} KM {trDate ? `(${trDate})` : ''}
+                                  </option>
+                                );
+                              })}
                           </select>
                         </div>
                       </div>
@@ -2329,7 +2577,12 @@ export default function ComenziLucruPage() {
                         {isTrailer
                           ? '• Pentru semiremorci este obligatoriu indexul kilometrajului capului tractor la momentul intervenției.'
                           : '• Valoarea contorului curent înregistrată pe utilaj: '}
-                        {!isTrailer && <span className="font-extrabold text-sapphire-700">{currentContor} {selV?.tipMasurare || 'KM/mTH'}</span>}
+                        {!isTrailer && (
+                          <span className="font-extrabold text-sapphire-700">
+                            {Number(currentContor || 0).toLocaleString('ro-RO')} {selV?.tipMasurare || 'KM/mTH'}
+                            {selVDate && <span className="text-slate-600 font-bold ml-1 font-sans">(înregistrat la: {selVDate})</span>}
+                          </span>
+                        )}
                       </p>
                       {isLower && (
                         <div className="mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-bold flex items-center space-x-1.5 animate-pulse">

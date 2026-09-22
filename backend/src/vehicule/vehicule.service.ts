@@ -331,7 +331,17 @@ export class VehiculeService {
         completariLichid: true,
         pozitiiAxe: { include: { anvelopa: true } },
         cuplariCapTractor: { where: { esteActiv: true }, include: { semiremorca: true } },
-        cuplariSemiremorca: { where: { esteActiv: true }, include: { capTractor: true } },
+        cuplariSemiremorca: {
+          where: { esteActiv: true },
+          include: {
+            capTractor: {
+              include: {
+                istoricContor: { orderBy: { dataInregistrare: 'desc' }, take: 1 },
+              },
+            },
+          },
+        },
+        istoricContor: { orderBy: { dataInregistrare: 'desc' }, take: 1 },
       },
       orderBy: { numarIntern: 'asc' },
     });
