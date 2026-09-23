@@ -2,7 +2,7 @@
 
 import { API_BASE_URL } from '@/lib/api';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
@@ -10,6 +10,87 @@ import {
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { showConfirm } from '@/lib/swal';
+
+const TIP_LICHID_LABELS: Record<string, string> = {
+  ULEI_MOTOR: 'Ulei Motor',
+  ULEI_HIDRAULIC: 'Ulei Hidraulic',
+  ULEI_TRANSMISIE: 'Ulei Transmisie & Diferențial',
+  ANTIGEL_G12: 'Antigel G12+ (Lichid Răcire Roz)',
+  ANTIGEL_G11: 'Antigel G11 (Lichid Răcire Albastru)',
+  ADBLUE: 'AdBlue (Uree 32.5%)',
+  ULEI_LIEBHERR_PUNTE: 'Ulei Punte Liebherr',
+  ULEI_LIEBHERR_CUTIE: 'Ulei Cutie Liebherr',
+  ULEI_CUTIE_MANUALA: 'Ulei Cutie Manuală',
+  ULEI_CUTIE_AUTOMATA: 'Ulei Cutie Automată',
+};
+
+const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
+  if (!item) return false;
+  const sub = (item.subcategorie || '').toLowerCase();
+  const den = (item.denumire || '').toLowerCase();
+  const cat = (item.categorie || '').toLowerCase();
+  const marca = (item.marcaUlei || '').toLowerCase();
+  const combined = `${sub} ${den} ${cat} ${marca}`;
+
+  if (/spuma|curatitor|spray|degresant/i.test(combined)) {
+    return false;
+  }
+
+  switch (tipLichid) {
+    case 'ULEI_MOTOR':
+      return (
+        (sub.includes('motor') || den.includes('motor') || /15w40|10w40|5w30|5w40|0w30|0w20|delvac|castrol/i.test(combined)) &&
+        !/hidraulic|hlp|dte|tellus|hvlp|transmisie|diferential|gear|punte|cutie|80w90|75w90|atf|antigel|adblue/i.test(combined)
+      );
+
+    case 'ULEI_HIDRAULIC':
+      return (
+        /hidraulic|hlp|dte|tellus|hvlp|hvi/i.test(combined) &&
+        !/delvac|castrol.*10w40|antigel|adblue/i.test(combined)
+      );
+
+    case 'ULEI_TRANSMISIE':
+      return (
+        /transmisie|diferential|gear|punte|cutie|80w90|75w90|75w80|85w140|atf|utto/i.test(combined) &&
+        !/hidraulic|antigel|adblue/i.test(combined)
+      );
+
+    case 'ULEI_LIEBHERR_PUNTE':
+      return (
+        /punte/i.test(combined) ||
+        (combined.includes('liebherr') && /gear|80w90|punte/i.test(combined)) ||
+        /80w90|gear\s*oil|punte/i.test(combined)
+      );
+
+    case 'ULEI_LIEBHERR_CUTIE':
+      return (
+        (combined.includes('liebherr') && /cutie|transmisie/i.test(combined)) ||
+        /cutie/i.test(combined) ||
+        /transmisie|atf/i.test(combined)
+      );
+
+    case 'ULEI_CUTIE_MANUALA':
+      return (
+        /cutie.*manual|manual.*cutie/i.test(combined) ||
+        /75w80|75w90|80w90|transmisie|cutie/i.test(combined)
+      );
+
+    case 'ULEI_CUTIE_AUTOMATA':
+      return /automat|atf|dexron/i.test(combined);
+
+    case 'ANTIGEL_G12':
+      return /g12|antigel.*roz|coolant.*pink|antigel/i.test(combined);
+
+    case 'ANTIGEL_G11':
+      return /g11|antigel.*albastru|coolant.*blue|antigel/i.test(combined);
+
+    case 'ADBLUE':
+      return /adblue|uree/i.test(combined);
+
+    default:
+      return true;
+  }
+};
 
 export default function FluidePage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -93,6 +174,29 @@ export default function FluidePage() {
   const [iesireData, setIesireData] = useState(new Date().toISOString().split('T')[0]);
   const [iesireMecanic, setIesireMecanic] = useState('Brașoveanu Virgil (Șef Atelier)');
   const [iesireObservatii, setIesireObservatii] = useState('');
+  const [arataToateFluidele, setArataToateFluidele] = useState<boolean>(false);
+
+  // Filtrare automată a articolelor din stoc după Tip Fluid / Lubrifiant selectat
+  const articoleStocFiltrate = useMemo(() => {
+    if (arataToateFluidele) return stocUleiuri;
+    return stocUleiuri.filter((art) => isArticolMatchingTipLichid(art, iesireTipLichid));
+  }, [stocUleiuri, iesireTipLichid, arataToateFluidele]);
+
+  // Actualizare automată a selecției când se schimbă categoria sau lista filtrată
+  useEffect(() => {
+    if (showCompletareModal) {
+      if (articoleStocFiltrate.length > 0) {
+        const exists = articoleStocFiltrate.some((a) => a.id === selectedArticolStocId);
+        if (!exists) {
+          setSelectedArticolStocId(articoleStocFiltrate[0].id);
+          setIesireMarca(articoleStocFiltrate[0].marcaUlei || articoleStocFiltrate[0].denumire);
+        }
+      } else {
+        setSelectedArticolStocId('');
+        setIesireMarca('');
+      }
+    }
+  }, [iesireTipLichid, articoleStocFiltrate, showCompletareModal]);
 
   // Stare Formular Configurare Intervale (Reguli mTH, KM, Luni)
   const [cfgTipLichid, setCfgTipLichid] = useState('ULEI_MOTOR');
@@ -102,8 +206,6 @@ export default function FluidePage() {
   const [cfgPragMth, setCfgPragMth] = useState(50);
   const [cfgPragKm, setCfgPragKm] = useState(1000);
   const [cfgPragLuni, setCfgPragLuni] = useState(1);
-
-
 
   const fetchInitialData = async () => {
     try {
@@ -135,6 +237,9 @@ export default function FluidePage() {
           const den = (s.denumire || '').toLowerCase();
           const sub = (s.subcategorie || '').toLowerCase();
           const isFilter = cat.includes('filtr') || den.includes('filtr') || cat === 'filtre';
+          const isNonFluid = /spuma|curatitor|spray|degresant/i.test(`${cat} ${den} ${sub}`);
+          if (isFilter || isNonFluid) return false;
+
           const isFluid =
             cat.includes('lubrifian') ||
             cat.includes('ulei') ||
@@ -146,11 +251,17 @@ export default function FluidePage() {
             sub.includes('g12') ||
             sub.includes('g11') ||
             sub.includes('adblue') ||
-            s.unitateMasura === 'L' ||
-            s.unitateMasura === 'Litri' ||
+            sub.includes('ulei') ||
+            sub.includes('punte') ||
+            sub.includes('cutie') ||
             den.includes('antigel') ||
-            den.includes('adblue');
-          return isFluid && !isFilter;
+            den.includes('adblue') ||
+            den.includes('ulei') ||
+            den.includes('mobil') ||
+            den.includes('castrol') ||
+            den.includes('hlp') ||
+            den.includes('gear');
+          return isFluid;
         });
         setStocUleiuri(lubeStoc);
         if (lubeStoc.length > 0 && !selectedArticolStocId) {
@@ -448,9 +559,17 @@ export default function FluidePage() {
   }, [selectedVehiculId]);
 
   const handleOpenCompletare = (vehiculId?: string, tipLichid?: string) => {
-    if (vehiculId) setSelectedVehiculId(vehiculId);
-    if (tipLichid) setIesireTipLichid(tipLichid);
+    if (vehiculId) {
+      setSelectedVehiculId(vehiculId);
+      const v = vehicule.find(item => item.id === vehiculId);
+      if (v) setIesireContor(v.valoareContorCurent || 0);
+    }
+    if (tipLichid) {
+      setIesireTipLichid(tipLichid);
+    }
     setIesireOperatiune('COMPLETARE_ULEI');
+    setIesireData(new Date().toISOString().split('T')[0]);
+    setArataToateFluidele(false);
     setShowCompletareModal(true);
   };
 
@@ -1693,7 +1812,10 @@ export default function FluidePage() {
                   <label className="text-sage-700 block mb-1 font-bold">Tip Fluid / Lubrifiant:</label>
                   <select
                     value={iesireTipLichid}
-                    onChange={(e) => setIesireTipLichid(e.target.value)}
+                    onChange={(e) => {
+                      setIesireTipLichid(e.target.value);
+                      setArataToateFluidele(false);
+                    }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="ULEI_MOTOR">Ulei Motor</option>
@@ -1710,7 +1832,14 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Articol Fluid / Ulei din Stoc:</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sage-700 font-bold">Articol Fluid / Ulei din Stoc:</label>
+                    {articoleStocFiltrate.length > 0 && !arataToateFluidele && (
+                      <span className="text-[10px] text-sapphire-700 font-bold bg-sapphire-100 px-1.5 py-0.5 rounded">
+                        {articoleStocFiltrate.length} {articoleStocFiltrate.length === 1 ? 'articol' : 'articole'}
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={selectedArticolStocId}
                     onChange={(e) => {
@@ -1720,22 +1849,66 @@ export default function FluidePage() {
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
-                    {stocUleiuri.length === 0 ? (
-                      <option value="">Fără fluide în stoc (Se introduce manual)</option>
+                    {articoleStocFiltrate.length === 0 ? (
+                      <option value="">
+                        {`⚠️ Niciun articol disponibil în stoc pentru această categorie`}
+                      </option>
                     ) : (
-                      stocUleiuri.map((s: any) => (
+                      articoleStocFiltrate.map((s: any) => (
                         <option key={s.id} value={s.id}>
-                           {s.denumire} {s.subcategorie ? `(${s.subcategorie})` : ''} • Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L
+                          {s.denumire} {s.subcategorie ? `(${s.subcategorie})` : ''} • Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/L
                         </option>
                       ))
                     )}
                   </select>
+
+                  {articoleStocFiltrate.length === 0 && (
+                    <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-center justify-between gap-2">
+                      <span>Nu există în stoc fluide pentru <strong>{TIP_LICHID_LABELS[iesireTipLichid] || iesireTipLichid}</strong>.</span>
+                      <button
+                        type="button"
+                        onClick={() => setArataToateFluidele(true)}
+                        className="text-sapphire-700 underline font-bold whitespace-nowrap hover:text-sapphire-900"
+                      >
+                        Afișează toate
+                      </button>
+                    </div>
+                  )}
+
+                  {arataToateFluidele && (
+                    <div className="mt-1 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setArataToateFluidele(false)}
+                        className="text-[11px] text-sapphire-600 underline hover:text-sapphire-800"
+                      >
+                        ← Filtrează strict după {TIP_LICHID_LABELS[iesireTipLichid] || 'categoria selectată'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-2 p-2.5 bg-sapphire-50 border border-sapphire-200 rounded-xl text-[11px] text-sapphire-900 flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-sapphire-600 shrink-0" />
                   <span>
                     <b>Consum Automat FIFO:</b> Cantitatea consumată va fi dedusă automat din cele mai vechi loturi de intrare din depozit, la costul real ponderat de achiziție.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-sapphire-600" />
+                    Data Intervenției: *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={iesireData}
+                    onChange={(e) => setIesireData(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-sage-500 mt-0.5 block">
+                    Data efectuării completării (permite înregistrare retroactivă, ex: ieri).
                   </span>
                 </div>
 
@@ -1753,7 +1926,12 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Index Contor Utilaj la Completare:</label>
+                  <label className="text-sage-700 block mb-1 font-bold flex items-center justify-between">
+                    <span>Index Contor Utilaj la Completare:</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sapphire-100 text-sapphire-700 font-mono">
+                      {currentVehicul?.tipMasurare || 'KM'}
+                    </span>
+                  </label>
                   <input
                     type="number"
                     value={iesireContor}

@@ -122,7 +122,19 @@ export class AnomaliiService {
 
     const cantitate = Number(data.cantitateLitri);
     const valoareContor = Number(data.valoareContor);
-    const dataOp = data.dataOperatiune ? new Date(data.dataOperatiune) : new Date();
+    let dataOp = new Date();
+    if (data.dataOperatiune) {
+      if (typeof data.dataOperatiune === 'string' && data.dataOperatiune.includes('-')) {
+        const parts = data.dataOperatiune.split('-');
+        if (parts.length === 3) {
+          dataOp = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0);
+        } else {
+          dataOp = new Date(data.dataOperatiune);
+        }
+      } else {
+        dataOp = new Date(data.dataOperatiune);
+      }
+    }
 
     const isSchimb = data.tipOperatiune.includes('SCHIMB');
     const sursaOp = isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
@@ -177,19 +189,8 @@ export class AnomaliiService {
     let articolUlei = null;
     let fifoResult = null;
 
-    if (data.articolStocId) {
+    if (data.articolStocId && String(data.articolStocId).trim() !== '') {
       articolUlei = await this.prisma.articolStoc.findUnique({ where: { id: data.articolStocId } });
-    } else {
-      // Căutare inteligentă articol în funcție de tipLichid
-      const tipLower = data.tipLichid.toLowerCase();
-      articolUlei = await this.prisma.articolStoc.findFirst({
-        where: {
-          OR: [
-            { categorie: { contains: tipLower.includes('hidraulic') ? 'Hidraulic' : tipLower.includes('antigel') ? 'Antigel' : tipLower.includes('adblue') ? 'AdBlue' : 'Motor' } },
-            { denumire: { contains: data.marcaUlei || 'Ulei' } },
-          ],
-        },
-      });
     }
 
     if (articolUlei) {
