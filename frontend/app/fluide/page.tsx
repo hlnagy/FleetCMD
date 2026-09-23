@@ -221,13 +221,19 @@ const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
 export default function FluidePage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
-  const [activeTab, setActiveTab] = useState<'flota' | 'stocuri' | 'config' | 'anomalii'>('flota');
+  const [activeTab, setActiveTab] = useState<'flota' | 'stocuri' | 'config' | 'anomalii' | 'istoric'>('flota');
   const [stocUleiuri, setStocUleiuri] = useState<any[]>([]);
   const [flotaFluide, setFlotaFluide] = useState<any[]>([]);
   const [statusSchimburi, setStatusSchimburi] = useState<any[]>([]);
   const [alerte, setAlerte] = useState<any[]>([]);
   const [mecaniciList, setMecaniciList] = useState<any[]>([]);
   const [isAlerteCollapsed, setIsAlerteCollapsed] = useState<boolean>(false);
+
+  // Istoric Completări & Schimburi Fluide
+  const [istoricCompletari, setIstoricCompletari] = useState<any[]>([]);
+  const [loadingIstoric, setLoadingIstoric] = useState<boolean>(false);
+  const [searchIstoric, setSearchIstoric] = useState<string>('');
+  const [filterIstoricTip, setFilterIstoricTip] = useState<string>('TOATE');
 
   // Categorii & Depozite Fluide
   const [categoriiFluide, setCategoriiFluide] = useState<any[]>([]);
@@ -512,8 +518,24 @@ export default function FluidePage() {
 
       // Fetch Norme pe Categorii
       await fetchCategoriiNorme();
+
+      // Fetch Istoric Completări Flotă
+      const resIstoric = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=150`);
+      if (resIstoric.ok) setIstoricCompletari(await resIstoric.json());
     } catch (e) {
       console.log('Error fetching initial data for fluids', e);
+    }
+  };
+
+  const fetchIstoricCompletari = async () => {
+    setLoadingIstoric(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=150`);
+      if (res.ok) setIstoricCompletari(await res.json());
+    } catch (e) {
+      console.error('Error fetching completions history', e);
+    } finally {
+      setLoadingIstoric(false);
     }
   };
 

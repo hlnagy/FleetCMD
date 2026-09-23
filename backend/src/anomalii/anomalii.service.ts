@@ -1572,4 +1572,18 @@ export class AnomaliiService {
 
     return listaAlerte.sort((a, b) => (a.urgenta === 'CRITIC' ? -1 : 1));
   }
+
+  // ==========================================
+  // ISTORIC COMPLETĂRI & SCHIMBURI FLUIDE
+  // ==========================================
+  async getIstoricCompletariFluide(limit = 150) {
+    return this.prisma.completareLichid.findMany({
+      include: {
+        vehicul: true,
+        articolStoc: true,
+      },
+      orderBy: { dataCompletare: 'desc' },
+      take: limit,
+    });
+  }
 }

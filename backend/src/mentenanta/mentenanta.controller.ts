@@ -109,4 +109,19 @@ export class MentenantaController {
   escaladeazaSarcina(@Param('sarcinaId') sarcinaId: string, @Body() body: any) {
     return this.mentenantaService.escaladeazaSarcinaInAtelier(sarcinaId, body);
   }
+
+  @Get('raport-activitate-costuri')
+  getRaportCosturiSiActivitate(
+    @Query('vehiculId') vehiculId?: string,
+    @Query('categorie') categorie?: string,
+    @Query('dataStart') dataStart?: string,
+    @Query('dataEnd') dataEnd?: string,
+  ) {
+    return this.mentenantaService.getRaportCosturiSiActivitate({
+      vehiculId,
+      categorie,
+      dataStart,
+      dataEnd,
+    });
+  }
 }

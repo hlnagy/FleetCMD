@@ -836,4 +836,285 @@ export class MentenantaService {
       comanda,
     };
   }
+
+  // ==========================================
+  // RAPORT CENTRALIZAT COSTURI, REPARAȚII & CONSUMABILE
+  // ==========================================
+  async getRaportCosturiSiActivitate(query: {
+    vehiculId?: string;
+    categorie?: string;
+    dataStart?: string;
+    dataEnd?: string;
+  }) {
+    // 1. Identificare vehicule țintă
+    const vehiculWhere: any = {};
+    if (query.vehiculId && query.vehiculId !== 'TOATE') {
+      vehiculWhere.id = query.vehiculId;
+    } else if (query.categorie && query.categorie !== 'TOATE') {
+      vehiculWhere.categorieEnum = query.categorie;
+    }
+
+    const vehicule = await this.prisma.vehicul.findMany({
+      where: vehiculWhere,
+      select: {
+        id: true,
+        numarIntern: true,
+        numarInmatriculare: true,
+        marca: true,
+        model: true,
+        categorieEnum: true,
+        tipMasurare: true,
+        valoareContorCurent: true,
+        valoareContorInitial: true,
+      },
+      orderBy: { numarIntern: 'asc' },
+    });
+
+    const vehiculIds = vehicule.map((v) => v.id);
+
+    // 2. Filtrare perioadă (dată)
+    let startFilter: Date | undefined;
+    let endFilter: Date | undefined;
+
+    if (query.dataStart) {
+      const s = new Date(query.dataStart);
+      if (!isNaN(s.getTime())) {
+        s.setHours(0, 0, 0, 0);
+        startFilter = s;
+      }
+    }
+    if (query.dataEnd) {
+      const e = new Date(query.dataEnd);
+      if (!isNaN(e.getTime())) {
+        e.setHours(23, 59, 59, 999);
+        endFilter = e;
+      }
+    }
+
+    const dateFilterComanda: any = {};
+    const dateFilterLichid: any = {};
+
+    if (startFilter || endFilter) {
+      dateFilterComanda.dataDeschidere = {};
+      dateFilterLichid.dataCompletare = {};
+      if (startFilter) {
+        dateFilterComanda.dataDeschidere.gte = startFilter;
+        dateFilterLichid.dataCompletare.gte = startFilter;
+      }
+      if (endFilter) {
+        dateFilterComanda.dataDeschidere.lte = endFilter;
+        dateFilterLichid.dataCompletare.lte = endFilter;
+      }
+    }
+
+    // 3. Comenzi de Lucru & Elemente Comandă
+    const comenzi = await this.prisma.comandaLucru.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+        ...dateFilterComanda,
+      },
+      include: {
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            categorieEnum: true,
+            tipMasurare: true,
+          },
+        },
+        elementeComanda: {
+          include: {
+            articolStoc: {
+              select: {
+                id: true,
+                denumire: true,
+                codArticol: true,
+                unitateMasura: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { dataDeschidere: 'desc' },
+    });
+
+    // 4. Completări & Schimburi Fluide
+    const completari = await this.prisma.completareLichid.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+        ...dateFilterLichid,
+      },
+      include: {
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            categorieEnum: true,
+            tipMasurare: true,
+          },
+        },
+        articolStoc: {
+          select: {
+            id: true,
+            denumire: true,
+            codArticol: true,
+            unitateMasura: true,
+          },
+        },
+      },
+      orderBy: { dataCompletare: 'desc' },
+    });
+
+    // 5. Agregare Piese & Manoperă & Fluide
+    let totalPiese = 0;
+    let totalManopera = 0;
+    let totalFluide = 0;
+    let totalVolumFluideLitri = 0;
+    const pieseConsumate: any[] = [];
+    const comenziPrelucrate: any[] = [];
+
+    // Harta evoluție lunară
+    const evolutieMap: Record<string, { luna: string; piese: number; manopera: number; fluide: number; total: number }> = {};
+
+    const getLunaKey = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}`;
+    };
+
+    comenzi.forEach((c) => {
+      let cmdPiese = 0;
+      let cmdManopera = 0;
+      const lKey = getLunaKey(new Date(c.dataDeschidere));
+
+      if (!evolutieMap[lKey]) {
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, fluide: 0, total: 0 };
+      }
+
+      c.elementeComanda.forEach((el) => {
+        const cost = Number(el.costTotal || (el.cantitate * el.pretUnitar) || 0);
+        const isManopera = el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA';
+
+        if (isManopera) {
+          cmdManopera += cost;
+          totalManopera += cost;
+          evolutieMap[lKey].manopera += cost;
+          evolutieMap[lKey].total += cost;
+        } else {
+          cmdPiese += cost;
+          totalPiese += cost;
+          evolutieMap[lKey].piese += cost;
+          evolutieMap[lKey].total += cost;
+
+          pieseConsumate.push({
+            id: el.id,
+            comandaLucruId: c.id,
+            numarComanda: c.numarComanda,
+            data: c.dataDeschidere,
+            vehicul: c.vehicul,
+            pilonCost: el.pilonCost,
+            descriere: el.descriere,
+            cantitate: el.cantitate,
+            pretUnitar: el.pretUnitar,
+            costTotal: Number(cost.toFixed(2)),
+            provenienta: el.provenienta,
+            articolStocId: el.articolStocId,
+            articolDenumire: el.articolStoc?.denumire || null,
+            articolCod: el.articolStoc?.codArticol || null,
+            furnizor: el.furnizor,
+            numarFactura: el.numarFactura,
+          });
+        }
+      });
+
+      const cmdTotal = cmdPiese + cmdManopera;
+
+      comenziPrelucrate.push({
+        id: c.id,
+        numarComanda: c.numarComanda,
+        dataDeschidere: c.dataDeschidere,
+        dataFinalizare: c.dataFinalizare,
+        stare: c.stare,
+        mecanicResponsabil: c.mecanicResponsabil,
+        valoareContorLaExecutie: c.valoareContorLaExecutie,
+        observatii: c.observatii,
+        vehicul: c.vehicul,
+        costPiese: Number(cmdPiese.toFixed(2)),
+        costManopera: Number(cmdManopera.toFixed(2)),
+        costTotal: Number(cmdTotal.toFixed(2)),
+        elementeCount: c.elementeComanda.length,
+        elemente: c.elementeComanda,
+      });
+    });
+
+    const completariPrelucrate: any[] = [];
+    completari.forEach((f) => {
+      const cost = Number(f.costTotal || (f.cantitateLitri * f.pretPerLitru) || 0);
+      totalFluide += cost;
+      totalVolumFluideLitri += Number(f.cantitateLitri || 0);
+
+      const lKey = getLunaKey(new Date(f.dataCompletare));
+      if (!evolutieMap[lKey]) {
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, fluide: 0, total: 0 };
+      }
+      evolutieMap[lKey].fluide += cost;
+      evolutieMap[lKey].total += cost;
+
+      completariPrelucrate.push({
+        id: f.id,
+        vehiculId: f.vehiculId,
+        vehicul: f.vehicul,
+        tipLichid: f.tipLichid,
+        tipOperatiune: f.tipOperatiune,
+        marcaUlei: f.marcaUlei,
+        cantitateLitri: f.cantitateLitri,
+        pretPerLitru: f.pretPerLitru,
+        costTotal: Number(cost.toFixed(2)),
+        valoareContor: f.valoareContor,
+        dataCompletare: f.dataCompletare,
+        mecanic: f.mecanic,
+        observatii: f.observatii,
+        alertaScurgereGenerata: f.alertaScurgereGenerata,
+        articolStocId: f.articolStocId,
+        articolDenumire: f.articolStoc?.denumire || null,
+        articolCod: f.articolStoc?.codArticol || null,
+      });
+    });
+
+    const totalGeneral = Number((totalPiese + totalManopera + totalFluide).toFixed(2));
+
+    // Sortare evoluție lunară cronologic
+    const evolutieLunara = Object.values(evolutieMap).sort((a, b) => a.luna.localeCompare(b.luna));
+
+    return {
+      filtru: {
+        vehiculId: query.vehiculId || 'TOATE',
+        categorie: query.categorie || 'TOATE',
+        dataStart: query.dataStart || null,
+        dataEnd: query.dataEnd || null,
+      },
+      totale: {
+        totalGeneral,
+        totalPiese: Number(totalPiese.toFixed(2)),
+        totalManopera: Number(totalManopera.toFixed(2)),
+        totalFluide: Number(totalFluide.toFixed(2)),
+        totalVolumFluideLitri: Number(totalVolumFluideLitri.toFixed(1)),
+        numarComenziLucru: comenzi.length,
+        numarPieseConsumate: pieseConsumate.length,
+        numarCompletariFluide: completari.length,
+        totalVehiculeAfectate: vehicule.length,
+      },
+      vehicule,
+      comenziLucru: comenziPrelucrate,
+      pieseConsumate,
+      completariFluide: completariPrelucrate,
+      evolutieLunara,
+    };
+  }
 }

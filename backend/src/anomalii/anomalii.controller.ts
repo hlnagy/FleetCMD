@@ -280,4 +280,9 @@ export class AnomaliiController {
   setBaselineVehicul(@Body() body: any) {
     return this.anomaliiService.setBaselineVehicul(body);
   }
+
+  @Get('istoric-completari')
+  getIstoricCompletari(@Query('limit') limit?: number) {
+    return this.anomaliiService.getIstoricCompletariFluide(limit ? Number(limit) : 150);
+  }
 }
