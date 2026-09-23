@@ -1558,6 +1558,7 @@ export class EFacturaService {
     luniGarantie?: number;
     kilometriGarantie?: number;
     serieUnica?: string;
+    forceNew?: boolean;
   }) {
     const item = await this.prisma.eFacturaItem.findUnique({
       where: { id: itemId },
@@ -1627,79 +1628,113 @@ export class EFacturaService {
 
       targetVehiculId = vehicul.id;
 
-      // Generare număr comandă unic CL-XXXXX
-      const allComenzi = await this.prisma.comandaLucru.findMany({ select: { numarComanda: true } });
-      let maxNum = 0;
-      for (const c of allComenzi) {
-        const match = c.numarComanda?.match(/CL-(\d+)/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum) maxNum = num;
+      let usedExisting = false;
+      if (!data.forceNew) {
+        const comandaExistenta = await this.prisma.comandaLucru.findFirst({
+          where: {
+            vehiculId: targetVehiculId,
+            stare: { in: ['IN_LUCRU', 'DEVALIDAT'] },
+          },
+          orderBy: { dataDeschidere: 'desc' },
+        });
+
+        if (comandaExistenta) {
+          targetComandaId = comandaExistenta.id;
+          numarComandaLucru = comandaExistenta.numarComanda;
+          usedExisting = true;
+
+          await this.prisma.elementComandaLucru.create({
+            data: {
+              comandaLucruId: targetComandaId,
+              pilonCost: 'PIESA_DIRECTA',
+              descriere: item.descrierePiesa,
+              cantitate: cantitateMontata,
+              pretUnitar: pretUnitarPiesa,
+              costTotal: costTotalPiesa,
+              provenienta: `Achiziție directă Factură ${numarFactura} (${furnizorNume})`,
+              furnizor: furnizorNume,
+              numarFactura: numarFactura,
+              serieUnicaPiesa: data.serieUnica?.trim() || null,
+            },
+          });
         }
       }
-      let nextNum = maxNum + 1;
-      let genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
-      while (await this.prisma.comandaLucru.findUnique({ where: { numarComanda: genNumar } })) {
-        nextNum++;
-        genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
-      }
-      numarComandaLucru = genNumar;
 
-      const contorExec = Number(data.valoareContor ?? vehicul.valoareContorCurent ?? 0);
-      const mecanic = data.mecanicResponsabil || 'Atelier Intern';
-      const observatiiText = data.observatii || `Achiziție piese direct de pe factură ${numarFactura} (${furnizorNume}) - ${item.descrierePiesa}`;
+      if (!usedExisting) {
+        // Generare număr comandă unic CL-XXXXX
+        const allComenzi = await this.prisma.comandaLucru.findMany({ select: { numarComanda: true } });
+        let maxNum = 0;
+        for (const c of allComenzi) {
+          const match = c.numarComanda?.match(/CL-(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+        let nextNum = maxNum + 1;
+        let genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
+        while (await this.prisma.comandaLucru.findUnique({ where: { numarComanda: genNumar } })) {
+          nextNum++;
+          genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
+        }
+        numarComandaLucru = genNumar;
 
-      // Actualizare contor vehicul dacă este specificat
-      if (contorExec > 0) {
-        await this.prisma.vehicul.update({
-          where: { id: targetVehiculId },
+        const contorExec = Number(data.valoareContor ?? vehicul.valoareContorCurent ?? 0);
+        const mecanic = data.mecanicResponsabil || 'Atelier Intern';
+        const observatiiText = data.observatii || `Achiziție piese direct de pe factură ${numarFactura} (${furnizorNume}) - ${item.descrierePiesa}`;
+
+        // Actualizare contor vehicul dacă este specificat
+        if (contorExec > 0) {
+          await this.prisma.vehicul.update({
+            where: { id: targetVehiculId },
+            data: {
+              valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorExec),
+              dataInregistrareContor: new Date(),
+            },
+          });
+
+          await this.prisma.istoricContorVehicul.create({
+            data: {
+              vehiculId: targetVehiculId,
+              valoareContor: contorExec,
+              dataInregistrare: new Date(),
+              sursa: 'SERVICE',
+              operator: mecanic,
+              observatii: `Deschidere Comandă de Lucru ${numarComandaLucru} de pe Factură (${numarFactura})`,
+            },
+          });
+        }
+
+        const nouaComanda = await this.prisma.comandaLucru.create({
           data: {
-            valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorExec),
-            dataInregistrareContor: new Date(),
-          },
-        });
-
-        await this.prisma.istoricContorVehicul.create({
-          data: {
+            numarComanda: numarComandaLucru,
             vehiculId: targetVehiculId,
-            valoareContor: contorExec,
-            dataInregistrare: new Date(),
-            sursa: 'SERVICE',
-            operator: mecanic,
-            observatii: `Deschidere Comandă de Lucru ${numarComandaLucru} de pe Factură (${numarFactura})`,
+            mecanicResponsabil: mecanic,
+            observatii: observatiiText,
+            valoareContorLaExecutie: contorExec,
+            stare: data.autoFinalize ? 'FINALIZAT' : 'IN_LUCRU',
+            dataDeschidere: new Date(),
+            dataFinalizare: data.autoFinalize ? new Date() : null,
+            elementeComanda: {
+              create: [
+                {
+                  pilonCost: 'PIESA_DIRECTA',
+                  descriere: item.descrierePiesa,
+                  cantitate: cantitateMontata,
+                  pretUnitar: pretUnitarPiesa,
+                  costTotal: costTotalPiesa,
+                  provenienta: `Achiziție directă Factură ${numarFactura} (${furnizorNume})`,
+                  furnizor: furnizorNume,
+                  numarFactura: numarFactura,
+                  serieUnicaPiesa: data.serieUnica?.trim() || null,
+                },
+              ],
+            },
           },
         });
+
+        targetComandaId = nouaComanda.id;
       }
-
-      const nouaComanda = await this.prisma.comandaLucru.create({
-        data: {
-          numarComanda: numarComandaLucru,
-          vehiculId: targetVehiculId,
-          mecanicResponsabil: mecanic,
-          observatii: observatiiText,
-          valoareContorLaExecutie: contorExec,
-          stare: data.autoFinalize ? 'FINALIZAT' : 'IN_LUCRU',
-          dataDeschidere: new Date(),
-          dataFinalizare: data.autoFinalize ? new Date() : null,
-          elementeComanda: {
-            create: [
-              {
-                pilonCost: 'PIESA_DIRECTA',
-                descriere: item.descrierePiesa,
-                cantitate: cantitateMontata,
-                pretUnitar: pretUnitarPiesa,
-                costTotal: costTotalPiesa,
-                provenienta: `Achiziție directă Factură ${numarFactura} (${furnizorNume})`,
-                furnizor: furnizorNume,
-                numarFactura: numarFactura,
-                serieUnicaPiesa: data.serieUnica?.trim() || null,
-              },
-            ],
-          },
-        },
-      });
-
-      targetComandaId = nouaComanda.id;
     }
 
     // Înregistrare Garanție dacă este cerută

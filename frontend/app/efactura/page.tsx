@@ -389,6 +389,7 @@ function EFacturaContent() {
   const [valoareContorMasina, setValoareContorMasina] = useState<number>(0);
   const [observatiiComanda, setObservatiiComanda] = useState('');
   const [autoFinalizeComanda, setAutoFinalizeComanda] = useState(false);
+  const [forceNewComanda, setForceNewComanda] = useState(false);
   const [cantitateAlocata, setCantitateAlocata] = useState<number>(1);
   const [savingAlocareDirecta, setSavingAlocareDirecta] = useState(false);
 
@@ -596,14 +597,13 @@ function EFacturaContent() {
 
         if (deschise.length > 0) {
           setSelectedComandaLucruId((prev) => prev || deschise[0].id);
+          setSelectedVehiculId((prev) => prev || deschise[0].vehiculId || (veh[0]?.id || ''));
+        } else if (veh.length > 0) {
+          setSelectedVehiculId((prev) => prev || veh[0].id);
         }
         if (veh.length > 0) {
-          setSelectedVehiculId((prev) => {
-            const nextId = prev || veh[0].id;
-            const targetV = veh.find((v: any) => v.id === nextId) || veh[0];
-            setValoareContorMasina(targetV?.valoareContorCurent || 0);
-            return nextId;
-          });
+          const targetV = veh.find((v: any) => v.id === selectedVehiculId) || veh[0];
+          if (targetV) setValoareContorMasina(targetV.valoareContorCurent || 0);
         }
         if (mec.length > 0) {
           setSelectedMecanic((prev) => prev || mec[0].nume);
@@ -947,6 +947,7 @@ function EFacturaContent() {
     setModAlocareMasina('EXISTENTA');
     setCantitateAlocata(item.cantitate || 1);
     setAutoFinalizeComanda(false);
+    setForceNewComanda(false);
     setObservatiiComanda(`Achiziție piese direct de pe factură ${selectedFactura?.numarFactura || ''} (${selectedFactura?.numeVanzator || ''}) - ${item.descrierePiesa}`);
     fetchComenziDeschise();
   };
@@ -1079,6 +1080,7 @@ function EFacturaContent() {
           valoareContor: modAlocareMasina === 'NOUA' ? Number(valoareContorMasina) : undefined,
           observatii: observatiiComanda,
           autoFinalize: autoFinalizeComanda,
+          forceNew: modAlocareMasina === 'NOUA' ? forceNewComanda : false,
           cantitate: Number(cantitateAlocata || importingItem.cantitate || 1),
           pretUnitar: isGarantieGratuita ? 0 : Number(pretUnitarImport),
           areGarantie: areGarantieProducator || isImportSerializat,
@@ -3349,7 +3351,14 @@ function EFacturaContent() {
                             <select
                               required
                               value={selectedComandaLucruId}
-                              onChange={(e) => setSelectedComandaLucruId(e.target.value)}
+                              onChange={(e) => {
+                                const cId = e.target.value;
+                                setSelectedComandaLucruId(cId);
+                                const order = comenziDeschiseFlota.find((c) => c.id === cId);
+                                if (order?.vehiculId) {
+                                  setSelectedVehiculId(order.vehiculId);
+                                }
+                              }}
                               className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
                             >
                               {comenziDeschiseFlota.map((c) => (
@@ -3364,19 +3373,22 @@ function EFacturaContent() {
                               const selC = comenziDeschiseFlota.find((c) => c.id === selectedComandaLucruId);
                               if (!selC) return null;
                               return (
-                                <div className="mt-2 p-3 bg-sapphire-50/50 border border-sapphire-200 rounded-xl flex items-center justify-between text-xs">
+                                <div className="mt-2 p-3 bg-emerald-50/70 border border-emerald-300 rounded-xl flex items-center justify-between text-xs">
                                   <div>
                                     <div className="flex items-center space-x-2">
-                                      <span className="px-2 py-0.5 rounded bg-sapphire-600 text-white font-mono font-black text-xs">
+                                      <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-mono font-black text-xs">
                                         {selC.numarComanda}
                                       </span>
-                                      <span className="font-black text-sapphire-950 text-xs">
+                                      <span className="font-black text-emerald-950 text-xs">
                                         {selC.vehicul?.numarIntern} • {selC.vehicul?.numarInmatriculare}
                                       </span>
                                       <span className="text-sage-600 text-[11px]">({selC.vehicul?.marca} {selC.vehicul?.model})</span>
                                     </div>
-                                    <div className="text-[11px] text-sage-600 mt-1">
-                                      Mecanic: <b>{selC.mecanicResponsabil}</b> • Deschidere: {new Date(selC.dataDeschidere).toLocaleDateString('ro-RO')} • {selC.elementeComanda?.length || 0} piese deja alocate
+                                    <div className="text-[11px] text-emerald-900 mt-1">
+                                      Mecanic: <b>{selC.mecanicResponsabil}</b> • Deschidere: {new Date(selC.dataDeschidere).toLocaleDateString('ro-RO')} • {selC.elementeComanda?.length || 0} piese deja pe comandă
+                                    </div>
+                                    <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                      ✓ Piesa va fi adăugată direct pe acest deviz existent, fără a se crea o comandă duplicată.
                                     </div>
                                   </div>
                                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold border shrink-0 ${
@@ -3422,19 +3434,74 @@ function EFacturaContent() {
                             required
                             value={selectedVehiculId}
                             onChange={(e) => {
-                              setSelectedVehiculId(e.target.value);
-                              const v = vehiculeFlota.find((veh) => veh.id === e.target.value);
+                              const vId = e.target.value;
+                              setSelectedVehiculId(vId);
+                              const v = vehiculeFlota.find((veh) => veh.id === vId);
                               if (v) setValoareContorMasina(v.valoareContorCurent || 0);
+                              const openOrder = comenziDeschiseFlota.find((c) => c.vehiculId === vId);
+                              if (openOrder) {
+                                setSelectedComandaLucruId(openOrder.id);
+                              }
                             }}
                             className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
                           >
-                            {vehiculeFlota.map((v) => (
-                              <option key={v.id} value={v.id}>
-                                {v.numarIntern} • {v.numarInmatriculare} - {v.marca} {v.model} ({v.categorieEnum})
-                              </option>
-                            ))}
+                            {vehiculeFlota.map((v) => {
+                              const hasOpen = comenziDeschiseFlota.some((c) => c.vehiculId === v.id);
+                              return (
+                                <option key={v.id} value={v.id}>
+                                  {hasOpen ? '🟢 [ARE COMANDĂ DESCHISĂ] ' : ''}{v.numarIntern} • {v.numarInmatriculare} - {v.marca} {v.model} ({v.categorieEnum})
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
+
+                        {/* AVERTIZARE ȘI DETECȚIE AUTOMATĂ DACĂ VEHICULUL ARE DEJA COMANDĂ DESCHISĂ */}
+                        {(() => {
+                          const comandaExistenta = comenziDeschiseFlota.find((c) => c.vehiculId === selectedVehiculId);
+                          if (!comandaExistenta) return null;
+                          const veh = vehiculeFlota.find((v) => v.id === selectedVehiculId);
+                          return (
+                            <div className="p-3 bg-amber-50 border-2 border-amber-400 rounded-xl space-y-2 animate-fade-in shadow-xs">
+                              <div className="flex items-start space-x-2.5">
+                                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="flex-1 text-xs">
+                                  <p className="font-extrabold text-amber-950">
+                                    Atenție: Vehiculul {veh?.numarIntern} ({veh?.numarInmatriculare}) are DEJA o comandă deschisă în atelier: <span className="font-mono underline text-sapphire-800">{comandaExistenta.numarComanda}</span>!
+                                  </p>
+                                  <p className="text-amber-900 text-[11px] mt-0.5">
+                                    Mecanic: <b>{comandaExistenta.mecanicResponsabil}</b> • Stare: <b>{comandaExistenta.stare === 'DEVALIDAT' ? 'DEVALIDAT (În Ediție)' : 'ÎN LUCRU'}</b> • Piese existente: <b>{comandaExistenta.elementeComanda?.length || 0}</b>
+                                  </p>
+                                  <p className="text-slate-600 text-[11px] mt-0.5">
+                                    Pentru a nu crea o comandă duplicată inutilă, este recomandat să adăugați piesa direct pe comanda {comandaExistenta.numarComanda}.
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between pt-1.5 border-t border-amber-200">
+                                <label className="flex items-center space-x-1.5 text-[11px] text-amber-950 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={forceNewComanda}
+                                    onChange={(e) => setForceNewComanda(e.target.checked)}
+                                    className="w-3.5 h-3.5 rounded text-amber-600 accent-amber-600"
+                                  />
+                                  <span>Forțează deschiderea unei comenzi separate</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModAlocareMasina('EXISTENTA');
+                                    setSelectedComandaLucruId(comandaExistenta.id);
+                                  }}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-extrabold text-xs shadow-xs transition flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  <span>Adaugă pe {comandaExistenta.numarComanda}</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
@@ -3640,7 +3707,9 @@ function EFacturaContent() {
                         {savingAlocareDirecta
                           ? 'Se alocă pe mașină...'
                           : modAlocareMasina === 'EXISTENTA'
-                          ? 'Confirmă Alocarea pe Comandă'
+                          ? `Confirmă Alocarea pe ${comenziDeschiseFlota.find((c) => c.id === selectedComandaLucruId)?.numarComanda || 'Comandă'}`
+                          : forceNewComanda
+                          ? 'Deschide Comandă Nouă Separată'
                           : 'Deschide Comanda & Montează Piesa'}
                       </span>
                     </>
