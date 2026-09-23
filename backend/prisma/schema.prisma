@@ -677,6 +677,7 @@ model EFacturaItem {
   cotaTVA            Float           @default(19)
   stare              String          @default("NEPROCESAT") // NEPROCESAT | IMPORTAT | ELIMINAT
   articolStocId      String?         // Relație cu ArticolStoc creat/actualizat
+  comandaLucruId     String?         // Relație directă cu ComandaLucru dacă piesa a fost montată direct pe utilaj
   createdAt          DateTime        @default(now())
 
   @@index([facturaId])
@@ -684,6 +685,7 @@ model EFacturaItem {
   @@index([codArticolFurnizor])
   @@index([pretUnitar])
   @@index([articolStocId])
+  @@index([comandaLucruId])
 }
 
 model EFacturaFurnizorExclus {

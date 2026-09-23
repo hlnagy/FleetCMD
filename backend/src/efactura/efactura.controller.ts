@@ -132,6 +132,20 @@ export class EFacturaController {
     return this.efacturaService.importaItemInStoc(itemId, body);
   }
 
+  // IMPORT DIRECT PE MAȘINĂ / COMANDĂ DE LUCRU
+  @Get('comenzi-deschise')
+  async getComenziLucruDeschise() {
+    return this.efacturaService.getComenziLucruDeschise();
+  }
+
+  @Post('items/:itemId/aloca-direct-masina')
+  async alocaItemDirectPeMasina(
+    @Param('itemId') itemId: string,
+    @Body() body: any
+  ) {
+    return this.efacturaService.alocaItemDirectPeMasina(itemId, body);
+  }
+
   // ELVET TÉTEL (REZSI / SERVICII)
   @Post('items/:itemId/elimina')
   async eliminaItem(@Param('itemId') itemId: string) {

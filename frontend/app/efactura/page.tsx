@@ -8,7 +8,8 @@ import {
   Settings, Clock, Building2, Layers, Check, X, ShieldCheck, ArrowRight,
   PackageCheck, Trash2, ChevronRight, Eye, Code, ExternalLink, Calendar, Zap,
   HelpCircle, BookOpen, Key, CheckCircle, Shield, ArrowUpDown, ArrowUp, ArrowDown,
-  ShoppingCart, History, Tag, ShieldAlert, Droplets, Sparkles
+  ShoppingCart, History, Tag, ShieldAlert, Droplets, Sparkles,
+  Truck, Database, Wrench
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
@@ -375,6 +376,22 @@ function EFacturaContent() {
   const [newSubcatNume, setNewSubcatNume] = useState('');
   const [savingNewSubcat, setSavingNewSubcat] = useState(false);
 
+  // DIRECT PE MAȘINĂ / COMANDĂ DE LUCRU STATE
+  const [tipDestinatieImport, setTipDestinatieImport] = useState<'DEPOZIT' | 'DIRECT_MASINA'>('DEPOZIT');
+  const [modAlocareMasina, setModAlocareMasina] = useState<'EXISTENTA' | 'NOUA'>('EXISTENTA');
+  const [comenziDeschiseFlota, setComenziDeschiseFlota] = useState<any[]>([]);
+  const [vehiculeFlota, setVehiculeFlota] = useState<any[]>([]);
+  const [mecaniciFlota, setMecaniciFlota] = useState<any[]>([]);
+  const [loadingComenziDeschise, setLoadingComenziDeschise] = useState(false);
+  const [selectedComandaLucruId, setSelectedComandaLucruId] = useState('');
+  const [selectedVehiculId, setSelectedVehiculId] = useState('');
+  const [selectedMecanic, setSelectedMecanic] = useState('');
+  const [valoareContorMasina, setValoareContorMasina] = useState<number>(0);
+  const [observatiiComanda, setObservatiiComanda] = useState('');
+  const [autoFinalizeComanda, setAutoFinalizeComanda] = useState(false);
+  const [cantitateAlocata, setCantitateAlocata] = useState<number>(1);
+  const [savingAlocareDirecta, setSavingAlocareDirecta] = useState(false);
+
   // SMART CATEGORY DETECTED SUGGESTION
   const [sugestieDetectata, setSugestieDetectata] = useState<{
     categorie: string;
@@ -555,10 +572,47 @@ function EFacturaContent() {
       }
       // Încărcăm și lista furnizorilor excluși automat
       fetchFurnizoriExclusi();
+      fetchComenziDeschise();
     } catch (e) {
       console.log('Eroare la încărcarea datelor e-Factura:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchComenziDeschise = async () => {
+    try {
+      setLoadingComenziDeschise(true);
+      const res = await fetch(`${API_BASE_URL}/efactura/comenzi-deschise`);
+      if (res.ok) {
+        const data = await res.json();
+        const deschise = Array.isArray(data.comenziDeschise) ? data.comenziDeschise : [];
+        const veh = Array.isArray(data.vehicule) ? data.vehicule : [];
+        const mec = Array.isArray(data.mecanici) ? data.mecanici : [];
+
+        setComenziDeschiseFlota(deschise);
+        setVehiculeFlota(veh);
+        setMecaniciFlota(mec);
+
+        if (deschise.length > 0) {
+          setSelectedComandaLucruId((prev) => prev || deschise[0].id);
+        }
+        if (veh.length > 0) {
+          setSelectedVehiculId((prev) => {
+            const nextId = prev || veh[0].id;
+            const targetV = veh.find((v: any) => v.id === nextId) || veh[0];
+            setValoareContorMasina(targetV?.valoareContorCurent || 0);
+            return nextId;
+          });
+        }
+        if (mec.length > 0) {
+          setSelectedMecanic((prev) => prev || mec[0].nume);
+        }
+      }
+    } catch (e) {
+      console.warn('Eroare la încărcarea comenzilor deschise:', e);
+    } finally {
+      setLoadingComenziDeschise(false);
     }
   };
 
@@ -887,6 +941,14 @@ function EFacturaContent() {
       });
     }
     setSeriiList(initialSerii);
+
+    // Inițializare parametri Alocare Directă pe Mașină / Comandă de Lucru
+    setTipDestinatieImport('DEPOZIT');
+    setModAlocareMasina('EXISTENTA');
+    setCantitateAlocata(item.cantitate || 1);
+    setAutoFinalizeComanda(false);
+    setObservatiiComanda(`Achiziție piese direct de pe factură ${selectedFactura?.numarFactura || ''} (${selectedFactura?.numeVanzator || ''}) - ${item.descrierePiesa}`);
+    fetchComenziDeschise();
   };
 
   // Verificare Consolidare Stoc Existent (doar dacă e într-adevăr același articol/cod/vâscozitate)
@@ -990,10 +1052,77 @@ function EFacturaContent() {
     }
   };
 
+  // EXECUTE DIRECT VEHICLE / WORK ORDER IMPORT (DIRECT PE MAȘINĂ)
+  const handleConfirmAlocareDirecta = async () => {
+    if (!importingItem) return;
+
+    if (modAlocareMasina === 'EXISTENTA' && !selectedComandaLucruId) {
+      alert('Vă rugăm să selectați o comandă de lucru deschisă din atelier.');
+      return;
+    }
+
+    if (modAlocareMasina === 'NOUA' && !selectedVehiculId) {
+      alert('Vă rugăm să selectați un vehicul din flotă.');
+      return;
+    }
+
+    setSavingAlocareDirecta(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/aloca-direct-masina`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modAlocare: modAlocareMasina === 'EXISTENTA' ? 'COMANDA_EXISTENTA' : 'COMANDA_NOUA',
+          comandaLucruId: modAlocareMasina === 'EXISTENTA' ? selectedComandaLucruId : undefined,
+          vehiculId: modAlocareMasina === 'NOUA' ? selectedVehiculId : undefined,
+          mecanicResponsabil: modAlocareMasina === 'NOUA' ? selectedMecanic : undefined,
+          valoareContor: modAlocareMasina === 'NOUA' ? Number(valoareContorMasina) : undefined,
+          observatii: observatiiComanda,
+          autoFinalize: autoFinalizeComanda,
+          cantitate: Number(cantitateAlocata || importingItem.cantitate || 1),
+          pretUnitar: isGarantieGratuita ? 0 : Number(pretUnitarImport),
+          areGarantie: areGarantieProducator || isImportSerializat,
+          luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
+          kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
+          serieUnica: areGarantieProducator ? serieUnicaCustom.trim() : undefined,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || 'Piesa a fost alocată cu succes pe comanda de lucru!');
+        setImportingItem(null);
+        fetchData();
+
+        if (selectedFactura) {
+          const updatedFact = await (await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`)).json();
+          const hasRemainingUnprocessed = updatedFact.articole?.some((a: any) => a.stare === 'NEPROCESAT');
+          if (!hasRemainingUnprocessed) {
+            setSelectedFactura(null);
+          } else {
+            setSelectedFactura(updatedFact);
+          }
+        }
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut aloca piesa pe mașină.'}`);
+      }
+    } catch (e) {
+      alert('Eroare la alocarea piesei pe mașină.');
+    } finally {
+      setSavingAlocareDirecta(false);
+    }
+  };
+
   // EXECUTE ITEM IMPORT INTO INVENTORY (DEPOZITFLOTA)
   const handleConfirmImportItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importingItem) return;
+
+    if (tipDestinatieImport === 'DIRECT_MASINA') {
+      await handleConfirmAlocareDirecta();
+      return;
+    }
 
     try {
       const isConversie = esteConversieVolum && Number(volumAmbalaj) > 0;
@@ -2077,10 +2206,21 @@ function EFacturaContent() {
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">Neprocesat</span>
                           )}
                           {art.stare === 'IMPORTAT' && (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-fit">
-                              <Check className="w-3 h-3" />
-                              <span>Importat în Stoc</span>
-                            </span>
+                            art.comandaLucruId ? (
+                              <Link
+                                href={`/comenzi-lucru`}
+                                className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sapphire-100 text-sapphire-800 border border-sapphire-200 flex items-center space-x-1 w-fit hover:bg-sapphire-200 transition"
+                                title="Deschide modulul Comenzi de Lucru"
+                              >
+                                <Truck className="w-3 h-3 text-sapphire-600" />
+                                <span>Montat pe Mașină</span>
+                              </Link>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-fit">
+                                <Check className="w-3 h-3" />
+                                <span>Importat în Stoc</span>
+                              </span>
+                            )
                           )}
                           {art.stare === 'ELIMINAT' && (
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">Exclus / Servicii</span>
@@ -2502,8 +2642,17 @@ function EFacturaContent() {
             {/* ANTET FIXAT (STICKY HEADER) */}
             <div className="flex items-center justify-between border-b border-morning-200 px-6 py-4 bg-white shrink-0">
               <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
-                <PackageCheck className="w-5 h-5 text-emerald-600" />
-                <span>Import Articol în Stoc</span>
+                {tipDestinatieImport === 'DIRECT_MASINA' ? (
+                  <>
+                    <Truck className="w-5 h-5 text-sapphire-600" />
+                    <span>Alocare Directă pe Mașină / Comandă de Lucru</span>
+                  </>
+                ) : (
+                  <>
+                    <PackageCheck className="w-5 h-5 text-emerald-600" />
+                    <span>Import Articol în Stoc</span>
+                  </>
+                )}
               </h3>
               <button
                 type="button"
@@ -2518,52 +2667,96 @@ function EFacturaContent() {
             {/* FORMULAR CU CORP SCROLLABIL & FOOTER FIXAT */}
             <form onSubmit={handleConfirmImportItem} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-                {/* TAB SELECTOR: IMPORT STANDARD VS CU SERII PER BUCATĂ */}
+                {/* SELECTOR DESTINAȚIE PRINCIPALĂ: DEPOZIT STOC VS DIRECT PE MAȘINĂ */}
                 <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setIsImportSerializat(false)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                      !isImportSerializat ? 'bg-emerald-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                    onClick={() => setTipDestinatieImport('DEPOZIT')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center space-x-1.5 transition cursor-pointer ${
+                      tipDestinatieImport === 'DEPOZIT'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-sage-700 hover:bg-morning-200'
                     }`}
                   >
-                     Import Rapid În Vrac
+                    <Database className="w-4 h-4" />
+                    <span>1. În Depozit Stoc (Magazie)</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setIsImportSerializat(true)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
-                      isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                    onClick={() => {
+                      setTipDestinatieImport('DIRECT_MASINA');
+                      if (comenziDeschiseFlota.length === 0) fetchComenziDeschise();
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center space-x-1.5 transition cursor-pointer ${
+                      tipDestinatieImport === 'DIRECT_MASINA'
+                        ? 'bg-sapphire-600 text-white shadow-xs'
+                        : 'text-sage-700 hover:bg-morning-200'
                     }`}
                   >
-                     Import cu Serii / Bucată ({seriiList.length} buc)
+                    <Truck className="w-4 h-4" />
+                    <span>2. Direct pe Mașină (Munkalap)</span>
                   </button>
                 </div>
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
-                <p className="font-extrabold text-emerald-950 text-xs truncate" title={importingItem.descrierePiesa}>
-                  {importingItem.descrierePiesa}
-                </p>
-                <div className="flex items-center space-x-3 text-[11px] text-emerald-800 font-mono">
-                  <span>Cantitate: <b>{importingItem.cantitate} {importingItem.unitateMasura || 'buc'}</b></span>
-                  <span>•</span>
-                  <span>Preț Unitar: <b>{Number(importingItem.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</b></span>
-                </div>
-              </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Stoc Target: *</label>
-                <select
-                  required
-                  value={targetDepozitId}
-                  onChange={(e) => setTargetDepozitId(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  {depozite.map((d) => (
-                    <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
-                  ))}
-                </select>
-              </div>
+                {tipDestinatieImport === 'DEPOZIT' ? (
+                  <div className="space-y-4">
+                    {/* TAB SELECTOR: IMPORT STANDARD VS CU SERII PER BUCATĂ */}
+                    <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setIsImportSerializat(false)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                          !isImportSerializat ? 'bg-emerald-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                        }`}
+                      >
+                         Import Rapid În Vrac
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsImportSerializat(true)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${
+                          isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
+                        }`}
+                      >
+                         Import cu Serii / Bucată ({seriiList.length} buc)
+                      </button>
+                    </div>
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+                    <p className="font-extrabold text-emerald-950 text-xs truncate" title={importingItem.descrierePiesa}>
+                      {importingItem.descrierePiesa}
+                    </p>
+                    <div className="flex items-center space-x-3 text-[11px] text-emerald-800 font-mono">
+                      <span>Cantitate: <b>{importingItem.cantitate} {importingItem.unitateMasura || 'buc'}</b></span>
+                      <span>•</span>
+                      <span>Preț Unitar: <b>{Number(importingItem.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</b></span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Stoc Target: *</label>
+                    <select
+                      required
+                      value={targetDepozitId}
+                      onChange={(e) => {
+                        if (e.target.value === 'DIRECT_PE_MASINA') {
+                          setTipDestinatieImport('DIRECT_MASINA');
+                          if (comenziDeschiseFlota.length === 0) fetchComenziDeschise();
+                        } else {
+                          setTargetDepozitId(e.target.value);
+                        }
+                      }}
+                      className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                    >
+                      <option value="DIRECT_PE_MASINA" className="text-sapphire-700 font-extrabold bg-sapphire-50">
+                        🚗 [Import Direct pe Mașină / Comandă de Lucru] (Fără stocare în depozit)
+                      </option>
+                      {depozite.map((d) => (
+                        <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
+                      ))}
+                    </select>
+                  </div>
 
               {/* CATEGORIE STOC CU BUTON CREARE NOUĂ */}
               <div>
@@ -3066,11 +3259,356 @@ function EFacturaContent() {
                   />
                 ) : (
                   <p className="text-[11px] text-purple-800 font-medium italic">
-                     Articolul va fi introdus în stoc cu preț de 0 RON (nu va încărca costurile flotei).
+                    Articolul va fi introdus în stoc cu preț de 0 RON (nu va încărca costurile flotei).
                   </p>
                 )}
               </div>
+            </div>
+          ) : (
+            /* RAMURA DIRECT PE MAȘINĂ (FĂRĂ STOCARE ÎN DEPOZIT) */
+            <div className="space-y-4">
+                    {/* SUMAR TÉTEL FEJLÉC */}
+                    <div className="p-3 bg-sapphire-50 border border-sapphire-200 rounded-xl space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-black tracking-wider text-sapphire-800 bg-sapphire-100 px-2 py-0.5 rounded">
+                          Piesă din Factură pentru Montaj Direct pe Utilaj
+                        </span>
+                        <span className="text-[11px] font-mono text-sapphire-900 font-bold truncate max-w-[280px]">
+                          Factură: {selectedFactura?.numarFactura || 'N/A'} • {selectedFactura?.numeVanzator || ''}
+                        </span>
+                      </div>
+                      <p className="font-extrabold text-sapphire-950 text-xs truncate" title={importingItem.descrierePiesa}>
+                        {importingItem.descrierePiesa}
+                      </p>
+                      <div className="flex items-center space-x-3 text-[11px] text-sapphire-800 font-mono">
+                        <span>Cantitate Facturată: <b>{importingItem.cantitate} {importingItem.unitateMasura || 'buc'}</b></span>
+                        <span>•</span>
+                        <span>Preț Unitar: <b>{Number(importingItem.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</b></span>
+                      </div>
+                    </div>
 
+                    {/* SELECTOR MOD ALOCARE: COMANDĂ EXISTENTĂ VS COMANDĂ NOUĂ */}
+                    <div className="p-3.5 bg-morning-100 border border-morning-200 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-sapphire-950 uppercase tracking-wider flex items-center space-x-1.5">
+                          <Wrench className="w-4 h-4 text-sapphire-600" />
+                          <span>Opțiuni de Alocare pe Utilaj</span>
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setModAlocareMasina('EXISTENTA')}
+                          className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                            modAlocareMasina === 'EXISTENTA'
+                              ? 'bg-white border-sapphire-500 ring-2 ring-sapphire-500/20 shadow-xs'
+                              : 'bg-morning-50 border-morning-200 text-sage-700 hover:bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <FileText className={`w-4 h-4 ${modAlocareMasina === 'EXISTENTA' ? 'text-sapphire-600' : 'text-sage-500'}`} />
+                            <span className="font-extrabold text-xs text-slate-900">Comandă de Lucru Deschisă</span>
+                          </div>
+                          <p className="text-[11px] text-sage-600 mt-1">
+                            Utilajul este deja în reparație în atelier ({comenziDeschiseFlota.length} comenzi active)
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModAlocareMasina('NOUA');
+                            if (vehiculeFlota.length === 0) fetchComenziDeschise();
+                          }}
+                          className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                            modAlocareMasina === 'NOUA'
+                              ? 'bg-white border-sapphire-500 ring-2 ring-sapphire-500/20 shadow-xs'
+                              : 'bg-morning-50 border-morning-200 text-sage-700 hover:bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Plus className={`w-4 h-4 ${modAlocareMasina === 'NOUA' ? 'text-emerald-600' : 'text-sage-500'}`} />
+                            <span className="font-extrabold text-xs text-slate-900">Deschide Comandă Nouă</span>
+                          </div>
+                          <p className="text-[11px] text-sage-600 mt-1">
+                            Deschide o comandă de lucru nouă pe un utilaj din flotă
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* RAMURA 1: COMANDĂ EXISTENTĂ ÎN ATELIER */}
+                    {modAlocareMasina === 'EXISTENTA' && (
+                      <div className="space-y-3">
+                        {comenziDeschiseFlota.length > 0 ? (
+                          <div>
+                            <label className="text-sage-700 block mb-1 font-bold text-xs">
+                              Selectează Comanda de Lucru Deschisă (IN_LUCRU): *
+                            </label>
+                            <select
+                              required
+                              value={selectedComandaLucruId}
+                              onChange={(e) => setSelectedComandaLucruId(e.target.value)}
+                              className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                            >
+                              {comenziDeschiseFlota.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.numarComanda} • {c.vehicul?.numarIntern || ''} {c.vehicul?.numarInmatriculare || ''} ({c.vehicul?.marca || ''}) — Mecanic: {c.mecanicResponsabil || 'Atelier'}
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* PREVIEW CARD PENTRU COMANDA SELECTATĂ */}
+                            {(() => {
+                              const selC = comenziDeschiseFlota.find((c) => c.id === selectedComandaLucruId);
+                              if (!selC) return null;
+                              return (
+                                <div className="mt-2 p-3 bg-sapphire-50/50 border border-sapphire-200 rounded-xl flex items-center justify-between text-xs">
+                                  <div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="px-2 py-0.5 rounded bg-sapphire-600 text-white font-mono font-black text-xs">
+                                        {selC.numarComanda}
+                                      </span>
+                                      <span className="font-black text-sapphire-950 text-xs">
+                                        {selC.vehicul?.numarIntern} • {selC.vehicul?.numarInmatriculare}
+                                      </span>
+                                      <span className="text-sage-600 text-[11px]">({selC.vehicul?.marca} {selC.vehicul?.model})</span>
+                                    </div>
+                                    <div className="text-[11px] text-sage-600 mt-1">
+                                      Mecanic: <b>{selC.mecanicResponsabil}</b> • Deschidere: {new Date(selC.dataDeschidere).toLocaleDateString('ro-RO')} • {selC.elementeComanda?.length || 0} piese deja alocate
+                                    </div>
+                                  </div>
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                                    IN LUCRU
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-center">
+                            <p className="text-xs font-bold text-amber-900">
+                              Nu există nicio comandă de lucru deschisă în acest moment în atelier.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setModAlocareMasina('NOUA');
+                                if (vehiculeFlota.length === 0) fetchComenziDeschise();
+                              }}
+                              className="px-3.5 py-2 bg-sapphire-600 hover:bg-sapphire-700 text-white rounded-xl text-xs font-extrabold transition cursor-pointer shadow-xs inline-flex items-center space-x-1.5"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Deschide o Comandă Nouă pe Utilaj</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* RAMURA 2: DESCHIDERE COMANDĂ NOUĂ */}
+                    {modAlocareMasina === 'NOUA' && (
+                      <div className="space-y-3 p-3.5 bg-morning-50 border border-morning-200 rounded-2xl">
+                        <div>
+                          <label className="text-sage-700 block mb-1 font-bold text-xs">
+                            Selectează Utilaj / Vehicul Target: *
+                          </label>
+                          <select
+                            required
+                            value={selectedVehiculId}
+                            onChange={(e) => {
+                              setSelectedVehiculId(e.target.value);
+                              const v = vehiculeFlota.find((veh) => veh.id === e.target.value);
+                              if (v) setValoareContorMasina(v.valoareContorCurent || 0);
+                            }}
+                            className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                          >
+                            {vehiculeFlota.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.numarIntern} • {v.numarInmatriculare} - {v.marca} {v.model} ({v.categorieEnum})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-sage-700 block mb-1 font-bold text-xs">
+                              Index Contor la Montaj ({vehiculeFlota.find((v) => v.id === selectedVehiculId)?.tipMasurare || 'KM/mTH'}): *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              value={valoareContorMasina}
+                              onChange={(e) => setValoareContorMasina(Number(e.target.value))}
+                              className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold font-mono text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-sage-700 block mb-1 font-bold text-xs">Mecanic Responsabil Atelier: *</label>
+                            <select
+                              value={selectedMecanic}
+                              onChange={(e) => setSelectedMecanic(e.target.value)}
+                              className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
+                            >
+                              {mecaniciFlota.map((m) => (
+                                <option key={m.id} value={m.nume}>{m.nume} ({m.functie || 'Mecanic'})</option>
+                              ))}
+                              <option value="Atelier Intern">Atelier Intern</option>
+                              <option value="Echipă Mobilă">Echipă Mobilă Service</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-sage-700 block mb-1 font-bold text-xs">Descriere Intervenție / Defecțiune (Opțional):</label>
+                          <input
+                            type="text"
+                            value={observatiiComanda}
+                            onChange={(e) => setObservatiiComanda(e.target.value)}
+                            placeholder="ex: Înlocuire piesă direct din factură..."
+                            className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 text-xs font-medium focus:ring-2 focus:ring-sapphire-500/20"
+                          />
+                        </div>
+
+                        <label className="flex items-center space-x-2.5 p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-50 transition">
+                          <input
+                            type="checkbox"
+                            checked={autoFinalizeComanda}
+                            onChange={(e) => setAutoFinalizeComanda(e.target.checked)}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600 shrink-0"
+                          />
+                          <div className="text-xs">
+                            <span className="font-extrabold text-emerald-950 block">Finalizează Comanda Imediat (Reparație Finalizată)</span>
+                            <span className="text-[11px] text-emerald-800">
+                              Bifați dacă piesa a fost deja montată și doriți închiderea imediată a comenzii cu decontarea costului pe mașină.
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* PARAMETRI CANTITATE & PREȚ ALOCAT */}
+                    <div className="p-3.5 bg-white border border-morning-200 rounded-2xl space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-sage-700 block mb-1 font-bold text-xs">
+                            Cantitate Montată pe Mașină: *
+                          </label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.01"
+                              max={importingItem.cantitate}
+                              required
+                              value={cantitateAlocata}
+                              onChange={(e) => setCantitateAlocata(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold font-mono text-xs focus:bg-white transition"
+                            />
+                            <span className="px-3 py-2 bg-morning-100 border border-morning-200 rounded-xl font-bold text-slate-700 text-xs shrink-0">
+                              {importingItem.unitateMasura || 'buc'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-sage-500 block mt-0.5">Disponibil pe linie: {importingItem.cantitate}</span>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-sage-700 font-bold text-xs">Preț Unitar Achiziție:</label>
+                            <label className="flex items-center space-x-1 cursor-pointer text-[10px] font-bold text-purple-900">
+                              <input
+                                type="checkbox"
+                                checked={isGarantieGratuita}
+                                onChange={(e) => {
+                                  setIsGarantieGratuita(e.target.checked);
+                                  if (e.target.checked) setPretUnitarImport(0);
+                                  else setPretUnitarImport(importingItem.pretUnitar || 0);
+                                }}
+                                className="w-3 h-3 rounded accent-purple-600"
+                              />
+                              <span>0 RON (Garanție)</span>
+                            </label>
+                          </div>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="number"
+                              step="0.0001"
+                              disabled={isGarantieGratuita}
+                              value={pretUnitarImport}
+                              onChange={(e) => setPretUnitarImport(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold font-mono text-xs disabled:opacity-50 focus:bg-white transition"
+                            />
+                            <span className="px-3 py-2 bg-morning-100 border border-morning-200 rounded-xl font-bold text-slate-700 text-xs shrink-0">
+                              RON
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-sage-500 block mt-0.5">
+                            Cost total alocat: <b>{(Number(cantitateAlocata || 0) * Number(pretUnitarImport || 0)).toFixed(2)} RON</b>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* GARANȚIE PIESĂ OPȚIONALĂ */}
+                      <div className="pt-2 border-t border-morning-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5">
+                            <ShieldCheck className="w-4 h-4 text-sapphire-600" />
+                            <span className="font-extrabold text-xs text-sapphire-900">Înregistrare Garanție & Serie Unică Piesă</span>
+                          </div>
+                          <label className="flex items-center space-x-1.5 cursor-pointer text-[11px] font-bold text-sapphire-900 bg-sapphire-50 px-2.5 py-1 rounded-lg border border-sapphire-200">
+                            <input
+                              type="checkbox"
+                              checked={areGarantieProducator}
+                              onChange={(e) => setAreGarantieProducator(e.target.checked)}
+                              className="w-3.5 h-3.5 rounded accent-sapphire-600"
+                            />
+                            <span>Activează Garanție</span>
+                          </label>
+                        </div>
+
+                        {areGarantieProducator && (
+                          <div className="p-3 bg-sapphire-50/60 border border-sapphire-200 rounded-xl space-y-2 animate-fade-in">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Durată Garanție (Luni):</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={durataGarantieLuni}
+                                  onChange={(e) => setDurataGarantieLuni(Number(e.target.value))}
+                                  className="w-full bg-white border border-morning-200 rounded-lg p-1.5 text-xs font-mono font-bold"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Limită Rulaj Garanție (km/ore):</label>
+                                <input
+                                  type="number"
+                                  step="100"
+                                  value={durataGarantieKm}
+                                  onChange={(e) => setDurataGarantieKm(Number(e.target.value))}
+                                  className="w-full bg-white border border-morning-200 rounded-lg p-1.5 text-xs font-mono font-bold"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-sage-700 font-bold block mb-0.5">Serie Unică Piesă (SN):</label>
+                              <input
+                                type="text"
+                                placeholder="Lăsați liber pentru auto-generare din cod și factură..."
+                                value={serieUnicaCustom}
+                                onChange={(e) => setSerieUnicaCustom(e.target.value)}
+                                className="w-full bg-white border border-morning-200 rounded-lg p-1.5 text-xs font-mono"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* BARA BUTOANE FIXATĂ LA BAZĂ (STICKY FOOTER) */}
@@ -3084,9 +3622,30 @@ function EFacturaContent() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                  disabled={savingAlocareDirecta}
+                  className={`px-5 py-2.5 rounded-xl text-white font-extrabold text-xs shadow-md transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 ${
+                    tipDestinatieImport === 'DIRECT_MASINA'
+                      ? 'bg-sapphire-600 hover:bg-sapphire-700 shadow-sapphire-600/20'
+                      : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                  }`}
                 >
-                  Confirmă Importul în Stoc
+                  {tipDestinatieImport === 'DIRECT_MASINA' ? (
+                    <>
+                      <Truck className="w-4 h-4" />
+                      <span>
+                        {savingAlocareDirecta
+                          ? 'Se alocă pe mașină...'
+                          : modAlocareMasina === 'EXISTENTA'
+                          ? 'Confirmă Alocarea pe Comandă'
+                          : 'Deschide Comanda & Montează Piesa'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <PackageCheck className="w-4 h-4" />
+                      <span>Confirmă Importul în Stoc</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
