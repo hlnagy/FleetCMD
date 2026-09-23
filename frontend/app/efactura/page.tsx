@@ -3311,7 +3311,7 @@ function EFacturaContent() {
                             <span className="font-extrabold text-xs text-slate-900">Comandă de Lucru Deschisă</span>
                           </div>
                           <p className="text-[11px] text-sage-600 mt-1">
-                            Utilajul este deja în reparație în atelier ({comenziDeschiseFlota.length} comenzi active)
+                            Utilajul este deja în reparație în atelier ({comenziDeschiseFlota.length} comenzi active / în ediție)
                           </p>
                         </button>
 
@@ -3344,7 +3344,7 @@ function EFacturaContent() {
                         {comenziDeschiseFlota.length > 0 ? (
                           <div>
                             <label className="text-sage-700 block mb-1 font-bold text-xs">
-                              Selectează Comanda de Lucru Deschisă (IN_LUCRU): *
+                              Selectează Comanda de Lucru Deschisă / În Ediție: *
                             </label>
                             <select
                               required
@@ -3354,7 +3354,7 @@ function EFacturaContent() {
                             >
                               {comenziDeschiseFlota.map((c) => (
                                 <option key={c.id} value={c.id}>
-                                  {c.numarComanda} • {c.vehicul?.numarIntern || ''} {c.vehicul?.numarInmatriculare || ''} ({c.vehicul?.marca || ''}) — Mecanic: {c.mecanicResponsabil || 'Atelier'}
+                                  {c.numarComanda} • {c.vehicul?.numarIntern || ''} {c.vehicul?.numarInmatriculare || ''} ({c.vehicul?.marca || ''}) — Mecanic: {c.mecanicResponsabil || 'Atelier'} [{c.stare === 'DEVALIDAT' ? 'DEVALIDAT (În Ediție)' : 'ÎN LUCRU'}]
                                 </option>
                               ))}
                             </select>
@@ -3379,8 +3379,12 @@ function EFacturaContent() {
                                       Mecanic: <b>{selC.mecanicResponsabil}</b> • Deschidere: {new Date(selC.dataDeschidere).toLocaleDateString('ro-RO')} • {selC.elementeComanda?.length || 0} piese deja alocate
                                     </div>
                                   </div>
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-                                    IN LUCRU
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold border shrink-0 ${
+                                    selC.stare === 'DEVALIDAT'
+                                      ? 'bg-roseash-100 text-terracotta-700 border-roseash-300'
+                                      : 'bg-amber-100 text-amber-800 border-amber-300'
+                                  }`}>
+                                    {selC.stare === 'DEVALIDAT' ? 'DEVALIDAT (În Ediție)' : 'ÎN LUCRU'}
                                   </span>
                                 </div>
                               );

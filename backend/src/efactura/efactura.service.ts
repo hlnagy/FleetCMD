@@ -1494,7 +1494,9 @@ export class EFacturaService {
 
   async getComenziLucruDeschise() {
     const comenziDeschise = await this.prisma.comandaLucru.findMany({
-      where: { stare: 'IN_LUCRU' },
+      where: {
+        stare: { in: ['IN_LUCRU', 'DEVALIDAT'] },
+      },
       include: {
         vehicul: {
           select: {
@@ -1587,7 +1589,9 @@ export class EFacturaService {
       });
 
       if (!comanda) throw new NotFoundException('Comanda de lucru selectată nu există.');
-      if (comanda.stare !== 'IN_LUCRU') throw new BadRequestException('Comanda selectată nu este deschisă (IN_LUCRU).');
+      if (comanda.stare !== 'IN_LUCRU' && comanda.stare !== 'DEVALIDAT') {
+        throw new BadRequestException('Comanda selectată nu este deschisă sau devalidată pentru lucru.');
+      }
 
       targetComandaId = comanda.id;
       targetVehiculId = comanda.vehiculId;
