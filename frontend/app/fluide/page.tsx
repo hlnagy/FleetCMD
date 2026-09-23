@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
-  Edit3, Trash2, DollarSign, TrendingDown, Gauge
+  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { showConfirm } from '@/lib/swal';
@@ -22,6 +22,132 @@ const TIP_LICHID_LABELS: Record<string, string> = {
   ULEI_LIEBHERR_CUTIE: 'Ulei Cutie Liebherr',
   ULEI_CUTIE_MANUALA: 'Ulei Cutie Manuală',
   ULEI_CUTIE_AUTOMATA: 'Ulei Cutie Automată',
+};
+
+const FLUIDE_CATEGORII_CONFIG = [
+  {
+    key: 'ULEI_MOTOR',
+    nume: 'Ulei Motor',
+    descriere: 'Lubrifiere motor termic, protecție împotriva uzurii și depunerilor la temperaturi înalte.',
+    iconType: 'Droplets',
+    accentColor: 'amber',
+    presetKm: [10000, 15000, 20000, 30000, 40000],
+    presetMth: [150, 250, 500],
+    recomandat: 'Esențial pentru toate utilajele și autovehiculele',
+  },
+  {
+    key: 'ULEI_HIDRAULIC',
+    nume: 'Ulei Hidraulic',
+    descriere: 'Transmisie putere hidraulică, operare braț, cilindri și pompe de presiune.',
+    iconType: 'Activity',
+    accentColor: 'blue',
+    presetKm: [30000, 60000, 100000],
+    presetMth: [500, 1000, 1500, 2000],
+    recomandat: 'Critic pentru Excavatoare, Încărcătoare, Basculante',
+  },
+  {
+    key: 'ULEI_TRANSMISIE',
+    nume: 'Ulei Transmisie & Diferențial',
+    descriere: 'Protecție cutie viteze mecanică/automată, grupuri conice și diferențiale axe.',
+    iconType: 'Sliders',
+    accentColor: 'indigo',
+    presetKm: [30000, 60000, 90000, 120000],
+    presetMth: [500, 1000, 1500],
+    recomandat: 'Capete Tractor, Camioane 8x4, Basculante, Autoutilitare',
+  },
+  {
+    key: 'ANTIGEL_G12',
+    nume: 'Antigel G12+ (Lichid Răcire Roz)',
+    descriere: 'Răcire motor, protecție anti-îngheț și anticoroziune aluminiu/aliaj.',
+    iconType: 'ShieldCheck',
+    accentColor: 'rose',
+    presetKm: [40000, 60000, 100000],
+    presetMth: [1000, 2000],
+    recomandat: 'Flotă modernă (Euro 5, Euro 6, Stage IV / V)',
+  },
+  {
+    key: 'ADBLUE',
+    nume: 'AdBlue (Soluție Uree 32.5%)',
+    descriere: 'Tratare gaze eșapament SCR, reducere emisii NOx conform normelor antipoluare.',
+    iconType: 'Sparkles',
+    accentColor: 'emerald',
+    presetKm: [10000, 15000, 25000],
+    presetMth: [250, 500],
+    recomandat: 'Vehicule echipate cu catalizator SCR (Euro 6 / Stage V)',
+  },
+  {
+    key: 'ANTIGEL_G11',
+    nume: 'Antigel G11 (Lichid Răcire Albastru)',
+    descriere: 'Răcire motor pe bază de silicați pentru utilaje din generații clasice.',
+    iconType: 'ShieldCheck',
+    accentColor: 'cyan',
+    presetKm: [30000, 50000],
+    presetMth: [1000],
+    recomandat: 'Generații clasice de utilaje',
+  },
+  {
+    key: 'ULEI_LIEBHERR_PUNTE',
+    nume: 'Ulei Punte Liebherr',
+    descriere: 'Ulei specific de înaltă presiune pentru punți și reductoare de roată Liebherr.',
+    iconType: 'Gauge',
+    accentColor: 'purple',
+    presetKm: [30000, 50000],
+    presetMth: [500, 1000],
+    recomandat: 'Utilaje grele Liebherr (Excavatoare, Vole)',
+  },
+  {
+    key: 'ULEI_LIEBHERR_CUTIE',
+    nume: 'Ulei Cutie Liebherr',
+    descriere: 'Ulei transmisie hidrostatică sau powershift pentru utilaje terasiere Liebherr.',
+    iconType: 'Gauge',
+    accentColor: 'purple',
+    presetKm: [30000, 50000],
+    presetMth: [500, 1000],
+    recomandat: 'Transmisii utilaje Liebherr',
+  },
+  {
+    key: 'ULEI_CUTIE_MANUALA',
+    nume: 'Ulei Cutie Manuală',
+    descriere: 'Transmisii manuale sinteză 75W-80 sau 80W-90.',
+    iconType: 'Sliders',
+    accentColor: 'slate',
+    presetKm: [40000, 80000],
+    presetMth: [500, 1000],
+    recomandat: 'Camioane și autoutilitare cu cutie manuală',
+  },
+  {
+    key: 'ULEI_CUTIE_AUTOMATA',
+    nume: 'Ulei Cutie Automată (ATF)',
+    descriere: 'Fluide de transmisie automată ATF Dexron / ZF Ecolife / TraXon.',
+    iconType: 'Sliders',
+    accentColor: 'violet',
+    presetKm: [60000, 120000],
+    presetMth: [1000, 1500],
+    recomandat: 'Capete tractor automate și autoturisme',
+  },
+];
+
+const getCategoryIcon = (catName: string) => {
+  const c = (catName || '').toUpperCase();
+  if (c.includes('EXCAVATOR') || c.includes('INCARCATOR') || c.includes('BULLDOZER') || c.includes('AUTOVALT') || c.includes('UTILAJ')) {
+    return '🚜';
+  }
+  if (c.includes('TRACTOR') || c.includes('BASCULANTA') || c.includes('CAMION')) {
+    return '🚛';
+  }
+  if (c.includes('SEMIREMORCA') || c.includes('REMORCA')) {
+    return '🛞';
+  }
+  if (c.includes('AUTOUTILITARA')) {
+    return '🚐';
+  }
+  if (c.includes('AUTOTURISM')) {
+    return '🚗';
+  }
+  if (c.includes('ATV')) {
+    return '🏍️';
+  }
+  return '⚙️';
 };
 
 const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
@@ -203,6 +329,21 @@ export default function FluidePage() {
   const [selectedCatEnum, setSelectedCatEnum] = useState<string>('');
   const [arataToateNormeleCategoriilor, setArataToateNormeleCategoriilor] = useState<boolean>(false);
   const [isSavingConfigCat, setIsSavingConfigCat] = useState<boolean>(false);
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<'TOATE' | 'MTH' | 'KM'>('TOATE');
+  const [searchNorme, setSearchNorme] = useState<string>('');
+  const [configViewMode, setConfigViewMode] = useState<'CARDS' | 'TABLE'>('CARDS');
+
+  // Modal Editare / Configurare Normă Fluid pe Categorie
+  const [modalNormaOpen, setModalNormaOpen] = useState<boolean>(false);
+  const [modalNormaCategorie, setModalNormaCategorie] = useState<string>('');
+  const [modalNormaTipLichid, setModalNormaTipLichid] = useState<string>('ULEI_MOTOR');
+  const [modalNormaIntervalKm, setModalNormaIntervalKm] = useState<number>(15000);
+  const [modalNormaPragKm, setModalNormaPragKm] = useState<number>(1000);
+  const [modalNormaIntervalMth, setModalNormaIntervalMth] = useState<number>(250);
+  const [modalNormaPragMth, setModalNormaPragMth] = useState<number>(50);
+  const [modalNormaIntervalLuni, setModalNormaIntervalLuni] = useState<number>(12);
+  const [modalNormaPragLuni, setModalNormaPragLuni] = useState<number>(1);
+  const [isModalSaving, setIsModalSaving] = useState<boolean>(false);
 
   const [cfgTipLichid, setCfgTipLichid] = useState('ULEI_MOTOR');
   const [cfgIntervalMth, setCfgIntervalMth] = useState(250);
@@ -743,6 +884,91 @@ export default function FluidePage() {
       alert('Eroare de rețea la ștergerea normei.');
     }
   };
+
+  const handleOpenModalNorma = (catEnum: string, tipLichid: string) => {
+    setModalNormaCategorie(catEnum);
+    setModalNormaTipLichid(tipLichid);
+
+    const cat = categoriiNormeList.find((c) => c.nume === catEnum);
+    const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+    const existing = (cat?.norme || []).find((n: any) => n.tipLichid === tipLichid);
+
+    if (existing) {
+      setModalNormaIntervalKm(existing.intervalKm || 15000);
+      setModalNormaPragKm(existing.pragAvertizareKm || 1000);
+      setModalNormaIntervalMth(existing.intervalMth || 250);
+      setModalNormaPragMth(existing.pragAvertizareMth || 50);
+      setModalNormaIntervalLuni(existing.intervalLuni || 12);
+      setModalNormaPragLuni(existing.pragAvertizareLuni || 1);
+    } else {
+      if (isKm) {
+        setModalNormaIntervalKm(tipLichid === 'ULEI_MOTOR' ? 15000 : 30000);
+        setModalNormaPragKm(1000);
+        setModalNormaIntervalMth(250);
+        setModalNormaPragMth(50);
+      } else {
+        setModalNormaIntervalMth(tipLichid === 'ULEI_MOTOR' ? 250 : 500);
+        setModalNormaPragMth(50);
+        setModalNormaIntervalKm(15000);
+        setModalNormaPragKm(1000);
+      }
+      setModalNormaIntervalLuni(12);
+      setModalNormaPragLuni(1);
+    }
+    setModalNormaOpen(true);
+  };
+
+  const handleSaveModalNorma = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalNormaCategorie || !modalNormaTipLichid) return;
+
+    const cat = categoriiNormeList.find((c) => c.nume === modalNormaCategorie);
+    const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+
+    setIsModalSaving(true);
+    try {
+      const payload: any = {
+        categorieEnum: modalNormaCategorie,
+        tipLichid: modalNormaTipLichid,
+        intervalLuni: modalNormaIntervalLuni ? Number(modalNormaIntervalLuni) : null,
+        pragAvertizareLuni: modalNormaPragLuni ? Number(modalNormaPragLuni) : 1,
+      };
+
+      if (isKm) {
+        payload.intervalKm = Number(modalNormaIntervalKm);
+        payload.pragAvertizareKm = Number(modalNormaPragKm);
+        payload.intervalMth = null;
+        payload.pragAvertizareMth = null;
+      } else {
+        payload.intervalMth = Number(modalNormaIntervalMth);
+        payload.pragAvertizareMth = Number(modalNormaPragMth);
+        payload.intervalKm = null;
+        payload.pragAvertizareKm = null;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei/categorie`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.mesaj || 'Norma a fost salvată cu succes!');
+        setModalNormaOpen(false);
+        await fetchCategoriiNorme();
+        await fetchInitialData();
+      } else {
+        const err = await res.json();
+        alert(`Eroare la salvare: ${err.message || 'Verificați datele introduse'}`);
+      }
+    } catch (e) {
+      alert('Eroare de rețea la salvarea normei de categorie.');
+    } finally {
+      setIsModalSaving(false);
+    }
+  };
+
 
 
   // Calcul Statistici Flotă Fluide
@@ -1615,364 +1841,227 @@ export default function FluidePage() {
         </div>
       )}
 
-      {/* TAB 3: NORME & CONFIGURARE INTERVALE PE CATEGORII */}
+      {/* TAB 3: NORME & CONFIGURARE INTERVALE PE CATEGORII (UI/UX REDESIGN) */}
       {activeTab === 'config' && (
         <div className="space-y-6">
-          {/* HEADER INFORMATIV */}
-          <div className="pleasant-card rounded-2xl p-5 border border-morning-200 bg-white space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* HEADER PRINCIPAL CU STATISTICI RAPIDE */}
+          <div className="pleasant-card rounded-2xl p-6 border border-morning-200 bg-white space-y-5 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
-                <h2 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
-                  <Sliders className="w-5 h-5 text-sapphire-600" />
-                  <span>Configurare Norme & Intervale pe Categorii de Utilaje</span>
-                </h2>
-                <p className="text-xs text-sage-600 font-medium mt-0.5">
-                  Selectează categoria de vehicule pentru a configura intervalele de schimb și marjele de avertizare. Sistemul adaptează automat contorul cerut (KM pentru autovehicule rutiere, mTH pentru utilaje grele).
-                </p>
+                <div className="flex items-center space-x-2">
+                  <div className="p-2.5 rounded-xl bg-sapphire-100 text-sapphire-700">
+                    <Sliders className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-sapphire-900 tracking-tight">
+                      Configurare Norme & Intervale pe Categorii de Utilaje
+                    </h2>
+                    <p className="text-xs text-sage-600 font-medium">
+                      Normele definite aici se propagă automat pe toate utilajele din categoria respectivă, adaptând contorul (KM pentru rutier, mTH pentru utilaje).
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center space-x-2 shrink-0">
+              {/* BUTOANE ACȚIUNE HEADER */}
+              <div className="flex items-center flex-wrap gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setArataToateNormeleCategoriilor(!arataToateNormeleCategoriilor)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border ${
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 border cursor-pointer ${
                     arataToateNormeleCategoriilor
-                      ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-xs'
-                      : 'bg-morning-100 text-sapphire-800 border-morning-200 hover:bg-morning-200'
+                      ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-sm'
+                      : 'bg-morning-100 hover:bg-morning-200 text-sapphire-900 border-morning-300'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>{arataToateNormeleCategoriilor ? 'Vezi Doar Categoria Selectată' : 'Afișează Toate Categoriile'}</span>
+                  <Layers className="w-4 h-4 text-periwinkle-700" />
+                  <span>{arataToateNormeleCategoriilor ? 'Focalizare pe Categoria Selectată' : 'Centralizator Toată Flota'}</span>
                 </button>
+
+                {selectedCatObj && !arataToateNormeleCategoriilor && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                    className="px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Configurează Normă Nouă</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* BARA SELECTOR CATEGORIE UTILAJ */}
-            <div className="pt-2 border-t border-morning-200">
-              <label className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider block mb-2">
-                Alege Categoria de Utilaje:
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {categoriiNormeList.map((cat: any) => {
-                  const isSelected = selectedCatObj?.nume === cat.nume;
-                  const isKm = (cat.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
-                  return (
-                    <button
-                      key={cat.id || cat.nume}
-                      type="button"
-                      onClick={() => setSelectedCatEnum(cat.nume)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border ${
-                        isSelected
-                          ? 'bg-sapphire-900 text-white border-sapphire-900 shadow-md ring-2 ring-sapphire-400/40'
-                          : 'bg-morning-50 hover:bg-morning-100 text-slate-700 border-morning-200 hover:border-sapphire-300'
-                      }`}
-                    >
-                      <span>{cat.nume.replace(/_/g, ' ')}</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-extrabold ${
+            {/* FILTRE GRUPURI & NAVIGATOR CATEGORII FLOTĂ */}
+            <div className="pt-3 border-t border-morning-200 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center space-x-1.5 text-xs font-bold">
+                  <span className="text-sage-500 uppercase tracking-wider text-[11px] mr-1">Filtru Grup:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroupFilter('TOATE')}
+                    className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                      selectedGroupFilter === 'TOATE'
+                        ? 'bg-sapphire-900 text-white shadow-2xs font-extrabold'
+                        : 'bg-morning-100 text-slate-700 hover:bg-morning-200 font-semibold'
+                    }`}
+                  >
+                    Toate Active ({categoriiNormeList.filter((c: any) => c.totalVehicule > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroupFilter('MTH')}
+                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer ${
+                      selectedGroupFilter === 'MTH'
+                        ? 'bg-amber-600 text-white shadow-2xs font-extrabold'
+                        : 'bg-morning-100 text-slate-700 hover:bg-morning-200 font-semibold'
+                    }`}
+                  >
+                    <span>🚜 Utilaje Șantier (mTH)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGroupFilter('KM')}
+                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer ${
+                      selectedGroupFilter === 'KM'
+                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                        : 'bg-morning-100 text-slate-700 hover:bg-morning-200 font-semibold'
+                    }`}
+                  >
+                    <span>🚚 Transport Rutier (KM)</span>
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-sage-500 font-medium">
+                  Faceți click pe o categorie pentru a vizualiza și edita normele
+                </span>
+              </div>
+
+              {/* GRID CARDURI CATEGORII SELECTABILE */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                {categoriiNormeList
+                  .filter((cat: any) => {
+                    const isKm = (cat.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+                    if (selectedGroupFilter === 'MTH' && isKm) return false;
+                    if (selectedGroupFilter === 'KM' && !isKm) return false;
+                    // Afișăm doar categoriile active sau dacă este selectată
+                    return cat.totalVehicule > 0 || cat.nume === selectedCatEnum;
+                  })
+                  .map((cat: any) => {
+                    const isSelected = selectedCatObj?.nume === cat.nume;
+                    const isKm = (cat.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+                    const icon = getCategoryIcon(cat.nume);
+                    const numarNorme = (cat.norme || []).length;
+
+                    return (
+                      <button
+                        key={cat.id || cat.nume}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCatEnum(cat.nume);
+                          if (arataToateNormeleCategoriilor) setArataToateNormeleCategoriilor(false);
+                        }}
+                        className={`p-3 rounded-2xl text-left transition flex flex-col justify-between border cursor-pointer ${
                           isSelected
-                            ? isKm ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white'
-                            : isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                            ? 'bg-sapphire-900 text-white border-sapphire-900 shadow-md ring-2 ring-sapphire-400/50 scale-[1.02]'
+                            : 'bg-morning-50/70 hover:bg-white text-slate-800 border-morning-200 hover:border-sapphire-300 shadow-2xs'
                         }`}
                       >
-                        {isKm ? 'KM' : 'mTH'}
-                      </span>
-                      <span className={`text-[10px] ${isSelected ? 'text-sapphire-200' : 'text-sage-500'}`}>
-                        ({cat.totalVehicule} utilaje)
-                      </span>
-                    </button>
-                  );
-                })}
+                        <div className="flex items-start justify-between">
+                          <span className="text-xl" role="img" aria-label={cat.nume}>
+                            {icon}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-wider ${
+                              isSelected
+                                ? isKm ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white'
+                                : isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {isKm ? 'KM' : 'mTH'}
+                          </span>
+                        </div>
+
+                        <div className="mt-2.5">
+                          <p className={`font-black text-xs truncate ${isSelected ? 'text-white' : 'text-sapphire-900'}`}>
+                            {cat.nume.replace(/_/g, ' ')}
+                          </p>
+                          <div className="flex items-center justify-between text-[11px] mt-1">
+                            <span className={isSelected ? 'text-sapphire-200' : 'text-sage-600'}>
+                              {cat.totalVehicule} utilaje
+                            </span>
+                            <span
+                              className={`font-bold ${
+                                numarNorme > 0
+                                  ? isSelected ? 'text-emerald-300' : 'text-emerald-700'
+                                  : isSelected ? 'text-slate-300' : 'text-slate-400'
+                              }`}
+                            >
+                              {numarNorme > 0 ? `${numarNorme} norme` : 'Implicite'}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* COLOANA STÂNGA: FORMULAR CONFIGURARE */}
-            <div className="md:col-span-1 pleasant-card rounded-2xl p-6 space-y-4 shadow-sm bg-white border border-morning-200">
-              <div className="border-b border-morning-200 pb-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-extrabold text-sapphire-900">
-                    Normă Intervale
-                  </h3>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase ${
-                      isCatKm ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
-                    }`}
-                  >
-                    Contor: {isCatKm ? 'KILOMETRI (KM)' : 'MUNCA (mTH / ORE)'}
-                  </span>
-                </div>
-                <p className="text-xs text-sage-600 font-medium mt-1">
-                  Se aplică la toate cele <strong>{selectedCatObj?.totalVehicule || 0} utilaje</strong> din categoria <strong>{selectedCatObj?.nume?.replace(/_/g, ' ')}</strong>.
-                </p>
-              </div>
-
-              <form onSubmit={handleSalveazaConfigCategorie} className="space-y-4 text-xs">
+          {/* VEDERE 1: MATRICE TOATĂ FLOTA */}
+          {arataToateNormeleCategoriilor ? (
+            <div className="pleasant-card rounded-2xl p-6 space-y-4 shadow-sm bg-white border border-morning-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-morning-200 gap-3">
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">
-                    Categorie Selectată:
-                  </label>
-                  <div className="p-2.5 rounded-xl bg-morning-100 border border-morning-200 font-bold text-sapphire-900 flex items-center justify-between">
-                    <span>{selectedCatObj?.nume?.replace(/_/g, ' ')}</span>
-                    <span className="text-[11px] font-mono font-bold text-sage-600">
-                      {selectedCatObj?.totalVehicule || 0} utilaje active
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Tip Lubrifiant / Fluid: *</label>
-                  <select
-                    value={cfgTipLichid}
-                    onChange={(e) => setCfgTipLichid(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
-                  >
-                    {Object.entries(TIP_LICHID_LABELS).map(([k, label]) => (
-                      <option key={k} value={k}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* ADAPTARE STRICTĂ KM vs MTH */}
-                {isCatKm ? (
-                  <>
-                    {/* ZONA 1: LIMITE SCHIMB KM */}
-                    <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 space-y-3">
-                      <div className="flex items-center space-x-1.5 text-blue-900 font-bold">
-                        <Gauge className="w-4 h-4 text-blue-600" />
-                        <span>1. Limite Schimb Standard (KM & Timp):</span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">
-                          Interval KM (Rulaj Kilometric): *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="500"
-                          step="500"
-                          value={cfgIntervalKm}
-                          onChange={(e) => setCfgIntervalKm(Number(e.target.value))}
-                          placeholder="ex: 15000 sau 30000"
-                          className="w-full bg-white border border-blue-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                        <span className="text-[10px] text-sage-500 mt-0.5 block">
-                          Număr maxim de kilometri până la următorul schimb obligatoriu.
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-medium">
-                          Interval Luni (Timp Calendaristic Maxim):
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={cfgIntervalLuni}
-                          onChange={(e) => setCfgIntervalLuni(Number(e.target.value))}
-                          placeholder="ex: 12 sau 24"
-                          className="w-full bg-white border border-blue-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* ZONA 2: MARJĂ AVERTIZARE KM */}
-                    <div className="p-3.5 bg-roseash-50/80 rounded-xl border border-roseash-200 space-y-3">
-                      <div className="flex items-center space-x-1.5 text-terracotta-800 font-bold">
-                        <AlertTriangle className="w-4 h-4 text-terracotta-600" />
-                        <span>2. Marjă Avertizare Înainte (KM & Timp):</span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">
-                          Avertizare KM Înainte: *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="50"
-                          step="50"
-                          value={cfgPragKm}
-                          onChange={(e) => setCfgPragKm(Number(e.target.value))}
-                          placeholder="ex: 1000"
-                          className="w-full bg-white border border-roseash-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                        <span className="text-[10px] text-sage-500 mt-0.5 block">
-                          Sistemul intră în stare de AVERTIZARE când mai rămân atâția KM.
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-medium">
-                          Avertizare Luni Înainte:
-                        </label>
-                        <input
-                          type="number"
-                          min="0.5"
-                          step="0.5"
-                          value={cfgPragLuni}
-                          onChange={(e) => setCfgPragLuni(Number(e.target.value))}
-                          placeholder="ex: 1"
-                          className="w-full bg-white border border-roseash-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* ZONA 1: LIMITE SCHIMB MTH */}
-                    <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
-                      <div className="flex items-center space-x-1.5 text-amber-900 font-bold">
-                        <Clock className="w-4 h-4 text-amber-600" />
-                        <span>1. Limite Schimb Standard (mTH & Timp):</span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">
-                          Interval mTH (Ore Funcționare Utilaj): *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="10"
-                          step="10"
-                          value={cfgIntervalMth}
-                          onChange={(e) => setCfgIntervalMth(Number(e.target.value))}
-                          placeholder="ex: 250 sau 500"
-                          className="w-full bg-white border border-amber-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                        <span className="text-[10px] text-sage-500 mt-0.5 block">
-                          Număr maxim de ore lucrate (GPS/mTH) până la următorul schimb.
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-medium">
-                          Interval Luni (Timp Calendaristic Maxim):
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={cfgIntervalLuni}
-                          onChange={(e) => setCfgIntervalLuni(Number(e.target.value))}
-                          placeholder="ex: 12 sau 24"
-                          className="w-full bg-white border border-amber-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* ZONA 2: MARJĂ AVERTIZARE MTH */}
-                    <div className="p-3.5 bg-roseash-50/80 rounded-xl border border-roseash-200 space-y-3">
-                      <div className="flex items-center space-x-1.5 text-terracotta-800 font-bold">
-                        <AlertTriangle className="w-4 h-4 text-terracotta-600" />
-                        <span>2. Marjă Avertizare Înainte (mTH & Timp):</span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-bold">
-                          Avertizare mTH Înainte: *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min="5"
-                          step="5"
-                          value={cfgPragMth}
-                          onChange={(e) => setCfgPragMth(Number(e.target.value))}
-                          placeholder="ex: 50"
-                          className="w-full bg-white border border-roseash-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                        <span className="text-[10px] text-sage-500 mt-0.5 block">
-                          Sistemul intră în stare de AVERTIZARE când mai rămân atâtea ore.
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="text-sage-700 block mb-1 font-medium">
-                          Avertizare Luni Înainte:
-                        </label>
-                        <input
-                          type="number"
-                          min="0.5"
-                          step="0.5"
-                          value={cfgPragLuni}
-                          onChange={(e) => setCfgPragLuni(Number(e.target.value))}
-                          placeholder="ex: 1"
-                          className="w-full bg-white border border-roseash-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSavingConfigCat}
-                  className="w-full py-3 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 transition flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {isSavingConfigCat
-                      ? 'Se salvează și se propagă...'
-                      : `Salvează Norma pe Categoria ${selectedCatObj?.nume?.replace(/_/g, ' ') || ''}`}
-                  </span>
-                </button>
-              </form>
-            </div>
-
-            {/* COLOANA DREAPTA: TABEL NORME CONFIGURATE */}
-            <div className="md:col-span-2 pleasant-card rounded-2xl p-6 space-y-4 shadow-sm bg-white border border-morning-200">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-morning-200 gap-2">
-                <div>
-                  <h3 className="text-base font-extrabold text-sapphire-900">
-                    {arataToateNormeleCategoriilor
-                      ? 'Toate Normele Configurate în Flotă'
-                      : `Norme Active pe Categoria ${selectedCatObj?.nume?.replace(/_/g, ' ') || ''}`}
+                  <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
+                    <Database className="w-5 h-5 text-sapphire-600" />
+                    <span>Centralizator Matrice Norme Flotă (Toate Categoriile)</span>
                   </h3>
                   <p className="text-xs text-sage-600 font-medium">
-                    {arataToateNormeleCategoriilor
-                      ? 'Centralizator complet al intervalelor definite pe categorii'
-                      : `Intervale aplicate automat la cele ${selectedCatObj?.totalVehicule || 0} utilaje`}
+                    Toate intervalele normate configurate manual pe categorii de vehicule și utilaje
                   </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Caută categorie sau fluid..."
+                      value={searchNorme}
+                      onChange={(e) => setSearchNorme(e.target.value)}
+                      className="pl-9 pr-3 py-2 bg-morning-100 border border-morning-200 rounded-xl text-xs text-sapphire-900 font-medium focus:outline-none focus:border-sapphire-500 w-56"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Tabelul de norme */}
+              {/* Tabel complet */}
               <div className="overflow-x-auto">
                 {(() => {
-                  const itemsToDisplay = arataToateNormeleCategoriilor
-                    ? categoriiNormeList.flatMap((c) =>
-                        (c.norme || []).map((n: any) => ({
-                          ...n,
-                          categorieNume: c.nume,
-                          categorieTipMasurare: c.tipMasurareImplicit,
-                          totalVehicule: c.totalVehicule,
-                        }))
-                      )
-                    : (selectedCatObj?.norme || []).map((n: any) => ({
-                        ...n,
-                        categorieNume: selectedCatObj.nume,
-                        categorieTipMasurare: selectedCatObj.tipMasurareImplicit,
-                        totalVehicule: selectedCatObj.totalVehicule,
-                      }));
+                  const allNorms = categoriiNormeList.flatMap((c: any) =>
+                    (c.norme || []).map((n: any) => ({
+                      ...n,
+                      categorieNume: c.nume,
+                      categorieTipMasurare: c.tipMasurareImplicit,
+                      totalVehicule: c.totalVehicule,
+                    }))
+                  ).filter((n: any) => {
+                    if (!searchNorme.trim()) return true;
+                    const query = searchNorme.toLowerCase();
+                    const cat = (n.categorieNume || '').toLowerCase();
+                    const fluid = (TIP_LICHID_LABELS[n.tipLichid] || n.tipLichid || '').toLowerCase();
+                    return cat.includes(query) || fluid.includes(query);
+                  });
 
-                  if (itemsToDisplay.length === 0) {
+                  if (allNorms.length === 0) {
                     return (
                       <div className="py-12 text-center space-y-3 bg-morning-50/50 rounded-2xl border border-dashed border-morning-200">
                         <Sliders className="w-8 h-8 text-sage-400 mx-auto" />
                         <p className="text-xs font-bold text-slate-700">
-                          {arataToateNormeleCategoriilor
-                            ? 'Nu există încă nicio normă configurată pe categorii.'
-                            : `Nu există norme configurate pentru categoria "${selectedCatObj?.nume?.replace(/_/g, ' ') || ''}".`}
+                          {searchNorme ? 'Nicio normă nu corespunde căutării.' : 'Nu există încă nicio normă configurată pe categorii.'}
                         </p>
                         <p className="text-[11px] text-sage-500 max-w-sm mx-auto">
-                          Folosește formularul din stânga pentru a stabili primul interval normat. Toate utilajele din categorie îl vor prelua automat.
+                          Alegeți o categorie din panoul de sus și configurați primul interval de schimb.
                         </p>
                       </div>
                     );
@@ -1982,7 +2071,8 @@ export default function FluidePage() {
                     <table className="w-full text-left text-xs text-slate-700">
                       <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                         <tr>
-                          {arataToateNormeleCategoriilor && <th className="p-3">Categorie</th>}
+                          <th className="p-3">Categorie Utilaj</th>
+                          <th className="p-3">Contor</th>
                           <th className="p-3">Tip Lubrifiant / Fluid</th>
                           <th className="p-3 font-mono">Interval Normat</th>
                           <th className="p-3 font-mono">Marjă Avertizare</th>
@@ -1991,26 +2081,27 @@ export default function FluidePage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-morning-200">
-                        {itemsToDisplay.map((norma: any) => {
+                        {allNorms.map((norma: any) => {
                           const isKm = (norma.categorieTipMasurare || 'KM').toUpperCase() === 'KM';
                           const fluidLabel = TIP_LICHID_LABELS[norma.tipLichid] || norma.tipLichid?.replace(/_/g, ' ');
 
                           return (
                             <tr key={norma.id} className="hover:bg-morning-50 transition">
-                              {arataToateNormeleCategoriilor && (
-                                <td className="p-3">
-                                  <span className="font-extrabold text-sapphire-900 block">
-                                    {norma.categorieNume?.replace(/_/g, ' ')}
-                                  </span>
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                                      isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
-                                    }`}
-                                  >
-                                    {isKm ? 'KM' : 'mTH'}
-                                  </span>
-                                </td>
-                              )}
+                              <td className="p-3 font-bold text-sapphire-900">
+                                <div className="flex items-center space-x-2">
+                                  <span>{getCategoryIcon(norma.categorieNume)}</span>
+                                  <span>{norma.categorieNume?.replace(/_/g, ' ')}</span>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                    isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {isKm ? 'KM' : 'mTH'}
+                                </span>
+                              </td>
                               <td className="p-3">
                                 <span className="font-extrabold text-sapphire-900 block">
                                   {fluidLabel}
@@ -2044,7 +2135,7 @@ export default function FluidePage() {
                                 )}
                               </td>
                               <td className="p-3">
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
+                                <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-extrabold">
                                   {norma.totalVehicule || 0} utilaje
                                 </span>
                               </td>
@@ -2052,18 +2143,9 @@ export default function FluidePage() {
                                 <div className="flex items-center justify-end space-x-1.5">
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      if (norma.categorieNume) setSelectedCatEnum(norma.categorieNume);
-                                      setCfgTipLichid(norma.tipLichid);
-                                      if (norma.intervalKm) setCfgIntervalKm(norma.intervalKm);
-                                      if (norma.pragAvertizareKm) setCfgPragKm(norma.pragAvertizareKm);
-                                      if (norma.intervalMth) setCfgIntervalMth(norma.intervalMth);
-                                      if (norma.pragAvertizareMth) setCfgPragMth(norma.pragAvertizareMth);
-                                      if (norma.intervalLuni) setCfgIntervalLuni(norma.intervalLuni);
-                                      if (norma.pragAvertizareLuni) setCfgPragLuni(norma.pragAvertizareLuni);
-                                    }}
-                                    title="Încarcă în formular pentru editare"
-                                    className="p-1.5 rounded-lg text-sage-600 hover:text-sapphire-600 hover:bg-white border border-transparent hover:border-morning-200 transition"
+                                    onClick={() => handleOpenModalNorma(norma.categorieNume, norma.tipLichid)}
+                                    title="Modifică norma"
+                                    className="p-1.5 rounded-lg text-sage-600 hover:text-sapphire-600 hover:bg-white border border-transparent hover:border-morning-200 transition cursor-pointer"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
                                   </button>
@@ -2071,7 +2153,7 @@ export default function FluidePage() {
                                     type="button"
                                     onClick={() => handleStergeConfigCategorie(norma.id, norma.tipLichid)}
                                     title="Șterge această normă"
-                                    className="p-1.5 rounded-lg text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 transition"
+                                    className="p-1.5 rounded-lg text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 transition cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -2086,7 +2168,196 @@ export default function FluidePage() {
                 })()}
               </div>
             </div>
-          </div>
+          ) : (
+            /* VEDERE 2: WORKSPACE PENTRU CATEGORIA SELECTATĂ (GRID CARDURI DE FLUIDE) */
+            selectedCatObj && (
+              <div className="space-y-4">
+                {/* BANNER SPOTLIGHT CATEGORIE */}
+                <div className="p-4 rounded-2xl bg-white border border-morning-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <span className="text-3xl p-2 rounded-xl bg-morning-100">
+                      {getCategoryIcon(selectedCatObj.nume)}
+                    </span>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-lg font-black text-sapphire-900 tracking-tight">
+                          {selectedCatObj.nume.replace(/_/g, ' ')}
+                        </h3>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-extrabold uppercase ${
+                            isCatKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          Contor: {isCatKm ? 'Kilometri (KM)' : 'Ore Funcționare (mTH)'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-sage-600 font-medium mt-0.5">
+                        {selectedCatObj.totalVehicule} utilaje active în flotă • {selectedCatObj.descriere || 'Gestiune norme și mentenanță preventivă'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <span className="text-xs font-bold text-slate-700 bg-morning-100 px-3 py-1.5 rounded-xl border border-morning-200">
+                      {selectedCatObj.norme?.length || 0} din {FLUIDE_CATEGORII_CONFIG.length} fluide configurate
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                      className="px-3.5 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adaugă Normă</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* GRID CARDURI INTERACTIVE PENTRU TOATE FLUIDELE DIN CATEGORIE */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {FLUIDE_CATEGORII_CONFIG.map((fluid) => {
+                    const existingNorm = (selectedCatObj.norme || []).find((n: any) => n.tipLichid === fluid.key);
+                    const isCustom = !!existingNorm;
+
+                    // Valori afișate (personalizate sau standard de referință)
+                    const displayInterval = isCustom
+                      ? isCatKm
+                        ? `${Number(existingNorm.intervalKm).toLocaleString('ro-RO')} KM`
+                        : `${Number(existingNorm.intervalMth).toLocaleString('ro-RO')} mTH`
+                      : isCatKm
+                      ? `${fluid.key === 'ULEI_MOTOR' ? '15.000' : '30.000'} KM (Standard)`
+                      : `${fluid.key === 'ULEI_MOTOR' ? '250' : '500'} mTH (Standard)`;
+
+                    const displayTimp = isCustom && existingNorm.intervalLuni
+                      ? `sau maxim ${existingNorm.intervalLuni} luni`
+                      : 'sau 12 luni';
+
+                    const displayAvertizare = isCustom
+                      ? isCatKm
+                        ? `cu ${Number(existingNorm.pragAvertizareKm || 1000).toLocaleString('ro-RO')} KM înainte`
+                        : `cu ${Number(existingNorm.pragAvertizareMth || 50).toLocaleString('ro-RO')} mTH înainte`
+                      : isCatKm
+                      ? 'cu 1.000 KM înainte'
+                      : 'cu 50 mTH înainte';
+
+                    return (
+                      <div
+                        key={fluid.key}
+                        className={`pleasant-card rounded-2xl p-5 border transition flex flex-col justify-between space-y-4 bg-white shadow-2xs hover:shadow-sm ${
+                          isCustom
+                            ? 'border-sapphire-300 ring-1 ring-sapphire-100'
+                            : 'border-morning-200 hover:border-morning-300'
+                        }`}
+                      >
+                        {/* ANTET CARD FLUID */}
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center space-x-2.5">
+                              <div
+                                className={`p-2 rounded-xl ${
+                                  fluid.accentColor === 'amber'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : fluid.accentColor === 'blue'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : fluid.accentColor === 'indigo'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : fluid.accentColor === 'emerald'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : fluid.accentColor === 'rose'
+                                    ? 'bg-roseash-100 text-terracotta-700'
+                                    : 'bg-morning-200 text-sapphire-900'
+                                }`}
+                              >
+                                <Droplets className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <h4 className="font-extrabold text-sm text-sapphire-900">{fluid.nume}</h4>
+                                <span className="text-[10px] font-mono text-sage-500 uppercase">{fluid.key}</span>
+                              </div>
+                            </div>
+
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                isCustom
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-morning-100 text-slate-500 border border-morning-200'
+                              }`}
+                            >
+                              {isCustom ? 'Normă Activă' : 'Implicit'}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-sage-600 line-clamp-2 leading-relaxed">
+                            {fluid.descriere}
+                          </p>
+                        </div>
+
+                        {/* METRICI CARD */}
+                        <div className="p-3.5 bg-morning-50/70 rounded-xl border border-morning-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-sage-600">Interval Schimb:</span>
+                            <div className="text-right">
+                              <span className="font-mono font-black text-sm text-sapphire-900 block">
+                                {displayInterval}
+                              </span>
+                              <span className="text-[10px] font-medium text-sage-500">
+                                {displayTimp}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-morning-200/80 flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-sage-600">Prag Avertizare:</span>
+                            <span className="font-mono font-bold text-xs text-terracotta-700">
+                              {displayAvertizare}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* ACȚIUNI CARD */}
+                        <div className="pt-2 border-t border-morning-200 flex items-center justify-between">
+                          <span className="text-[11px] text-sage-500 font-semibold">
+                            {selectedCatObj.totalVehicule} utilaje
+                          </span>
+
+                          <div className="flex items-center space-x-1.5">
+                            {isCustom ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStergeConfigCategorie(existingNorm.id, fluid.key)}
+                                  title="Resetează la valoarea implicită"
+                                  className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
+                                  className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs border border-sapphire-200 transition flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  <span>Editează</span>
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
+                                className="px-3 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-2xs transition flex items-center space-x-1 cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Configurează</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -2760,6 +3031,400 @@ export default function FluidePage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: CONFIGURARE / EDITARE NORMĂ PE CATEGORIE DE UTILAJE */}
+      {/* ========================================================================= */}
+      {modalNormaOpen && (() => {
+        const cat = categoriiNormeList.find((c: any) => c.nume === modalNormaCategorie);
+        const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+        const fluidConfig = FLUIDE_CATEGORII_CONFIG.find((f) => f.key === modalNormaTipLichid);
+        const fluidLabel = TIP_LICHID_LABELS[modalNormaTipLichid] || modalNormaTipLichid?.replace(/_/g, ' ');
+
+        // Calcule pentru bara vizuală interactivă (Timeline Gauge)
+        const intervalVal = isKm ? Number(modalNormaIntervalKm || 0) : Number(modalNormaIntervalMth || 0);
+        const pragVal = isKm ? Number(modalNormaPragKm || 0) : Number(modalNormaPragMth || 0);
+        const warnStartVal = Math.max(0, intervalVal - pragVal);
+        const unitate = isKm ? 'KM' : 'mTH';
+
+        const warnPercent = intervalVal > 0 ? Math.min(100, Math.max(10, Math.round((pragVal / intervalVal) * 100))) : 20;
+        const okPercent = 100 - warnPercent;
+
+        const presets = isKm
+          ? [10000, 15000, 20000, 30000, 50000, 100000]
+          : [100, 250, 500, 1000, 1500, 2000];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-2xl space-y-5 shadow-2xl border border-morning-200 max-h-[92vh] flex flex-col">
+              {/* Header Modal */}
+              <div className="flex items-center justify-between pb-3 border-b border-morning-200 shrink-0">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 rounded-xl bg-sapphire-100 text-sapphire-700">
+                    <Sliders className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-base font-extrabold text-sapphire-900">
+                        Configurare Normă Intervale
+                      </h3>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-wider ${
+                          isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {isKm ? 'Rutier • KM' : 'Utilaj Șantier • mTH'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-sage-600 font-medium mt-0.5">
+                      {getCategoryIcon(modalNormaCategorie)} Categorie: <strong className="text-sapphire-900">{modalNormaCategorie?.replace(/_/g, ' ')}</strong> ({cat?.totalVehicule || 0} utilaje) • Fluid: <strong className="text-sapphire-900">{fluidLabel}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalNormaOpen(false)}
+                  className="p-1.5 rounded-lg text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Corp Formular Scrollabil */}
+              <form onSubmit={handleSaveModalNorma} className="space-y-4 overflow-y-auto pr-1 flex-1">
+                {/* Selector Tip Fluid */}
+                <div>
+                  <label className="text-xs font-bold text-sapphire-900 block mb-1.5">
+                    Selectează Tipul de Lubrifiant / Fluid:
+                  </label>
+                  <select
+                    value={modalNormaTipLichid}
+                    onChange={(e) => {
+                      const newTip = e.target.value;
+                      setModalNormaTipLichid(newTip);
+                      const existing = (cat?.norme || []).find((n: any) => n.tipLichid === newTip);
+                      if (existing) {
+                        setModalNormaIntervalKm(existing.intervalKm || 15000);
+                        setModalNormaPragKm(existing.pragAvertizareKm || 1000);
+                        setModalNormaIntervalMth(existing.intervalMth || 250);
+                        setModalNormaPragMth(existing.pragAvertizareMth || 50);
+                        setModalNormaIntervalLuni(existing.intervalLuni || 12);
+                        setModalNormaPragLuni(existing.pragAvertizareLuni || 1);
+                      } else {
+                        if (isKm) {
+                          setModalNormaIntervalKm(newTip === 'ULEI_MOTOR' ? 15000 : 30000);
+                          setModalNormaPragKm(1000);
+                        } else {
+                          setModalNormaIntervalMth(newTip === 'ULEI_MOTOR' ? 250 : 500);
+                          setModalNormaPragMth(50);
+                        }
+                      }
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                  >
+                    {FLUIDE_CATEGORII_CONFIG.map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.nume} ({f.key})
+                      </option>
+                    ))}
+                  </select>
+                  {fluidConfig?.descriere && (
+                    <p className="text-[11px] text-sage-500 mt-1 italic">
+                      {fluidConfig.descriere}
+                    </p>
+                  )}
+                </div>
+
+                {/* Butoane Preset 1-Click */}
+                <div className="p-3 bg-morning-50/80 rounded-xl border border-morning-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-sage-700 uppercase tracking-wider flex items-center space-x-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Presetări Rapide Standard ({unitate}):</span>
+                    </span>
+                    <span className="text-[10px] text-sage-500 font-medium">
+                      Alegeți un interval comun dintr-un click
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {presets.map((val) => {
+                      const isCurrent = isKm ? modalNormaIntervalKm === val : modalNormaIntervalMth === val;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => {
+                            if (isKm) {
+                              setModalNormaIntervalKm(val);
+                              // Auto ajustare prag sugerat (8-10% din interval)
+                              const suggestedPrag = Math.max(500, Math.round((val * 0.08) / 500) * 500);
+                              setModalNormaPragKm(suggestedPrag);
+                            } else {
+                              setModalNormaIntervalMth(val);
+                              const suggestedPrag = Math.max(25, Math.round((val * 0.1) / 10) * 10);
+                              setModalNormaPragMth(suggestedPrag);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                            isCurrent
+                              ? 'bg-sapphire-900 text-white shadow-xs'
+                              : 'bg-white hover:bg-morning-200 text-sapphire-900 border border-morning-200'
+                          }`}
+                        >
+                          {val.toLocaleString('ro-RO')} {unitate}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Câmpuri de Intrare: KM vs MTH (Strict separate) */}
+                <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
+                  <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
+                    <Gauge className="w-4 h-4 text-sapphire-600" />
+                    <span>Configurare Contor Principal ({isKm ? 'Kilometri — KM' : 'Ore Funcționare — mTH'})</span>
+                  </h4>
+
+                  {isKm ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                          Interval Schimb Normat (KM): *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1000"
+                            step="500"
+                            required
+                            value={modalNormaIntervalKm}
+                            onChange={(e) => setModalNormaIntervalKm(Number(e.target.value))}
+                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                            placeholder="ex: 15000"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                            KM
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-sage-500 mt-1">
+                          La atingerea acestui rulaj, pachetul de schimb devine <strong>Depășit</strong>.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                          Marjă Avertizare Anticipată (KM): *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="100"
+                            step="100"
+                            required
+                            value={modalNormaPragKm}
+                            onChange={(e) => setModalNormaPragKm(Number(e.target.value))}
+                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                            placeholder="ex: 1000"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                            KM
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-sage-500 mt-1">
+                          Alertă galbenă înainte de termen (ex: {modalNormaPragKm} KM înainte).
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                          Interval Schimb Normat (mTH): *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="20"
+                            step="10"
+                            required
+                            value={modalNormaIntervalMth}
+                            onChange={(e) => setModalNormaIntervalMth(Number(e.target.value))}
+                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
+                            placeholder="ex: 250"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                            mTH
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-sage-500 mt-1">
+                          La atingerea acestor ore de funcționare, norma devine <strong>Depășită</strong>.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                          Marjă Avertizare Anticipată (mTH): *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="5"
+                            step="5"
+                            required
+                            value={modalNormaPragMth}
+                            onChange={(e) => setModalNormaPragMth(Number(e.target.value))}
+                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
+                            placeholder="ex: 50"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                            mTH
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-sage-500 mt-1">
+                          Alertă galbenă înainte de termen (ex: cu {modalNormaPragMth} mTH înainte).
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Câmpuri Opționale: Limită Calendaristică (Luni) */}
+                <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
+                  <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
+                    <Calendar className="w-4 h-4 text-sapphire-600" />
+                    <span>Interval Calendaristic Alternativ (Timp de Îmbătrânire Ulei)</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                        Interval Maxim Calendaristic (Luni):
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={modalNormaIntervalLuni}
+                          onChange={(e) => setModalNormaIntervalLuni(Number(e.target.value))}
+                          className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                          placeholder="ex: 12"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500">
+                          luni
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-sage-500 mt-1">
+                        Schimb chiar dacă rulajul nu a fost atins (ex: 12 luni).
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                        Marjă Avertizare Timp (Luni):
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="6"
+                          value={modalNormaPragLuni}
+                          onChange={(e) => setModalNormaPragLuni(Number(e.target.value))}
+                          className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                          placeholder="ex: 1"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500">
+                          luni
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-sage-500 mt-1">
+                        Alertă galbenă cu X luni înainte de termenul calendaristic.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Previziune Vizuală (Timeline Gauge) */}
+                <div className="p-3.5 bg-gradient-to-r from-morning-50 to-morning-100 rounded-xl border border-morning-200 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold">
+                    <span className="text-sapphire-900 flex items-center space-x-1">
+                      <Activity className="w-3.5 h-3.5 text-sapphire-600" />
+                      <span>Schema Pragurilor de Alertă:</span>
+                    </span>
+                    <span className="font-mono text-sage-600">
+                      Total: {intervalVal.toLocaleString('ro-RO')} {unitate}
+                    </span>
+                  </div>
+
+                  {/* Segmented Timeline Bar */}
+                  <div className="h-4 rounded-full overflow-hidden flex bg-morning-200 p-0.5 border border-morning-300">
+                    <div
+                      style={{ width: `${okPercent}%` }}
+                      className="h-full bg-emerald-500 rounded-l-full flex items-center justify-center text-[9px] text-white font-extrabold"
+                      title="Zona Verde: Funcționare optimă"
+                    >
+                      OK
+                    </div>
+                    <div
+                      style={{ width: `${warnPercent}%` }}
+                      className="h-full bg-amber-400 flex items-center justify-center text-[9px] text-amber-950 font-extrabold"
+                      title="Zona Galbenă: Avertizare revizie"
+                    >
+                      Avertizare
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-sage-600 font-mono">
+                    <span>0 {unitate}</span>
+                    <span className="text-amber-700 font-bold">
+                      Avertizare la: {warnStartVal.toLocaleString('ro-RO')} {unitate}
+                    </span>
+                    <span className="text-terracotta-700 font-bold">
+                      Depășit: ≥ {intervalVal.toLocaleString('ro-RO')} {unitate}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Notă Informativă privind Propagarea */}
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start space-x-2">
+                  <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                  <p className="text-[11px] leading-relaxed">
+                    Salvarea acestei norme va actualiza automat starea de mentenanță preventivă pentru toate cele <strong>{cat?.totalVehicule || 0} utilaje/vehicule</strong> din categoria <strong>{modalNormaCategorie?.replace(/_/g, ' ')}</strong>.
+                  </p>
+                </div>
+
+                {/* Butoane Acțiune Modal */}
+                <div className="flex justify-end space-x-2.5 pt-3 border-t border-morning-200 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setModalNormaOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold text-xs hover:bg-morning-300 transition cursor-pointer"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isModalSaving}
+                    className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 disabled:opacity-50 transition flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    {isModalSaving ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Se salvează norma...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Salvează Norma de Categorie</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
