@@ -75,6 +75,21 @@ export class AnomaliiController {
     return this.anomaliiService.adaugaIesireUlei(body);
   }
 
+  @Get('configurare-ulei/categorii')
+  getConfigurariUleiCategorii() {
+    return this.anomaliiService.getConfigurariUleiCategorii();
+  }
+
+  @Post('configurare-ulei/categorie')
+  salveazaConfigurareUleiCategorie(@Body() body: any) {
+    return this.anomaliiService.salveazaConfigurareUleiCategorie(body);
+  }
+
+  @Delete('configurare-ulei/categorie/:id')
+  stergeConfigurareUleiCategorie(@Param('id') id: string) {
+    return this.anomaliiService.stergeConfigurareUleiCategorie(id);
+  }
+
   @Post('configurare-ulei')
   salveazaConfigurare(@Body() body: any) {
     return this.anomaliiService.salveazaConfigurareUlei(body);

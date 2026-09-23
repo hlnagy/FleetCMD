@@ -24,6 +24,7 @@ model CategorieVehicul {
   updatedAt            DateTime      @updatedAt
 
   vehicule             Vehicul[]
+  configurariUlei      ConfigurareUleiCategorie[]
 }
 
 model Vehicul {
@@ -153,6 +154,28 @@ model ConfigurareUleiVehicul {
 
   @@unique([vehiculId, tipLichid])
 }
+
+model ConfigurareUleiCategorie {
+  id                   String            @id @default(uuid())
+  categorieEnum        String            // ex: "CAP_TRACTOR", "EXCAVATOR"
+  categorie            CategorieVehicul  @relation(fields: [categorieEnum], references: [nume], onDelete: Cascade)
+  tipLichid            String            // ULEI_MOTOR, ULEI_HIDRAULIC, etc.
+
+  intervalKm           Float?
+  intervalMth          Float?
+  intervalLuni         Float?
+
+  pragAvertizareKm     Float?            @default(1000)
+  pragAvertizareMth    Float?            @default(50)
+  pragAvertizareLuni   Float?            @default(1)
+
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@unique([categorieEnum, tipLichid])
+  @@index([categorieEnum])
+}
+
 
 // ==========================================
 // MENTENANȚĂ PREVENTIVĂ ȘI ESCALADARE

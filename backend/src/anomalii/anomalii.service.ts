@@ -329,6 +329,133 @@ export class AnomaliiService {
     });
   }
 
+  async getConfigurariUleiCategorii() {
+    const categorii = await this.prisma.categorieVehicul.findMany({
+      include: {
+        configurariUlei: {
+          orderBy: { tipLichid: 'asc' },
+        },
+        vehicule: {
+          select: { id: true, tipMasurare: true, stare: true },
+        },
+      },
+      orderBy: { nume: 'asc' },
+    });
+
+    return categorii.map((c) => {
+      const activeVehicule = c.vehicule.filter((v) => v.stare !== 'CASAT');
+      const mthCount = activeVehicule.filter((v) => (v.tipMasurare || '').toUpperCase() === 'MTH').length;
+      const kmCount = activeVehicule.filter((v) => (v.tipMasurare || '').toUpperCase() === 'KM').length;
+      
+      // Dacă categoria are utilaje MTH sau implicitul este MTH
+      let tipMasurare = c.tipMasurareImplicit || 'KM';
+      if (mthCount > kmCount) {
+        tipMasurare = 'MTH';
+      }
+
+      return {
+        id: c.id,
+        nume: c.nume,
+        descriere: c.descriere,
+        tipMasurareImplicit: tipMasurare,
+        totalVehicule: c.vehicule.length,
+        vehiculeActive: activeVehicule.length,
+        norme: c.configurariUlei,
+      };
+    });
+  }
+
+  async salveazaConfigurareUleiCategorie(data: {
+    categorieEnum: string;
+    tipLichid: string;
+    intervalKm?: number;
+    intervalMth?: number;
+    intervalLuni?: number;
+    pragAvertizareKm?: number;
+    pragAvertizareMth?: number;
+    pragAvertizareLuni?: number;
+  }) {
+    if (!data.categorieEnum || !data.tipLichid) {
+      throw new BadRequestException('Categoria și tipul de fluid sunt obligatorii.');
+    }
+
+    const catNorma = await this.prisma.configurareUleiCategorie.upsert({
+      where: {
+        categorieEnum_tipLichid: {
+          categorieEnum: data.categorieEnum,
+          tipLichid: data.tipLichid,
+        },
+      },
+      update: {
+        intervalKm: data.intervalKm !== undefined ? (data.intervalKm ? Number(data.intervalKm) : null) : undefined,
+        intervalMth: data.intervalMth !== undefined ? (data.intervalMth ? Number(data.intervalMth) : null) : undefined,
+        intervalLuni: data.intervalLuni !== undefined ? (data.intervalLuni ? Number(data.intervalLuni) : null) : undefined,
+        pragAvertizareKm: data.pragAvertizareKm !== undefined ? (data.pragAvertizareKm ? Number(data.pragAvertizareKm) : null) : undefined,
+        pragAvertizareMth: data.pragAvertizareMth !== undefined ? (data.pragAvertizareMth ? Number(data.pragAvertizareMth) : null) : undefined,
+        pragAvertizareLuni: data.pragAvertizareLuni !== undefined ? (data.pragAvertizareLuni ? Number(data.pragAvertizareLuni) : null) : undefined,
+      },
+      create: {
+        categorieEnum: data.categorieEnum,
+        tipLichid: data.tipLichid,
+        intervalKm: data.intervalKm ? Number(data.intervalKm) : null,
+        intervalMth: data.intervalMth ? Number(data.intervalMth) : null,
+        intervalLuni: data.intervalLuni ? Number(data.intervalLuni) : null,
+        pragAvertizareKm: data.pragAvertizareKm ? Number(data.pragAvertizareKm) : (data.intervalKm ? 1000 : null),
+        pragAvertizareMth: data.pragAvertizareMth ? Number(data.pragAvertizareMth) : (data.intervalMth ? 50 : null),
+        pragAvertizareLuni: data.pragAvertizareLuni ? Number(data.pragAvertizareLuni) : 1,
+      },
+    });
+
+    // Propagăm norma pe toate vehiculele din această categorie
+    const vehicule = await this.prisma.vehicul.findMany({
+      where: { categorieEnum: data.categorieEnum },
+    });
+
+    for (const v of vehicule) {
+      await this.prisma.configurareUleiVehicul.upsert({
+        where: { vehiculId_tipLichid: { vehiculId: v.id, tipLichid: data.tipLichid } },
+        update: {
+          intervalKm: data.intervalKm ? Number(data.intervalKm) : null,
+          intervalMth: data.intervalMth ? Number(data.intervalMth) : null,
+          intervalLuni: data.intervalLuni ? Number(data.intervalLuni) : null,
+          pragAvertizareKm: data.pragAvertizareKm ? Number(data.pragAvertizareKm) : null,
+          pragAvertizareMth: data.pragAvertizareMth ? Number(data.pragAvertizareMth) : null,
+          pragAvertizareLuni: data.pragAvertizareLuni ? Number(data.pragAvertizareLuni) : null,
+        },
+        create: {
+          vehiculId: v.id,
+          tipLichid: data.tipLichid,
+          intervalKm: data.intervalKm ? Number(data.intervalKm) : null,
+          intervalMth: data.intervalMth ? Number(data.intervalMth) : null,
+          intervalLuni: data.intervalLuni ? Number(data.intervalLuni) : null,
+          pragAvertizareKm: data.pragAvertizareKm ? Number(data.pragAvertizareKm) : (data.intervalKm ? 1000 : null),
+          pragAvertizareMth: data.pragAvertizareMth ? Number(data.pragAvertizareMth) : (data.intervalMth ? 50 : null),
+          pragAvertizareLuni: data.pragAvertizareLuni ? Number(data.pragAvertizareLuni) : 1,
+          ultimulSchimbContor: v.valoareContorCurent || 0,
+          ultimulSchimbData: new Date(),
+        },
+      });
+    }
+
+    return {
+      succes: true,
+      mesaj: `Norma pentru "${data.tipLichid}" a fost salvată pe categoria "${data.categorieEnum}" și aplicată pe ${vehicule.length} utilaje.`,
+      numarVehiculeAfectate: vehicule.length,
+      norma: catNorma,
+    };
+  }
+
+  async stergeConfigurareUleiCategorie(id: string) {
+    const norma = await this.prisma.configurareUleiCategorie.findUnique({
+      where: { id },
+    });
+    if (!norma) {
+      throw new NotFoundException('Norma de categorie nu a fost găsită.');
+    }
+    await this.prisma.configurareUleiCategorie.delete({ where: { id } });
+    return { succes: true, mesaj: 'Norma a fost ștearsă cu succes.' };
+  }
+
   async getStatusSchimburiUleiVehicul(vehiculId: string) {
     const vehicul = await this.prisma.vehicul.findUnique({
       where: { id: vehiculId },
@@ -338,9 +465,34 @@ export class AnomaliiService {
     if (!vehicul) throw new NotFoundException('Vehicul negăsit');
 
     const acum = new Date();
-    const configurari = await this.prisma.configurareUleiVehicul.findMany({
+    let configurari = await this.prisma.configurareUleiVehicul.findMany({
       where: { vehiculId },
     });
+
+    // Dacă vehiculul nu are configurări specifice pentru anumite fluide, preluăm din categoria vehiculului
+    if (vehicul.categorieEnum) {
+      const catNorme = await this.prisma.configurareUleiCategorie.findMany({
+        where: { categorieEnum: vehicul.categorieEnum },
+      });
+      for (const cn of catNorme) {
+        const exists = configurari.some((c) => c.tipLichid === cn.tipLichid);
+        if (!exists) {
+          configurari.push({
+            id: `cat-${cn.id}`,
+            vehiculId: vehicul.id,
+            tipLichid: cn.tipLichid,
+            intervalKm: cn.intervalKm,
+            intervalMth: cn.intervalMth,
+            intervalLuni: cn.intervalLuni,
+            pragAvertizareKm: cn.pragAvertizareKm,
+            pragAvertizareMth: cn.pragAvertizareMth,
+            pragAvertizareLuni: cn.pragAvertizareLuni,
+            ultimulSchimbContor: vehicul.valoareContorInitial || 0,
+            ultimulSchimbData: vehicul.createdAt || new Date(),
+          } as any);
+        }
+      }
+    }
 
     return configurari.map((cfg) => {
       const rulajEfectiv = Math.max(0, vehicul.valoareContorCurent - cfg.ultimulSchimbContor);
