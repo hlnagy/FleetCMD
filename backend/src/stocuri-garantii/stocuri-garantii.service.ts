@@ -325,23 +325,58 @@ export class StocuriGarantiiService {
     });
   }
 
-  async updateSubcategorie(id: string, data: { nume?: string; descriere?: string; categorieStocId?: string }) {
-    const existing = await this.prisma.subcategorieStoc.findUnique({ where: { id } });
+  async updateSubcategorie(id: string, data: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string }) {
+    const existing = await this.prisma.subcategorieStoc.findUnique({
+      where: { id },
+      include: { categorieStoc: true },
+    });
     if (!existing) throw new NotFoundException('Subcategoria nu a fost găsită.');
+
+    let newCatId = data.categorieStocId;
+    let newCatNume: string | undefined;
+
+    if (data.categorieNume) {
+      let cat = await this.prisma.categorieStoc.findUnique({ where: { nume: data.categorieNume } });
+      if (!cat) {
+        cat = await this.prisma.categorieStoc.create({ data: { nume: data.categorieNume } });
+      }
+      newCatId = cat.id;
+      newCatNume = cat.nume;
+    } else if (newCatId) {
+      const cat = await this.prisma.categorieStoc.findUnique({ where: { id: newCatId } });
+      if (cat) newCatNume = cat.nume;
+    }
 
     const updated = await this.prisma.subcategorieStoc.update({
       where: { id },
       data: {
         nume: data.nume ? data.nume.trim() : undefined,
         descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
-        categorieStocId: data.categorieStocId !== undefined ? data.categorieStocId : undefined,
+        categorieStocId: newCatId !== undefined ? newCatId : undefined,
       },
+      include: { categorieStoc: true },
     });
 
-    if (data.nume && data.nume.trim() !== existing.nume) {
+    const oldSubName = existing.nume;
+    const newSubName = data.nume ? data.nume.trim() : existing.nume;
+    const oldCatName = existing.categorieStoc?.nume;
+
+    // Actualizare în cascadă pe articolele de stoc existente
+    if (newCatNume && oldCatName && newCatNume !== oldCatName) {
       await this.prisma.articolStoc.updateMany({
-        where: { subcategorie: existing.nume },
-        data: { subcategorie: data.nume.trim() },
+        where: {
+          subcategorie: oldSubName,
+          categorie: oldCatName,
+        },
+        data: {
+          categorie: newCatNume,
+          subcategorie: newSubName,
+        },
+      });
+    } else if (newSubName !== oldSubName) {
+      await this.prisma.articolStoc.updateMany({
+        where: { subcategorie: oldSubName },
+        data: { subcategorie: newSubName },
       });
     }
 

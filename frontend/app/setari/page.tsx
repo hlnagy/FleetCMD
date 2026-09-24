@@ -1026,11 +1026,14 @@ function SetariContent() {
         : `${API_BASE_URL}/stocuri-garantii/subcategorii`;
       const method = editingSubcat ? 'PATCH' : 'POST';
 
+      const targetCatObj = categorii.find((c: any) => c.nume === targetCatForSubcat);
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           categorieNume: targetCatForSubcat,
+          categorieStocId: targetCatObj?.id,
           nume: numeSubcatNoua.trim(),
           descriere: descriereSubcatNoua.trim() || null,
         }),

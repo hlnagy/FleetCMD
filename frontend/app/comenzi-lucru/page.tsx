@@ -907,18 +907,26 @@ export default function ComenziLucruPage() {
   const comenziInLucruCount = comenzi.filter((c) => c.stare === 'IN_LUCRU' || c.stare === 'DEVALIDAT').length;
   const comenziFinalizateCount = comenzi.filter((c) => c.stare === 'FINALIZAT').length;
 
-  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor (FĂRĂ ANVELOPE - anvelopele se montează doar din Anvelope/Axe)
+  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor (FĂRĂ ANVELOPE și doar cu stoc disponibil > 0)
   const availableStockCategories = [
     'TOATE',
-    ...Array.from(new Set(stocuri.map((s: any) => s.categorie).filter(Boolean))).filter(
-      (cat: any) => !isTireCategory(cat)
-    ),
+    ...Array.from(
+      new Set(
+        stocuri
+          .filter((s: any) => Number(s.stocCurent || 0) > 0 && !isTireItem(s))
+          .map((s: any) => s.categorie)
+          .filter(Boolean)
+      )
+    ).filter((cat: any) => !isTireCategory(cat)),
   ];
 
   const filteredStockList = stocuri
     .filter((item: any) => {
       // Excludem complet anvelopele din lista pieselor de schimb în atelier
       if (isTireItem(item)) return false;
+
+      // Excludem complet articolele cu stoc epuizat (stoc <= 0)
+      if (Number(item.stocCurent || 0) <= 0) return false;
 
       if (quickSelectedCategory !== 'TOATE') {
         if ((item.categorie || '').toLowerCase() !== quickSelectedCategory.toLowerCase()) {
@@ -937,10 +945,6 @@ export default function ComenziLucruPage() {
       return true;
     })
     .sort((a: any, b: any) => {
-      const stockA = Number(a.stocCurent || 0);
-      const stockB = Number(b.stocCurent || 0);
-      if (stockA > 0 && stockB <= 0) return -1;
-      if (stockB > 0 && stockA <= 0) return 1;
       return (a.denumire || '').localeCompare(b.denumire || '');
     });
 
@@ -2354,7 +2358,7 @@ export default function ComenziLucruPage() {
                     onChange={(e) => handleSelectElemArticolStoc(e.target.value)}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
-                    {stocuri.filter((st) => !isTireItem(st)).map((st) => (
+                    {stocuri.filter((st) => !isTireItem(st) && Number(st.stocCurent || 0) > 0).map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON)
                       </option>

@@ -221,7 +221,7 @@ const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
 export default function FluidePage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
-  const [activeTab, setActiveTab] = useState<'flota' | 'stocuri' | 'config' | 'anomalii' | 'istoric'>('flota');
+  const [activeTab, setActiveTab] = useState<'stocuri' | 'config' | 'anomalii' | 'istoric'>('stocuri');
   const [stocUleiuri, setStocUleiuri] = useState<any[]>([]);
   const [flotaFluide, setFlotaFluide] = useState<any[]>([]);
   const [statusSchimburi, setStatusSchimburi] = useState<any[]>([]);
@@ -290,11 +290,6 @@ export default function FluidePage() {
       return next;
     });
   };
-
-  // Filtre Tab Flotă
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState('TOATE'); // TOATE, DEPASITE, AVERTIZARE, OK
-  const [selectedTipLichidFilter, setSelectedTipLichidFilter] = useState('');
 
   // Stare Formular Ieșiri Ulei (Completare pe vehicul)
   const [iesireTipLichid, setIesireTipLichid] = useState('ULEI_MOTOR');
@@ -545,7 +540,7 @@ export default function FluidePage() {
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const t = params.get('tab');
-        if (t === 'stocuri' || t === 'flota' || t === 'config' || t === 'anomalii') {
+        if (t === 'stocuri' || t === 'config' || t === 'anomalii') {
           setActiveTab(t as any);
         }
       }
@@ -689,11 +684,14 @@ export default function FluidePage() {
         : `${API_BASE_URL}/stocuri-garantii/subcategorii`;
       const method = editingSubcat ? 'PATCH' : 'POST';
 
+      const targetCatObj = categoriiFluide.find((c: any) => c.nume === targetCatForSubcat);
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           categorieNume: targetCatForSubcat,
+          categorieStocId: targetCatObj?.id,
           nume: subcatNume.trim(),
           descriere: subcatDescriere.trim() || null,
         }),
@@ -993,31 +991,6 @@ export default function FluidePage() {
 
 
 
-  // Calcul Statistici Flotă Fluide
-  const totalPuncte = flotaFluide.length;
-  const numDepasite = flotaFluide.filter(f => f.esteDepasit).length;
-  const numAvertizari = flotaFluide.filter(f => f.esteInPragAvertizare && !f.esteDepasit).length;
-
-  const fluideFiltrate = flotaFluide.filter((f) => {
-    const matchStatus = 
-      selectedStatusFilter === 'TOATE' ? true :
-      selectedStatusFilter === 'DEPASITE' ? f.esteDepasit :
-      selectedStatusFilter === 'AVERTIZARE' ? f.esteInPragAvertizare && !f.esteDepasit :
-      selectedStatusFilter === 'OK' ? !f.esteDepasit && !f.esteInPragAvertizare : true;
-
-    const matchLichid = selectedTipLichidFilter ? f.tipLichid === selectedTipLichidFilter : true;
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const mIntern = f.vehiculNumarIntern?.toLowerCase().includes(q);
-      const mInmat = f.vehiculInmatriculare?.toLowerCase().includes(q);
-      const mLichid = f.tipLichid?.toLowerCase().includes(q);
-      const mMarca = f.vehiculMarca?.toLowerCase().includes(q);
-      return matchStatus && matchLichid && (mIntern || mInmat || mLichid || mMarca);
-    }
-    return matchStatus && matchLichid;
-  });
-
   // Calcule & Filtrare Stocuri Fluide
   const totalVolumFluide = stocUleiuri.reduce((acc, s) => acc + (Number(s.stocCurent) || 0), 0);
   const totalValoareFluide = stocUleiuri.reduce((acc, s) => acc + ((Number(s.stocCurent) || 0) * (Number(s.pretUnitar) || 0)), 0);
@@ -1168,23 +1141,6 @@ export default function FluidePage() {
       {/* MENIU TABS PROFESIONAL (FĂRĂ NUMERE) */}
       <div className="flex space-x-2 border-b border-morning-300 pb-1">
         <button
-          onClick={() => setActiveTab('flota')}
-          className={`flex items-center space-x-2 px-5 py-3 text-xs font-extrabold rounded-xl transition ${
-            activeTab === 'flota'
-              ? 'bg-sapphire-500 text-white shadow-md shadow-sapphire-500/20'
-              : 'text-sage-700 hover:bg-morning-100'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          <span>Monitorizare Flotă & Nivel Uleiuri</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'flota' ? 'bg-white/20 text-white' : 'bg-morning-200 text-slate-700'
-          }`}>
-            {flotaFluide.length}
-          </span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('stocuri')}
           className={`flex items-center space-x-2 px-5 py-3 text-xs font-extrabold rounded-xl transition ${
             activeTab === 'stocuri'
@@ -1239,181 +1195,8 @@ export default function FluidePage() {
         </button>
       </div>
 
-      {/* TAB 1: MONITORIZARE FLOTĂ & NIVEL ULEIURI */}
-      {activeTab === 'flota' && (
-        <div className="pleasant-card rounded-2xl p-6 space-y-4 shadow-sm">
-          {/* BARA DE FILTRARE & CĂUTARE */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 bg-morning-100 rounded-2xl border border-morning-200">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-sage-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Căutare utilaj, număr intern, înmatriculare, tip ulei..."
-                className="w-full bg-white border border-morning-200 rounded-xl pl-10 pr-4 py-2.5 text-xs text-sapphire-900 font-bold focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2 text-xs flex-wrap">
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="TOATE">Toate Stările</option>
-                <option value="DEPASITE">Doar Schimburi Depășite</option>
-                <option value="AVERTIZARE"> Doar În Prag Avertizare</option>
-                <option value="OK">Doar În Grafic (OK)</option>
-              </select>
-
-              <select
-                value={selectedTipLichidFilter}
-                onChange={(e) => setSelectedTipLichidFilter(e.target.value)}
-                className="bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="">Toate Tipurile de Fluide & Lubrifianți</option>
-                <option value="ULEI_MOTOR">Ulei Motor</option>
-                <option value="ULEI_HIDRAULIC">Ulei Hidraulic</option>
-                <option value="ULEI_TRANSMISIE">Ulei Transmisie & Diferențial</option>
-                <option value="ANTIGEL_G12">Antigel G12+ (Lichid Răcire Roz)</option>
-                <option value="ANTIGEL_G11">Antigel G11 (Lichid Răcire Albastru)</option>
-                <option value="ADBLUE">AdBlue (Uree 32.5%)</option>
-                <option value="ULEI_LIEBHERR_PUNTE">Ulei Punte Liebherr</option>
-                <option value="ULEI_LIEBHERR_CUTIE">Ulei Cutie Liebherr</option>
-                <option value="ULEI_CUTIE_MANUALA">Ulei Cutie Manuală</option>
-                <option value="ULEI_CUTIE_AUTOMATA">Ulei Cutie Automată</option>
-              </select>
-            </div>
-          </div>
-
-          {/* TABEL CENTRALIZATOR STARE ULEIURI */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
-              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
-                <tr>
-                  <th className="p-3">Utilaj / Vehicul</th>
-                  <th className="p-3">Tip Lubrifiant</th>
-                  <th className="p-3 font-mono">Ultimul Schimb</th>
-                  <th className="p-3 font-mono">Rulaj Curent / Limită</th>
-                  <th className="p-3">Consum Interval</th>
-                  <th className="p-3">Stare Schimb</th>
-                  <th className="p-3 text-right">Acțiuni Operative</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200">
-                {fluideFiltrate.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-sage-500 font-medium">
-                      Nu s-au găsit înregistrări conform filtrelor aplicate.
-                    </td>
-                  </tr>
-                ) : (
-                  fluideFiltrate.map((f: any, idx: number) => {
-                    const limit = f.limitInterval || (f.tipMasurare === 'MTH' ? 250 : 15000);
-                    const pct = Math.min(100, Math.round((f.rulajDeLaUltimulSchimb / limit) * 100));
-
-                    return (
-                      <tr key={idx} className={`hover:bg-morning-50 transition ${f.esteDepasit ? 'bg-roseash-50/60' : ''}`}>
-                        <td className="p-3">
-                          <div className="flex items-center space-x-2">
-                            <span className="p-1.5 rounded-lg bg-morning-200 text-sapphire-800">
-                              <Truck className="w-4 h-4" />
-                            </span>
-                            <div>
-                              <span className="font-black text-sapphire-900 block text-xs">{f.vehiculNumarIntern}</span>
-                              <span className="text-[10px] text-sage-600 block font-medium">
-                                {f.vehiculMarca} {f.vehiculModel} ({f.vehiculInmatriculare})
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2.5 py-1 rounded-lg bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-bold text-[11px]">
-                            {f.tipLichid?.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono text-sage-700 font-semibold">
-                          {f.ultimulSchimbContor} {f.tipMasurare}
-                          {f.ultimulSchimbData && (
-                            <span className="text-[10px] text-sage-500 block">
-                              {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 font-mono">
-                          <span className={`font-bold ${f.esteDepasit ? 'text-terracotta-600' : 'text-slate-800'}`}>
-                            {f.rulajDeLaUltimulSchimb} {f.tipMasurare}
-                          </span>
-                          <span className="text-sage-500 text-[10px] block">/ {limit} {f.tipMasurare}</span>
-                        </td>
-                        <td className="p-3">
-                          <div className="w-28 bg-morning-200 h-2 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all ${
-                                f.esteDepasit ? 'bg-terracotta-500' : f.esteInPragAvertizare ? 'bg-amber-500' : 'bg-sage-500'
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-[10px] font-mono text-sage-600 font-bold mt-0.5 block">{pct}% consumat</span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center space-x-1 w-fit ${
-                            f.esteDepasit ? 'bg-roseash-200 text-terracotta-700' :
-                            f.esteInPragAvertizare ? 'bg-amber-100 text-amber-800' :
-                            'bg-sage-100 text-sage-700'
-                          }`}>
-                            {f.esteDepasit ? (
-                              <>
-                                <AlertTriangle className="w-3 h-3 text-terracotta-600" />
-                                <span>DEPĂȘIT</span>
-                              </>
-                            ) : f.esteInPragAvertizare ? (
-                              <>
-                                <Clock className="w-3 h-3 text-amber-600" />
-                                <span>ÎN PRAG</span>
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="w-3 h-3 text-sage-600" />
-                                <span>ÎN GRAFIC</span>
-                              </>
-                            )}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end space-x-1.5">
-                            <button
-                              onClick={() => handleOpenCompletare(f.vehiculId, f.tipLichid)}
-                              className="px-3 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1"
-                              title="Înregistrează completare rapidă de ulei"
-                            >
-                              <Plus className="w-3 h-3" />
-                              <span>Completare</span>
-                            </button>
-
-                            <a
-                              href={`/comenzi-lucru?vehiculId=${f.vehiculId}`}
-                              className="px-2.5 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-xs transition border border-morning-300"
-                              title="Deschide comandă de lucru pentru revizie completă"
-                            >
-                              Revizie
-                            </a>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* ========================================================================= */}
-      {/* TAB 2: STOCURI & CATEGORII FLUIDE */}
+      {/* TAB 1: STOCURI & CATEGORII FLUIDE */}
       {/* ========================================================================= */}
       {activeTab === 'stocuri' && (
         <div className="space-y-6">

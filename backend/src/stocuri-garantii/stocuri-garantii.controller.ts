@@ -69,7 +69,7 @@ export class StocuriGarantiiController {
   @Patch('subcategorii/:id')
   updateSubcategorie(
     @Param('id') id: string,
-    @Body() body: { nume?: string; descriere?: string; categorieStocId?: string }
+    @Body() body: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string }
   ) {
     return this.stocuriGarantiiService.updateSubcategorie(id, body);
   }
