@@ -240,6 +240,26 @@ export default function ComenziLucruPage() {
     }
   };
 
+  const isTireCategory = (catName: string) => {
+    if (!catName) return false;
+    const c = String(catName).toLowerCase();
+    return c.includes('anvelop') || c.includes('cauciuc') || c.includes('pneu');
+  };
+
+  const isTireItem = (item: any) => {
+    if (!item) return false;
+    const cat = String(item.categorie || '').toLowerCase();
+    const sub = String(item.subcategorie || '').toLowerCase();
+    const cod = String(item.codArticol || '').toUpperCase();
+    const den = String(item.denumire || '').toLowerCase();
+    return (
+      isTireCategory(cat) ||
+      isTireCategory(sub) ||
+      cod.startsWith('ANV') ||
+      /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(den)
+    );
+  };
+
   const handleSelectElemArticolStoc = (articolId: string) => {
     setElemArticolStocId(articolId);
     const item = stocuri.find((s) => s.id === articolId);
@@ -381,10 +401,23 @@ export default function ComenziLucruPage() {
 
     if (elemPilonCost === 'PIESA_STOC' && elemArticolStocId) {
       const itemStoc = stocuri.find((s) => s.id === elemArticolStocId);
+      if (itemStoc && isTireItem(itemStoc)) {
+        alert(
+          '🚫 Montarea anvelopelor NU este permisă din Comanda de Lucru!\n\n' +
+          'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe).'
+        );
+        return;
+      }
       if (itemStoc && Number(elemCantitate) > itemStoc.stocCurent) {
         alert(` Stoc Insuficient!\n\nNu puteți adăuga ${elemCantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
         return;
       }
+    } else if ((elemPilonCost === 'PIESA_DIRECTA' || elemPilonCost === 'PIESA_DEZMEMBRATA') && /anvelop|cauciuc|pneu\b|pneuri/i.test(elemDescriere)) {
+      alert(
+        '🚫 Montarea anvelopelor NU este permisă din Comanda de Lucru!\n\n' +
+        'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe).'
+      );
+      return;
     }
 
     try {
@@ -622,6 +655,18 @@ export default function ComenziLucruPage() {
         alert('Vă rugăm să alegeți un articol din stoc din lista de căutare!');
         return;
       }
+      if (isTireItem(quickSelectedArticol)) {
+        alert(
+          '🚫 MONTAREA ANVELOPELOR NU ESTE PERMISĂ DIN COMANDA DE LUCRU!\n\n' +
+          'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe)!\n\n' +
+          'Montarea dedicată din Harta Axe asigură:\n' +
+          '• Poziționarea corectă pe axe (ex: Ax 1 Direcție, Ax 2 Tracțiune)\n' +
+          '• Înregistrarea contorului KM/mTH la montare\n' +
+          '• Măsurarea adâncimii profilului și calculul uzurii\n' +
+          '• Istoricul complet de permutări și trasabilitate.'
+        );
+        return;
+      }
       if (Number(quickCantitate) <= 0) {
         alert('Cantitatea trebuie să fie de minim 1!');
         return;
@@ -648,6 +693,13 @@ export default function ComenziLucruPage() {
         alert('Vă rugăm să introduceți denumirea piesei din dezmembrări!');
         return;
       }
+      if (/anvelop|cauciuc|pneu\b|pneuri|r22\.5|r17\.5|315\/80|385\/65/i.test(quickDescriere)) {
+        alert(
+          '🚫 MONTAREA ANVELOPELOR NU ESTE PERMISĂ DIN COMANDA DE LUCRU!\n\n' +
+          'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe)!'
+        );
+        return;
+      }
       setEditElemente([
         ...editElemente,
         {
@@ -663,6 +715,13 @@ export default function ComenziLucruPage() {
     } else {
       if (!quickDescriere.trim()) {
         alert('Vă rugăm să introduceți denumirea piesei sau a operațiunii de manoperă!');
+        return;
+      }
+      if (quickPilonCost === 'PIESA_DIRECTA' && /anvelop|cauciuc|pneu\b|pneuri|r22\.5|r17\.5|315\/80|385\/65/i.test(quickDescriere)) {
+        alert(
+          '🚫 MONTAREA ANVELOPELOR NU ESTE PERMISĂ DIN COMANDA DE LUCRU!\n\n' +
+          'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe)!'
+        );
         return;
       }
       setEditElemente([
@@ -848,14 +907,19 @@ export default function ComenziLucruPage() {
   const comenziInLucruCount = comenzi.filter((c) => c.stare === 'IN_LUCRU' || c.stare === 'DEVALIDAT').length;
   const comenziFinalizateCount = comenzi.filter((c) => c.stare === 'FINALIZAT').length;
 
-  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor
+  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor (FĂRĂ ANVELOPE - anvelopele se montează doar din Anvelope/Axe)
   const availableStockCategories = [
     'TOATE',
-    ...Array.from(new Set(stocuri.map((s: any) => s.categorie).filter(Boolean))),
+    ...Array.from(new Set(stocuri.map((s: any) => s.categorie).filter(Boolean))).filter(
+      (cat: any) => !isTireCategory(cat)
+    ),
   ];
 
   const filteredStockList = stocuri
     .filter((item: any) => {
+      // Excludem complet anvelopele din lista pieselor de schimb în atelier
+      if (isTireItem(item)) return false;
+
       if (quickSelectedCategory !== 'TOATE') {
         if ((item.categorie || '').toLowerCase() !== quickSelectedCategory.toLowerCase()) {
           return false;
@@ -1474,6 +1538,25 @@ export default function ComenziLucruPage() {
                 <span className="text-[11px] text-sage-600 font-medium">
                   Selectați sursa, tastați denumirea și apăsați Enter sau „+ Adaugă”
                 </span>
+              </div>
+
+              {/* Notificare Anvelope: Montarea se realizează exclusiv din Anvelope/Axe */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] bg-amber-50/90 border border-amber-200/90 rounded-xl px-3 py-1.5 text-amber-950 gap-1.5">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-sm">🛞</span>
+                  <span>
+                    <strong>Gestiune Anvelope:</strong> Anvelopele <u>nu</u> se adaugă pe comanda de lucru, ci se montează exclusiv din meniul <strong>Anvelope / Axe</strong> (pe poziție exactă de axă, contor și adâncime profil).
+                  </span>
+                </div>
+                <a
+                  href="/anvelope"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-amber-800 hover:text-amber-950 hover:underline flex items-center space-x-1 whitespace-nowrap self-end sm:self-auto"
+                >
+                  <span>Harta Axe Anvelope</span>
+                  <span>↗</span>
+                </a>
               </div>
 
               {/* TABS SURSĂ / PILON COST */}
@@ -2271,7 +2354,7 @@ export default function ComenziLucruPage() {
                     onChange={(e) => handleSelectElemArticolStoc(e.target.value)}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
-                    {stocuri.map((st) => (
+                    {stocuri.filter((st) => !isTireItem(st)).map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON)
                       </option>

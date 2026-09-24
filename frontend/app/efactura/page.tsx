@@ -1057,6 +1057,17 @@ function EFacturaContent() {
   const handleConfirmAlocareDirecta = async () => {
     if (!importingItem) return;
 
+    const isItemTire =
+      /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
+      /anvelop|cauciuc|pneu/i.test(targetCategorie || '');
+    if (isItemTire) {
+      alert(
+        '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
+        'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul: Anvelope & Siguranță (Harta Axe).'
+      );
+      return;
+    }
+
     if (modAlocareMasina === 'EXISTENTA' && !selectedComandaLucruId) {
       alert('Vă rugăm să selectați o comandă de lucru deschisă din atelier.');
       return;
@@ -2687,6 +2698,16 @@ function EFacturaContent() {
                   <button
                     type="button"
                     onClick={() => {
+                      const isItemTire =
+                        /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
+                        /anvelop|cauciuc|pneu/i.test(targetCategorie || '');
+                      if (isItemTire) {
+                        alert(
+                          '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
+                          'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
+                        );
+                        return;
+                      }
                       setTipDestinatieImport('DIRECT_MASINA');
                       if (comenziDeschiseFlota.length === 0) fetchComenziDeschise();
                     }}
@@ -2743,6 +2764,16 @@ function EFacturaContent() {
                       value={targetDepozitId}
                       onChange={(e) => {
                         if (e.target.value === 'DIRECT_PE_MASINA') {
+                          const isItemTire =
+                            /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
+                            /anvelop|cauciuc|pneu/i.test(targetCategorie || '');
+                          if (isItemTire) {
+                            alert(
+                              '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
+                              'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
+                            );
+                            return;
+                          }
                           setTipDestinatieImport('DIRECT_MASINA');
                           if (comenziDeschiseFlota.length === 0) fetchComenziDeschise();
                         } else {

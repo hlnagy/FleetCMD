@@ -354,6 +354,31 @@ export class MentenantaService {
   // COMENZI DE LUCRU CU MULTIPLE ELEMENTE & CICLU DE VIAȚĂ
   // ==========================================
 
+  private isTireItemOrDescription(articol: any, descriere?: string): boolean {
+    if (articol) {
+      const cat = (articol.categorie || '').toLowerCase();
+      const sub = (articol.subcategorie || '').toLowerCase();
+      const cod = (articol.codArticol || '').toUpperCase();
+      const den = (articol.denumire || '').toLowerCase();
+      if (
+        cat.includes('anvelop') ||
+        cat.includes('cauciuc') ||
+        cat.includes('pneu') ||
+        sub.includes('anvelop') ||
+        cod.startsWith('ANV') ||
+        /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(den)
+      ) {
+        return true;
+      }
+    }
+    if (descriere) {
+      if (/anvelop|cauciuc|pneu\b|pneuri/i.test(descriere)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async createComandaLucru(data: {
     vehiculId: string;
     mecanicResponsabil: string;
@@ -421,17 +446,28 @@ export class MentenantaService {
 
     const elementeData = data.elemente || [];
 
-    // ENFORCE STRICT STOCK LIMIT VALIDATION
+    // ENFORCE STRICT STOCK LIMIT VALIDATION & EXCLUDE TIRES (Tires must be mounted only via Anvelope / Axe)
     for (const el of elementeData) {
       if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
         const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
         if (articol) {
+          if (this.isTireItemOrDescription(articol, el.descriere)) {
+            throw new BadRequestException(
+              'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+            );
+          }
           const requestedQty = Number(el.cantitate || 1);
           if (requestedQty > articol.stocCurent) {
             throw new BadRequestException(
               `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
             );
           }
+        }
+      } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
+        if (this.isTireItemOrDescription(null, el.descriere)) {
+          throw new BadRequestException(
+            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+          );
         }
       }
     }
@@ -481,16 +517,27 @@ export class MentenantaService {
     if (!comanda) throw new NotFoundException('Comanda nu există.');
     if (comanda.stare !== 'IN_LUCRU') throw new BadRequestException('Nu se pot adăuga piese pe o comandă finalizată sau anulată.');
 
-    // ENFORCE STRICT STOCK LIMIT VALIDATION FOR NEW ITEM
+    // ENFORCE STRICT STOCK LIMIT VALIDATION & EXCLUDE TIRES (Tires must be mounted only via Anvelope / Axe)
     if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
       const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
       if (articol) {
+        if (this.isTireItemOrDescription(articol, el.descriere)) {
+          throw new BadRequestException(
+            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+          );
+        }
         const requestedQty = Number(el.cantitate || 1);
         if (requestedQty > articol.stocCurent) {
           throw new BadRequestException(
             `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
           );
         }
+      }
+    } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
+      if (this.isTireItemOrDescription(null, el.descriere)) {
+        throw new BadRequestException(
+          'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+        );
       }
     }
 
@@ -744,12 +791,23 @@ export class MentenantaService {
         if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
           const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
           if (articol) {
+            if (this.isTireItemOrDescription(articol, el.descriere)) {
+              throw new BadRequestException(
+                'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+              );
+            }
             const requestedQty = Number(el.cantitate || 1);
             if (requestedQty > articol.stocCurent) {
               throw new BadRequestException(
                 `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
               );
             }
+          }
+        } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
+          if (this.isTireItemOrDescription(null, el.descriere)) {
+            throw new BadRequestException(
+              'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
+            );
           }
         }
       }

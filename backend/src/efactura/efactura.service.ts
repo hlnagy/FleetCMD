@@ -1568,6 +1568,13 @@ export class EFacturaService {
     if (!item) throw new NotFoundException('Articolul din factură nu a fost găsit.');
     if (item.stare === 'IMPORTAT') throw new BadRequestException('Acest articol a fost deja importat.');
 
+    const isTire = /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(item.descrierePiesa || '');
+    if (isTire) {
+      throw new BadRequestException(
+        'Anvelopele nu pot fi montate direct pe Comandă de Lucru! Recepționați anvelopele în depozit / stoc, iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția de axă corespunzătoare.'
+      );
+    }
+
     const factura = item.factura;
     const cantitateMontata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : item.cantitate);
     const pretUnitarPiesa = Number(data.pretUnitar !== undefined && data.pretUnitar >= 0 ? data.pretUnitar : item.pretUnitar);
