@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
-  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles
+  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { showConfirm } from '@/lib/swal';
@@ -127,27 +127,24 @@ const FLUIDE_CATEGORII_CONFIG = [
   },
 ];
 
-const getCategoryIcon = (catName: string) => {
+const CategoryIcon = ({ catName, className = "w-4 h-4" }: { catName?: string; className?: string }) => {
   const c = (catName || '').toUpperCase();
   if (c.includes('EXCAVATOR') || c.includes('INCARCATOR') || c.includes('BULLDOZER') || c.includes('AUTOVALT') || c.includes('UTILAJ')) {
-    return '🚜';
+    return <Tractor className={className} />;
   }
-  if (c.includes('TRACTOR') || c.includes('BASCULANTA') || c.includes('CAMION')) {
-    return '🚛';
+  if (c.includes('TRACTOR') || c.includes('BASCULANTA') || c.includes('CAMION') || c.includes('AUTOUTILITARA')) {
+    return <Truck className={className} />;
   }
   if (c.includes('SEMIREMORCA') || c.includes('REMORCA')) {
-    return '🛞';
-  }
-  if (c.includes('AUTOUTILITARA')) {
-    return '🚐';
+    return <CircleDot className={className} />;
   }
   if (c.includes('AUTOTURISM')) {
-    return '🚗';
+    return <Car className={className} />;
   }
   if (c.includes('ATV')) {
-    return '🏍️';
+    return <Bike className={className} />;
   }
-  return '⚙️';
+  return <Cog className={className} />;
 };
 
 const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
@@ -1715,24 +1712,26 @@ export default function FluidePage() {
                   <button
                     type="button"
                     onClick={() => setSelectedGroupFilter('MTH')}
-                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                       selectedGroupFilter === 'MTH'
                         ? 'bg-amber-600 text-white shadow-2xs font-extrabold'
                         : 'bg-morning-100 text-slate-700 hover:bg-morning-200 font-semibold'
                     }`}
                   >
-                    <span>🚜 Utilaje Șantier (mTH)</span>
+                    <Tractor className="w-3.5 h-3.5" />
+                    <span>Utilaje Șantier (mTH)</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedGroupFilter('KM')}
-                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1 cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg transition flex items-center space-x-1.5 cursor-pointer ${
                       selectedGroupFilter === 'KM'
                         ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
                         : 'bg-morning-100 text-slate-700 hover:bg-morning-200 font-semibold'
                     }`}
                   >
-                    <span>🚚 Transport Rutier (KM)</span>
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>Transport Rutier (KM)</span>
                   </button>
                 </div>
 
@@ -1754,7 +1753,6 @@ export default function FluidePage() {
                   .map((cat: any) => {
                     const isSelected = selectedCatObj?.nume === cat.nume;
                     const isKm = (cat.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
-                    const icon = getCategoryIcon(cat.nume);
                     const numarNorme = (cat.norme || []).length;
 
                     return (
@@ -1772,8 +1770,8 @@ export default function FluidePage() {
                         }`}
                       >
                         <div className="flex items-start justify-between">
-                          <span className="text-xl" role="img" aria-label={cat.nume}>
-                            {icon}
+                          <span className={`p-1.5 rounded-lg flex items-center justify-center ${isSelected ? 'bg-white/10 text-white' : 'bg-morning-200/80 text-sapphire-800'}`}>
+                            <CategoryIcon catName={cat.nume} className="w-4 h-4" />
                           </span>
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-wider ${
@@ -1894,7 +1892,9 @@ export default function FluidePage() {
                             <tr key={norma.id} className="hover:bg-morning-50 transition">
                               <td className="p-3 font-bold text-sapphire-900">
                                 <div className="flex items-center space-x-2">
-                                  <span>{getCategoryIcon(norma.categorieNume)}</span>
+                                  <span className="p-1 rounded-md bg-morning-100 text-sapphire-700 flex items-center justify-center">
+                                    <CategoryIcon catName={norma.categorieNume} className="w-3.5 h-3.5" />
+                                  </span>
                                   <span>{norma.categorieNume?.replace(/_/g, ' ')}</span>
                                 </div>
                               </td>
@@ -1980,8 +1980,8 @@ export default function FluidePage() {
                 {/* BANNER SPOTLIGHT CATEGORIE */}
                 <div className="p-4 rounded-2xl bg-white border border-morning-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="flex items-center space-x-3">
-                    <span className="text-3xl p-2 rounded-xl bg-morning-100">
-                      {getCategoryIcon(selectedCatObj.nume)}
+                    <span className="p-3 rounded-xl bg-sapphire-50 border border-sapphire-100 text-sapphire-700 flex items-center justify-center shadow-2xs">
+                      <CategoryIcon catName={selectedCatObj.nume} className="w-6 h-6" />
                     </span>
                     <div>
                       <div className="flex items-center space-x-2">
@@ -2328,7 +2328,7 @@ export default function FluidePage() {
                   >
                     {articoleStocFiltrate.length === 0 ? (
                       <option value="">
-                        {`⚠️ Niciun articol disponibil în stoc pentru această categorie`}
+                        Niciun articol disponibil în stoc pentru această categorie
                       </option>
                     ) : (
                       articoleStocFiltrate.map((s: any) => (
@@ -2881,8 +2881,15 @@ export default function FluidePage() {
                         {isKm ? 'Rutier • KM' : 'Utilaj Șantier • mTH'}
                       </span>
                     </div>
-                    <p className="text-xs text-sage-600 font-medium mt-0.5">
-                      {getCategoryIcon(modalNormaCategorie)} Categorie: <strong className="text-sapphire-900">{modalNormaCategorie?.replace(/_/g, ' ')}</strong> ({cat?.totalVehicule || 0} utilaje) • Fluid: <strong className="text-sapphire-900">{fluidLabel}</strong>
+                    <p className="text-xs text-sage-600 font-medium mt-0.5 flex items-center flex-wrap gap-1.5">
+                      <span className="inline-flex items-center space-x-1">
+                        <CategoryIcon catName={modalNormaCategorie} className="w-3.5 h-3.5 text-sapphire-600" />
+                        <span>Categorie: <strong className="text-sapphire-900">{modalNormaCategorie?.replace(/_/g, ' ')}</strong></span>
+                      </span>
+                      <span>•</span>
+                      <span>({cat?.totalVehicule || 0} utilaje)</span>
+                      <span>•</span>
+                      <span>Fluid: <strong className="text-sapphire-900">{fluidLabel}</strong></span>
                     </p>
                   </div>
                 </div>
