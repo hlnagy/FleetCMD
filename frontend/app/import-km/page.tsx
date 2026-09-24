@@ -1141,19 +1141,19 @@ function ImportKmPompaContent() {
   const approvedCount = previewRows.filter((r) => r.aprobat && r.vehiculId && r.valoareKmPropusa > 0).length;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8 animate-fadeIn">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 animate-fadeIn">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/60 pb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-morning-200 dark:border-slate-700/60 pb-5">
         <div>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-400 shadow-sm">
+            <div className="p-3 bg-sapphire-100 dark:bg-sapphire-950/40 border border-sapphire-200 dark:border-sapphire-800 rounded-2xl text-sapphire-600 dark:text-sapphire-400 shadow-xs">
               <Gauge className="w-7 h-7" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-black text-sapphire-950 dark:text-white tracking-tight flex items-center gap-2">
                 Actualizare KM din CSV Pompă Combustibil
               </h1>
-              <p className="text-slate-400 text-sm mt-0.5">
+              <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mt-0.5 font-medium">
                 Procesare livrări pompă, selecție după categorii (KM vs. MTH), deduplicare zilnică și reconciliere anomalii.
               </p>
             </div>
@@ -1165,18 +1165,18 @@ function ImportKmPompaContent() {
             <button
               onClick={() => processCsvContent(csvContent)}
               disabled={loadingPreview}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm border border-slate-600 transition"
+              className="flex items-center gap-2 px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-morning-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold border border-morning-300 dark:border-slate-600 transition shadow-2xs cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${loadingPreview ? 'animate-spin' : ''}`} />
-              Reanalizează
+              <RefreshCw className={`w-4 h-4 ${loadingPreview ? 'animate-spin text-sapphire-600' : ''}`} />
+              <span>Reanalizează</span>
             </button>
             <button
               onClick={handleResetAll}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-rose-900/30 text-slate-300 hover:text-rose-300 rounded-lg text-sm border border-slate-600 hover:border-rose-500/40 transition"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-400 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-900/50 transition shadow-2xs cursor-pointer"
               title="Curăță selecția și revino la starea inițială"
             >
               <X className="w-4 h-4" />
-              Curăță Selecția
+              <span>Curăță Selecția</span>
             </button>
           </div>
         )}
@@ -1184,13 +1184,13 @@ function ImportKmPompaContent() {
 
       {/* MESAJ EROARE */}
       {errorMessage && (
-        <div className="p-4 bg-rose-950/40 border border-rose-500/50 rounded-xl flex items-start gap-3 animate-fadeIn">
-          <XCircle className="w-5 h-5 text-rose-400 mt-0.5 shrink-0" />
-          <div className="flex-1 text-xs text-rose-300">
-            <strong className="block font-semibold mb-0.5">Atenție:</strong>
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-500/50 rounded-2xl flex items-start gap-3 animate-fadeIn shadow-xs">
+          <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+          <div className="flex-1 text-xs text-rose-900 dark:text-rose-300">
+            <strong className="block font-bold mb-0.5">Atenție:</strong>
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-rose-200 text-xs">
+          <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-800 text-xs font-bold cursor-pointer">
             ✕
           </button>
         </div>
@@ -1198,19 +1198,19 @@ function ImportKmPompaContent() {
 
       {/* REZULTAT SALVARE REUȘITĂ */}
       {applyResult && (
-        <div className="p-4 bg-emerald-950/40 border border-emerald-500/50 rounded-xl flex items-start gap-3 animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/50 rounded-2xl flex items-start gap-3 animate-fadeIn shadow-xs">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
           <div className="flex-1">
-            <h4 className="text-emerald-300 font-semibold text-sm">
+            <h4 className="text-emerald-950 dark:text-emerald-300 font-bold text-sm">
               {applyResult.mesaj || 'Kilometrajul a fost actualizat cu succes în baza de date!'}
             </h4>
-            <p className="text-emerald-400/80 text-xs mt-1">
+            <p className="text-emerald-800 dark:text-emerald-400/90 text-xs mt-1 font-medium">
               Au fost actualizate {applyResult.numarActualizate || 0} vehicule. Dacă au existat capete tractor cuplate cu semiremorci active, rulajul s-a propagat automat.
             </p>
           </div>
           <button
             onClick={() => setApplyResult(null)}
-            className="text-emerald-400 hover:text-emerald-200 text-xs"
+            className="text-emerald-700 hover:text-emerald-950 text-xs font-bold cursor-pointer"
           >
             ✕ Închide
           </button>
@@ -1220,35 +1220,39 @@ function ImportKmPompaContent() {
       {/* PAS 1 & 2: UPLOAD / PASTE & CONFIGURARE CATEGORII */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ZONA DE INTRODUCERE CSV (Upload fișier sau Lipire directă) */}
-        <div className="lg:col-span-1 bg-slate-800/60 border border-slate-700/70 rounded-2xl p-5 flex flex-col justify-between backdrop-blur-sm">
+        <div className="lg:col-span-1 pleasant-card bg-white dark:bg-slate-800 border border-morning-200 dark:border-slate-700 rounded-2xl p-5 sm:p-6 flex flex-col justify-between shadow-sm">
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-white font-semibold">
-                <UploadCloud className="w-5 h-5 text-blue-400" />
+            <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center gap-2 text-sapphire-950 dark:text-white font-extrabold text-sm sm:text-base">
+                <UploadCloud className="w-5 h-5 text-sapphire-600 dark:text-sapphire-400" />
                 <span>1. Date Livrări Pompă</span>
               </div>
 
               {/* TABS UPLOAD VS PASTE */}
-              <div className="flex bg-slate-900/60 p-0.5 rounded-lg border border-slate-700 text-[11px]">
+              <div className="flex bg-morning-100 dark:bg-slate-900 p-0.5 rounded-xl border border-morning-200 dark:border-slate-700 text-xs">
                 <button
                   type="button"
                   onClick={() => setInputMode('upload')}
-                  className={`px-2 py-1 rounded transition flex items-center gap-1 ${
-                    inputMode === 'upload' ? 'bg-blue-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                    inputMode === 'upload'
+                      ? 'bg-sapphire-600 text-white font-bold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-sapphire-900 font-medium'
                   }`}
                 >
-                  <FileText className="w-3 h-3" />
-                  Fișier
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Fișier</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setInputMode('paste')}
-                  className={`px-2 py-1 rounded transition flex items-center gap-1 ${
-                    inputMode === 'paste' ? 'bg-blue-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  className={`px-2.5 py-1 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                    inputMode === 'paste'
+                      ? 'bg-sapphire-600 text-white font-bold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-sapphire-900 font-medium'
                   }`}
                 >
-                  <Type className="w-3 h-3" />
-                  Lipire text
+                  <Type className="w-3.5 h-3.5" />
+                  <span>Lipire text</span>
                 </button>
               </div>
             </div>
@@ -1257,10 +1261,10 @@ function ImportKmPompaContent() {
               <div
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+                className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
                   fileName && fileName !== 'Text lipit direct (Pompă)'
-                    ? 'border-emerald-500/50 bg-emerald-950/20'
-                    : 'border-slate-600 hover:border-blue-500 bg-slate-900/40'
+                    ? 'border-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
+                    : 'border-morning-300 dark:border-slate-600 hover:border-sapphire-500 bg-morning-50/60 dark:bg-slate-900/40'
                 }`}
               >
                 <input
@@ -1274,48 +1278,50 @@ function ImportKmPompaContent() {
                 <label htmlFor="csvInput" className="cursor-pointer block">
                   {loadedFiles.length > 1 ? (
                     <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-2 shadow-sm">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/40 flex items-center justify-center text-emerald-700 dark:text-emerald-400 mb-2 shadow-xs">
                         <Layers className="w-6 h-6" />
                       </div>
-                      <span className="text-sm font-semibold text-white">
+                      <span className="text-sm font-extrabold text-slate-900 dark:text-white">
                         {loadedFiles.length} fișiere CSV încărcate simultan
                       </span>
-                      <span className="text-xs text-slate-400 mt-1">
+                      <span className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
                         {loadedFiles.reduce((acc, f) => acc + f.rowsCount, 0)} rânduri cumulate detectate
                       </span>
-                      <div className="flex flex-wrap gap-1.5 justify-center mt-2.5 max-h-24 overflow-y-auto px-2">
+                      <div className="flex flex-wrap gap-1.5 justify-center mt-3 max-h-24 overflow-y-auto px-2">
                         {loadedFiles.map((f, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center gap-1 text-[10px] bg-slate-800 text-slate-200 border border-slate-700 px-2 py-0.5 rounded-full"
+                            className="inline-flex items-center gap-1 text-[11px] bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-morning-200 dark:border-slate-700 px-2.5 py-0.5 rounded-full font-medium shadow-2xs"
                           >
-                            <FileText className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <FileText className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             <span className="max-w-[130px] truncate">{f.name}</span>
                           </span>
                         ))}
                       </div>
-                      <span className="text-xs text-emerald-400 mt-2.5 hover:underline font-medium">
+                      <span className="text-xs text-sapphire-600 dark:text-sapphire-400 mt-3 hover:underline font-bold">
                         Apasă pentru a alege alte fișiere sau adaugă prin drag &amp; drop
                       </span>
                     </div>
                   ) : fileName && fileName !== 'Text lipit direct (Pompă)' ? (
                     <div className="flex flex-col items-center">
-                      <FileText className="w-10 h-10 text-emerald-400 mb-2" />
-                      <span className="text-sm font-medium text-white break-all">{fileName}</span>
-                      <span className="text-xs text-slate-400 mt-1">
+                      <FileText className="w-10 h-10 text-emerald-600 dark:text-emerald-400 mb-2" />
+                      <span className="text-sm font-bold text-slate-900 dark:text-white break-all">{fileName}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
                         {csvContent.split('\n').filter(Boolean).length} rânduri detectate
                       </span>
-                      <span className="text-xs text-emerald-400 mt-2 hover:underline">
+                      <span className="text-xs text-sapphire-600 dark:text-sapphire-400 mt-2 hover:underline font-bold">
                         Click pentru a schimba fișierul (poți selecta mai multe simultan)
                       </span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center">
-                      <UploadCloud className="w-10 h-10 text-slate-400 mb-2 group-hover:text-blue-400" />
-                      <span className="text-sm font-medium text-slate-200">
+                    <div className="flex flex-col items-center py-2">
+                      <div className="w-12 h-12 rounded-2xl bg-sapphire-50 dark:bg-slate-800 border border-sapphire-200 dark:border-slate-700 flex items-center justify-center text-sapphire-600 dark:text-sapphire-400 mb-3 shadow-xs">
+                        <UploadCloud className="w-6 h-6" />
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-200">
                         Trage fișierele CSV aici sau apasă pentru a alege
                       </span>
-                      <span className="text-xs text-slate-500 mt-1">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
                         Poți selecta simultan oricâte fișiere CSV (ex: 10 zile deodată)
                       </span>
                     </div>
@@ -1329,13 +1335,13 @@ function ImportKmPompaContent() {
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
                   placeholder="Lipește aici conținutul generat de pompă (linii cu SelfService System, Data, Ora, Kilometraj...)"
-                  className="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-morning-50 dark:bg-slate-900 border border-morning-300 dark:border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 resize-none font-medium"
                 />
                 <button
                   type="button"
                   onClick={handlePasteSubmit}
                   disabled={!pasteText.trim()}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-xs font-medium rounded-lg transition"
+                  className="w-full py-2 bg-sapphire-600 hover:bg-sapphire-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs"
                 >
                   Procesează Textul Lipit
                 </button>
@@ -1343,21 +1349,21 @@ function ImportKmPompaContent() {
             )}
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-700/50">
+          <div className="mt-4 pt-3 border-t border-morning-200 dark:border-slate-700">
             <button
               onClick={() => processCsvContent(csvContent)}
               disabled={!csvContent || loadingPreview}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-xl font-medium text-sm transition shadow-md shadow-blue-900/20"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-sapphire-600 hover:bg-sapphire-700 disabled:opacity-40 text-white rounded-xl font-black text-sm transition shadow-md shadow-sapphire-600/20 cursor-pointer"
             >
               {loadingPreview ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Se procesează CSV-ul...
+                  <span>Se procesează CSV-ul...</span>
                 </>
               ) : (
                 <>
                   <Layers className="w-4 h-4" />
-                  Analizează & Reconciliază CSV
+                  <span>Analizează & Reconciliază CSV</span>
                 </>
               )}
             </button>
@@ -1365,15 +1371,15 @@ function ImportKmPompaContent() {
         </div>
 
         {/* SELECTARE CATEGORII VEHICULE (KM vs MTH) */}
-        <div className="lg:col-span-2 bg-slate-800/60 border border-slate-700/70 rounded-2xl p-5 flex flex-col justify-between backdrop-blur-sm">
+        <div className="lg:col-span-2 pleasant-card bg-white dark:bg-slate-800 border border-morning-200 dark:border-slate-700 rounded-2xl p-5 sm:p-6 flex flex-col justify-between shadow-sm">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2 text-white font-semibold">
-                <Filter className="w-5 h-5 text-indigo-400" />
+              <div className="flex items-center gap-2 text-sapphire-950 dark:text-white font-extrabold text-sm sm:text-base">
+                <Filter className="w-5 h-5 text-sapphire-600 dark:text-sapphire-400" />
                 <span>2. Categorii de extras KM (Exclude utilajele cu ore / mTH)</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -1381,7 +1387,7 @@ function ImportKmPompaContent() {
                     setSelectedCategories(roadOnly);
                     if (csvContent) processCsvContent(csvContent, roadOnly);
                   }}
-                  className="text-xs px-2.5 py-1 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg border border-indigo-500/30 transition"
+                  className="text-xs px-3 py-1.5 bg-sapphire-50 dark:bg-sapphire-950/40 text-sapphire-700 dark:text-sapphire-300 hover:bg-sapphire-100 rounded-xl border border-sapphire-200 dark:border-sapphire-800 font-bold transition shadow-2xs cursor-pointer"
                 >
                   Doar Autovehicule KM (Recomandat)
                 </button>
@@ -1391,7 +1397,7 @@ function ImportKmPompaContent() {
                     setSelectedCategories(allCategories);
                     if (csvContent) processCsvContent(csvContent, allCategories);
                   }}
-                  className="text-xs px-2 py-1 bg-slate-700 text-slate-300 hover:bg-slate-600 rounded-lg transition"
+                  className="text-xs px-2.5 py-1.5 bg-morning-100 hover:bg-morning-200 text-slate-700 dark:text-slate-300 rounded-xl font-bold border border-morning-300 dark:border-slate-700 transition cursor-pointer"
                 >
                   Toate
                 </button>
@@ -1401,18 +1407,18 @@ function ImportKmPompaContent() {
                     setSelectedCategories([]);
                     if (csvContent) processCsvContent(csvContent, []);
                   }}
-                  className="text-xs px-2 py-1 bg-slate-700 text-slate-300 hover:bg-slate-600 rounded-lg transition"
+                  className="text-xs px-2.5 py-1.5 bg-morning-100 hover:bg-morning-200 text-slate-700 dark:text-slate-300 rounded-xl font-bold border border-morning-300 dark:border-slate-700 transition cursor-pointer"
                 >
                   Deselectează
                 </button>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 mb-4">
-              Pompa cere indexul la fiecare alimentare. Autovehiculele rutiere (capete tractor, basculante 8x4, camioane, autoutilitare) funcționează pe <strong>Kilometri (KM)</strong>. Doar utilajele de carieră/șantier (excavatoare, buldozere, compactoare) funcționează pe <strong>ore (MTH)</strong>.
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 font-normal leading-relaxed">
+              Pompa cere indexul la fiecare alimentare. Autovehiculele rutiere (capete tractor, basculante 8x4, camioane, autoutilitare) funcționează pe <strong className="text-slate-900 dark:text-white font-bold">Kilometri (KM)</strong>. Doar utilajele de carieră/șantier (excavatoare, buldozere, compactoare) funcționează pe <strong className="text-slate-900 dark:text-white font-bold">ore (MTH)</strong>.
             </p>
 
-            <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto pr-1">
+            <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
               {allCategories.map((rawCat) => {
                 const cat = extractCatName(rawCat);
                 if (!cat) return null;
@@ -1429,18 +1435,20 @@ function ImportKmPompaContent() {
                       setSelectedCategories(nextCats);
                       if (csvContent) processCsvContent(csvContent, nextCats);
                     }}
-                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
+                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 cursor-pointer ${
                       isSelected
-                        ? 'bg-blue-600/30 text-blue-200 border-blue-500/60 shadow-sm'
-                        : 'bg-slate-900/40 text-slate-400 border-slate-700/60 hover:bg-slate-800'
+                        ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-xs'
+                        : 'bg-morning-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-morning-300 dark:border-slate-700 hover:bg-morning-200'
                     }`}
                   >
                     <span
-                      className={`w-2 h-2 rounded-full ${isSelected ? 'bg-blue-400' : 'bg-slate-600'}`}
+                      className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-slate-400'}`}
                     />
                     <span>{cat}</span>
                     {isKmRecommended && (
-                      <span className="text-[10px] text-blue-300 font-mono">KM</span>
+                      <span className={`text-[10px] px-1 rounded font-mono font-bold ${isSelected ? 'bg-white/20 text-white' : 'bg-morning-200 text-slate-600'}`}>
+                        KM
+                      </span>
                     )}
                   </button>
                 );
@@ -1453,11 +1461,11 @@ function ImportKmPompaContent() {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between text-xs text-slate-400">
+          <div className="mt-4 pt-3 border-t border-morning-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-600 dark:text-slate-400 font-medium">
             <span>
-              Categorii active: <strong>{selectedCategories.length}</strong> din {allCategories.length}
+              Categorii active: <strong className="text-slate-900 dark:text-white font-bold">{selectedCategories.length}</strong> din {allCategories.length}
             </span>
-            <span className="text-slate-500">
+            <span className="text-slate-500 dark:text-slate-400 text-[11px]">
               * Pentru categoriile neselectate, vehiculele vor fi marcate ca <em>Ignorate</em>.
             </span>
           </div>
@@ -1467,130 +1475,130 @@ function ImportKmPompaContent() {
       {/* STATISTICI / SUMAR */}
       {statistici && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-fadeIn">
-          <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4">
-            <div className="text-xs text-slate-400 uppercase font-medium tracking-wider">
+          <div className="pleasant-card bg-white dark:bg-slate-800 border border-morning-200 dark:border-slate-700 rounded-2xl p-4 shadow-xs">
+            <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-black tracking-wider">
               Total Vehicule CSV
             </div>
-            <div className="text-2xl font-bold text-white mt-1">
+            <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               {statistici.totalVehiculeGasiteInCsv || 0}
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">unități distincte găsite</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">unități distincte găsite</div>
           </div>
 
           <div
             onClick={() => setActiveFilter('valide')}
-            className={`cursor-pointer rounded-xl p-4 border transition ${
+            className={`cursor-pointer rounded-2xl p-4 border transition pleasant-card ${
               activeFilter === 'valide'
-                ? 'bg-emerald-950/40 border-emerald-500'
-                : 'bg-slate-800/40 border-slate-700/60 hover:border-emerald-500/50'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 shadow-sm'
+                : 'bg-white dark:bg-slate-800 border-morning-200 dark:border-slate-700 hover:border-emerald-400 shadow-xs'
             }`}
           >
-            <div className="text-xs text-emerald-400 uppercase font-medium tracking-wider flex items-center justify-between">
+            <div className="text-xs text-emerald-800 dark:text-emerald-400 uppercase font-black tracking-wider flex items-center justify-between">
               <span>Valide pentru Salvare</span>
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div className="text-2xl font-bold text-emerald-300 mt-1">{statistici.valide || 0}</div>
-            <div className="text-[11px] text-emerald-500/80 mt-0.5">gata de import</div>
+            <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">{statistici.valide || 0}</div>
+            <div className="text-[11px] text-emerald-600 dark:text-emerald-400/80 mt-0.5 font-medium">gata de import</div>
           </div>
 
           <div
             onClick={() => setActiveFilter('anomalii')}
-            className={`cursor-pointer rounded-xl p-4 border transition ${
+            className={`cursor-pointer rounded-2xl p-4 border transition pleasant-card ${
               activeFilter === 'anomalii'
-                ? 'bg-amber-950/40 border-amber-500'
-                : 'bg-slate-800/40 border-slate-700/60 hover:border-amber-500/50'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-500 shadow-sm'
+                : 'bg-white dark:bg-slate-800 border-morning-200 dark:border-slate-700 hover:border-amber-400 shadow-xs'
             }`}
           >
-            <div className="text-xs text-amber-400 uppercase font-medium tracking-wider flex items-center justify-between">
+            <div className="text-xs text-amber-900 dark:text-amber-400 uppercase font-black tracking-wider flex items-center justify-between">
               <span>Necesită Atenție</span>
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             </div>
-            <div className="text-2xl font-bold text-amber-300 mt-1">{statistici.cuAnomalii || 0}</div>
-            <div className="text-[11px] text-amber-500/80 mt-0.5">0 km, regresiuni, salturi mari</div>
+            <div className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">{statistici.cuAnomalii || 0}</div>
+            <div className="text-[11px] text-amber-700 dark:text-amber-400/80 mt-0.5 font-medium">0 km, regresiuni, salturi mari</div>
           </div>
 
           <div
             onClick={() => setActiveFilter('ignorate')}
-            className={`cursor-pointer rounded-xl p-4 border transition ${
+            className={`cursor-pointer rounded-2xl p-4 border transition pleasant-card ${
               activeFilter === 'ignorate'
-                ? 'bg-slate-700/40 border-slate-500'
-                : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-500/50'
+                ? 'bg-morning-100 dark:bg-slate-700/40 border-2 border-slate-400 shadow-sm'
+                : 'bg-white dark:bg-slate-800 border-morning-200 dark:border-slate-700 hover:border-slate-400 shadow-xs'
             }`}
           >
-            <div className="text-xs text-slate-400 uppercase font-medium tracking-wider flex items-center justify-between">
+            <div className="text-xs text-slate-600 dark:text-slate-400 uppercase font-black tracking-wider flex items-center justify-between">
               <span>Ignorate / MTH</span>
-              <Clock className="w-4 h-4" />
+              <Clock className="w-4 h-4 text-slate-500" />
             </div>
-            <div className="text-2xl font-bold text-slate-300 mt-1">
+            <div className="text-2xl font-black text-slate-800 dark:text-slate-200 mt-1">
               {statistici.ignorateSauMth || 0}
             </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">din categorii excluse</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">din categorii excluse</div>
           </div>
         </div>
       )}
 
       {/* TABEL RECONCILIERE KM */}
       {previewRows.length > 0 && (
-        <div className="bg-slate-800/60 border border-slate-700/70 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl animate-fadeIn">
+        <div className="pleasant-card bg-white dark:bg-slate-800 border border-morning-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm animate-fadeIn">
           {/* BARĂ FILTRE & CĂUTARE TABEL */}
-          <div className="p-4 border-b border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="p-4 bg-morning-50 dark:bg-slate-900/60 border-b border-morning-200 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-2 overflow-x-auto">
               <button
                 onClick={() => setActiveFilter('toate')}
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
                   activeFilter === 'toate'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-sapphire-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-morning-300 dark:border-slate-700 hover:bg-morning-100 shadow-2xs'
                 }`}
               >
                 Toate ({previewRows.length})
               </button>
               <button
                 onClick={() => setActiveFilter('valide')}
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
                   activeFilter === 'valide'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 shadow-2xs'
                 }`}
               >
                 Valide ({previewRows.filter((r) => r.status === 'VALID').length})
               </button>
               <button
                 onClick={() => setActiveFilter('anomalii')}
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
                   activeFilter === 'anomalii'
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-50 shadow-2xs'
                 }`}
               >
                 Anomalii / Atenție ({statistici?.cuAnomalii || 0})
               </button>
               <button
                 onClick={() => setActiveFilter('ignorate')}
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`text-xs px-3.5 py-1.5 rounded-xl font-bold transition cursor-pointer ${
                   activeFilter === 'ignorate'
-                    ? 'bg-slate-600 text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    ? 'bg-slate-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-morning-300 dark:border-slate-700 hover:bg-morning-100 shadow-2xs'
                 }`}
               >
                 Ignorate ({statistici?.ignorateSauMth || 0})
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Caută număr înmatriculare, cod intern..."
-                className="bg-slate-900/60 border border-slate-700 text-xs text-white rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 w-64"
+                className="bg-white dark:bg-slate-900 border border-morning-300 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 w-64 shadow-2xs"
               />
 
-              <div className="flex items-center gap-1 border-l border-slate-700 pl-3">
+              <div className="flex items-center gap-1.5 border-l border-morning-200 dark:border-slate-700 pl-3">
                 <button
                   type="button"
                   onClick={() => handleSelectAllVisible(true)}
-                  className="text-xs px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition"
+                  className="text-xs px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-morning-100 text-slate-700 dark:text-slate-200 rounded-xl border border-morning-300 dark:border-slate-700 font-bold transition shadow-2xs cursor-pointer"
                   title="Selectează toate rândurile afișate"
                 >
                   Bifează afișate
@@ -1598,7 +1606,7 @@ function ImportKmPompaContent() {
                 <button
                   type="button"
                   onClick={() => handleSelectAllVisible(false)}
-                  className="text-xs px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition"
+                  className="text-xs px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-morning-100 text-slate-700 dark:text-slate-200 rounded-xl border border-morning-300 dark:border-slate-700 font-bold transition shadow-2xs cursor-pointer"
                   title="Deselectează toate rândurile afișate"
                 >
                   Debifează
@@ -1611,7 +1619,7 @@ function ImportKmPompaContent() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-900/70 border-b border-slate-700/70 text-slate-400 font-semibold uppercase tracking-wider">
+                <tr className="bg-morning-100 dark:bg-slate-900 border-b border-morning-200 dark:border-slate-700 text-sapphire-950 dark:text-slate-200 font-black uppercase tracking-wider text-[11px]">
                   <th className="p-3 w-10 text-center">
                     <input
                       type="checkbox"
@@ -1619,7 +1627,7 @@ function ImportKmPompaContent() {
                         filteredRows.length > 0 && filteredRows.every((r) => Boolean(r.aprobat))
                       }
                       onChange={(e) => handleSelectAllVisible(e.target.checked)}
-                      className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer"
+                      className="rounded border-morning-300 text-sapphire-600 focus:ring-0 cursor-pointer w-4 h-4"
                     />
                   </th>
                   <th className="p-3">Vehicul CSV</th>
@@ -1632,7 +1640,7 @@ function ImportKmPompaContent() {
                   <th className="p-3 text-center">Istoric Zi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-700/50">
+              <tbody className="divide-y divide-morning-200 dark:divide-slate-700/50">
                 {filteredRows.map((row) => {
                   const isExpanded = expandedRowId === row.idTemp;
                   const isAnomaly = ['REGRESSIE_KM', 'KM_ZERO', 'DELTA_EXCESIV'].includes(
@@ -1648,12 +1656,12 @@ function ImportKmPompaContent() {
                       <tr
                         className={`transition-colors ${
                           row.aprobat
-                            ? 'bg-blue-950/20 hover:bg-blue-950/30'
+                            ? 'bg-sapphire-50/50 dark:bg-blue-950/20 hover:bg-sapphire-50/80'
                             : isIgnored
-                            ? 'bg-slate-900/40 text-slate-500'
+                            ? 'bg-morning-100/40 dark:bg-slate-900/40 text-slate-500'
                             : isAnomaly
-                            ? 'bg-amber-950/15 hover:bg-amber-950/25'
-                            : 'hover:bg-slate-700/30'
+                            ? 'bg-amber-50/50 dark:bg-amber-950/15 hover:bg-amber-50/80'
+                            : 'bg-white dark:bg-slate-800 hover:bg-morning-50 dark:hover:bg-slate-700/30'
                         }`}
                       >
                         {/* CHECKBOX */}
@@ -1663,17 +1671,17 @@ function ImportKmPompaContent() {
                             checked={Boolean(row.aprobat)}
                             disabled={!row.vehiculId || (row.tipMasurare || '').toUpperCase().includes('MTH')}
                             onChange={() => toggleRowApproval(row.idTemp)}
-                            className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-30"
+                            className="rounded border-morning-300 text-sapphire-600 focus:ring-0 cursor-pointer disabled:opacity-30 w-4 h-4"
                           />
                         </td>
 
                         {/* VEHICUL CSV */}
                         <td className="p-3">
-                          <div className="font-semibold text-white flex items-center gap-1.5">
+                          <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
                             <span>{row.cleanUnit || '-'}</span>
                           </div>
                           {row.unitRaw !== row.cleanUnit && (
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                               raw: &quot;{row.unitRaw}&quot;
                             </span>
                           )}
@@ -1683,39 +1691,39 @@ function ImportKmPompaContent() {
                         <td className="p-3">
                           {row.vehiculId ? (
                             <div>
-                              <div className="font-medium text-slate-200 flex items-center gap-1">
+                              <div className="font-extrabold text-slate-900 dark:text-slate-200 flex items-center gap-1.5">
                                 <span>{row.numarInmatriculare}</span>
                                 {row.numarIntern && (
-                                  <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">
+                                  <span className="text-[10px] bg-sapphire-100 dark:bg-slate-700 text-sapphire-900 dark:text-slate-300 px-1.5 py-0.5 rounded font-black font-mono">
                                     {row.numarIntern}
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-slate-400">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                                 {extractCatName(row.categorieEnum)}
                               </span>
                             </div>
                           ) : (
                             <div className="space-y-1.5">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1">
+                                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1">
                                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                                   Neatribuit
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => handleOpenQuickCreate(row)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition shadow-sm"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-500/20 text-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 rounded-lg transition shadow-2xs cursor-pointer"
                                   title="Adaugă rapid acest vehicul în baza de date cu un singur click"
                                 >
                                   <Plus className="w-3 h-3" />
-                                  + Adaugă în flotă
+                                  <span>+ Adaugă în flotă</span>
                                 </button>
                               </div>
                               <select
                                 onChange={(e) => handleAssignVehicle(row.idTemp, e.target.value)}
                                 defaultValue=""
-                                className="bg-slate-900 border border-amber-500/40 text-[11px] text-slate-200 rounded px-2 py-1 max-w-[190px] focus:outline-none focus:border-blue-500"
+                                className="bg-white dark:bg-slate-900 border border-amber-400 text-[11px] text-slate-800 dark:text-slate-200 rounded-lg px-2 py-1 max-w-[210px] focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 font-medium"
                               >
                                 <option value="" disabled>
                                   sau alege vehicul existent...
@@ -1731,11 +1739,11 @@ function ImportKmPompaContent() {
                         </td>
 
                         {/* DATA & ORA */}
-                        <td className="p-3 text-slate-300">
-                          <div className="font-medium">{row.data}</div>
-                          <div className="text-[10px] text-slate-500">ora {row.ora}</div>
+                        <td className="p-3 text-slate-700 dark:text-slate-300">
+                          <div className="font-bold text-slate-900 dark:text-white">{row.data}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">ora {row.ora}</div>
                           {Array.isArray(row.istoricAlimentariFisier) && row.istoricAlimentariFisier.length > 1 && (
-                            <span className="inline-block mt-0.5 text-[9px] bg-blue-900/50 text-blue-300 px-1 rounded">
+                            <span className="inline-block mt-0.5 text-[9px] bg-sapphire-100 dark:bg-blue-900/50 text-sapphire-800 dark:text-blue-300 px-1.5 py-0.5 rounded font-bold">
                               Ultima din {row.istoricAlimentariFisier.length} alimentări
                             </span>
                           )}
@@ -1746,74 +1754,74 @@ function ImportKmPompaContent() {
                           {row.fereastraIstoric ? (
                             <div className="space-y-0.5 inline-block text-right">
                               {row.fereastraIstoric.esteInIstoricTrecut ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded text-[9px] font-semibold uppercase tracking-wider mb-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 rounded text-[9px] font-bold uppercase tracking-wider mb-1">
                                   📁 Înregistrare în trecut
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[9px] font-semibold uppercase tracking-wider mb-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 rounded text-[9px] font-bold uppercase tracking-wider mb-1">
                                   ⚡ Index Curent
                                 </span>
                               )}
-                              <div className="text-[11px] text-slate-300">
+                              <div className="text-[11px] text-slate-800 dark:text-slate-300">
                                 <span className="text-slate-500 font-normal">Ant: </span>
-                                <span className="font-mono font-semibold">
+                                <span className="font-mono font-bold">
                                   {row.fereastraIstoric.anterior
                                     ? `${formatKm(row.fereastraIstoric.anterior.km)} km (${row.fereastraIstoric.anterior.data})`
                                     : '-'}
                                 </span>
                               </div>
                               {row.fereastraIstoric.posterior && (
-                                <div className="text-[10px] text-slate-400">
+                                <div className="text-[10px] text-slate-600 dark:text-slate-400">
                                   <span className="text-slate-500 font-normal">Post: </span>
-                                  <span className="font-mono">
+                                  <span className="font-mono font-medium">
                                     {`${formatKm(row.fereastraIstoric.posterior.km)} km (${row.fereastraIstoric.posterior.data})`}
                                   </span>
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <span className="font-mono text-slate-300">{curContorStr}</span>
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-300">{curContorStr}</span>
                           )}
                         </td>
 
                         {/* CONTOR NOU CSV EDITABIL */}
                         <td className="p-3 text-right">
-                          <div className="inline-flex items-center gap-1">
+                          <div className="inline-flex items-center gap-1.5">
                             <input
                               type="number"
                               value={row.valoareKmPropusa ?? ''}
                               onChange={(e) => handleEditKm(row.idTemp, e.target.value)}
                               disabled={isIgnored}
-                              className={`w-24 text-right font-mono text-xs px-2 py-1 rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                              className={`w-28 text-right font-mono text-xs px-2.5 py-1.5 rounded-lg border focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 shadow-2xs ${
                                 isAnomaly
-                                  ? 'bg-amber-950/40 border-amber-500/70 text-amber-200'
-                                  : 'bg-slate-900 border-slate-700 text-white'
+                                  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-400 dark:border-amber-500/70 text-amber-950 dark:text-amber-200 font-black'
+                                  : 'bg-white dark:bg-slate-900 border-morning-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold'
                               }`}
                             />
-                            <span className="text-slate-500 text-[10px]">km</span>
+                            <span className="text-slate-500 font-bold text-[10px]">km</span>
                           </div>
                         </td>
 
                         {/* DELTA */}
-                        <td className="p-3 text-right font-mono">
+                        <td className="p-3 text-right font-mono font-black">
                           {row.vehiculId && row.valoareKmPropusa > 0 ? (
                             deltaKmVal >= 0 ? (
                               <span
                                 className={`${
                                   deltaKmVal > 5000
-                                    ? 'text-amber-400 font-bold'
-                                    : 'text-emerald-400 font-medium'
+                                    ? 'text-amber-700 dark:text-amber-400 font-black'
+                                    : 'text-emerald-700 dark:text-emerald-400 font-black'
                                 }`}
                               >
                                 +{formatKm(deltaKmVal)} km
                               </span>
                             ) : (
-                              <span className="text-rose-400 font-bold">
+                              <span className="text-rose-700 dark:text-rose-400 font-black">
                                 {formatKm(deltaKmVal)} km
                               </span>
                             )
                           ) : (
-                            <span className="text-slate-500">-</span>
+                            <span className="text-slate-400">-</span>
                           )}
                         </td>
 
@@ -1822,34 +1830,34 @@ function ImportKmPompaContent() {
                           {row.status === 'VALID' && (
                             row.isRollover ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded text-[11px] font-semibold">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-50 dark:bg-cyan-500/20 text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-500/40 rounded text-[11px] font-bold">
                                   <CheckCircle2 className="w-3 h-3" />
                                   Rollover 1M (+{formatKm(deltaKmVal)} km)
                                 </span>
-                                <p className="text-[10px] text-cyan-400/90 mt-0.5">
+                                <p className="text-[10px] text-cyan-700 dark:text-cyan-400 mt-0.5 font-medium">
                                   Trecere &gt; 1.000.000 km recunoscută
                                 </p>
                               </div>
                             ) : row.fereastraIstoric?.esteInIstoricTrecut ? (
                               <div>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded text-[11px] font-medium">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40 rounded text-[11px] font-bold">
                                   <CheckCircle2 className="w-3 h-3" />
-                                  În fereastra istorică (+{formatKm(deltaKmVal)} km)
+                                  În fereastră istorică (+{formatKm(deltaKmVal)} km)
                                 </span>
                                 {row.anomaliiMesaje && row.anomaliiMesaje[0] && (
-                                  <p className="text-[10px] text-indigo-300/80 mt-0.5 max-w-[240px]">
+                                  <p className="text-[10px] text-indigo-700 dark:text-indigo-300 mt-0.5 max-w-[240px] font-medium">
                                     {row.anomaliiMesaje[0]}
                                   </p>
                                 )}
                               </div>
                             ) : (
                               <div>
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[11px] font-medium">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 rounded text-[11px] font-bold">
                                   <CheckCircle2 className="w-3 h-3" />
                                   Valid (+{formatKm(deltaKmVal)} km)
                                 </span>
                                 {row.anomaliiMesaje && row.anomaliiMesaje[0] && (
-                                  <p className="text-[10px] text-emerald-300/80 mt-0.5 max-w-[240px]">
+                                  <p className="text-[10px] text-emerald-700 dark:text-emerald-300 mt-0.5 max-w-[240px] font-medium">
                                     {row.anomaliiMesaje[0]}
                                   </p>
                                 )}
@@ -1857,17 +1865,17 @@ function ImportKmPompaContent() {
                             )
                           )}
                           {row.status === 'KM_ZERO' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700/60 text-slate-300 border border-slate-600 rounded text-[11px] font-medium">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 rounded text-[11px] font-bold">
                               0 KM raportat
                             </span>
                           )}
                           {row.status === 'REGRESSIE_KM' && (
                             <div>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded text-[11px] font-semibold">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 rounded text-[11px] font-bold">
                                 <XCircle className="w-3 h-3" />
                                 Regresie index
                               </span>
-                              <p className="text-[10px] text-rose-400/90 mt-0.5 max-w-[240px]">
+                              <p className="text-[10px] text-rose-700 dark:text-rose-400 mt-0.5 max-w-[240px] font-medium">
                                 {row.anomaliiMesaje && row.anomaliiMesaje[0]
                                   ? row.anomaliiMesaje[0]
                                   : `Nou (${formatKm(row.valoareKmPropusa)}) în afara limitelor`}
@@ -1876,11 +1884,11 @@ function ImportKmPompaContent() {
                           )}
                           {row.status === 'DELTA_EXCESIV' && (
                             <div>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[11px] font-semibold">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 rounded text-[11px] font-bold">
                                 <AlertTriangle className="w-3 h-3" />
                                 Salt excesiv
                               </span>
-                              <p className="text-[10px] text-amber-400/90 mt-0.5 max-w-[240px]">
+                              <p className="text-[10px] text-amber-800 dark:text-amber-400 mt-0.5 max-w-[240px] font-medium">
                                 {row.anomaliiMesaje && row.anomaliiMesaje[0]
                                   ? row.anomaliiMesaje[0]
                                   : `+${formatKm(deltaKmVal)} km (ritm zilnic nerealist)`}
@@ -1888,16 +1896,16 @@ function ImportKmPompaContent() {
                             </div>
                           )}
                           {row.status === 'VEHICUL_NEGASIȚ' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded text-[11px] font-medium">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-blue-500/20 text-amber-900 dark:text-blue-300 border border-amber-300 dark:border-blue-500/40 rounded text-[11px] font-bold">
                               Vehicul necunoscut
                             </span>
                           )}
                           {row.status === 'CATEGORIE_IGNORATA' && (
                             <div>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[11px]">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-morning-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 border border-morning-300 dark:border-slate-700 rounded text-[11px] font-medium">
                                 {(row.tipMasurare || '').toUpperCase().includes('MTH') ? 'Utilaj MTH (Exclus de la KM)' : 'Categorie nebifată'}
                               </span>
-                              <p className="text-[10px] text-slate-400/80 mt-0.5">
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                                 {(row.tipMasurare || '').toUpperCase().includes('MTH')
                                   ? 'Exclus automat (MTH funcționează exclusiv pe ore GPS)'
                                   : `Bifează ${row.categorieEnum} sus`}
@@ -1912,7 +1920,7 @@ function ImportKmPompaContent() {
                             <button
                               type="button"
                               onClick={() => setExpandedRowId(isExpanded ? null : row.idTemp)}
-                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center justify-center gap-0.5 mx-auto"
+                              className="text-xs text-sapphire-600 dark:text-blue-400 hover:text-sapphire-800 flex items-center justify-center gap-0.5 mx-auto font-bold bg-sapphire-50 dark:bg-slate-700/50 px-2 py-1 rounded-lg border border-sapphire-200 dark:border-slate-600 transition cursor-pointer"
                               title="Vezi toate alimentările din această zi"
                             >
                               <span>{row.istoricAlimentariFisier.length}</span>
@@ -1923,63 +1931,63 @@ function ImportKmPompaContent() {
                               )}
                             </button>
                           ) : (
-                            <span className="text-slate-600">1</span>
+                            <span className="text-slate-400 font-medium">1</span>
                           )}
                         </td>
                       </tr>
 
                       {/* DETALII EXPANDATE (Dacă vehiculul a alimentat de mai multe ori) */}
                       {isExpanded && (
-                        <tr className="bg-slate-900/90 border-b border-slate-700">
-                          <td colSpan={9} className="p-3 pl-12">
-                            <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700 max-w-2xl">
-                              <div className="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                        <tr className="bg-morning-100/60 dark:bg-slate-900/90 border-b border-morning-200 dark:border-slate-700">
+                          <td colSpan={9} className="p-4 pl-12">
+                            <div className="pleasant-card bg-white dark:bg-slate-800 rounded-2xl p-4 border border-morning-200 dark:border-slate-700 max-w-3xl shadow-xs">
+                              <div className="text-xs font-bold text-sapphire-950 dark:text-slate-300 mb-3 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <Clock className="w-4 h-4 text-blue-400" />
+                                  <Clock className="w-4 h-4 text-sapphire-600 dark:text-blue-400" />
                                   <span>
                                     Toate alimentările din fișier pentru {row.cleanUnit} ({row.istoricAlimentariFisier?.length || 0})
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-400 font-normal">
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
                                   Indexurile pot fi editate manual direct în căsuțe
                                 </span>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-2">
                                 {(row.istoricAlimentariFisier || []).map((al, idx) => (
                                   <div
                                     key={idx}
-                                    className={`flex items-center justify-between text-xs px-3 py-1.5 rounded transition ${
+                                    className={`flex items-center justify-between text-xs px-3.5 py-2 rounded-xl transition ${
                                       idx === (row.istoricAlimentariFisier?.length || 1) - 1
-                                        ? 'bg-blue-950/50 text-blue-200 border border-blue-500/30'
-                                        : 'bg-slate-900 text-slate-300 border border-slate-800'
+                                        ? 'bg-sapphire-50 dark:bg-blue-950/50 text-sapphire-950 dark:text-blue-200 border border-sapphire-300 dark:border-blue-500/30'
+                                        : 'bg-morning-50 dark:bg-slate-900 text-slate-800 dark:text-slate-300 border border-morning-200 dark:border-slate-800'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono font-medium">{al.data}</span>
-                                      <span className="font-mono text-slate-400">{al.ora}</span>
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="font-mono font-bold text-slate-900 dark:text-white">{al.data}</span>
+                                      <span className="font-mono text-slate-500">{al.ora}</span>
                                       {idx === (row.istoricAlimentariFisier?.length || 1) - 1 && (
-                                        <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-medium">
+                                        <span className="text-[10px] bg-sapphire-600 text-white px-2 py-0.5 rounded-full font-bold">
                                           recentă
                                         </span>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-3">
                                       {al.litri !== undefined && (
-                                        <span className="text-emerald-400 font-mono font-semibold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30 text-[11px]">
+                                        <span className="text-emerald-800 dark:text-emerald-400 font-mono font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-500/30 text-[11px]">
                                           {al.litri} L
                                         </span>
                                       )}
-                                      <div className="flex items-center gap-1">
+                                      <div className="flex items-center gap-1.5">
                                         <input
                                           type="number"
                                           value={al.km ?? ''}
                                           onChange={(e) => handleEditFuelingKm(row.idTemp, idx, e.target.value)}
-                                          className="w-28 text-right font-mono text-xs px-2 py-1 rounded border bg-slate-950 border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          className="w-28 text-right font-mono text-xs px-2.5 py-1 rounded-lg border bg-white dark:bg-slate-950 border-morning-300 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 shadow-2xs"
                                           title="Editează acest index dacă a fost tastat greșit la pompă"
                                         />
-                                        <span className="text-slate-500 text-[10px]">km</span>
+                                        <span className="text-slate-500 font-bold text-[10px]">km</span>
                                         {al.isRollover && al.rawKm !== undefined && (
-                                          <span className="text-[10px] text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap" title={`Tastat la pompă: ${formatKm(al.rawKm)} km`}>
+                                          <span className="text-[10px] text-cyan-800 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 px-2 py-0.5 rounded-lg border border-cyan-300 dark:border-cyan-500/30 whitespace-nowrap font-bold" title={`Tastat la pompă: ${formatKm(al.rawKm)} km`}>
                                             pompă: {formatKm(al.rawKm)}
                                           </span>
                                         )}
@@ -1988,8 +1996,8 @@ function ImportKmPompaContent() {
                                   </div>
                                 ))}
                               </div>
-                              <p className="text-[11px] text-emerald-400/90 mt-2 flex items-center gap-1.5">
-                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              <p className="text-[11px] text-emerald-800 dark:text-emerald-400/90 mt-3 flex items-start gap-1.5 font-medium leading-relaxed">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                                 <span>
                                   <strong>Toate alimentările și toți indexii de kilometraj</strong> din fișier vor fi salvați individual în istoricul contorului vehiculului (pentru trasabilitate și auditare completă a fiecărui rulaj), iar contorul curent al vehiculului este actualizat la cel mai recent index.
                                 </span>
@@ -2006,26 +2014,26 @@ function ImportKmPompaContent() {
           </div>
 
           {/* BARA INFERIOARĂ DE ACȚIUNE */}
-          <div className="p-4 bg-slate-900/90 border-t border-slate-700/70 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-400">
+          <div className="p-4 bg-morning-50 dark:bg-slate-900/90 border-t border-morning-200 dark:border-slate-700/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
               Selectate pentru actualizare:{' '}
-              <strong className="text-white font-semibold text-sm">{approvedCount}</strong> vehicule
+              <strong className="text-sapphire-950 dark:text-white font-black text-sm">{approvedCount}</strong> vehicule
             </div>
 
             <button
               onClick={handleApplyUpdates}
               disabled={approvedCount === 0 || isApplying}
-              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white rounded-xl font-semibold text-sm shadow-lg shadow-emerald-900/20 transition"
+              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-black text-sm shadow-md shadow-emerald-600/20 transition cursor-pointer"
             >
               {isApplying ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Se salvează în baza de date...
+                  <span>Se salvează în baza de date...</span>
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  Aplică Actualizările de Kilometraj ({approvedCount})
+                  <span>Aplică Actualizările de Kilometraj ({approvedCount})</span>
                 </>
               )}
             </button>
@@ -2035,22 +2043,22 @@ function ImportKmPompaContent() {
 
       {/* MODAL ADĂUGARE RAPIDĂ VEHICUL NOU */}
       {quickCreateModal && quickCreateModal.isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="pleasant-card bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="p-5 border-b border-morning-200 dark:border-slate-800 flex items-center justify-between bg-morning-50/50 dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shadow-2xs">
                   <Car className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Adăugare Vehicul în Flotă</h3>
-                  <p className="text-xs text-slate-400">Preluat automat din fișierul CSV de alimentare</p>
+                  <h3 className="text-base font-black text-sapphire-950 dark:text-white">Adăugare Vehicul în Flotă</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Preluat automat din fișierul CSV de alimentare</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setQuickCreateModal(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-xl hover:bg-morning-100 dark:hover:bg-slate-800 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2058,15 +2066,15 @@ function ImportKmPompaContent() {
 
             <form onSubmit={handleSaveQuickVehicle} className="p-5 space-y-4 text-xs">
               {quickCreateModal.error && (
-                <div className="p-3 bg-rose-950/40 border border-rose-500/50 rounded-xl text-rose-300 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-500/50 rounded-xl text-rose-900 dark:text-rose-300 flex items-center gap-2 font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
                   <span>{quickCreateModal.error}</span>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Număr Înmatriculare *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Număr Înmatriculare *</label>
                   <input
                     type="text"
                     required
@@ -2076,12 +2084,12 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, numarInmatriculare: e.target.value.toUpperCase() } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Număr Intern / Cod *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Număr Intern / Cod *</label>
                   <input
                     type="text"
                     required
@@ -2091,14 +2099,14 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, numarIntern: e.target.value.toUpperCase() } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Categorie Vehicul *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Categorie Vehicul *</label>
                   <select
                     value={quickCreateModal.categorieEnum}
                     onChange={(e) =>
@@ -2106,7 +2114,7 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, categorieEnum: e.target.value } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   >
                     {allCategories.map((c) => (
                       <option key={c} value={c}>
@@ -2120,7 +2128,7 @@ function ImportKmPompaContent() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Tip Măsurare *</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Tip Măsurare *</label>
                   <select
                     value={quickCreateModal.tipMasurare}
                     onChange={(e) =>
@@ -2128,7 +2136,7 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, tipMasurare: e.target.value } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   >
                     <option value="KM">Kilometri (KM)</option>
                     <option value="MTH">Ore Funcționare (MTH)</option>
@@ -2138,7 +2146,7 @@ function ImportKmPompaContent() {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Marcă</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Marcă</label>
                   <input
                     type="text"
                     value={quickCreateModal.marca}
@@ -2147,12 +2155,12 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, marca: e.target.value } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Model</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Model</label>
                   <input
                     type="text"
                     value={quickCreateModal.model}
@@ -2161,12 +2169,12 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, model: e.target.value } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Contor Curent</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Contor Curent</label>
                   <input
                     type="number"
                     value={quickCreateModal.valoareContor}
@@ -2175,33 +2183,33 @@ function ImportKmPompaContent() {
                         prev ? { ...prev, valoareContor: Number(e.target.value) || 0 } : null
                       )
                     }
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                    className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-mono font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+              <div className="pt-3 border-t border-morning-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setQuickCreateModal(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition font-medium"
+                  className="px-4 py-2 bg-morning-100 hover:bg-morning-200 text-slate-700 dark:text-slate-300 rounded-xl transition font-bold cursor-pointer"
                 >
                   Anulează
                 </button>
                 <button
                   type="submit"
                   disabled={quickCreateModal.isSubmitting}
-                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white font-semibold rounded-xl transition shadow-lg shadow-emerald-900/20"
+                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black rounded-xl transition shadow-md shadow-emerald-600/20 cursor-pointer"
                 >
                   {quickCreateModal.isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Se adaugă...
+                      <span>Se adaugă...</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-4 h-4" />
-                      Salvează și Asociază
+                      <span>Salvează și Asociază</span>
                     </>
                   )}
                 </button>
@@ -2212,26 +2220,26 @@ function ImportKmPompaContent() {
       )}
 
       {/* GHID / INFORMARE UTILIZATOR */}
-      <div className="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 text-xs text-slate-400 space-y-2">
-        <div className="font-semibold text-slate-300 flex items-center gap-2">
-          <Info className="w-4 h-4 text-blue-400" />
+      <div className="pleasant-card bg-sapphire-50/70 dark:bg-slate-800 border border-sapphire-200 dark:border-slate-700 rounded-2xl p-5 text-xs text-slate-700 dark:text-slate-300 space-y-3 shadow-xs">
+        <div className="font-extrabold text-sapphire-950 dark:text-sapphire-300 flex items-center gap-2 text-sm">
+          <Info className="w-4 h-4 text-sapphire-600 dark:text-sapphire-400" />
           <span>Cum funcționează reconcilierea kilometrajelor de la pompă:</span>
         </div>
-        <ul className="list-disc list-inside space-y-1 pl-1 text-slate-400">
+        <ul className="list-disc list-inside space-y-1.5 pl-1 text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
           <li>
-            <strong>Înregistrare completă a tuturor alimentărilor și indexurilor de contor:</strong> Dacă un vehicul are mai multe alimentări în fișier (pe aceeași zi sau pe mai multe zile), toate indexurile de kilometraj și toate cantitățile de combustibil vor fi salvate individual în istoricul vehiculului pentru o trasabilitate și auditare completă.
+            <strong className="text-slate-900 dark:text-white font-bold">Înregistrare completă a tuturor alimentărilor și indexurilor de contor:</strong> Dacă un vehicul are mai multe alimentări în fișier (pe aceeași zi sau pe mai multe zile), toate indexurile de kilometraj și toate cantitățile de combustibil vor fi salvate individual în istoricul vehiculului pentru o trasabilitate și auditare completă.
           </li>
           <li>
-            <strong>Separare pe categorii:</strong> Autovehiculele rutiere (capete tractor, autoutilitare) folosesc KM. Utilajele de carieră / construcții (excavatoare, buldozere) folosesc ore de funcționare (MTH) sau tastează 0 la pompă și sunt excluse automat.
+            <strong className="text-slate-900 dark:text-white font-bold">Separare pe categorii:</strong> Autovehiculele rutiere (capete tractor, autoutilitare) folosesc KM. Utilajele de carieră / construcții (excavatoare, buldozere) folosesc ore de funcționare (MTH) sau tastează 0 la pompă și sunt excluse automat.
           </li>
           <li>
-            <strong>Detectare anomalii & editare manuală:</strong> Dacă un șofer a tastat greșit un index la pompă (regresie sau salt nerealist de kilometraj), rândul este semnalizat vizual. Poți corecta manual orice index atât pe linia principală, cât și în tabelul detaliat al fiecărei alimentări.
+            <strong className="text-slate-900 dark:text-white font-bold">Detectare anomalii & editare manuală:</strong> Dacă un șofer a tastat greșit un index la pompă (regresie sau salt nerealist de kilometraj), rândul este semnalizat vizual. Poți corecta manual orice index atât pe linia principală, cât și în tabelul detaliat al fiecărei alimentări.
           </li>
           <li>
-            <strong>Adăugare rapidă de vehicule noi:</strong> Dacă în fișier apare un vehicul necunoscut în parcul auto, îl poți înregistra instantaneu apăsând pe butonul <em>&quot;+ Adaugă în flotă&quot;</em>.
+            <strong className="text-slate-900 dark:text-white font-bold">Adăugare rapidă de vehicule noi:</strong> Dacă în fișier apare un vehicul necunoscut în parcul auto, îl poți înregistra instantaneu apăsând pe butonul <em>&quot;+ Adaugă în flotă&quot;</em>.
           </li>
           <li>
-            <strong>Propagare la semiremorci cuplate:</strong> Când se actualizează kilometrajul unui cap tractor, rulajul parcurs (+km) este transmis automat semiremorcii cuplate activ.
+            <strong className="text-slate-900 dark:text-white font-bold">Propagare la semiremorci cuplate:</strong> Când se actualizează kilometrajul unui cap tractor, rulajul parcurs (+km) este transmis automat semiremorcii cuplate activ.
           </li>
         </ul>
       </div>
