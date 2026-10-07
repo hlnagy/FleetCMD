@@ -1,6 +1,22 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+export function parseOreMth(val: any): number {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  const s = String(val).trim();
+  if (s.includes(':')) {
+    const parts = s.split(':');
+    const h = parseInt(parts[0], 10);
+    const m = parseFloat(parts[1]);
+    if (!isNaN(h) && !isNaN(m)) {
+      return Number((h + m / 60).toFixed(4));
+    }
+  }
+  const n = parseFloat(s.replace(',', '.'));
+  return isNaN(n) ? 0 : Number(n.toFixed(4));
+}
+
 @Injectable()
 export class VehiculeService {
   constructor(private prisma: PrismaService) {}
@@ -1675,7 +1691,7 @@ export class VehiculeService {
     const nrZile = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
     const maxOreTeoretic = nrZile * 24;
 
-    const ore = Number(data.oreFunctionare || 0);
+    const ore = parseOreMth(data.oreFunctionare);
     if (ore < 0) {
       return {
         valid: false,
@@ -1877,7 +1893,7 @@ export class VehiculeService {
         vehiculId: data.vehiculId,
         dataStart: dStart,
         dataEnd: dEnd,
-        oreFunctionare: Number(data.oreFunctionare),
+        oreFunctionare: parseOreMth(data.oreFunctionare),
         indexContorStart: validare.indexContorStartEstimat || 0,
         indexContorEnd: validare.indexContorEndEstimat || 0,
         areGol,
@@ -2152,7 +2168,7 @@ export class VehiculeService {
 
     const updateData: any = {};
     if (data.observatii !== undefined) updateData.observatii = data.observatii;
-    if (data.oreFunctionare !== undefined) updateData.oreFunctionare = Number(data.oreFunctionare);
+    if (data.oreFunctionare !== undefined) updateData.oreFunctionare = parseOreMth(data.oreFunctionare);
     if (data.dataStart) updateData.dataStart = new Date(data.dataStart);
     if (data.dataEnd) updateData.dataEnd = new Date(data.dataEnd);
 

@@ -68,6 +68,59 @@ interface ValidareContinuitate {
   perioadaSuprapusa?: any;
 }
 
+function parseOreFunctionareInput(val: string | number): {
+  numericValue: number;
+  isTimeFormat: boolean;
+  hours: number;
+  minutes: number;
+  displayText?: string;
+  badgeText?: string;
+} {
+  if (val === undefined || val === null) {
+    return { numericValue: 0, isTimeFormat: false, hours: 0, minutes: 0 };
+  }
+  const str = String(val).trim();
+  if (!str) {
+    return { numericValue: 0, isTimeFormat: false, hours: 0, minutes: 0 };
+  }
+
+  // Format GPS orar (HH:mm sau H:m): "09:05", "9:05", "12:05", "120:30"
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    const h = parseInt(parts[0], 10);
+    const m = parseFloat(parts[1]);
+    if (!isNaN(h) && !isNaN(m) && h >= 0 && m >= 0) {
+      // 9 ore și 5 minute = 9 + 5/60 = 9.0833 mTH
+      const decimalVal = Number((h + m / 60).toFixed(4));
+      return {
+        numericValue: decimalVal,
+        isTimeFormat: true,
+        hours: h,
+        minutes: m,
+        displayText: `${h} ore și ${m} min`,
+        badgeText: `${h}h ${m < 10 ? '0' + m : m}m ➔ ${decimalVal.toFixed(2)} mTH (${decimalVal})`,
+      };
+    }
+  }
+
+  // Format zecimal: "145.5", "145,5", "9.0833"
+  const normalized = str.replace(',', '.');
+  const num = parseFloat(normalized);
+  if (!isNaN(num) && num >= 0) {
+    const wholeHours = Math.floor(num);
+    const remainingMins = Math.round((num - wholeHours) * 60);
+    return {
+      numericValue: Number(num.toFixed(4)),
+      isTimeFormat: false,
+      hours: wholeHours,
+      minutes: remainingMins,
+      badgeText: remainingMins > 0 ? `~ ${wholeHours}h ${remainingMins}m` : undefined,
+    };
+  }
+
+  return { numericValue: 0, isTimeFormat: false, hours: 0, minutes: 0 };
+}
+
 export default function OreFunctionarePage() {
   const { user } = useAuth();
 
@@ -218,6 +271,8 @@ export default function OreFunctionarePage() {
       return;
     }
 
+    const parsedOre = parseOreFunctionareInput(oreFunctionare);
+
     const timer = setTimeout(async () => {
       try {
         setValidareLoading(true);
@@ -228,7 +283,7 @@ export default function OreFunctionarePage() {
             vehiculId: selectedVehiculId,
             dataStart,
             dataEnd,
-            oreFunctionare: Number(oreFunctionare || 0),
+            oreFunctionare: parsedOre.numericValue,
           }),
         });
         if (res.ok) {
@@ -259,9 +314,10 @@ export default function OreFunctionarePage() {
       return;
     }
 
-    const oreNum = parseFloat(oreFunctionare);
-    if (isNaN(oreNum) || oreNum < 0) {
-      setNotificare({ tip: 'error', mesaj: 'Vă rugăm să introduceți un număr valid de ore de funcționare!' });
+    const parsed = parseOreFunctionareInput(oreFunctionare);
+    const oreNum = parsed.numericValue;
+    if (oreNum <= 0) {
+      setNotificare({ tip: 'error', mesaj: 'Vă rugăm să introduceți un număr valid de ore de funcționare (ex: 09:05 sau 145.5)!' });
       return;
     }
 
@@ -344,13 +400,20 @@ export default function OreFunctionarePage() {
   // Salvare editare
   const handleSalveazaEditare = async () => {
     if (!perioadaDeEditat) return;
+    const parsed = parseOreFunctionareInput(editOre);
+    const oreNum = parsed.numericValue;
+    if (oreNum <= 0) {
+      setNotificare({ tip: 'error', mesaj: 'Vă rugăm să introduceți un număr valid de ore (ex: 09:05 sau 145.5)!' });
+      return;
+    }
+
     try {
       setEditInProgress(true);
       const res = await fetch(`${API_BASE_URL}/vehicule/ore-functionare/perioada/${perioadaDeEditat.id}`, {
         method: 'PATCH',
         headers: getHeaders(),
         body: JSON.stringify({
-          oreFunctionare: parseFloat(editOre),
+          oreFunctionare: oreNum,
           observatii: editObservatii,
         }),
       });
@@ -744,20 +807,43 @@ export default function OreFunctionarePage() {
 
               {/* ORE FUNCTIONARE */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                  Ore de Funcționare (mTH) *
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                    Ore de Funcționare (mTH) *
+                  </span>
+                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md">
+                    Suportă HH:MM (ex: 09:05) sau zecimal
+                  </span>
                 </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  min="0"
+                  type="text"
                   required
-                  placeholder="ex: 200 sau 145.5"
+                  placeholder="ex: 09:05 sau 145.5"
                   value={oreFunctionare}
                   onChange={(e) => setOreFunctionare(e.target.value)}
                   className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold"
                 />
+                {(() => {
+                  const parsed = parseOreFunctionareInput(oreFunctionare);
+                  if (parsed.isTimeFormat) {
+                    return (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 animate-fade-in">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Format GPS: <strong>{parsed.hours} ore și {parsed.minutes} min</strong> ➔ <strong>{parsed.numericValue} mTH</strong> ({parsed.hours} + {parsed.minutes}/60)</span>
+                      </div>
+                    );
+                  }
+                  if (oreFunctionare.trim() && parsed.badgeText) {
+                    return (
+                      <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                        <Info className="w-3 h-3 text-slate-400" />
+                        <span>Echivalent timp: {parsed.badgeText}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* OBSERVATII */}
@@ -1049,10 +1135,25 @@ export default function OreFunctionarePage() {
 
                         {/* ORE LUCRATE */}
                         <td className="p-3.5 whitespace-nowrap">
-                          <span className="font-black text-indigo-600 dark:text-indigo-400 text-base">
-                            +{p.oreFunctionare}
-                          </span>
-                          <span className="text-xs font-normal text-slate-400 ml-1">ore</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="font-black text-indigo-600 dark:text-indigo-400 text-base">
+                              +{p.oreFunctionare}
+                            </span>
+                            <span className="text-xs font-normal text-slate-400">mTH</span>
+                          </div>
+                          {(() => {
+                            const val = Number(p.oreFunctionare || 0);
+                            const h = Math.floor(val);
+                            const m = Math.round((val - h) * 60);
+                            if (m > 0 || (val > 0 && val < 50)) {
+                              return (
+                                <span className="block text-[11px] font-mono text-slate-500 font-semibold mt-0.5">
+                                  ⏱️ {h}:{m < 10 ? '0' + m : m} ({h}h {m}m)
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </td>
 
                         {/* RITM ZILNIC */}
@@ -1218,17 +1319,40 @@ export default function OreFunctionarePage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Ore Funcționare (mTH) *
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span>Ore Funcționare (mTH) *</span>
+                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded">
+                    HH:MM (ex: 09:05) sau zecimal
+                  </span>
                 </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  min="0"
+                  type="text"
+                  required
+                  placeholder="ex: 09:05 sau 145.5"
                   value={editOre}
                   onChange={(e) => setEditOre(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono font-bold text-sm"
                 />
+                {(() => {
+                  const parsed = parseOreFunctionareInput(editOre);
+                  if (parsed.isTimeFormat) {
+                    return (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800 animate-fade-in">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Format GPS: <strong>{parsed.hours} ore și {parsed.minutes} min</strong> ➔ <strong>{parsed.numericValue} mTH</strong></span>
+                      </div>
+                    );
+                  }
+                  if (editOre.trim() && parsed.badgeText) {
+                    return (
+                      <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                        <Info className="w-3 h-3 text-slate-400" />
+                        <span>Echivalent timp: {parsed.badgeText}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>
