@@ -967,6 +967,52 @@ export class EFacturaService {
     return factura;
   }
 
+  async genereazaFacturaPdf(id: string): Promise<{ buffer: Buffer; filename: string }> {
+    const factura = await this.prisma.eFacturaFactura.findUnique({
+      where: { id },
+    });
+
+    if (!factura) {
+      throw new NotFoundException(`Factura cu ID-ul ${id} nu a fost găsită.`);
+    }
+
+    if (!factura.xmlRawContent) {
+      throw new NotFoundException(`Conținutul XML UBL 2.1 lipsește pentru factura ${factura.numarFactura}.`);
+    }
+
+    const token = await this.refreshOAuthTokenIfNeeded();
+    if (!token) {
+      throw new BadRequestException('Token-ul ANAF OAuth2 lipsește sau nu este configurat. Vă rugăm să verificați configurarea în Setări.');
+    }
+
+    try {
+      const url = 'https://api.anaf.ro/prod/FCTEL/rest/transformare/FACT1/DA';
+      const response = await this.executeWithRetry(() =>
+        axios.post(url, factura.xmlRawContent, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'text/plain',
+          },
+          responseType: 'arraybuffer',
+          timeout: 45000,
+        })
+      );
+
+      const pdfBuffer = Buffer.from(response.data);
+      const cleanNumar = (factura.numarFactura || 'factura').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `Factura_${cleanNumar}_SPV.pdf`;
+
+      return {
+        buffer: pdfBuffer,
+        filename,
+      };
+    } catch (err: any) {
+      const errorDetails = err?.response?.data ? Buffer.from(err.response.data).toString('utf8') : err.message;
+      this.logger.error(`Eroare la transformarea XML în PDF prin API ANAF pentru factura ${factura.numarFactura}: ${errorDetails}`);
+      throw new BadRequestException(`Eroare generare PDF ANAF SPV: ${errorDetails || err.message}`);
+    }
+  }
+
   // IMPORT TÉTELENKÉNT RAKTÁRBA (StocuriGarantiiModule Integration)
   async importaItemInStoc(itemId: string, data: {
     depozitId?: string;

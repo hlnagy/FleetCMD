@@ -2062,12 +2062,12 @@ function EFacturaContent() {
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
-                  onClick={() => openFacturaPdf(selectedFactura, config)}
+                  onClick={() => openFacturaPdf(selectedFactura, config, authFetch)}
                   className="px-3.5 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs flex items-center space-x-1.5 shadow-sm shadow-sapphire-500/20 transition cursor-pointer"
-                  title="Deschide și vizualizează factura fiscală în format PDF / A4 printabil"
+                  title="Deschide și vizualizează factura fiscală în formatul oficial ANAF SPV / PDF printabil"
                 >
                   <FileText className="w-4 h-4 text-white" />
-                  <span>Deschide Factură PDF</span>
+                  <span>Deschide Factură PDF (SPV)</span>
                 </button>
 
                 <button onClick={() => { setSelectedFactura(null); setShowRawXml(false); }} className="text-sage-500 hover:text-sapphire-900">

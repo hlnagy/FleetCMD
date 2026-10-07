@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Headers, ForbiddenException, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { EFacturaService } from './efactura.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -121,6 +122,26 @@ export class EFacturaController {
       throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a accesa facturile fiscale.');
     }
     return this.efacturaService.getFacturaById(id);
+  }
+
+  @Get('facturi/:id/pdf')
+  async descarcaFacturaPdf(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Headers('x-user-role') role?: string,
+  ) {
+    if (role === 'VIEWER') {
+      throw new ForbiddenException('Acces restricționat: Rolul de Vizitator nu are permisiunea de a descărca facturile fiscale.');
+    }
+    const { buffer, filename } = await this.efacturaService.genereazaFacturaPdf(id);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+
+    return res.end(buffer);
   }
 
   // IMPORT TÉTELENKÉNT RAKTÁRBA

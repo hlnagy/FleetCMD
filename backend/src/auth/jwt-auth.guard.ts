@@ -27,14 +27,21 @@ export class JwtAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'];
+    let token: string | undefined;
 
-    if (!authHeader || typeof authHeader !== 'string') {
-      throw new UnauthorizedException('Autentificare necesară. Vă rugăm să transmiteți antetul Authorization cu Bearer token.');
+    if (authHeader && typeof authHeader === 'string') {
+      const [scheme, bearerToken] = authHeader.split(' ');
+      if (scheme === 'Bearer') {
+        token = bearerToken;
+      }
     }
 
-    const [scheme, token] = authHeader.split(' ');
-    if (scheme !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Formatul token-ului este invalid. Formatul așteptat este: Bearer <token>.');
+    if (!token && request.query?.token && typeof request.query.token === 'string') {
+      token = request.query.token;
+    }
+
+    if (!token) {
+      throw new UnauthorizedException('Autentificare necesară. Vă rugăm să transmiteți antetul Authorization cu Bearer token sau parametrul token.');
     }
 
     // 2. Validăm semnătura criptografică HMAC-SHA256 și expirarea
