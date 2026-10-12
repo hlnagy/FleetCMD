@@ -1305,6 +1305,25 @@ function EFacturaContent() {
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [facturi]);
 
+  // DETERMINARE STARE REALĂ FACTURĂ (BAZAT PE ARTICOLE - SINCRONIZARE INSTANTANEE)
+  const getStareFactura = (f: any): 'NEPROCESAT' | 'IMPORTAT_PARȚIAL' | 'IMPORTAT_TOTAL' | 'ELIMINAT' => {
+    if (!f) return 'NEPROCESAT';
+    const articole = f.articole || [];
+    const total = articole.length;
+    if (total === 0) return (f.stare as any) || 'ELIMINAT';
+    const neproc = articole.filter((a: any) => a.stare === 'NEPROCESAT').length;
+    const imp = articole.filter((a: any) => a.stare === 'IMPORTAT').length;
+    const elm = articole.filter((a: any) => a.stare === 'ELIMINAT').length;
+
+    if (neproc === 0) {
+      return imp > 0 ? 'IMPORTAT_TOTAL' : 'ELIMINAT';
+    }
+    if (imp > 0 || elm > 0) {
+      return 'IMPORTAT_PARȚIAL';
+    }
+    return 'NEPROCESAT';
+  };
+
   // FILTERED & SORTED INVOICES
   const facturiFiltrate = facturi
     .filter((f) => {
@@ -1321,27 +1340,18 @@ function EFacturaContent() {
         if (lunaFactura !== lunaFilter) return false;
       }
 
+      const st = getStareFactura(f);
       if (stareFilter === 'TOATE') return true;
       if (stareFilter === 'NEPROCESAT') {
-        return (
-          f.stare === 'NEPROCESAT' ||
-          f.stare === 'IMPORTAT_PARȚIAL' ||
-          (f.articole && f.articole.some((a: any) => a.stare === 'NEPROCESAT'))
-        );
+        return st === 'NEPROCESAT' || st === 'IMPORTAT_PARȚIAL';
       }
       if (stareFilter === 'IMPORTAT_TOTAL') {
-        return (
-          f.stare === 'IMPORTAT_TOTAL' ||
-          (f.articole && f.articole.some((a: any) => a.stare === 'IMPORTAT'))
-        );
+        return st === 'IMPORTAT_TOTAL';
       }
       if (stareFilter === 'ELIMINAT') {
-        return (
-          f.stare === 'ELIMINAT' ||
-          (f.articole && f.articole.some((a: any) => a.stare === 'ELIMINAT'))
-        );
+        return st === 'ELIMINAT';
       }
-      return f.stare === stareFilter;
+      return st === stareFilter;
     })
     .sort((a, b) => {
       let comparison = 0;
@@ -1358,9 +1368,10 @@ function EFacturaContent() {
     });
 
   // MULTI-SELECTION HELPERS FOR INVOICES
-  const eligibleFacturi = facturiFiltrate.filter(
-    (f) => f.stare !== 'IMPORTAT_TOTAL' && f.stare !== 'ELIMINAT'
-  );
+  const eligibleFacturi = facturiFiltrate.filter((f) => {
+    const s = getStareFactura(f);
+    return s !== 'IMPORTAT_TOTAL' && s !== 'ELIMINAT';
+  });
 
   const toggleSelectFactura = (id: string) => {
     setSelectedFacturaIds((prev) =>
@@ -1469,24 +1480,18 @@ function EFacturaContent() {
   };
 
   const totalFacturiValoare = facturi.reduce((acc, f) => acc + (f.valoareTotala || 0), 0);
-  const facturiNeprocesateCount = facturi.filter(
-    (f) =>
-      f.stare === 'NEPROCESAT' ||
-      f.stare === 'IMPORTAT_PARȚIAL' ||
-      (f.articole && f.articole.some((a: any) => a.stare === 'NEPROCESAT'))
-  ).length;
+  const facturiNeprocesateCount = facturi.filter((f) => {
+    const s = getStareFactura(f);
+    return s === 'NEPROCESAT' || s === 'IMPORTAT_PARȚIAL';
+  }).length;
 
-  const facturiImportateCount = facturi.filter(
-    (f) =>
-      f.stare === 'IMPORTAT_TOTAL' ||
-      (f.articole && f.articole.some((a: any) => a.stare === 'IMPORTAT'))
-  ).length;
+  const facturiImportateCount = facturi.filter((f) => {
+    return getStareFactura(f) === 'IMPORTAT_TOTAL';
+  }).length;
 
-  const facturiExcluseCount = facturi.filter(
-    (f) =>
-      f.stare === 'ELIMINAT' ||
-      (f.articole && f.articole.some((a: any) => a.stare === 'ELIMINAT'))
-  ).length;
+  const facturiExcluseCount = facturi.filter((f) => {
+    return getStareFactura(f) === 'ELIMINAT';
+  }).length;
 
   if (authUser?.rol === 'VIEWER') {
     return (
@@ -1961,7 +1966,7 @@ function EFacturaContent() {
                     className={`${index % 2 === 1 ? 'bg-slate-50/90 dark:bg-[#142232]' : 'bg-white dark:bg-[#111D28]'} hover:bg-sapphire-50/80 dark:hover:bg-[#1A2D40] transition ${selectedFacturaIds.includes(f.id) ? '!bg-amber-50/80 dark:!bg-amber-950/40' : ''}`}
                   >
                     <td className="p-3 text-center">
-                      {f.stare !== 'IMPORTAT_TOTAL' && f.stare !== 'ELIMINAT' ? (
+                      {getStareFactura(f) !== 'IMPORTAT_TOTAL' && getStareFactura(f) !== 'ELIMINAT' ? (
                         <input
                           type="checkbox"
                           checked={selectedFacturaIds.includes(f.id)}
@@ -1984,22 +1989,22 @@ function EFacturaContent() {
                       {f.valoareTotala?.toLocaleString('ro-RO')} {f.moneda}
                     </td>
                     <td className="p-3">
-                      {f.stare === 'NEPROCESAT' && (
+                      {getStareFactura(f) === 'NEPROCESAT' && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
                           Neprocesat ({f.articole?.filter((a: any) => a.stare === 'NEPROCESAT').length || 0} articole)
                         </span>
                       )}
-                      {f.stare === 'IMPORTAT_PARȚIAL' && (
+                      {getStareFactura(f) === 'IMPORTAT_PARȚIAL' && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-900 border border-blue-300">
                           Parțial procesat ({f.articole?.filter((a: any) => a.stare === 'NEPROCESAT').length || 0} rămase)
                         </span>
                       )}
-                      {f.stare === 'IMPORTAT_TOTAL' && (
+                      {getStareFactura(f) === 'IMPORTAT_TOTAL' && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300">
                           Importat în Stoc
                         </span>
                       )}
-                      {f.stare === 'ELIMINAT' && (
+                      {getStareFactura(f) === 'ELIMINAT' && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-300">
                           Exclus / Servicii
                         </span>
@@ -2016,7 +2021,7 @@ function EFacturaContent() {
                           <span>Inspectează Linii Factură</span>
                         </button>
 
-                        {f.stare !== 'IMPORTAT_TOTAL' && f.stare !== 'ELIMINAT' && (
+                        {getStareFactura(f) !== 'IMPORTAT_TOTAL' && getStareFactura(f) !== 'ELIMINAT' && (
                           <button
                             onClick={() => handleEliminaToataFactura(f.id, f.numarFactura, f.numeVanzator, f.articole?.length || 0)}
                             className="px-2.5 py-1.5 rounded-lg bg-morning-100 hover:bg-roseash-200 text-slate-700 hover:text-rose-700 font-bold transition border border-morning-200 hover:border-rose-200 text-xs flex items-center space-x-1"
@@ -2291,7 +2296,7 @@ function EFacturaContent() {
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-morning-200">
-              {selectedFactura.stare !== 'IMPORTAT_TOTAL' && selectedFactura.stare !== 'ELIMINAT' ? (
+              {getStareFactura(selectedFactura) !== 'IMPORTAT_TOTAL' && getStareFactura(selectedFactura) !== 'ELIMINAT' ? (
                 <button
                   type="button"
                   onClick={() => handleEliminaToataFactura(selectedFactura.id, selectedFactura.numarFactura, selectedFactura.numeVanzator, selectedFactura.articole?.length || 0)}

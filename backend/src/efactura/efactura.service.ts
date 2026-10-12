@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { XMLParser } from 'fast-xml-parser';
 import * as AdmZip from 'adm-zip';
@@ -156,13 +156,55 @@ export function parseModel(desc: string): string {
 }
 
 @Injectable()
-export class EFacturaService {
+export class EFacturaService implements OnModuleInit {
   private readonly logger = new Logger(EFacturaService.name);
 
   // Rate Limiting: Minimum delay of 500ms between requests (max 2 requests / sec)
   private lastRequestTime = 0;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    // La pornire, verificăm și corectăm automat starea oricăror facturi rămase desincronizate
+    this.recalculeazaToateFacturile().catch((err) => {
+      this.logger.error('Eroare recalculeazaToateFacturile la onModuleInit: ' + err?.message);
+    });
+  }
+
+  async recalculeazaToateFacturile() {
+    try {
+      const facturi = await this.prisma.eFacturaFactura.findMany({
+        include: { articole: true },
+      });
+      let updatedCount = 0;
+      for (const f of facturi) {
+        const total = f.articole.length;
+        if (total === 0) continue;
+        const imp = f.articole.filter((a) => a.stare === 'IMPORTAT').length;
+        const elm = f.articole.filter((a) => a.stare === 'ELIMINAT').length;
+        let stareCorecta = f.stare;
+        if (imp + elm === total) {
+          stareCorecta = imp > 0 ? 'IMPORTAT_TOTAL' : 'ELIMINAT';
+        } else if (imp > 0 || elm > 0) {
+          stareCorecta = 'IMPORTAT_PARȚIAL';
+        } else {
+          stareCorecta = 'NEPROCESAT';
+        }
+        if (stareCorecta !== f.stare) {
+          await this.prisma.eFacturaFactura.update({
+            where: { id: f.id },
+            data: { stare: stareCorecta },
+          });
+          updatedCount++;
+        }
+      }
+      if (updatedCount > 0) {
+        this.logger.log(`Recalculare completă facturi: ${updatedCount} facturi actualizate.`);
+      }
+    } catch (e: any) {
+      this.logger.error('Eroare recalculeazaToateFacturile: ' + e?.message);
+    }
+  }
 
   // -------------------------------------------------------------------------
   // CONFIG & OAUTH2 TOKEN MANAGEMENT
@@ -1295,6 +1337,9 @@ export class EFacturaService {
       ? `Articolul "${item.descrierePiesa}" a fost recepționat cu succes în stoc: ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM} (despachetat din ${item.cantitate} ${item.unitateMasura || 'buc'})!`
       : `Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
 
+    // 7. Recalculare imediată a stării facturii mamă (dacă toate articolele sunt procesate, se marchează automat IMPORTAT_TOTAL / ELIMINAT)
+    await this.recalculeazaStareFactura(item.facturaId);
+
     return {
       mesaj: mesajSucces,
       item: updatedItem,
@@ -1409,7 +1454,9 @@ export class EFacturaService {
     const total = articole.length;
 
     let stareFinala = 'NEPROCESAT';
-    if (importate + eliminate === total && total > 0) {
+    if (total === 0) {
+      stareFinala = 'ELIMINAT';
+    } else if (importate + eliminate === total) {
       stareFinala = importate > 0 ? 'IMPORTAT_TOTAL' : 'ELIMINAT';
     } else if (importate > 0 || eliminate > 0) {
       stareFinala = 'IMPORTAT_PARȚIAL';
@@ -1848,28 +1895,7 @@ export class EFacturaService {
     });
 
     // Actualizăm starea facturii mamă
-    const facturaActualizata = await this.prisma.eFacturaFactura.findUnique({
-      where: { id: factura.id },
-      include: { articole: true },
-    });
-
-    if (facturaActualizata) {
-      const total = facturaActualizata.articole.length;
-      const importate = facturaActualizata.articole.filter((a) => a.stare === 'IMPORTAT').length;
-      const eliminate = facturaActualizata.articole.filter((a) => a.stare === 'ELIMINAT').length;
-
-      let stareFinala = facturaActualizata.stare;
-      if (importate + eliminate === total && total > 0) {
-        stareFinala = importate > 0 ? 'IMPORTAT_TOTAL' : 'ELIMINAT';
-      } else if (importate > 0 || eliminate > 0) {
-        stareFinala = 'IMPORTAT_PARȚIAL';
-      }
-
-      await this.prisma.eFacturaFactura.update({
-        where: { id: factura.id },
-        data: { stare: stareFinala },
-      });
-    }
+    await this.recalculeazaStareFactura(factura.id);
 
     return {
       success: true,
