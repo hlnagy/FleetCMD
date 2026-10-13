@@ -38,6 +38,16 @@ export default function Sidebar() {
   const navItems: NavItem[] = [
     { name: 'Dashboard Principal', href: '/', icon: LayoutDashboard },
     {
+      name: 'Facturi & Recepție Marfă',
+      href: '/efactura',
+      icon: FileText,
+      subItems: [
+        { name: '1. ANAF e-Factura (Import)', href: '/efactura?tab=efactura', tabKey: 'efactura', icon: FileText },
+        { name: '2. Recepție Manuală Factură', href: '/efactura?tab=manual', tabKey: 'manual', icon: ShoppingCart },
+        { name: '3. Istoric & Căutare Facturi', href: '/efactura?tab=istoric', tabKey: 'istoric', icon: History },
+      ],
+    },
+    {
       name: 'Vehicule & Flotă',
       href: '/fisa-tehnica',
       icon: Truck,
@@ -51,16 +61,6 @@ export default function Sidebar() {
     },
     { name: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
     { name: 'Profiluri Mentenanță', href: '/mentenanta', icon: Clock },
-    {
-      name: 'Facturi & Recepție Marfă',
-      href: '/efactura',
-      icon: FileText,
-      subItems: [
-        { name: '1. ANAF e-Factura (Import)', href: '/efactura?tab=efactura', tabKey: 'efactura', icon: FileText },
-        { name: '2. Recepție Manuală Factură', href: '/efactura?tab=manual', tabKey: 'manual', icon: ShoppingCart },
-        { name: '3. Istoric & Căutare Facturi', href: '/efactura?tab=istoric', tabKey: 'istoric', icon: History },
-      ],
-    },
     {
       name: 'Gestiune Stoc & Garanții',
       href: '/stocuri',
