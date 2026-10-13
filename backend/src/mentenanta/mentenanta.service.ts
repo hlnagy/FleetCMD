@@ -951,17 +951,21 @@ export class MentenantaService {
 
     const dateFilterComanda: any = {};
     const dateFilterLichid: any = {};
+    const dateFilterPermutare: any = {};
 
     if (startFilter || endFilter) {
       dateFilterComanda.dataDeschidere = {};
       dateFilterLichid.dataCompletare = {};
+      dateFilterPermutare.dataPermutare = {};
       if (startFilter) {
         dateFilterComanda.dataDeschidere.gte = startFilter;
         dateFilterLichid.dataCompletare.gte = startFilter;
+        dateFilterPermutare.dataPermutare.gte = startFilter;
       }
       if (endFilter) {
         dateFilterComanda.dataDeschidere.lte = endFilter;
         dateFilterLichid.dataCompletare.lte = endFilter;
+        dateFilterPermutare.dataPermutare.lte = endFilter;
       }
     }
 
@@ -991,6 +995,7 @@ export class MentenantaService {
                 denumire: true,
                 codArticol: true,
                 unitateMasura: true,
+                categorie: true,
               },
             },
           },
@@ -1029,46 +1034,300 @@ export class MentenantaService {
       orderBy: { dataCompletare: 'desc' },
     });
 
-    // 5. Agregare Piese & Manoperă & Fluide
+    // 5. Montaj Anvelope pe Mașini din Stoc
+    const permutariAnvelope = await this.prisma.istoricPermutareAnvelopa.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+        pozitieSursaCod: { contains: 'STOC' },
+        ...dateFilterPermutare,
+      },
+      include: {
+        anvelopa: true,
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            categorieEnum: true,
+            tipMasurare: true,
+          },
+        },
+      },
+      orderBy: { dataPermutare: 'desc' },
+    });
+
+    // Helper mapare categorie fluid
+    const mapFluidCategory = (desc: string, tipRaw?: string): { key: string; label: string } => {
+      const t = (tipRaw || '').toUpperCase();
+      const d = (desc || '').toLowerCase();
+      if (t.includes('MOTOR') || /motor|10w40|15w40|5w30|5w40/i.test(d)) {
+        return { key: 'ULEI_MOTOR', label: 'Ulei Motor' };
+      }
+      if (t.includes('HIDRAUL') || /hidraul/i.test(d)) {
+        return { key: 'ULEI_HIDRAULIC', label: 'Ulei Hidraulic' };
+      }
+      if (t.includes('TRANSMIS') || /transmis|cutie|punte|80w90|75w90|atf/i.test(d)) {
+        return { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie' };
+      }
+      if (t.includes('ANTIGEL') || /antigel|g11|g12|racire/i.test(d)) {
+        return { key: 'ANTIGEL', label: 'Antigel / Hűtőfolyadék' };
+      }
+      if (t.includes('VASELIN') || /vaselin|unsoare|grease/i.test(d)) {
+        return { key: 'VASELINA', label: 'Vaselină / Zsír' };
+      }
+      if (t.includes('ADBLUE') || /adblue|uree/i.test(d)) {
+        return { key: 'ADBLUE', label: 'AdBlue' };
+      }
+      return { key: 'ALTE', label: 'Alte Fluide' };
+    };
+
+    // 6. Agregare Piese, Manoperă, Anvelope & Fluide (Csere vs Potlas + Lebontás)
     let totalPiese = 0;
     let totalManopera = 0;
+    let totalAnvelope = 0;
     let totalFluide = 0;
     let totalVolumFluideLitri = 0;
+    let totalFluideCsereLitri = 0;
+    let totalFluideCsereCost = 0;
+    let totalFluidePotlasLitri = 0;
+    let totalFluidePotlasCost = 0;
+
     const pieseConsumate: any[] = [];
+    const anvelopeMontate: any[] = [];
     const comenziPrelucrate: any[] = [];
+    const completariPrelucrate: any[] = [];
+
+    // Mapare fluide pe tipuri
+    const fluideTipuriMap: Record<string, {
+      key: string;
+      label: string;
+      totalLitri: number;
+      totalCost: number;
+      csereLitri: number;
+      csereCost: number;
+      potlasLitri: number;
+      potlasCost: number;
+    }> = {
+      ULEI_MOTOR: { key: 'ULEI_MOTOR', label: 'Ulei Motor', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ULEI_HIDRAULIC: { key: 'ULEI_HIDRAULIC', label: 'Ulei Hidraulic', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ULEI_TRANSMISIE: { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ANTIGEL: { key: 'ANTIGEL', label: 'Antigel / Hűtőfolyadék', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      VASELINA: { key: 'VASELINA', label: 'Vaselină / Zsír', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ADBLUE: { key: 'ADBLUE', label: 'AdBlue', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ALTE: { key: 'ALTE', label: 'Alte Fluide', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+    };
+
+    // Vehicule agregate
+    const vehiculeMap: Record<string, {
+      id: string;
+      numarIntern: string;
+      numarInmatriculare: string;
+      marca: string;
+      model: string;
+      categorieEnum: string;
+      costPiese: number;
+      costManopera: number;
+      costAnvelope: number;
+      costFluide: number;
+      costFluideCsere: number;
+      costFluidePotlas: number;
+      volumFluideLitri: number;
+      volumCsereLitri: number;
+      volumPotlasLitri: number;
+      numarComenzi: number;
+      numarAnvelope: number;
+      totalCost: number;
+    }> = {};
+
+    vehicule.forEach((v) => {
+      vehiculeMap[v.id] = {
+        id: v.id,
+        numarIntern: v.numarIntern || '',
+        numarInmatriculare: v.numarInmatriculare || '',
+        marca: v.marca || '',
+        model: v.model || '',
+        categorieEnum: v.categorieEnum || 'NESPECIFICAT',
+        costPiese: 0,
+        costManopera: 0,
+        costAnvelope: 0,
+        costFluide: 0,
+        costFluideCsere: 0,
+        costFluidePotlas: 0,
+        volumFluideLitri: 0,
+        volumCsereLitri: 0,
+        volumPotlasLitri: 0,
+        numarComenzi: 0,
+        numarAnvelope: 0,
+        totalCost: 0,
+      };
+    });
 
     // Harta evoluție lunară
-    const evolutieMap: Record<string, { luna: string; piese: number; manopera: number; fluide: number; total: number }> = {};
-
+    const evolutieMap: Record<string, { luna: string; piese: number; manopera: number; anvelope: number; fluide: number; total: number }> = {};
     const getLunaKey = (d: Date) => {
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, '0');
       return `${year}-${month}`;
     };
 
+    // A. Prelucrare Anvelope montate din stoc (Harta Axe)
+    permutariAnvelope.forEach((p) => {
+      const cost = Number(p.anvelopa?.pretAchizitie || 0);
+      totalAnvelope += cost;
+
+      const lKey = getLunaKey(new Date(p.dataPermutare));
+      if (!evolutieMap[lKey]) {
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
+      }
+      evolutieMap[lKey].anvelope += cost;
+      evolutieMap[lKey].total += cost;
+
+      if (vehiculeMap[p.vehiculId]) {
+        vehiculeMap[p.vehiculId].costAnvelope += cost;
+        vehiculeMap[p.vehiculId].numarAnvelope += 1;
+        vehiculeMap[p.vehiculId].totalCost += cost;
+      }
+
+      anvelopeMontate.push({
+        id: p.id,
+        anvelopaId: p.anvelopaId,
+        data: p.dataPermutare,
+        vehiculId: p.vehiculId,
+        vehicul: p.vehicul,
+        serieAnvelopa: p.anvelopa?.serieAnvelopa || '-',
+        marca: p.anvelopa?.marca || '-',
+        model: p.anvelopa?.model || '-',
+        dimensiune: p.anvelopa?.dimensiune || '-',
+        codDot: p.anvelopa?.codDot || '-',
+        pozitieAx: p.pozitieDestCod,
+        pretAchizitie: Number(cost.toFixed(2)),
+        valoareContor: p.valoareContor,
+        operator: p.operator || 'Atelier',
+        observatii: p.observatii,
+        provenienta: 'Harta Axe (Montaj Nou din Stoc)',
+      });
+    });
+
+    // B. Prelucrare Comenzi de Lucru & Elemente
     comenzi.forEach((c) => {
       let cmdPiese = 0;
       let cmdManopera = 0;
+      let cmdAnvelope = 0;
+      let cmdFluide = 0;
       const lKey = getLunaKey(new Date(c.dataDeschidere));
 
       if (!evolutieMap[lKey]) {
-        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, fluide: 0, total: 0 };
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
+      }
+
+      if (vehiculeMap[c.vehiculId]) {
+        vehiculeMap[c.vehiculId].numarComenzi += 1;
       }
 
       c.elementeComanda.forEach((el) => {
         const cost = Number(el.costTotal || (el.cantitate * el.pretUnitar) || 0);
+        const cant = Number(el.cantitate || 1);
         const isManopera = el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA';
+        const isAnvelopa = /\b(\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?|anvelop|cauciuc|pneu)\b/i.test(el.descriere);
+        const isFluid = /\b(ulei|oil|antigel|adblue|vaselin|lichid|atf)\b/i.test(el.descriere);
 
         if (isManopera) {
           cmdManopera += cost;
           totalManopera += cost;
           evolutieMap[lKey].manopera += cost;
           evolutieMap[lKey].total += cost;
+          if (vehiculeMap[c.vehiculId]) {
+            vehiculeMap[c.vehiculId].costManopera += cost;
+            vehiculeMap[c.vehiculId].totalCost += cost;
+          }
+        } else if (isAnvelopa) {
+          cmdAnvelope += cost;
+          totalAnvelope += cost;
+          evolutieMap[lKey].anvelope += cost;
+          evolutieMap[lKey].total += cost;
+          if (vehiculeMap[c.vehiculId]) {
+            vehiculeMap[c.vehiculId].costAnvelope += cost;
+            vehiculeMap[c.vehiculId].numarAnvelope += cant;
+            vehiculeMap[c.vehiculId].totalCost += cost;
+          }
+          anvelopeMontate.push({
+            id: el.id,
+            anvelopaId: null,
+            data: c.dataDeschidere,
+            vehiculId: c.vehiculId,
+            vehicul: c.vehicul,
+            serieAnvelopa: el.serieUnicaPiesa || '-',
+            marca: el.descriere,
+            model: el.articolStoc?.denumire || '-',
+            dimensiune: '-',
+            codDot: '-',
+            pozitieAx: 'Montaj Comandă Lucru',
+            pretAchizitie: Number(cost.toFixed(2)),
+            valoareContor: c.valoareContorLaExecutie,
+            operator: c.mecanicResponsabil || 'Atelier',
+            observatii: el.descriere,
+            provenienta: `Comandă Lucru ${c.numarComanda}`,
+          });
+        } else if (isFluid) {
+          // Ulei / Fluid consumat pe comanda de lucru = Csere (Schimb Revizie)
+          cmdFluide += cost;
+          totalFluide += cost;
+          totalVolumFluideLitri += cant;
+          totalFluideCsereLitri += cant;
+          totalFluideCsereCost += cost;
+
+          const catInfo = mapFluidCategory(el.descriere);
+          if (fluideTipuriMap[catInfo.key]) {
+            fluideTipuriMap[catInfo.key].totalLitri += cant;
+            fluideTipuriMap[catInfo.key].totalCost += cost;
+            fluideTipuriMap[catInfo.key].csereLitri += cant;
+            fluideTipuriMap[catInfo.key].csereCost += cost;
+          }
+
+          evolutieMap[lKey].fluide += cost;
+          evolutieMap[lKey].total += cost;
+
+          if (vehiculeMap[c.vehiculId]) {
+            vehiculeMap[c.vehiculId].costFluide += cost;
+            vehiculeMap[c.vehiculId].costFluideCsere += cost;
+            vehiculeMap[c.vehiculId].volumFluideLitri += cant;
+            vehiculeMap[c.vehiculId].volumCsereLitri += cant;
+            vehiculeMap[c.vehiculId].totalCost += cost;
+          }
+
+          completariPrelucrate.push({
+            id: el.id,
+            vehiculId: c.vehiculId,
+            vehicul: c.vehicul,
+            tipLichid: catInfo.key,
+            tipOperatiune: 'SCHIMB_ULEI',
+            marcaUlei: el.descriere,
+            cantitateLitri: cant,
+            pretPerLitru: Number(el.pretUnitar || 0),
+            costTotal: Number(cost.toFixed(2)),
+            valoareContor: c.valoareContorLaExecutie,
+            dataCompletare: c.dataDeschidere,
+            mecanic: c.mecanicResponsabil || 'Atelier',
+            observatii: `Revizie / Comanda ${c.numarComanda}`,
+            alertaScurgereGenerata: false,
+            articolStocId: el.articolStocId,
+            articolDenumire: el.articolStoc?.denumire || el.descriere,
+            articolCod: el.articolStoc?.codArticol || null,
+            provenienta: `Comandă Lucru ${c.numarComanda}`,
+          });
         } else {
+          // Piesă normală
           cmdPiese += cost;
           totalPiese += cost;
           evolutieMap[lKey].piese += cost;
           evolutieMap[lKey].total += cost;
+
+          if (vehiculeMap[c.vehiculId]) {
+            vehiculeMap[c.vehiculId].costPiese += cost;
+            vehiculeMap[c.vehiculId].totalCost += cost;
+          }
 
           pieseConsumate.push({
             id: el.id,
@@ -1091,8 +1350,7 @@ export class MentenantaService {
         }
       });
 
-      const cmdTotal = cmdPiese + cmdManopera;
-
+      const cmdTotal = cmdPiese + cmdManopera + cmdAnvelope + cmdFluide;
       comenziPrelucrate.push({
         id: c.id,
         numarComanda: c.numarComanda,
@@ -1105,24 +1363,63 @@ export class MentenantaService {
         vehicul: c.vehicul,
         costPiese: Number(cmdPiese.toFixed(2)),
         costManopera: Number(cmdManopera.toFixed(2)),
+        costAnvelope: Number(cmdAnvelope.toFixed(2)),
+        costFluide: Number(cmdFluide.toFixed(2)),
         costTotal: Number(cmdTotal.toFixed(2)),
         elementeCount: c.elementeComanda.length,
         elemente: c.elementeComanda,
       });
     });
 
-    const completariPrelucrate: any[] = [];
+    // C. Prelucrare Completări / Schimburi Fluide directe
     completari.forEach((f) => {
       const cost = Number(f.costTotal || (f.cantitateLitri * f.pretPerLitru) || 0);
+      const litri = Number(f.cantitateLitri || 0);
+      const isCsere = f.tipOperatiune && f.tipOperatiune.toUpperCase().includes('SCHIMB');
+
       totalFluide += cost;
-      totalVolumFluideLitri += Number(f.cantitateLitri || 0);
+      totalVolumFluideLitri += litri;
+
+      if (isCsere) {
+        totalFluideCsereLitri += litri;
+        totalFluideCsereCost += cost;
+      } else {
+        totalFluidePotlasLitri += litri;
+        totalFluidePotlasCost += cost;
+      }
+
+      const catInfo = mapFluidCategory(f.marcaUlei || f.articolStoc?.denumire || '', f.tipLichid);
+      if (fluideTipuriMap[catInfo.key]) {
+        fluideTipuriMap[catInfo.key].totalLitri += litri;
+        fluideTipuriMap[catInfo.key].totalCost += cost;
+        if (isCsere) {
+          fluideTipuriMap[catInfo.key].csereLitri += litri;
+          fluideTipuriMap[catInfo.key].csereCost += cost;
+        } else {
+          fluideTipuriMap[catInfo.key].potlasLitri += litri;
+          fluideTipuriMap[catInfo.key].potlasCost += cost;
+        }
+      }
 
       const lKey = getLunaKey(new Date(f.dataCompletare));
       if (!evolutieMap[lKey]) {
-        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, fluide: 0, total: 0 };
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
       }
       evolutieMap[lKey].fluide += cost;
       evolutieMap[lKey].total += cost;
+
+      if (vehiculeMap[f.vehiculId]) {
+        vehiculeMap[f.vehiculId].costFluide += cost;
+        vehiculeMap[f.vehiculId].volumFluideLitri += litri;
+        if (isCsere) {
+          vehiculeMap[f.vehiculId].costFluideCsere += cost;
+          vehiculeMap[f.vehiculId].volumCsereLitri += litri;
+        } else {
+          vehiculeMap[f.vehiculId].costFluidePotlas += cost;
+          vehiculeMap[f.vehiculId].volumPotlasLitri += litri;
+        }
+        vehiculeMap[f.vehiculId].totalCost += cost;
+      }
 
       completariPrelucrate.push({
         id: f.id,
@@ -1131,7 +1428,7 @@ export class MentenantaService {
         tipLichid: f.tipLichid,
         tipOperatiune: f.tipOperatiune,
         marcaUlei: f.marcaUlei,
-        cantitateLitri: f.cantitateLitri,
+        cantitateLitri: litri,
         pretPerLitru: f.pretPerLitru,
         costTotal: Number(cost.toFixed(2)),
         valoareContor: f.valoareContor,
@@ -1142,10 +1439,96 @@ export class MentenantaService {
         articolStocId: f.articolStocId,
         articolDenumire: f.articolStoc?.denumire || null,
         articolCod: f.articolStoc?.codArticol || null,
+        provenienta: 'Meniu Fluide (Completare / Schimb)',
       });
     });
 
-    const totalGeneral = Number((totalPiese + totalManopera + totalFluide).toFixed(2));
+    const totalGeneral = Number((totalPiese + totalManopera + totalAnvelope + totalFluide).toFixed(2));
+
+    // D. Statistici categorii vehicule
+    const categoriiMap: Record<string, {
+      categorie: string;
+      numarVehicule: number;
+      totalCost: number;
+      costPiese: number;
+      costManopera: number;
+      costAnvelope: number;
+      costFluide: number;
+      costFluideCsere: number;
+      costFluidePotlas: number;
+      volumFluideLitri: number;
+    }> = {};
+
+    Object.values(vehiculeMap).forEach((v) => {
+      const c = v.categorieEnum || 'ALTELE';
+      if (!categoriiMap[c]) {
+        categoriiMap[c] = {
+          categorie: c,
+          numarVehicule: 0,
+          totalCost: 0,
+          costPiese: 0,
+          costManopera: 0,
+          costAnvelope: 0,
+          costFluide: 0,
+          costFluideCsere: 0,
+          costFluidePotlas: 0,
+          volumFluideLitri: 0,
+        };
+      }
+      categoriiMap[c].numarVehicule += 1;
+      categoriiMap[c].totalCost += v.totalCost;
+      categoriiMap[c].costPiese += v.costPiese;
+      categoriiMap[c].costManopera += v.costManopera;
+      categoriiMap[c].costAnvelope += v.costAnvelope;
+      categoriiMap[c].costFluide += v.costFluide;
+      categoriiMap[c].costFluideCsere += v.costFluideCsere;
+      categoriiMap[c].costFluidePotlas += v.costFluidePotlas;
+      categoriiMap[c].volumFluideLitri += v.volumFluideLitri;
+    });
+
+    const statisticiCategorii = Object.values(categoriiMap)
+      .map((cat) => ({
+        ...cat,
+        totalCost: Number(cat.totalCost.toFixed(2)),
+        costPiese: Number(cat.costPiese.toFixed(2)),
+        costManopera: Number(cat.costManopera.toFixed(2)),
+        costAnvelope: Number(cat.costAnvelope.toFixed(2)),
+        costFluide: Number(cat.costFluide.toFixed(2)),
+        costFluideCsere: Number(cat.costFluideCsere.toFixed(2)),
+        costFluidePotlas: Number(cat.costFluidePotlas.toFixed(2)),
+        volumFluideLitri: Number(cat.volumFluideLitri.toFixed(1)),
+      }))
+      .sort((a, b) => b.totalCost - a.totalCost);
+
+    const statisticiVehicule = Object.values(vehiculeMap)
+      .map((v) => ({
+        ...v,
+        totalCost: Number(v.totalCost.toFixed(2)),
+        costPiese: Number(v.costPiese.toFixed(2)),
+        costManopera: Number(v.costManopera.toFixed(2)),
+        costAnvelope: Number(v.costAnvelope.toFixed(2)),
+        costFluide: Number(v.costFluide.toFixed(2)),
+        costFluideCsere: Number(v.costFluideCsere.toFixed(2)),
+        costFluidePotlas: Number(v.costFluidePotlas.toFixed(2)),
+        volumFluideLitri: Number(v.volumFluideLitri.toFixed(1)),
+        volumCsereLitri: Number(v.volumCsereLitri.toFixed(1)),
+        volumPotlasLitri: Number(v.volumPotlasLitri.toFixed(1)),
+      }))
+      .sort((a, b) => b.totalCost - a.totalCost);
+
+    // E. Formatare listă fluide pe tipuri
+    const fluidePeTipuri = Object.values(fluideTipuriMap)
+      .map((t) => ({
+        ...t,
+        totalLitri: Number(t.totalLitri.toFixed(1)),
+        totalCost: Number(t.totalCost.toFixed(2)),
+        csereLitri: Number(t.csereLitri.toFixed(1)),
+        csereCost: Number(t.csereCost.toFixed(2)),
+        potlasLitri: Number(t.potlasLitri.toFixed(1)),
+        potlasCost: Number(t.potlasCost.toFixed(2)),
+        pretMediuPerLitru: t.totalLitri > 0 ? Number((t.totalCost / t.totalLitri).toFixed(2)) : 0,
+      }))
+      .filter((t) => t.totalLitri > 0 || t.totalCost > 0);
 
     // Sortare evoluție lunară cronologic
     const evolutieLunara = Object.values(evolutieMap).sort((a, b) => a.luna.localeCompare(b.luna));
@@ -1161,14 +1544,25 @@ export class MentenantaService {
         totalGeneral,
         totalPiese: Number(totalPiese.toFixed(2)),
         totalManopera: Number(totalManopera.toFixed(2)),
+        totalAnvelope: Number(totalAnvelope.toFixed(2)),
+        totalAnvelopeBuc: anvelopeMontate.length,
         totalFluide: Number(totalFluide.toFixed(2)),
         totalVolumFluideLitri: Number(totalVolumFluideLitri.toFixed(1)),
+        totalFluideCsereLitri: Number(totalFluideCsereLitri.toFixed(1)),
+        totalFluideCsereCost: Number(totalFluideCsereCost.toFixed(2)),
+        totalFluidePotlasLitri: Number(totalFluidePotlasLitri.toFixed(1)),
+        totalFluidePotlasCost: Number(totalFluidePotlasCost.toFixed(2)),
         numarComenziLucru: comenzi.length,
         numarPieseConsumate: pieseConsumate.length,
-        numarCompletariFluide: completari.length,
+        numarAnvelopeMontate: anvelopeMontate.length,
+        numarCompletariFluide: completariPrelucrate.length,
         totalVehiculeAfectate: vehicule.length,
       },
       vehicule,
+      statisticiVehicule,
+      statisticiCategorii,
+      fluidePeTipuri,
+      anvelopeMontate,
       comenziLucru: comenziPrelucrate,
       pieseConsumate,
       completariFluide: completariPrelucrate,
