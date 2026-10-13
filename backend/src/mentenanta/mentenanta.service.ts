@@ -1058,6 +1058,93 @@ export class MentenantaService {
       orderBy: { dataPermutare: 'desc' },
     });
 
+    // 6. Înregistrări Contor pentru calcul Rulaj & Cost Unitar
+    const dateFilterContor: any = {};
+    if (startFilter || endFilter) {
+      dateFilterContor.dataInregistrare = {};
+      if (startFilter) dateFilterContor.dataInregistrare.gte = startFilter;
+      if (endFilter) dateFilterContor.dataInregistrare.lte = endFilter;
+    }
+
+    const istoContoare = await this.prisma.istoricContorVehicul.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+        ...dateFilterContor,
+      },
+      select: {
+        vehiculId: true,
+        valoareContor: true,
+        dataInregistrare: true,
+      },
+      orderBy: { dataInregistrare: 'asc' },
+    });
+
+    // 7. Achiziții e-Factura din perioadă
+    const dateFilterEFactura: any = {};
+    if (startFilter || endFilter) {
+      dateFilterEFactura.dataFactura = {};
+      if (startFilter) dateFilterEFactura.dataFactura.gte = startFilter;
+      if (endFilter) dateFilterEFactura.dataFactura.lte = endFilter;
+    }
+
+    const facturiEFactura = await this.prisma.eFacturaFactura.findMany({
+      where: {
+        ...dateFilterEFactura,
+        tipFactura: 'FACTURA',
+      },
+      select: {
+        id: true,
+        cifVanzator: true,
+        numeVanzator: true,
+        numarFactura: true,
+        dataFactura: true,
+        valoareTotala: true,
+        stare: true,
+      },
+      orderBy: { dataFactura: 'desc' },
+      take: 2000,
+    });
+
+    // 8. Documente Scadente / Expirate (ITP, RCA, Rovinietă, Tahograf)
+    const documenteVehicule = await this.prisma.documentVehicul.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+      },
+      include: {
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            categorieEnum: true,
+          },
+        },
+      },
+      orderBy: { dataExpirare: 'asc' },
+    });
+
+    // 9. Configurații intervale schimb ulei & revizii
+    const configurariUlei = await this.prisma.configurareUleiVehicul.findMany({
+      where: {
+        vehiculId: { in: vehiculIds },
+      },
+      include: {
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            tipMasurare: true,
+            valoareContorCurent: true,
+          },
+        },
+      },
+    });
+
     // Helper mapare categorie fluid
     const mapFluidCategory = (desc: string, tipRaw?: string): { key: string; label: string } => {
       const t = (tipRaw || '').toUpperCase();
@@ -1533,6 +1620,256 @@ export class MentenantaService {
     // Sortare evoluție lunară cronologic
     const evolutieLunara = Object.values(evolutieMap).sort((a, b) => a.luna.localeCompare(b.luna));
 
+    // F. Raport 1: Fajlagos Költség Riport / Cost Unitar & Eficiență Exploatare
+    // Mapare contor per vehicul
+    const contorPerVehicul: Record<string, number[]> = {};
+    istoContoare.forEach((c) => {
+      if (!contorPerVehicul[c.vehiculId]) contorPerVehicul[c.vehiculId] = [];
+      contorPerVehicul[c.vehiculId].push(c.valoareContor);
+    });
+    comenziPrelucrate.forEach((c) => {
+      if (c.valoareContorLaExecutie && c.valoareContorLaExecutie > 0) {
+        if (!contorPerVehicul[c.vehicul.id]) contorPerVehicul[c.vehicul.id] = [];
+        contorPerVehicul[c.vehicul.id].push(c.valoareContorLaExecutie);
+      }
+    });
+    completariPrelucrate.forEach((f) => {
+      if (f.valoareContor && f.valoareContor > 0) {
+        if (!contorPerVehicul[f.vehiculId]) contorPerVehicul[f.vehiculId] = [];
+        contorPerVehicul[f.vehiculId].push(f.valoareContor);
+      }
+    });
+
+    const eficientaCostUnitar = vehicule.map((v) => {
+      const vCost = vehiculeMap[v.id] || { totalCost: 0, costPiese: 0, costManopera: 0, costAnvelope: 0, costFluide: 0 };
+      const puncte = (contorPerVehicul[v.id] || []).filter((val) => typeof val === 'number' && !isNaN(val) && val > 0);
+      
+      let deltaRulaj = 0;
+      let minContor = 0;
+      let maxContor = v.valoareContorCurent || 0;
+
+      if (puncte.length >= 2) {
+        minContor = Math.min(...puncte);
+        maxContor = Math.max(...puncte);
+        deltaRulaj = Math.max(0, maxContor - minContor);
+      } else if (puncte.length === 1) {
+        minContor = puncte[0];
+        deltaRulaj = Math.max(0, (v.valoareContorCurent || 0) - minContor);
+      } else {
+        minContor = v.valoareContorInitial || 0;
+        deltaRulaj = Math.max(0, (v.valoareContorCurent || 0) - (v.valoareContorInitial || 0));
+      }
+
+      const isKm = v.tipMasurare === 'KM';
+      const costTotal = vCost.totalCost || 0;
+
+      let costPer100Km: number | null = null;
+      let costPerKm: number | null = null;
+      let costPerOra: number | null = null;
+      let statusEficienta = 'FARA_RULAJ';
+
+      if (deltaRulaj > 0) {
+        if (isKm) {
+          costPer100Km = Number(((costTotal / deltaRulaj) * 100).toFixed(2));
+          costPerKm = Number((costTotal / deltaRulaj).toFixed(3));
+          if (costPer100Km < 35) statusEficienta = 'OPTIM';
+          else if (costPer100Km <= 85) statusEficienta = 'MODERAT';
+          else statusEficienta = 'RIDICAT';
+        } else {
+          costPerOra = Number((costTotal / deltaRulaj).toFixed(2));
+          if (costPerOra < 30) statusEficienta = 'OPTIM';
+          else if (costPerOra <= 75) statusEficienta = 'MODERAT';
+          else statusEficienta = 'RIDICAT';
+        }
+      }
+
+      return {
+        vehiculId: v.id,
+        numarIntern: v.numarIntern,
+        numarInmatriculare: v.numarInmatriculare,
+        marca: v.marca,
+        model: v.model,
+        categorieEnum: v.categorieEnum,
+        tipMasurare: v.tipMasurare,
+        contorStart: minContor,
+        contorEnd: maxContor,
+        deltaRulaj: Math.round(deltaRulaj),
+        costTotal: Number(costTotal.toFixed(2)),
+        costPiese: Number((vCost.costPiese || 0).toFixed(2)),
+        costManopera: Number((vCost.costManopera || 0).toFixed(2)),
+        costAnvelope: Number((vCost.costAnvelope || 0).toFixed(2)),
+        costFluide: Number((vCost.costFluide || 0).toFixed(2)),
+        costPer100Km,
+        costPerKm,
+        costPerOra,
+        statusEficienta,
+      };
+    }).sort((a, b) => b.costTotal - a.costTotal);
+
+    // G. Raport 2: Consum Excesiv de Ulei & Scurgeri
+    const analizaConsumUlei = vehicule.map((v) => {
+      const vStat = vehiculeMap[v.id] || { volumPotlasLitri: 0, costFluidePotlas: 0, volumCsereLitri: 0, costFluideCsere: 0 };
+      const operatiuniVehicul = completariPrelucrate.filter((f) => f.vehiculId === v.id);
+      const completariTopup = operatiuniVehicul.filter((f) => !f.tipOperatiune?.toUpperCase().includes('SCHIMB'));
+      const alerteScurgere = operatiuniVehicul.filter((f) => f.alertaScurgereGenerata);
+
+      const ef = eficientaCostUnitar.find((e) => e.vehiculId === v.id);
+      const deltaRulaj = ef ? ef.deltaRulaj : 0;
+      const isKm = v.tipMasurare === 'KM';
+
+      let rataConsumPer1000Km: number | null = null;
+      let rataConsumPer100Ore: number | null = null;
+      let statusConsum = 'NORMAL';
+
+      if (vStat.volumPotlasLitri > 0 && deltaRulaj > 0) {
+        if (isKm) {
+          rataConsumPer1000Km = Number(((vStat.volumPotlasLitri / deltaRulaj) * 1000).toFixed(2));
+          if (rataConsumPer1000Km >= 1.0 || alerteScurgere.length > 0) statusConsum = 'CRITIC';
+          else if (rataConsumPer1000Km >= 0.45) statusConsum = 'ATENTIE';
+          else statusConsum = 'NORMAL';
+        } else {
+          rataConsumPer100Ore = Number(((vStat.volumPotlasLitri / deltaRulaj) * 100).toFixed(2));
+          if (rataConsumPer100Ore >= 1.5 || alerteScurgere.length > 0) statusConsum = 'CRITIC';
+          else if (rataConsumPer100Ore >= 0.75) statusConsum = 'ATENTIE';
+          else statusConsum = 'NORMAL';
+        }
+      } else if (alerteScurgere.length > 0) {
+        statusConsum = 'CRITIC';
+      }
+
+      return {
+        vehiculId: v.id,
+        numarIntern: v.numarIntern,
+        numarInmatriculare: v.numarInmatriculare,
+        marca: v.marca,
+        model: v.model,
+        categorieEnum: v.categorieEnum,
+        tipMasurare: v.tipMasurare,
+        deltaRulaj,
+        litriPotlas: Number(vStat.volumPotlasLitri.toFixed(1)),
+        costPotlas: Number(vStat.costFluidePotlas.toFixed(2)),
+        litriCsere: Number(vStat.volumCsereLitri.toFixed(1)),
+        costCsere: Number(vStat.costFluideCsere.toFixed(2)),
+        numarCompletari: completariTopup.length,
+        numarAlerteScurgeri: alerteScurgere.length,
+        rataConsumPer1000Km,
+        rataConsumPer100Ore,
+        statusConsum,
+        completariRecente: completariTopup.slice(0, 5),
+      };
+    }).sort((a, b) => {
+      // Prioritizează CRITIC și ATENȚIE, apoi litri completați descrescător
+      const score = (s: string) => (s === 'CRITIC' ? 3 : s === 'ATENTIE' ? 2 : 1);
+      if (score(b.statusConsum) !== score(a.statusConsum)) {
+        return score(b.statusConsum) - score(a.statusConsum);
+      }
+      return b.litriPotlas - a.litriPotlas;
+    });
+
+    // H. Raport 3: Achiziții Furnizori ANAF e-Factura
+    const furnizoriMap: Record<string, {
+      cif: string;
+      nume: string;
+      numarFacturi: number;
+      valoareTotalaRON: number;
+      facturi: any[];
+    }> = {};
+
+    let totalGeneralFacturiRON = 0;
+    facturiEFactura.forEach((f) => {
+      const cif = (f.cifVanzator || '').replace(/^RO/i, '').trim();
+      const nume = f.numeVanzator || 'Furnizor Necunoscut';
+      const key = cif || nume;
+      if (!furnizoriMap[key]) {
+        furnizoriMap[key] = {
+          cif: f.cifVanzator || '-',
+          nume,
+          numarFacturi: 0,
+          valoareTotalaRON: 0,
+          facturi: [],
+        };
+      }
+      furnizoriMap[key].numarFacturi += 1;
+      furnizoriMap[key].valoareTotalaRON += f.valoareTotala;
+      totalGeneralFacturiRON += f.valoareTotala;
+      if (furnizoriMap[key].facturi.length < 5) {
+        furnizoriMap[key].facturi.push({
+          numarFactura: f.numarFactura,
+          dataFactura: f.dataFactura,
+          valoareTotala: Number(f.valoareTotala.toFixed(2)),
+          stare: f.stare,
+        });
+      }
+    });
+
+    const achizitiiFurnizori = Object.values(furnizoriMap)
+      .map((fn) => ({
+        cif: fn.cif,
+        nume: fn.nume,
+        numarFacturi: fn.numarFacturi,
+        valoareTotalaRON: Number(fn.valoareTotalaRON.toFixed(2)),
+        procentDinTotal: totalGeneralFacturiRON > 0 ? Number(((fn.valoareTotalaRON / totalGeneralFacturiRON) * 100).toFixed(1)) : 0,
+        facturiRecente: fn.facturi,
+      }))
+      .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
+
+    // I. Raport 4: Scadențar Mentenanță & Documente (Următoarele 30-60 Zile)
+    const now = new Date();
+    const documenteScadente = documenteVehicule
+      .map((d) => {
+        const expDate = new Date(d.dataExpirare);
+        const zileRamase = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        let status = 'NORMAL';
+        if (zileRamase < 0) status = 'EXPIRAT';
+        else if (zileRamase <= 15) status = 'CRITIC';
+        else if (zileRamase <= 30) status = 'URGENT';
+        else if (zileRamase <= 60) status = 'ATENTIE';
+
+        return {
+          id: d.id,
+          vehiculId: d.vehiculId,
+          vehicul: d.vehicul,
+          tipDocument: d.tipDocument,
+          serieDocument: d.serieDocument || '-',
+          emitent: d.emitent || '-',
+          cost: d.cost || 0,
+          dataExpirare: d.dataExpirare,
+          zileRamase,
+          status,
+        };
+      })
+      .filter((d) => d.zileRamase <= 60)
+      .sort((a, b) => a.zileRamase - b.zileRamase);
+
+    // Revizii și schimburi ulei preconizate
+    const reviziiPreconizate: any[] = [];
+    configurariUlei.forEach((cfg) => {
+      if (!cfg.vehicul) return;
+      const currentContor = cfg.vehicul.valoareContorCurent || 0;
+      const lastContor = cfg.ultimulSchimbContor || 0;
+      const isKm = cfg.vehicul.tipMasurare === 'KM';
+      const interval = isKm ? (cfg.intervalKm || 30000) : (cfg.intervalMth || 500);
+      const nextDue = lastContor + interval;
+      const ramase = nextDue - currentContor;
+      const pragAvertizare = isKm ? (cfg.pragAvertizareKm || 2500) : (cfg.pragAvertizareMth || 50);
+
+      if (ramase <= pragAvertizare) {
+        reviziiPreconizate.push({
+          vehiculId: cfg.vehicul.id,
+          vehicul: cfg.vehicul,
+          tipLichid: cfg.tipLichid,
+          interval,
+          ultimulSchimbContor: lastContor,
+          contorCurent: currentContor,
+          contorScadent: nextDue,
+          unitate: cfg.vehicul.tipMasurare,
+          ramase,
+          status: ramase <= 0 ? 'DEPASIT' : (ramase <= pragAvertizare / 2 ? 'CRITIC' : 'ATENTIE'),
+        });
+      }
+    });
+    reviziiPreconizate.sort((a, b) => a.ramase - b.ramase);
+
     return {
       filtru: {
         vehiculId: query.vehiculId || 'TOATE',
@@ -1557,6 +1894,10 @@ export class MentenantaService {
         numarAnvelopeMontate: anvelopeMontate.length,
         numarCompletariFluide: completariPrelucrate.length,
         totalVehiculeAfectate: vehicule.length,
+        totalAchizitiiEFacturaRON: Number(totalGeneralFacturiRON.toFixed(2)),
+        numarFacturiEFactura: facturiEFactura.length,
+        numarDocumenteScadente: documenteScadente.length,
+        numarReviziiPreconizate: reviziiPreconizate.length,
       },
       vehicule,
       statisticiVehicule,
@@ -1567,6 +1908,13 @@ export class MentenantaService {
       pieseConsumate,
       completariFluide: completariPrelucrate,
       evolutieLunara,
+      eficientaCostUnitar,
+      analizaConsumUlei,
+      achizitiiFurnizori,
+      scadentarMentenanta: {
+        documenteScadente,
+        reviziiPreconizate,
+      },
     };
   }
 }
