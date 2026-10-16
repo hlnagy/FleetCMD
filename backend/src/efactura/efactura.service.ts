@@ -1065,6 +1065,8 @@ export class EFacturaService implements OnModuleInit {
     conversieAmbalaj?: boolean;
     volumAmbalaj?: number;
     cantitateRealaStoc?: number;
+    cantitate?: number;
+    observatiiIntern?: string;
     unitateMasuraCustom?: string;
     areGarantie?: boolean;
     luniGarantie?: number;
@@ -1087,7 +1089,18 @@ export class EFacturaService implements OnModuleInit {
     });
 
     if (!item) throw new NotFoundException('Articolul din factură nu a fost găsit.');
-    if (item.stare === 'IMPORTAT') throw new BadRequestException('Acest articol a fost deja importat în stoc.');
+    
+    const cantitateProcesataAnterior = Number(item.cantitateProcesata || 0);
+    const cantitateFacturaRamasa = Math.max(0, Number((item.cantitate - cantitateProcesataAnterior).toFixed(4)));
+
+    if (cantitateFacturaRamasa <= 0 || item.stare === 'IMPORTAT') {
+      throw new BadRequestException('Acest articol a fost deja importat integral în stoc.');
+    }
+
+    const cantitateFacturaConsumata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : cantitateFacturaRamasa);
+    if (cantitateFacturaConsumata > cantitateFacturaRamasa + 0.0001) {
+      throw new BadRequestException(`Cantitatea solicitată (${cantitateFacturaConsumata}) depășește cantitatea rămasă neprocesată pe linie (${cantitateFacturaRamasa}).`);
+    }
 
     // 1. Identificare sau Creare Depozit target
     let targetDepozitId = data.depozitId;
@@ -1116,20 +1129,20 @@ export class EFacturaService implements OnModuleInit {
       normalizedUM === 'L';
 
     // Suport Conversie Ambalaj în Volum Real (ex: Ulei motor 60 ltr facturat ca 1 buc la 1200 RON -> 60 L la 20 RON/L)
-    const isConversie = !!(data.conversieAmbalaj && data.cantitateRealaStoc && Number(data.cantitateRealaStoc) > 0);
-    const effectiveCantitate = isConversie ? Number(data.cantitateRealaStoc) : item.cantitate;
+    const isConversie = !!(data.conversieAmbalaj && data.volumAmbalaj && Number(data.volumAmbalaj) > 0);
+    const effectiveCantitate = isConversie 
+      ? Number((cantitateFacturaConsumata * Number(data.volumAmbalaj)).toFixed(2)) 
+      : (data.cantitateRealaStoc && !isConversie ? Number(data.cantitateRealaStoc) : cantitateFacturaConsumata);
 
-    // Calcul valoare totală linie factură pentru a asigura exactitatea contabilă
-    const effectivePretTotal = item.valoareFaraTVA > 0 
-      ? Number(item.valoareFaraTVA.toFixed(2)) 
-      : Number((item.pretUnitar * item.cantitate).toFixed(2));
+    // Calcul valoare proporțională linie factură pentru cantitatea consumată
+    const effectivePretTotal = Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
 
     // Preț unitar în stoc:
     let effectivePretUnitar = 0;
     if (typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom >= 0) {
       effectivePretUnitar = Number(Number(data.pretUnitarCustom).toFixed(4));
-    } else if (isConversie) {
-      effectivePretUnitar = effectiveCantitate > 0 ? Number((effectivePretTotal / effectiveCantitate).toFixed(4)) : 0;
+    } else if (isConversie && effectiveCantitate > 0) {
+      effectivePretUnitar = Number((effectivePretTotal / effectiveCantitate).toFixed(4));
     } else {
       effectivePretUnitar = Number(Number(item.pretUnitar || 0).toFixed(2));
     }
@@ -1178,6 +1191,7 @@ export class EFacturaService implements OnModuleInit {
           unitateMasura: effectiveUM,
           subcategorie: data.subcategorieNume || articol.subcategorie,
           esteSerializat: data.areGarantie ? true : articol.esteSerializat,
+          observatiiIntern: data.observatiiIntern || articol.observatiiIntern,
         },
       });
     } else {
@@ -1195,15 +1209,17 @@ export class EFacturaService implements OnModuleInit {
           pretUnitar: effectivePretUnitar,
           unitateMasura: effectiveUM,
           esteSerializat: !!data.areGarantie,
+          observatiiIntern: data.observatiiIntern || null,
           depozitId: targetDepozitId,
         },
       });
     }
 
     // 3. Înregistrare Recepție IntrareStoc cu cantitateRamasa pentru FIFO
+    const observatiiInternText = data.observatiiIntern ? ` • Notă: ${data.observatiiIntern}` : '';
     const observatiiReceptie = isConversie
-      ? `Importat din e-Factura. Despachetat: ${item.cantitate} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / item.cantitate)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}`
-      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}`;
+      ? `Importat din e-Factura. Despachetat: ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / cantitateFacturaConsumata)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${observatiiInternText}`
+      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${observatiiInternText}`;
 
     await this.prisma.intrareStoc.create({
       data: {
@@ -1304,12 +1320,17 @@ export class EFacturaService implements OnModuleInit {
       });
     }
 
-    // 5. Actualizare stare EFacturaItem
+    // 5. Actualizare stare EFacturaItem (Suport cantități parțiale)
+    const nouaCantitateProcesata = Number((cantitateProcesataAnterior + cantitateFacturaConsumata).toFixed(4));
+    const esteComplet = nouaCantitateProcesata >= (item.cantitate - 0.0001);
+
     const updatedItem = await this.prisma.eFacturaItem.update({
       where: { id: itemId },
       data: {
-        stare: 'IMPORTAT',
+        cantitateProcesata: Math.min(item.cantitate, nouaCantitateProcesata),
+        stare: esteComplet ? 'IMPORTAT' : 'NEPROCESAT',
         articolStocId: articol.id,
+        observatiiIntern: data.observatiiIntern || item.observatiiIntern,
       },
     });
 
@@ -1333,9 +1354,10 @@ export class EFacturaService implements OnModuleInit {
       }
     }
 
+    const cantRamasaDupa = Math.max(0, Number((item.cantitate - nouaCantitateProcesata).toFixed(2)));
     const mesajSucces = isConversie
-      ? `Articolul "${item.descrierePiesa}" a fost recepționat cu succes în stoc: ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM} (despachetat din ${item.cantitate} ${item.unitateMasura || 'buc'})!`
-      : `Articolul "${item.descrierePiesa}" (${item.cantitate} ${item.unitateMasura}) a fost importat cu succes în stoc!${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
+      ? `Articolul "${item.descrierePiesa}" a fost recepționat în stoc: ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM} (despachetat din ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'})!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}`
+      : `Articolul "${item.descrierePiesa}" (${cantitateFacturaConsumata} ${item.unitateMasura}) a fost importat în stoc!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
 
     // 7. Recalculare imediată a stării facturii mamă (dacă toate articolele sunt procesate, se marchează automat IMPORTAT_TOTAL / ELIMINAT)
     await this.recalculeazaStareFactura(item.facturaId);
@@ -1452,13 +1474,14 @@ export class EFacturaService implements OnModuleInit {
     const importate = articole.filter((a) => a.stare === 'IMPORTAT').length;
     const eliminate = articole.filter((a) => a.stare === 'ELIMINAT').length;
     const total = articole.length;
+    const arePartiale = articole.some((a) => (a.cantitateProcesata || 0) > 0 && a.stare === 'NEPROCESAT');
 
     let stareFinala = 'NEPROCESAT';
     if (total === 0) {
       stareFinala = 'ELIMINAT';
     } else if (importate + eliminate === total) {
       stareFinala = importate > 0 ? 'IMPORTAT_TOTAL' : 'ELIMINAT';
-    } else if (importate > 0 || eliminate > 0) {
+    } else if (importate > 0 || eliminate > 0 || arePartiale) {
       stareFinala = 'IMPORTAT_PARȚIAL';
     }
 
@@ -1642,6 +1665,8 @@ export class EFacturaService implements OnModuleInit {
     comandaLucruId?: string;
     vehiculId?: string;
     mecanicResponsabil?: string;
+    mecaniciResponsabili?: string[];
+    dataComanda?: string | Date;
     valoareContor?: number;
     observatii?: string;
     autoFinalize?: boolean;
@@ -1652,6 +1677,9 @@ export class EFacturaService implements OnModuleInit {
     kilometriGarantie?: number;
     serieUnica?: string;
     forceNew?: boolean;
+    categorie?: string;
+    subcategorie?: string;
+    observatiiIntern?: string;
   }) {
     const item = await this.prisma.eFacturaItem.findUnique({
       where: { id: itemId },
@@ -1659,7 +1687,13 @@ export class EFacturaService implements OnModuleInit {
     });
 
     if (!item) throw new NotFoundException('Articolul din factură nu a fost găsit.');
-    if (item.stare === 'IMPORTAT') throw new BadRequestException('Acest articol a fost deja importat.');
+
+    const cantitateProcesataAnterior = Number(item.cantitateProcesata || 0);
+    const cantitateRamasa = Math.max(0, Number((item.cantitate - cantitateProcesataAnterior).toFixed(4)));
+
+    if (cantitateRamasa <= 0 || item.stare === 'IMPORTAT') {
+      throw new BadRequestException('Acest articol a fost deja alocat integral.');
+    }
 
     const isTire = /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(item.descrierePiesa || '');
     if (isTire) {
@@ -1669,11 +1703,19 @@ export class EFacturaService implements OnModuleInit {
     }
 
     const factura = item.factura;
-    const cantitateMontata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : item.cantitate);
+    const cantitateMontata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : cantitateRamasa);
+    if (cantitateMontata > cantitateRamasa + 0.0001) {
+      throw new BadRequestException(`Cantitatea solicitată (${cantitateMontata}) depășește cantitatea rămasă nealocată pe linie (${cantitateRamasa}).`);
+    }
+
     const pretUnitarPiesa = Number(data.pretUnitar !== undefined && data.pretUnitar >= 0 ? data.pretUnitar : item.pretUnitar);
     const costTotalPiesa = Number((cantitateMontata * pretUnitarPiesa).toFixed(2));
     const furnizorNume = factura.numeVanzator || 'Furnizor Factură';
     const numarFactura = factura.numarFactura || 'Fără Număr';
+
+    const descriereElementFinal = data.observatiiIntern 
+      ? `${item.descrierePiesa} [${data.observatiiIntern}]` 
+      : item.descrierePiesa;
 
     let targetComandaId = '';
     let targetVehiculId = '';
@@ -1703,7 +1745,7 @@ export class EFacturaService implements OnModuleInit {
         data: {
           comandaLucruId: targetComandaId,
           pilonCost: 'PIESA_DIRECTA',
-          descriere: item.descrierePiesa,
+          descriere: descriereElementFinal,
           cantitate: cantitateMontata,
           pretUnitar: pretUnitarPiesa,
           costTotal: costTotalPiesa,
@@ -1711,11 +1753,14 @@ export class EFacturaService implements OnModuleInit {
           furnizor: furnizorNume,
           numarFactura: numarFactura,
           serieUnicaPiesa: data.serieUnica?.trim() || null,
+          categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+          subcategorie: data.subcategorie || null,
+          observatiiIntern: data.observatiiIntern || null,
         },
       });
 
     } else {
-      // COMANDA NOUĂ
+      // COMANDĂ NOUĂ
       if (!data.vehiculId) {
         throw new BadRequestException('Trebuie selectat un vehicul pentru deschiderea comenzii noi.');
       }
@@ -1747,7 +1792,7 @@ export class EFacturaService implements OnModuleInit {
             data: {
               comandaLucruId: targetComandaId,
               pilonCost: 'PIESA_DIRECTA',
-              descriere: item.descrierePiesa,
+              descriere: descriereElementFinal,
               cantitate: cantitateMontata,
               pretUnitar: pretUnitarPiesa,
               costTotal: costTotalPiesa,
@@ -1755,6 +1800,9 @@ export class EFacturaService implements OnModuleInit {
               furnizor: furnizorNume,
               numarFactura: numarFactura,
               serieUnicaPiesa: data.serieUnica?.trim() || null,
+              categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+              subcategorie: data.subcategorie || null,
+              observatiiIntern: data.observatiiIntern || null,
             },
           });
         }
@@ -1779,17 +1827,26 @@ export class EFacturaService implements OnModuleInit {
         }
         numarComandaLucru = genNumar;
 
-        const contorExec = Number(data.valoareContor ?? vehicul.valoareContorCurent ?? 0);
-        const mecanic = data.mecanicResponsabil || 'Atelier Intern';
+        const contorExec = Number(data.valoareContor !== undefined && data.valoareContor !== null ? data.valoareContor : (vehicul.valoareContorCurent || 0));
+        
+        // Multi-mecanici suport
+        let mecanicString = 'Atelier Intern';
+        if (Array.isArray(data.mecaniciResponsabili) && data.mecaniciResponsabili.length > 0) {
+          mecanicString = data.mecaniciResponsabili.join(', ');
+        } else if (data.mecanicResponsabil) {
+          mecanicString = data.mecanicResponsabil;
+        }
+
+        const dataComandaDeschidere = data.dataComanda ? new Date(data.dataComanda) : new Date();
         const observatiiText = data.observatii || `Achiziție piese direct de pe factură ${numarFactura} (${furnizorNume}) - ${item.descrierePiesa}`;
 
-        // Actualizare contor vehicul dacă este specificat
+        // Actualizare contor vehicul doar dacă este specificat și mai mare ca 0
         if (contorExec > 0) {
           await this.prisma.vehicul.update({
             where: { id: targetVehiculId },
             data: {
               valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorExec),
-              dataInregistrareContor: new Date(),
+              dataInregistrareContor: dataComandaDeschidere,
             },
           });
 
@@ -1797,9 +1854,9 @@ export class EFacturaService implements OnModuleInit {
             data: {
               vehiculId: targetVehiculId,
               valoareContor: contorExec,
-              dataInregistrare: new Date(),
+              dataInregistrare: dataComandaDeschidere,
               sursa: 'SERVICE',
-              operator: mecanic,
+              operator: mecanicString,
               observatii: `Deschidere Comandă de Lucru ${numarComandaLucru} de pe Factură (${numarFactura})`,
             },
           });
@@ -1809,17 +1866,17 @@ export class EFacturaService implements OnModuleInit {
           data: {
             numarComanda: numarComandaLucru,
             vehiculId: targetVehiculId,
-            mecanicResponsabil: mecanic,
+            mecanicResponsabil: mecanicString,
             observatii: observatiiText,
-            valoareContorLaExecutie: contorExec,
+            valoareContorLaExecutie: contorExec > 0 ? contorExec : (vehicul.valoareContorCurent || 0),
             stare: data.autoFinalize ? 'FINALIZAT' : 'IN_LUCRU',
-            dataDeschidere: new Date(),
+            dataDeschidere: dataComandaDeschidere,
             dataFinalizare: data.autoFinalize ? new Date() : null,
             elementeComanda: {
               create: [
                 {
                   pilonCost: 'PIESA_DIRECTA',
-                  descriere: item.descrierePiesa,
+                  descriere: descriereElementFinal,
                   cantitate: cantitateMontata,
                   pretUnitar: pretUnitarPiesa,
                   costTotal: costTotalPiesa,
@@ -1827,6 +1884,9 @@ export class EFacturaService implements OnModuleInit {
                   furnizor: furnizorNume,
                   numarFactura: numarFactura,
                   serieUnicaPiesa: data.serieUnica?.trim() || null,
+                  categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+                  subcategorie: data.subcategorie || null,
+                  observatiiIntern: data.observatiiIntern || null,
                 },
               ],
             },
@@ -1850,7 +1910,9 @@ export class EFacturaService implements OnModuleInit {
             data: {
               codArticol: item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`,
               denumire: item.descrierePiesa,
-              categorie: 'Piese Mecanice & Direcție',
+              categorie: data.categorie || 'Piese Mecanice & Direcție',
+              subcategorie: data.subcategorie || null,
+              observatiiIntern: data.observatiiIntern || null,
               depozitId: primDepozit?.id || 'depozit-default',
               stocCurent: 0,
               pretUnitar: pretUnitarPiesa,
@@ -1885,21 +1947,31 @@ export class EFacturaService implements OnModuleInit {
       }
     }
 
-    // Marcăm articolul ca IMPORTAT și legat de comanda de lucru
+    // Calcul cantitate procesată acumulată și actualizare stare EFacturaItem
+    const nouaCantitateProcesata = Number((cantitateProcesataAnterior + cantitateMontata).toFixed(4));
+    const esteComplet = nouaCantitateProcesata >= (item.cantitate - 0.0001);
+
     await this.prisma.eFacturaItem.update({
       where: { id: itemId },
       data: {
-        stare: 'IMPORTAT',
+        cantitateProcesata: Math.min(item.cantitate, nouaCantitateProcesata),
+        stare: esteComplet ? 'IMPORTAT' : 'NEPROCESAT',
         comandaLucruId: targetComandaId,
+        observatiiIntern: data.observatiiIntern || item.observatiiIntern,
       },
     });
 
     // Actualizăm starea facturii mamă
     await this.recalculeazaStareFactura(factura.id);
 
+    const cantRamasaDupa = Math.max(0, Number((item.cantitate - nouaCantitateProcesata).toFixed(2)));
+    const mesajSucces = esteComplet
+      ? `Articolul "${item.descrierePiesa}" (${cantitateMontata} ${item.unitateMasura}) a fost alocat cu succes pe comanda de lucru ${numarComandaLucru}!`
+      : `Au fost alocate ${cantitateMontata} ${item.unitateMasura} pe comanda ${numarComandaLucru}. Au rămas ${cantRamasaDupa} ${item.unitateMasura} de procesat!`;
+
     return {
       success: true,
-      mesaj: `Articolul "${item.descrierePiesa}" a fost alocat cu succes pe comanda de lucru ${numarComandaLucru}!`,
+      mesaj: mesajSucces,
       comandaLucruId: targetComandaId,
       numarComanda: numarComandaLucru,
     };

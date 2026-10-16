@@ -244,7 +244,7 @@ model ComandaLucru {
   stare                  String              @default("IN_LUCRU") // "IN_LUCRU" | "FINALIZAT" | "ANULAT"
   mecanicResponsabil     String
   observatii             String?
-  valoareContorLaExecutie Float
+  valoareContorLaExecutie Float               @default(0)
 
   elementeComanda        ElementComandaLucru[]
   createdAt              DateTime            @default(now())
@@ -276,6 +276,9 @@ model ElementComandaLucru {
   serieUnicaPiesa      String?
   furnizor             String?
   numarFactura         String?
+  categorie            String?
+  subcategorie         String?
+  observatiiIntern     String?
 
   createdAt            DateTime            @default(now())
 
@@ -477,6 +480,7 @@ model ArticolStoc {
   pretUnitar         Float                 @default(0)
   unitateMasura      String                @default("buc")
   esteSerializat     Boolean               @default(false)
+  observatiiIntern   String?
 
   depozitId          String?
   depozit            Depozit?              @relation(fields: [depozitId], references: [id], onDelete: SetNull)
@@ -675,6 +679,8 @@ model EFacturaItem {
   valoareFaraTVA     Float
   valoareTVA         Float
   cotaTVA            Float           @default(19)
+  cantitateProcesata Float?          @default(0)
+  observatiiIntern   String?
   stare              String          @default("NEPROCESAT") // NEPROCESAT | IMPORTAT | ELIMINAT
   articolStocId      String?         // Relație cu ArticolStoc creat/actualizat
   comandaLucruId     String?         // Relație directă cu ComandaLucru dacă piesa a fost montată direct pe utilaj
