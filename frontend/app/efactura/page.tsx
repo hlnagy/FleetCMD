@@ -1360,7 +1360,15 @@ function EFacturaContent() {
       } else if (sortKey === 'numarFactura') {
         comparison = (a.numarFactura || '').localeCompare(b.numarFactura || '', 'ro', { numeric: true });
       } else if (sortKey === 'dataFactura') {
-        comparison = new Date(a.dataFactura).getTime() - new Date(b.dataFactura).getTime();
+        const tA = new Date(a.dataFactura).getTime();
+        const tB = new Date(b.dataFactura).getTime();
+        if (tA !== tB) {
+          comparison = tA - tB;
+        } else {
+          const mA = new Date(a.dataMesaj || a.createdAt).getTime();
+          const mB = new Date(b.dataMesaj || b.createdAt).getTime();
+          comparison = mA - mB;
+        }
       } else if (sortKey === 'valoareTotala') {
         comparison = (a.valoareTotala || 0) - (b.valoareTotala || 0);
       }
@@ -1982,8 +1990,13 @@ function EFacturaContent() {
                       <div className="text-[10px] text-sage-500 font-mono">CUI: {f.cifVanzator}</div>
                     </td>
                     <td className="p-3 font-mono font-bold text-sapphire-700">{f.numarFactura}</td>
-                    <td className="p-3 font-mono text-sage-600">
-                      {new Date(f.dataFactura).toLocaleDateString('ro-RO')}
+                    <td className="p-3 font-mono">
+                      <div className="font-bold text-sapphire-900">{new Date(f.dataFactura).toLocaleDateString('ro-RO')}</div>
+                      {f.dataMesaj && (
+                        <div className="text-[10px] text-sage-500 font-sans mt-0.5" title="Data și ora recepționării în ANAF SPV">
+                          SPV: {new Date(f.dataMesaj).toLocaleDateString('ro-RO', { day: '2-digit', month: '2-digit' })} {new Date(f.dataMesaj).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3 font-mono font-extrabold text-sapphire-900">
                       {f.valoareTotala?.toLocaleString('ro-RO')} {f.moneda}
