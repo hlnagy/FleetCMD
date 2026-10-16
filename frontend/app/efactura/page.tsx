@@ -234,39 +234,73 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
   };
 }
 
+// Module-level persistent cache across tab switching
+interface EFacturaPersistentCache {
+  facturi?: any[];
+  config?: any;
+  depozite?: any[];
+  categoriiStoc?: any[];
+  stocuriFlota?: any[];
+  intrariHistory?: any[];
+  selectedFactura?: any;
+  selectedFacturaIds?: string[];
+  searchQuery?: string;
+  stareFilter?: string;
+  lunaFilter?: string;
+  activeTab?: 'efactura' | 'manual' | 'istoric';
+  lastFetchTime?: number;
+}
+
+const efacturaCache: EFacturaPersistentCache = {};
+
 function EFacturaContent() {
   const { user: authUser, isAdmin, authFetch } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
 
-  const [activeTab, setActiveTab] = useState<'efactura' | 'manual' | 'istoric'>('efactura');
+  const [activeTab, setActiveTab] = useState<'efactura' | 'manual' | 'istoric'>(() => {
+    if (tabParam && ['efactura', 'manual', 'istoric'].includes(tabParam)) return tabParam as any;
+    return efacturaCache.activeTab || 'efactura';
+  });
 
-  const initialSearch = searchParams?.get('search') || searchParams?.get('q') || '';
+  const initialSearch = searchParams?.get('search') || searchParams?.get('q') || efacturaCache.searchQuery || '';
   const [searchQuery, setSearchQuery] = useState(initialSearch);
-  const [stareFilter, setStareFilter] = useState(initialSearch ? 'TOATE' : 'NEPROCESAT');
-  const [lunaFilter, setLunaFilter] = useState<'TOATE' | string>('TOATE');
+  const [stareFilter, setStareFilter] = useState(() => efacturaCache.stareFilter || (initialSearch ? 'TOATE' : 'NEPROCESAT'));
+  const [lunaFilter, setLunaFilter] = useState<'TOATE' | string>(() => efacturaCache.lunaFilter || 'TOATE');
 
   // Ascultăm schimbarea tab-ului sau a căutării din URL / Sidebar / Robi Hyperlink
   useEffect(() => {
     if (tabParam && ['efactura', 'manual', 'istoric'].includes(tabParam)) {
       setActiveTab(tabParam as any);
+      efacturaCache.activeTab = tabParam as any;
     }
     const q = searchParams?.get('search') || searchParams?.get('q');
     if (q) {
       setSearchQuery(q);
       setStareFilter('TOATE');
       setLunaFilter('TOATE');
+      efacturaCache.searchQuery = q;
+      efacturaCache.stareFilter = 'TOATE';
+      efacturaCache.lunaFilter = 'TOATE';
     }
   }, [tabParam, searchParams]);
 
-  const [facturi, setFacturi] = useState<any[]>([]);
-  const [config, setConfig] = useState<any>(null);
-  const [depozite, setDepozite] = useState<any[]>([]);
-  const [categoriiStoc, setCategoriiStoc] = useState<any[]>([]);
-  const [stocuriFlota, setStocuriFlota] = useState<any[]>([]);
+  // Keep cache in sync with local filter states
+  useEffect(() => {
+    efacturaCache.searchQuery = searchQuery;
+    efacturaCache.stareFilter = stareFilter;
+    efacturaCache.lunaFilter = lunaFilter;
+    efacturaCache.activeTab = activeTab;
+  }, [searchQuery, stareFilter, lunaFilter, activeTab]);
 
-  const [loading, setLoading] = useState(false);
+  const [facturi, setFacturi] = useState<any[]>(() => efacturaCache.facturi || []);
+  const [config, setConfig] = useState<any>(() => efacturaCache.config || null);
+  const [depozite, setDepozite] = useState<any[]>(() => efacturaCache.depozite || []);
+  const [categoriiStoc, setCategoriiStoc] = useState<any[]>(() => efacturaCache.categoriiStoc || []);
+  const [stocuriFlota, setStocuriFlota] = useState<any[]>(() => efacturaCache.stocuriFlota || []);
+
+  const [loading, setLoading] = useState(() => !efacturaCache.facturi || efacturaCache.facturi.length === 0);
   const [syncing, setSyncing] = useState(false);
   const [selectedZile, setSelectedZile] = useState(60);
 
@@ -313,7 +347,11 @@ function EFacturaContent() {
 
   // MODALS
   const [showFurnizoriExclusiModal, setShowFurnizoriExclusiModal] = useState(false);
-  const [selectedFactura, setSelectedFactura] = useState<any>(null);
+  const [selectedFactura, setSelectedFacturaRaw] = useState<any>(() => efacturaCache.selectedFactura || null);
+  const setSelectedFactura = (val: any) => {
+    setSelectedFacturaRaw(val);
+    efacturaCache.selectedFactura = val;
+  };
   const [showRawXml, setShowRawXml] = useState(false);
 
   // GESTIUNE FURNIZORI EXCLUȘI AUTOMAT
@@ -487,33 +525,59 @@ function EFacturaContent() {
     }
   };
 
-  // FETCH DATA FROM BACKEND
-  const fetchData = async () => {
+  // FETCH DATA FROM BACKEND WITH PERSISTENT CACHE
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
-      let loadedConfig: any = null;
-      const resConfig = await fetch(`${API_BASE_URL}/efactura/config`);
+      if (!silent && (!efacturaCache.facturi || efacturaCache.facturi.length === 0)) {
+        setLoading(true);
+      }
+
+      const [resConfig, resFact, resDep, resIntrari, resStoc] = await Promise.all([
+        fetch(`${API_BASE_URL}/efactura/config`),
+        fetch(`${API_BASE_URL}/efactura/facturi`),
+        fetch(`${API_BASE_URL}/stocuri-garantii/depozite`),
+        fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`),
+        fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`),
+      ]);
+
       if (resConfig.ok) {
         const cfg = await resConfig.json();
-        loadedConfig = cfg;
         setConfig(cfg);
+        efacturaCache.config = cfg;
       }
 
-      const resFact = await fetch(`${API_BASE_URL}/efactura/facturi`);
       if (resFact.ok) {
         const list = await resFact.json();
-        setFacturi(Array.isArray(list) ? list : []);
+        const safeList = Array.isArray(list) ? list : [];
+        setFacturi(safeList);
+        efacturaCache.facturi = safeList;
+        efacturaCache.lastFetchTime = Date.now();
       }
 
-      const resDep = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`);
       if (resDep.ok) {
         const dList = await resDep.json();
-        setDepozite(Array.isArray(dList) ? dList : []);
-        if (dList.length > 0 && !targetDepozitId) setTargetDepozitId(dList[0].id);
+        const safeDList = Array.isArray(dList) ? dList : [];
+        setDepozite(safeDList);
+        efacturaCache.depozite = safeDList;
+        if (safeDList.length > 0 && !targetDepozitId) setTargetDepozitId(safeDList[0].id);
       }
 
-      // Încărcare categorii stoc cu retry (pentru a tolera trezirea la rece a backend-ului pe serverul cloud)
-      for (let attempt = 0; attempt < 3; attempt++) {
+      if (resIntrari.ok) {
+        const iList = await resIntrari.json();
+        const safeIList = Array.isArray(iList) ? iList : [];
+        setIntrariHistory(safeIList);
+        efacturaCache.intrariHistory = safeIList;
+      }
+
+      if (resStoc.ok) {
+        const sList = await resStoc.json();
+        const safeSList = Array.isArray(sList) ? sList : [];
+        setStocuriFlota(safeSList);
+        efacturaCache.stocuriFlota = safeSList;
+      }
+
+      // Încărcare categorii stoc cu retry
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
           if (resCat.ok) {
@@ -524,28 +588,17 @@ function EFacturaContent() {
             ];
             if (merged.length > 0) {
               setCategoriiStoc(merged);
+              efacturaCache.categoriiStoc = merged;
               break;
             }
           }
         } catch (err) {
           console.warn(`Tentativă ${attempt + 1} de încărcare categorii:`, err);
         }
-        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (attempt < 1) await new Promise((resolve) => setTimeout(resolve, 800));
       }
 
-      const resIntrari = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`);
-      if (resIntrari.ok) {
-        const iList = await resIntrari.json();
-        setIntrariHistory(Array.isArray(iList) ? iList : []);
-      }
-
-      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
-      if (resStoc.ok) {
-        const sList = await resStoc.json();
-        setStocuriFlota(Array.isArray(sList) ? sList : []);
-      }
-
-      // Verificăm dacă o sincronizare este deja în curs pe server la încărcarea paginii
+      // Verificăm dacă o sincronizare este deja în curs pe server
       const resSync = await authFetch(`${API_BASE_URL}/efactura/sync/status`);
       if (resSync.ok) {
         const sData = await resSync.json();
@@ -561,22 +614,24 @@ function EFacturaContent() {
                 if (!polled.inProgress) {
                   clearInterval(pollInterval);
                   setSyncing(false);
-                  fetchData();
+                  fetchData(true);
                 }
               }
             } catch (e) {
-              console.error(e);
+              console.error('Eroare polling status sync:', e);
             }
           }, 2000);
-        } else if (loadedConfig?.stareCronAuto && loadedConfig?.accessToken) {
-          // AUTO-SYNC INTELIGENT: Dacă ultimul sync a fost acum mai mult de 30 de minute (sau după weekend/inactivitate), pornim automat sync în fundal!
-          const lastSyncTime = loadedConfig?.ultimulSyncSucces ? new Date(loadedConfig.ultimulSyncSucces).getTime() : 0;
+        } else if (resConfig.ok && (await resConfig.clone().json())?.stareCronAuto) {
+          // AUTO-SYNC INTELIGENT
+          const cfg = efacturaCache.config;
+          const lastSyncTime = cfg?.ultimulSyncSucces ? new Date(cfg.ultimulSyncSucces).getTime() : 0;
           const thirtyMinMs = 30 * 60 * 1000;
           if (Date.now() - lastSyncTime > thirtyMinMs) {
             handleForceSync(60);
           }
         }
       }
+
       // Încărcăm și lista furnizorilor excluși automat
       fetchFurnizoriExclusi();
       fetchComenziDeschise();
@@ -772,7 +827,13 @@ function EFacturaContent() {
 
   useEffect(() => {
     if (authUser?.rol === 'VIEWER') return;
-    fetchData();
+    const now = Date.now();
+    const hasCache = efacturaCache.facturi && efacturaCache.facturi.length > 0;
+    const isFresh = hasCache && (now - (efacturaCache.lastFetchTime || 0) < 60000);
+
+    if (!isFresh) {
+      fetchData(Boolean(hasCache));
+    }
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -1659,7 +1720,7 @@ function EFacturaContent() {
           </button>
 
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-200 text-xs font-bold text-sapphire-900 shadow-xs transition"
           >
             <RefreshCw className={`w-4 h-4 text-sapphire-500 ${loading ? 'animate-spin' : ''}`} />

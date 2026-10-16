@@ -12,20 +12,43 @@ import {
 import { showConfirm } from '@/lib/swal';
 import DraggableModal from '@/components/DraggableModal';
 
+// Module-level persistent cache across tab switching
+interface ComenziLucruCache {
+  comenzi?: any[];
+  vehicule?: any[];
+  stocuri?: any[];
+  mecaniciList?: any[];
+  searchQuery?: string;
+  stareFilter?: string;
+  vehiculFilter?: string;
+  mecanicFilter?: string;
+  lastFetchTime?: number;
+}
+
+const comenziCache: ComenziLucruCache = {};
+
 export default function ComenziLucruPage() {
-  const [comenzi, setComenzi] = useState<any[]>([]);
-  const [vehicule, setVehicule] = useState<any[]>([]);
-  const [stocuri, setStocuri] = useState<any[]>([]);
-  const [mecaniciList, setMecaniciList] = useState<any[]>([]);
+  const [comenzi, setComenzi] = useState<any[]>(() => comenziCache.comenzi || []);
+  const [vehicule, setVehicule] = useState<any[]>(() => comenziCache.vehicule || []);
+  const [stocuri, setStocuri] = useState<any[]>(() => comenziCache.stocuri || []);
+  const [mecaniciList, setMecaniciList] = useState<any[]>(() => comenziCache.mecaniciList || []);
   const [isCreating, setIsCreating] = useState(false);
 
   // Filtre
-  const [searchQuery, setSearchQuery] = useState('');
-  const [stareFilter, setStareFilter] = useState('TOATE');
-  const [vehiculFilter, setVehiculFilter] = useState('TOATE');
-  const [mecanicFilter, setMecanicFilter] = useState('TOATE');
+  const [searchQuery, setSearchQuery] = useState(() => comenziCache.searchQuery || '');
+  const [stareFilter, setStareFilter] = useState(() => comenziCache.stareFilter || 'TOATE');
+  const [vehiculFilter, setVehiculFilter] = useState(() => comenziCache.vehiculFilter || 'TOATE');
+  const [mecanicFilter, setMecanicFilter] = useState(() => comenziCache.mecanicFilter || 'TOATE');
   const [dateStartFilter, setDateStartFilter] = useState('');
   const [dateEndFilter, setDateEndFilter] = useState('');
+
+  // Sync cache with filters
+  useEffect(() => {
+    comenziCache.searchQuery = searchQuery;
+    comenziCache.stareFilter = stareFilter;
+    comenziCache.vehiculFilter = vehiculFilter;
+    comenziCache.mecanicFilter = mecanicFilter;
+  }, [searchQuery, stareFilter, vehiculFilter, mecanicFilter]);
 
   // Modale
   const [showAddModal, setShowAddModal] = useState(false);
@@ -117,6 +140,9 @@ export default function ComenziLucruPage() {
         });
 
         setComenzi(allCL);
+        comenziCache.comenzi = allCL;
+        comenziCache.vehicule = data;
+        comenziCache.lastFetchTime = Date.now();
       }
 
       // Fetch Stocuri
@@ -124,6 +150,7 @@ export default function ComenziLucruPage() {
       if (resStoc.ok) {
         const stData = await resStoc.json();
         setStocuri(stData);
+        comenziCache.stocuri = stData;
       }
 
       // Fetch Mecanici
@@ -131,6 +158,7 @@ export default function ComenziLucruPage() {
       if (resMec.ok) {
         const mecData = await resMec.json();
         setMecaniciList(mecData);
+        comenziCache.mecaniciList = mecData;
         if (mecData.length > 0 && selectedMecanici.length === 0) {
           setSelectedMecanici([mecData[0].nume]);
         }
@@ -141,7 +169,13 @@ export default function ComenziLucruPage() {
   };
 
   useEffect(() => {
-    fetchData();
+    const now = Date.now();
+    const hasCache = comenziCache.comenzi && comenziCache.comenzi.length > 0;
+    const isFresh = hasCache && (now - (comenziCache.lastFetchTime || 0) < 60000);
+
+    if (!isFresh) {
+      fetchData();
+    }
   }, []);
 
   const formatContorDate = (dateVal: string | Date | undefined | null) => {
