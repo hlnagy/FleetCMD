@@ -57,7 +57,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-morning-100 text-sapphire-900 flex min-h-screen transition-colors duration-200">
+      <body className="bg-morning-100 text-sapphire-900 min-h-screen w-full transition-colors duration-200">
         <SweetAlertProvider />
         <ThemeProvider>
           <AuthProvider>

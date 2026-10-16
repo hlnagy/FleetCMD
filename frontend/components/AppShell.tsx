@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import LoginPage from '@/components/LoginPage';
-import Sidebar from '@/components/Sidebar';
-import Navbar from '@/components/Navbar';
-import { SidebarProvider } from '@/lib/SidebarContext';
+import TopNavigation from '@/components/TopNavigation';
+import TabBar from '@/components/TabBar';
+import { TabWorkspaceProvider } from '@/lib/TabWorkspaceContext';
 import { ShieldCheck } from 'lucide-react';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
 import FleetAIAssistant from '@/components/ai/FleetAIAssistant';
@@ -60,18 +60,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <LoginPage />;
   }
 
-  // Authenticated -> render full operational cockpit with Sidebar & Navbar
+  // Authenticated -> render full operational cockpit with TopNavigation, TabBar & widescreen workspace
   return (
-    <SidebarProvider>
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Navbar />
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+    <TabWorkspaceProvider>
+      <div className="min-h-screen w-full flex flex-col bg-morning-100 text-sapphire-900 transition-colors duration-200">
+        <TopNavigation />
+        <TabBar />
+        <main className="flex-1 p-3 sm:p-5 overflow-y-auto w-full">
           {children}
         </main>
         <OptiBaseFooter variant="light" />
       </div>
       <FleetAIAssistant />
-    </SidebarProvider>
+    </TabWorkspaceProvider>
   );
 }
