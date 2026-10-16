@@ -1548,9 +1548,12 @@ export class AnomaliiService {
     });
 
     articoleStoc.forEach((art) => {
-      if (art.stocCurent <= art.stocMinim) {
+      const min = Number(art.stocMinim) || 0;
+      // Alertă de stoc critic se generează DOAR dacă există un prag minim definit (> 0) și stocul scade sub sau la nivelul acestuia!
+      // Dacă stocMinim este 0, monitorizarea de stoc minim este dezactivată explicit (nu generează alertă).
+      if (min > 0 && art.stocCurent <= min) {
         const esteEpuizat = art.stocCurent <= 0;
-        const lipsa = Math.max(0, art.stocMinim - art.stocCurent);
+        const lipsa = Math.max(0, min - art.stocCurent);
         listaAlerte.push({
           id: `stoc-critic-${art.id}`,
           dbId: art.id,
@@ -1561,8 +1564,8 @@ export class AnomaliiService {
           vehiculNumar: art.depozit?.nume || 'Depozit Central',
           urgenta: esteEpuizat ? 'CRITIC' : 'AVERTIZARE',
           mesaj: esteEpuizat
-            ? `STOC EPUIZAT! Cantitate disponibilă: 0 ${art.unitateMasura} (Limita minimă: ${art.stocMinim} ${art.unitateMasura}) în ${art.depozit?.nume || 'Depozit'}`
-            : `Stoc sub limita minimă! Disponibil: ${art.stocCurent} ${art.unitateMasura} (Limita minimă: ${art.stocMinim} ${art.unitateMasura}, necesar: +${lipsa} ${art.unitateMasura})`,
+            ? `STOC EPUIZAT! Cantitate disponibilă: 0 ${art.unitateMasura} (Limita minimă: ${min} ${art.unitateMasura}) în ${art.depozit?.nume || 'Depozit'}`
+            : `Stoc sub limita minimă! Disponibil: ${art.stocCurent} ${art.unitateMasura} (Limita minimă: ${min} ${art.unitateMasura}, necesar: +${lipsa} ${art.unitateMasura})`,
           dataReferinta: art.updatedAt || art.createdAt,
           modCalcul: `Depozit: ${art.depozit?.nume || 'Depozit Central'} • Preț: ${art.pretUnitar} RON/${art.unitateMasura}`,
           linkDirect: '/stocuri?tab=stoc',

@@ -306,7 +306,12 @@ export class StocuriGarantiiService {
     // 1. Sincronizare redenumire categorie pe articolele din stoc
     if (data.nume && data.nume.trim() !== existing.nume) {
       await this.prisma.articolStoc.updateMany({
-        where: { categorie: existing.nume },
+        where: {
+          OR: [
+            { categorie: existing.nume },
+            { categorie: { equals: existing.nume, mode: 'insensitive' } },
+          ],
+        },
         data: { categorie: targetCategoryName },
       });
     }
@@ -314,7 +319,14 @@ export class StocuriGarantiiService {
     // 2. Sincronizare prag stocMinim pe articolele din stoc din această categorie
     if (newStocMinim !== undefined) {
       await this.prisma.articolStoc.updateMany({
-        where: { categorie: targetCategoryName },
+        where: {
+          OR: [
+            { categorie: targetCategoryName },
+            { categorie: existing.nume },
+            { categorie: { equals: targetCategoryName, mode: 'insensitive' } },
+            { categorie: { equals: existing.nume, mode: 'insensitive' } },
+          ],
+        },
         data: { stocMinim: newStocMinim },
       });
     }
@@ -583,9 +595,9 @@ export class StocuriGarantiiService {
     });
 
     if (filters?.statusStoc === 'CRITIC') {
-      return articole.filter((a) => a.stocCurent <= a.stocMinim);
+      return articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent <= (Number(a.stocMinim) || 0));
     } else if (filters?.statusStoc === 'IN_STOC') {
-      return articole.filter((a) => a.stocCurent > a.stocMinim);
+      return articole.filter((a) => (Number(a.stocMinim) || 0) <= 0 || a.stocCurent > (Number(a.stocMinim) || 0));
     }
 
     return articole;
@@ -595,7 +607,8 @@ export class StocuriGarantiiService {
     const articole = await this.prisma.articolStoc.findMany({
       include: { depozit: true },
     });
-    const critice = articole.filter((a) => a.stocCurent <= a.stocMinim);
+    // Doar articolele care au un stoc minim configurat (> 0) și stocul este sub sau egal cu acesta
+    const critice = articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent <= (Number(a.stocMinim) || 0));
     return {
       numarArticoleCritice: critice.length,
       articoleCritice: critice.map((a) => ({

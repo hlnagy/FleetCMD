@@ -999,7 +999,7 @@ export default function FluidePage() {
   // Calcule & Filtrare Stocuri Fluide
   const totalVolumFluide = stocUleiuri.reduce((acc, s) => acc + (Number(s.stocCurent) || 0), 0);
   const totalValoareFluide = stocUleiuri.reduce((acc, s) => acc + ((Number(s.stocCurent) || 0) * (Number(s.pretUnitar) || 0)), 0);
-  const fluideCriticeCount = stocUleiuri.filter((s) => (Number(s.stocCurent) || 0) <= (Number(s.stocMinim) || 0)).length;
+  const fluideCriticeCount = stocUleiuri.filter((s) => (Number(s.stocMinim) || 0) > 0 && (Number(s.stocCurent) || 0) <= (Number(s.stocMinim) || 0)).length;
   const totalSubcategoriiFluide = categoriiFluide.reduce((acc, c) => acc + (c.subcategorii?.length || 0), 0);
 
   const stocUleiuriFiltrate = stocUleiuri.filter((s) => {
@@ -1024,10 +1024,12 @@ export default function FluidePage() {
       return false;
     }
     // Filtru stare
+    const min = Number(s.stocMinim) || 0;
+    const cur = Number(s.stocCurent) || 0;
     if (selectedStatusStoc === 'CRITIC') {
-      if ((Number(s.stocCurent) || 0) > (Number(s.stocMinim) || 0)) return false;
+      if (min <= 0 || cur > min) return false;
     } else if (selectedStatusStoc === 'OPTIM') {
-      if ((Number(s.stocCurent) || 0) <= (Number(s.stocMinim) || 0)) return false;
+      if (min > 0 && cur <= min) return false;
     }
     return true;
   });
@@ -1390,8 +1392,8 @@ export default function FluidePage() {
                     stocUleiuriFiltrate.map((s: any) => {
                       const stocNum = Number(s.stocCurent) || 0;
                       const minimNum = Number(s.stocMinim) || 0;
-                      const esteCritic = stocNum <= minimNum;
-                      const esteEpuizat = stocNum <= 0;
+                      const esteCritic = minimNum > 0 && stocNum <= minimNum;
+                      const esteEpuizat = minimNum > 0 && stocNum <= 0;
                       const lipsa = Math.max(0, minimNum - stocNum);
                       const unitate = s.unitateMasura || 'L';
 
