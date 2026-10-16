@@ -342,7 +342,21 @@ export class VehiculeService {
     return this.prisma.vehicul.findMany({
       where,
       include: {
-        comenziLucru: { include: { elementeComanda: true } },
+        comenziLucru: {
+          include: {
+            elementeComanda: {
+              include: {
+                articolStoc: {
+                  include: {
+                    intrariStoc: {
+                      orderBy: { dataFactura: 'desc' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         anvelope: true,
         completariLichid: true,
         pozitiiAxe: { include: { anvelopa: true } },
@@ -367,7 +381,21 @@ export class VehiculeService {
     const vehicul = await this.prisma.vehicul.findUnique({
       where: { id },
       include: {
-        comenziLucru: { include: { elementeComanda: true } },
+        comenziLucru: {
+          include: {
+            elementeComanda: {
+              include: {
+                articolStoc: {
+                  include: {
+                    intrariStoc: {
+                      orderBy: { dataFactura: 'desc' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
         anvelope: { include: { masuratori: true, pozitieAx: true } },
         pozitiiAxe: { include: { anvelopa: true } },
         completariLichid: true,

@@ -553,12 +553,16 @@ export default function FluidePage() {
   const handleSavePragAlert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAlertArticol) return;
+    if (newPragAlert < 0) {
+      alert('Pragul de alertă stoc minim nu poate fi un număr negativ!');
+      return;
+    }
     setIsSavingAlert(true);
     try {
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingAlertArticol.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stocMinim: Number(newPragAlert) }),
+        body: JSON.stringify({ stocMinim: Math.max(0, Number(newPragAlert) || 0) }),
       });
       if (res.ok) {
         alert(`Pragul minim de alertă pentru "${editingAlertArticol.denumire}" a fost setat la ${newPragAlert} ${editingAlertArticol.unitateMasura || 'L'}.`);
@@ -597,6 +601,10 @@ export default function FluidePage() {
       alert('Vă rugăm introduceți denumirea categoriei de fluid!');
       return;
     }
+    if (catStocMinim < 0) {
+      alert('Pragul de alertă stoc minim nu poate fi negativ!');
+      return;
+    }
     try {
       const url = editingCat
         ? `${API_BASE_URL}/stocuri-garantii/categorii/${editingCat.id}`
@@ -609,7 +617,7 @@ export default function FluidePage() {
         body: JSON.stringify({
           nume: catNume.trim(),
           descriere: catDescriere.trim() || null,
-          stocMinimImplicit: Number(catStocMinim),
+          stocMinimImplicit: Math.max(0, Number(catStocMinim) || 0),
           esteFluid: true,
         }),
       });
@@ -2507,7 +2515,7 @@ export default function FluidePage() {
                   step="0.5"
                   required
                   value={newPragAlert}
-                  onChange={(e) => setNewPragAlert(Number(e.target.value))}
+                  onChange={(e) => setNewPragAlert(Math.max(0, Number(e.target.value) || 0))}
                   placeholder="ex: 50"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold text-sm focus:outline-none focus:border-sapphire-500"
                 />

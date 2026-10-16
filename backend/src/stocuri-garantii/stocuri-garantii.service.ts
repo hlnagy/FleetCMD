@@ -260,11 +260,18 @@ export class StocuriGarantiiService {
       ? Boolean(data.esteFluid) 
       : /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(data.nume);
 
+    if (data.stocMinimImplicit !== undefined && Number(data.stocMinimImplicit) < 0) {
+      throw new BadRequestException('Pragul de stoc minim nu poate fi negativ.');
+    }
+    const stocMinimImplicit = data.stocMinimImplicit !== undefined
+      ? Math.max(0, Number(data.stocMinimImplicit))
+      : (isFluid ? 20 : 5);
+
     return this.prisma.categorieStoc.create({
       data: {
         nume: data.nume.trim(),
         descriere: data.descriere?.trim() || null,
-        stocMinimImplicit: data.stocMinimImplicit ? Number(data.stocMinimImplicit) : (isFluid ? 20 : 5),
+        stocMinimImplicit,
         esteFluid: isFluid,
       },
       include: { subcategorii: true },
@@ -275,21 +282,40 @@ export class StocuriGarantiiService {
     const existing = await this.prisma.categorieStoc.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Categoria nu a fost găsită.');
 
+    if (data.stocMinimImplicit !== undefined && Number(data.stocMinimImplicit) < 0) {
+      throw new BadRequestException('Pragul de alertă stoc minim nu poate fi negativ.');
+    }
+
+    const newStocMinim = data.stocMinimImplicit !== undefined
+      ? Math.max(0, Number(data.stocMinimImplicit))
+      : undefined;
+
     const updated = await this.prisma.categorieStoc.update({
       where: { id },
       data: {
         nume: data.nume ? data.nume.trim() : undefined,
         descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
-        stocMinimImplicit: data.stocMinimImplicit !== undefined ? Number(data.stocMinimImplicit) : undefined,
+        stocMinimImplicit: newStocMinim,
         esteFluid: data.esteFluid !== undefined ? Boolean(data.esteFluid) : undefined,
       },
       include: { subcategorii: true },
     });
 
+    const targetCategoryName = data.nume ? data.nume.trim() : existing.nume;
+
+    // 1. Sincronizare redenumire categorie pe articolele din stoc
     if (data.nume && data.nume.trim() !== existing.nume) {
       await this.prisma.articolStoc.updateMany({
         where: { categorie: existing.nume },
-        data: { categorie: data.nume.trim() },
+        data: { categorie: targetCategoryName },
+      });
+    }
+
+    // 2. Sincronizare prag stocMinim pe articolele din stoc din această categorie
+    if (newStocMinim !== undefined) {
+      await this.prisma.articolStoc.updateMany({
+        where: { categorie: targetCategoryName },
+        data: { stocMinim: newStocMinim },
       });
     }
 
@@ -547,7 +573,12 @@ export class StocuriGarantiiService {
 
     const articole = await this.prisma.articolStoc.findMany({
       where,
-      include: { depozit: true },
+      include: {
+        depozit: true,
+        intrariStoc: {
+          orderBy: { dataFactura: 'desc' },
+        },
+      },
       orderBy: { denumire: 'asc' },
     });
 
@@ -623,6 +654,9 @@ export class StocuriGarantiiService {
   }
 
   async updateArticolStoc(id: string, data: any) {
+    if (data.stocMinim !== undefined && Number(data.stocMinim) < 0) {
+      throw new BadRequestException('Pragul de alertă stoc minim nu poate fi negativ.');
+    }
     return this.prisma.articolStoc.update({
       where: { id },
       data: {
@@ -631,7 +665,7 @@ export class StocuriGarantiiService {
         categorie: data.categorie !== undefined ? data.categorie : undefined,
         subcategorie: data.subcategorie !== undefined ? data.subcategorie : undefined,
         stocCurent: data.stocCurent !== undefined ? Number(data.stocCurent) : undefined,
-        stocMinim: data.stocMinim !== undefined ? Number(data.stocMinim) : undefined,
+        stocMinim: data.stocMinim !== undefined ? Math.max(0, Number(data.stocMinim)) : undefined,
         pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
         unitateMasura: data.unitateMasura !== undefined ? data.unitateMasura : undefined,
         depozitId: data.depozitId !== undefined ? data.depozitId : undefined,

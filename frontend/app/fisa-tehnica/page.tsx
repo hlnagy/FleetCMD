@@ -7,19 +7,33 @@ import Link from 'next/link';
 import {
   Truck, Plus, Edit3, Clock, DollarSign, Calendar, Layers, Search, CheckCircle2,
   FileText, CircleDot, Droplets, PieChart, Wrench, X, Eye, Settings, ShieldAlert,
-  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer, Link2
+  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer, Link2, Building2
 } from 'lucide-react';
 import VehicleSelector from '../../components/VehicleSelector';
 import VehicleOdometerModal from '../../components/VehicleOdometerModal';
 import { getLabelPozitie } from '@/lib/tirePositions';
 import { getCategoryColor } from '@/lib/categoryColors';
+import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
 
 export default function FisaTehnicaPage() {
+  const { openTab } = useTabWorkspace();
+
+  const handleOpenFacturaInEfactura = (numarFactura?: string) => {
+    if (!numarFactura || numarFactura === 'Fără Număr' || numarFactura === '-') return;
+    openTab({
+      id: '/efactura?tab=efactura',
+      title: `Factură: ${numarFactura}`,
+      href: `/efactura?tab=efactura&search=${encodeURIComponent(numarFactura)}`,
+      iconName: 'FileText',
+    });
+  };
+
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [fisaData, setFisaData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'piloni' | 'comenzi' | 'anvelope' | 'lichide' | 'mentenanta'>('piloni');
+  const [pieseSearchQuery, setPieseSearchQuery] = useState('');
 
   // MODAL PREVIZUALIZARE FIȘĂ A4 (DEVIZ / COMANDĂ DE LUCRU)
   const [showViewModal, setShowViewModal] = useState<any>(null);
@@ -1151,6 +1165,173 @@ export default function FisaTehnicaPage() {
 
                 </table>
               </div>
+
+              {/* SECTIUNE DEDICATA: REGISTRU PIESE MONTATE & TRASABILITATE ACHIZITII (FURNIZOR & FACTURA) */}
+              <div className="mt-8 pt-6 border-t border-morning-300 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-sapphire-900 flex items-center space-x-2">
+                      <span className="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                        <Layers className="w-4 h-4 text-emerald-700" />
+                      </span>
+                      <span>Registru Piese Montate & Istoric Achiziții (Trasabilitate Furnizori & Facturi)</span>
+                    </h4>
+                    <p className="text-xs text-sage-600 mt-0.5">
+                      Vedeți exact de la ce companie, cu ce factură fiscală, la ce preț și când a fost achiziționată și montată fiecare piesă pe acest utilaj.
+                    </p>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Căutare piesă, furnizor, factură..."
+                      value={pieseSearchQuery}
+                      onChange={(e) => setPieseSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 bg-white border border-morning-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {(() => {
+                  const allPieseMontate = (vehicul?.comenziLucru || []).flatMap((cl: any) =>
+                    (cl.elementeComanda || []).map((el: any) => {
+                      const furnizor = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor || null;
+                      const factura = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura || null;
+                      const dataFactura = el.articolStoc?.intrariStoc?.[0]?.dataFactura || null;
+                      const pretUnit = Number(el.pretUnitar || el.articolStoc?.intrariStoc?.[0]?.pretUnitar || 0);
+                      const costTotal = Number(el.costTotal != null ? el.costTotal : (Number(el.cantitate || 1) * pretUnit));
+                      const prov = getProvenientaSuffix(el);
+                      return {
+                        ...el,
+                        comandaId: cl.id,
+                        comandaNumar: cl.numarComanda,
+                        comandaStare: cl.stare,
+                        comandaData: cl.dataDeschidere,
+                        comandaMecanic: cl.mecanicResponsabil,
+                        furnizorFinal: furnizor,
+                        facturaFinal: factura,
+                        dataFacturaFinal: dataFactura,
+                        pretUnitFinal: pretUnit,
+                        costTotalFinal: costTotal,
+                        provFinal: prov,
+                      };
+                    })
+                  );
+
+                  const filteredPiese = allPieseMontate.filter((p: any) => {
+                    if (!pieseSearchQuery) return true;
+                    const q = pieseSearchQuery.toLowerCase().trim();
+                    return (
+                      p.descriere?.toLowerCase().includes(q) ||
+                      p.furnizorFinal?.toLowerCase().includes(q) ||
+                      p.facturaFinal?.toLowerCase().includes(q) ||
+                      p.comandaNumar?.toLowerCase().includes(q) ||
+                      p.comandaMecanic?.toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filteredPiese.length === 0) {
+                    return (
+                      <div className="p-8 text-center bg-morning-50 rounded-xl border border-morning-200 text-xs text-sage-600">
+                        {pieseSearchQuery ? (
+                          <span>Nicio piesă nu corespunde căutării &ldquo;{pieseSearchQuery}&rdquo;.</span>
+                        ) : (
+                          <span>Nu există încă piese montate înregistrate în comenzile de lucru ale acestui vehicul.</span>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto rounded-xl border border-morning-200">
+                      <table className="w-full text-left text-xs text-slate-700 min-w-[900px]">
+                        <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
+                          <tr>
+                            <th className="p-3">Dată Montaj & Comandă</th>
+                            <th className="p-3">Descriere Piesă / Consumabil</th>
+                            <th className="p-3">Companie Furnizoare</th>
+                            <th className="p-3">Factură Achiziție</th>
+                            <th className="p-3 font-mono text-center">Cant.</th>
+                            <th className="p-3 font-mono text-right">Preț Achiziție</th>
+                            <th className="p-3 font-mono text-right">Cost Total</th>
+                            <th className="p-3 text-right">Acțiuni</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-morning-200 bg-white">
+                          {filteredPiese.map((p: any, pIdx: number) => (
+                            <tr key={`${p.id}-${pIdx}`} className="hover:bg-morning-50 transition">
+                              <td className="p-3">
+                                <span className="font-mono font-bold text-sapphire-900 block">{p.comandaNumar}</span>
+                                <span className="text-[10px] text-sage-500">
+                                  {new Date(p.comandaData).toLocaleDateString('ro-RO')} • {p.comandaMecanic || 'Atelier'}
+                                </span>
+                              </td>
+                              <td className="p-3 font-semibold text-slate-900">
+                                {p.descriere}
+                                {p.provFinal && (
+                                  <span className="text-slate-500 text-[10px] font-normal block">({p.provFinal})</span>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                {p.furnizorFinal ? (
+                                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-bold text-[11px]">
+                                    <Building2 className="w-3 h-3 text-sapphire-600" />
+                                    <span>{p.furnizorFinal}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">Magazie Internă</span>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                {p.facturaFinal ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFacturaInEfactura(p.facturaFinal)}
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-morning-100 hover:bg-sapphire-100 text-slate-800 hover:text-sapphire-900 border border-morning-300 transition text-[11px] font-medium"
+                                    title="Deschide factura în ANAF e-Factura"
+                                  >
+                                    <FileText className="w-3 h-3 text-slate-500" />
+                                    <span>Factura: <strong className="underline decoration-dotted">{p.facturaFinal}</strong></span>
+                                    {p.dataFacturaFinal && (
+                                      <span className="text-[10px] text-slate-500 ml-1">({new Date(p.dataFacturaFinal).toLocaleDateString('ro-RO')})</span>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">-</span>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono font-bold text-center text-slate-800">
+                                {p.cantitate} buc
+                              </td>
+                              <td className="p-3 font-mono font-bold text-right text-slate-700">
+                                {p.pretUnitFinal > 0
+                                  ? `${p.pretUnitFinal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`
+                                  : '-'}
+                              </td>
+                              <td className="p-3 font-mono font-extrabold text-right text-sapphire-900">
+                                {p.costTotalFinal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                              </td>
+                              <td className="p-3 text-right">
+                                {p.facturaFinal && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFacturaInEfactura(p.facturaFinal)}
+                                    className="px-2.5 py-1 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-[10px] border border-sapphire-200 transition inline-flex items-center space-x-1"
+                                    title="Vezi Factura în e-Factura"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>Vezi Factură</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           )}
 
@@ -1568,9 +1749,10 @@ export default function FisaTehnicaPage() {
                     <tr>
                       <th className="p-2 border-r border-slate-300 w-10 text-center">#</th>
                       <th className="p-2 border-r border-slate-300">Descriere Operațiune / Piesă</th>
-                      <th className="p-2 border-r border-slate-300 w-24 text-center">Cant.</th>
-                      <th className="p-2 border-r border-slate-300 w-32 text-right">Preț Unitar</th>
-                      <th className="p-2 w-32 text-right">Total (RON)</th>
+                      <th className="p-2 border-r border-slate-300">Proveniență & Factură Achiziție</th>
+                      <th className="p-2 border-r border-slate-300 w-20 text-center">Cant.</th>
+                      <th className="p-2 border-r border-slate-300 w-28 text-right">Preț Unitar</th>
+                      <th className="p-2 w-28 text-right">Total (RON)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -1578,6 +1760,9 @@ export default function FisaTehnicaPage() {
                       const prov = getProvenientaSuffix(el);
                       const unitPrice = Number(el.pretUnitar || 0);
                       const lineTotal = Number(el.costTotal != null ? el.costTotal : (Number(el.cantitate || 1) * unitPrice));
+                      const furnizor = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor;
+                      const factura = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura;
+                      const dataFactura = el.articolStoc?.intrariStoc?.[0]?.dataFactura;
 
                       return (
                         <tr key={idx} className="hover:bg-slate-50">
@@ -1586,6 +1771,32 @@ export default function FisaTehnicaPage() {
                             <span className="font-semibold text-slate-900">{el.descriere}</span>
                             {prov && (
                               <span className="text-slate-500 font-normal ml-1.5">({prov})</span>
+                            )}
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            {furnizor || factura ? (
+                              <div className="space-y-0.5 text-[11px]">
+                                {furnizor && (
+                                  <div className="font-bold text-slate-800 flex items-center space-x-1">
+                                    <span>🏢 {furnizor}</span>
+                                  </div>
+                                )}
+                                {factura && (
+                                  <div className="text-slate-600 flex items-center space-x-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenFacturaInEfactura(factura)}
+                                      className="hover:underline hover:text-sapphire-700 font-medium inline-flex items-center space-x-0.5"
+                                      title="Deschide în e-Factura"
+                                    >
+                                      <span>📄 Factura: <strong>{factura}</strong></span>
+                                      {dataFactura && <span className="text-slate-500 text-[10px]">({new Date(dataFactura).toLocaleDateString('ro-RO')})</span>}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[10px]">Stoc Intern / Nespecificat</span>
                             )}
                           </td>
                           <td className="p-2 border-r border-slate-200 font-mono text-center font-bold">{el.cantitate}</td>

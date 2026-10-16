@@ -3,7 +3,7 @@
 import { API_BASE_URL } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Settings, Save, Bell, FileText, ShieldAlert, Plus, Trash2, Edit3, CheckCircle2,
@@ -121,13 +121,63 @@ function SetariContent() {
   const [numeSubcatNoua, setNumeSubcatNoua] = useState('');
   const [descriereSubcatNoua, setDescriereSubcatNoua] = useState('');
 
+  const [searchCategoriiText, setSearchCategoriiText] = useState('');
+  const [sortCategoriiMod, setSortCategoriiMod] = useState<'alfabetic' | 'subcategorii' | 'stoc_minim'>('alfabetic');
+  const [viewCategoriiMod, setViewCategoriiMod] = useState<'grid' | 'tabel'>('grid');
+
   // Categoriile de fluide & lubrifianți sunt gestionate dedicat în modulul /fluide
   const isFluidCategory = (c: any) => {
     if (c?.esteFluid) return true;
     const name = (c?.nume || '').toLowerCase();
     return /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(name);
   };
-  const categoriiPiese = categorii.filter((c: any) => !isFluidCategory(c));
+
+  const isGenericCategory = (nume: string) => {
+    const n = (nume || '').toLowerCase().trim();
+    return n === 'alte' || n === 'altele' || n === 'diverse' || n === 'general' || n.startsWith('alte ');
+  };
+
+  const sortedCategoriiPiese = useMemo(() => {
+    let list = (categorii || [])
+      .filter((c: any) => !isFluidCategory(c))
+      .map((c: any) => ({
+        ...c,
+        subcategorii: [...(c.subcategorii || [])].sort((a: any, b: any) =>
+          (a.nume || '').localeCompare(b.nume || '', 'ro', { sensitivity: 'base' })
+        ),
+      }));
+
+    if (searchCategoriiText.trim()) {
+      const q = searchCategoriiText.toLowerCase().trim();
+      list = list.filter(
+        (c: any) =>
+          c.nume?.toLowerCase().includes(q) ||
+          c.descriere?.toLowerCase().includes(q) ||
+          (c.subcategorii || []).some(
+            (sc: any) => sc.nume?.toLowerCase().includes(q) || sc.descriere?.toLowerCase().includes(q)
+          )
+      );
+    }
+
+    return list.sort((a: any, b: any) => {
+      if (sortCategoriiMod === 'subcategorii') {
+        const diff = (b.subcategorii?.length || 0) - (a.subcategorii?.length || 0);
+        if (diff !== 0) return diff;
+      } else if (sortCategoriiMod === 'stoc_minim') {
+        const diff = (b.stocMinimImplicit || 0) - (a.stocMinimImplicit || 0);
+        if (diff !== 0) return diff;
+      }
+
+      // Alfabetic, dar categoriile generice ("Alte", "Diverse") la sfârșitul listei!
+      const aIsGen = isGenericCategory(a.nume);
+      const bIsGen = isGenericCategory(b.nume);
+      if (aIsGen && !bIsGen) return 1;
+      if (!aIsGen && bIsGen) return -1;
+      return (a.nume || '').localeCompare(b.nume || '', 'ro', { sensitivity: 'base' });
+    });
+  }, [categorii, searchCategoriiText, sortCategoriiMod]);
+
+  const categoriiPiese = sortedCategoriiPiese;
 
   // ==========================================
   // 5. STATE REGULI MENTENANȚĂ
@@ -934,7 +984,7 @@ function SetariContent() {
     setEditingCat(c);
     setNumeCategorieNoua(c.nume || '');
     setDescriereCatNoua(c.descriere || '');
-    setStocMinimImplicitCat(c.stocMinimImplicit || 5);
+    setStocMinimImplicitCat(c.stocMinimImplicit !== undefined && c.stocMinimImplicit !== null ? Number(c.stocMinimImplicit) : 5);
     setShowAddCatModal(true);
   };
 
@@ -942,6 +992,10 @@ function SetariContent() {
     e.preventDefault();
     if (!numeCategorieNoua.trim()) {
       alert('Vă rugăm introduceți numele categoriei!');
+      return;
+    }
+    if (stocMinimImplicitCat < 0) {
+      alert('Pragul de alertă stoc minim nu poate fi un număr negativ!');
       return;
     }
     try {
@@ -956,7 +1010,7 @@ function SetariContent() {
         body: JSON.stringify({
           nume: numeCategorieNoua.trim(),
           descriere: descriereCatNoua.trim() || null,
-          stocMinimImplicit: Number(stocMinimImplicitCat),
+          stocMinimImplicit: Math.max(0, Number(stocMinimImplicitCat) || 0),
         }),
       });
 
@@ -2162,84 +2216,253 @@ function SetariContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {categoriiPiese.map((c: any) => (
-              <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3 shadow-2xs hover:shadow-xs transition">
-                <div className="flex items-center justify-between border-b border-morning-200 pb-2">
-                  <div className="flex items-center space-x-2">
-                    <Layers className="w-5 h-5 text-periwinkle-700" />
-                    <h4 className="font-extrabold text-sapphire-900 text-base">{c.nume}</h4>
-                  </div>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
-                      Stoc Min: {c.stocMinimImplicit || 5} buc
-                    </span>
-                    <button
-                      onClick={() => openEditCat(c)}
-                      title="Editare Categorie"
-                      className="p-1.5 text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-lg transition"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCategorie(c.id, c.nume)}
-                      title="Ștergere Categorie"
-                      className="p-1.5 text-terracotta-600 hover:text-terracotta-700 hover:bg-roseash-100 rounded-lg transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+          {/* TOOLBAR CĂUTARE & SORTARE & MOD VIZUALIZARE CATEGORII */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-morning-200 shadow-2xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Caută categorie sau subcategorie..."
+                value={searchCategoriiText}
+                onChange={(e) => setSearchCategoriiText(e.target.value)}
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-8 py-2 text-xs font-bold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
+              />
+              {searchCategoriiText && (
+                <button
+                  onClick={() => setSearchCategoriiText('')}
+                  className="absolute right-2.5 top-2.5 text-sage-400 hover:text-sapphire-900"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
-                <p className="text-xs text-sage-700">{c.descriere || 'Fără descriere adițională.'}</p>
-
-                <div className="pt-2 border-t border-morning-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider">
-                      Subcategorii incluse ({c.subcategorii?.length || 0}):
-                    </p>
-                    <button
-                      onClick={() => openAddSubcat(c.nume)}
-                      className="text-[11px] font-extrabold text-sapphire-600 hover:text-sapphire-800 hover:bg-sapphire-50 px-2 py-0.5 rounded-lg border border-sapphire-200 transition flex items-center space-x-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Adaugă Subcategorie</span>
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5">
-                    {c.subcategorii && c.subcategorii.length > 0 ? (
-                      c.subcategorii.map((sc: any) => (
-                        <div
-                          key={sc.id || sc.nume}
-                          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-morning-100 border border-morning-200 text-[11px] font-bold text-sapphire-900 shadow-2xs group hover:border-sapphire-300 transition"
-                          title={sc.descriere || sc.nume}
-                        >
-                          <span>{sc.nume}</span>
-                          <button
-                            onClick={() => openEditSubcat(sc, c.nume)}
-                            title="Editare Subcategorie"
-                            className="p-0.5 text-sage-400 hover:text-sapphire-600 hover:bg-white rounded transition"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSubcategorie(sc.id, sc.nume)}
-                            title="Ștergere Subcategorie"
-                            className="p-0.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded transition"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <span className="text-[11px] text-sage-500 italic">Nicio subcategorie definită</span>
-                    )}
-                  </div>
-                </div>
+            <div className="flex items-center space-x-3 shrink-0">
+              <div className="flex items-center space-x-1.5">
+                <span className="text-sage-500 font-bold text-[11px] whitespace-nowrap">Sortare:</span>
+                <select
+                  value={sortCategoriiMod}
+                  onChange={(e) => setSortCategoriiMod(e.target.value as any)}
+                  className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
+                >
+                  <option value="alfabetic">Alfabetic (A-Z, diverse la final)</option>
+                  <option value="subcategorii">Nr. Subcategorii (Multe → Puține)</option>
+                  <option value="stoc_minim">Alertă Stoc Minim (Mare → Mic)</option>
+                </select>
               </div>
-            ))}
+
+              <div className="flex items-center bg-morning-100 p-0.5 rounded-xl border border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setViewCategoriiMod('grid')}
+                  title="Vizualizare Carduri"
+                  className={`p-1.5 rounded-lg transition ${
+                    viewCategoriiMod === 'grid'
+                      ? 'bg-white shadow-xs text-sapphire-700 font-bold'
+                      : 'text-sage-500 hover:text-sapphire-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewCategoriiMod('tabel')}
+                  title="Vizualizare Tabel Sintetic"
+                  className={`p-1.5 rounded-lg transition ${
+                    viewCategoriiMod === 'tabel'
+                      ? 'bg-white shadow-xs text-sapphire-700 font-bold'
+                      : 'text-sage-500 hover:text-sapphire-900'
+                  }`}
+                >
+                  <LayoutList className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
+
+          {categoriiPiese.length === 0 ? (
+            <div className="pleasant-card p-8 rounded-2xl border border-morning-200 text-center text-sage-600 space-y-2">
+              <Layers className="w-8 h-8 text-sage-400 mx-auto" />
+              <p className="font-bold text-sm text-sapphire-900">Nicio categorie găsită</p>
+              <p className="text-xs">
+                {searchCategoriiText
+                  ? `Nu există rezultate pentru căutarea "${searchCategoriiText}". Încercați alt termen.`
+                  : 'Nu există categorii de piese configurate.'}
+              </p>
+            </div>
+          ) : viewCategoriiMod === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {categoriiPiese.map((c: any) => (
+                <div key={c.id || c.nume} className="pleasant-card p-5 rounded-2xl border border-morning-200 space-y-3 shadow-2xs hover:shadow-xs transition">
+                  <div className="flex items-center justify-between border-b border-morning-200 pb-2">
+                    <div className="flex items-center space-x-2">
+                      <Layers className="w-5 h-5 text-periwinkle-700" />
+                      <h4 className="font-extrabold text-sapphire-900 text-base">{c.nume}</h4>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-morning-200 text-sapphire-900">
+                        Alertă Stoc Min: {c.stocMinimImplicit !== undefined && c.stocMinimImplicit !== null ? c.stocMinimImplicit : 5} buc
+                      </span>
+                      <button
+                        onClick={() => openEditCat(c)}
+                        title="Editare Categorie"
+                        className="p-1.5 text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-lg transition"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategorie(c.id, c.nume)}
+                        title="Ștergere Categorie"
+                        className="p-1.5 text-terracotta-600 hover:text-terracotta-700 hover:bg-roseash-100 rounded-lg transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-sage-700">{c.descriere || 'Fără descriere adițională.'}</p>
+
+                  <div className="pt-2 border-t border-morning-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider">
+                        Subcategorii incluse ({c.subcategorii?.length || 0}):
+                      </p>
+                      <button
+                        onClick={() => openAddSubcat(c.nume)}
+                        className="text-[11px] font-extrabold text-sapphire-600 hover:text-sapphire-800 hover:bg-sapphire-50 px-2 py-0.5 rounded-lg border border-sapphire-200 transition flex items-center space-x-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Adaugă Subcategorie</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.subcategorii && c.subcategorii.length > 0 ? (
+                        c.subcategorii.map((sc: any) => (
+                          <div
+                            key={sc.id || sc.nume}
+                            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-morning-100 border border-morning-200 text-[11px] font-bold text-sapphire-900 shadow-2xs group hover:border-sapphire-300 transition"
+                            title={sc.descriere || sc.nume}
+                          >
+                            <span>{sc.nume}</span>
+                            <button
+                              onClick={() => openEditSubcat(sc, c.nume)}
+                              title="Editare Subcategorie"
+                              className="p-0.5 text-sage-400 hover:text-sapphire-600 hover:bg-white rounded transition"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSubcategorie(sc.id, sc.nume)}
+                              title="Ștergere Subcategorie"
+                              className="p-0.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded transition"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-[11px] text-sage-500 italic">Nicio subcategorie definită</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="pleasant-card rounded-2xl border border-morning-200 overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-morning-100/80 border-b border-morning-200 text-sage-700 font-extrabold">
+                      <th className="p-3">Categorie</th>
+                      <th className="p-3 text-center">Alertă Stoc Min</th>
+                      <th className="p-3">Subcategorii ({categoriiPiese.reduce((acc: number, cur: any) => acc + (cur.subcategorii?.length || 0), 0)})</th>
+                      <th className="p-3 text-right">Acțiuni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200">
+                    {categoriiPiese.map((c: any) => (
+                      <tr key={c.id || c.nume} className="hover:bg-morning-50/50 transition">
+                        <td className="p-3 align-top font-bold text-sapphire-900 min-w-[180px]">
+                          <div className="flex items-center space-x-2">
+                            <Layers className="w-4 h-4 text-periwinkle-700 shrink-0" />
+                            <div>
+                              <span>{c.nume}</span>
+                              {c.descriere && (
+                                <p className="text-[11px] font-normal text-sage-500">{c.descriere}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 align-top text-center whitespace-nowrap">
+                          <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-morning-200 text-sapphire-900 font-mono">
+                            {c.stocMinimImplicit !== undefined && c.stocMinimImplicit !== null ? c.stocMinimImplicit : 5} buc
+                          </span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap gap-1">
+                              {(c.subcategorii || []).map((sc: any) => (
+                                <span
+                                  key={sc.id || sc.nume}
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-morning-100 border border-morning-200 text-[10px] font-bold text-sapphire-900"
+                                >
+                                  <span>{sc.nume}</span>
+                                  <button
+                                    onClick={() => openEditSubcat(sc, c.nume)}
+                                    title="Editare"
+                                    className="p-0.5 text-sage-400 hover:text-sapphire-600"
+                                  >
+                                    <Edit3 className="w-2.5 h-2.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSubcategorie(sc.id, sc.nume)}
+                                    title="Ștergere"
+                                    className="p-0.5 text-sage-400 hover:text-terracotta-600"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              ))}
+                              {(!c.subcategorii || c.subcategorii.length === 0) && (
+                                <span className="text-[11px] text-sage-400 italic">Fără subcategorii</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-3 align-top text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end space-x-1">
+                            <button
+                              onClick={() => openAddSubcat(c.nume)}
+                              title="Adaugă Subcategorie"
+                              className="p-1.5 text-sapphire-600 hover:bg-sapphire-50 rounded-lg transition"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openEditCat(c)}
+                              title="Editare Categorie"
+                              className="p-1.5 text-sage-600 hover:text-sapphire-600 hover:bg-sapphire-50 rounded-lg transition"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategorie(c.id, c.nume)}
+                              title="Ștergere Categorie"
+                              className="p-1.5 text-terracotta-600 hover:text-terracotta-700 hover:bg-roseash-100 rounded-lg transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* BANNER GESTIUNE DEDICATĂ FLUIDE (PLASAT LA BAZA PAGINII) */}
           <div className="pleasant-card p-4 rounded-2xl bg-sapphire-50/80 border border-sapphire-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs mt-2">
@@ -4515,8 +4738,17 @@ function SetariContent() {
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Stoc Minim Implicit (Avertizare automat):</label>
-                <input type="number" value={stocMinimImplicitCat} onChange={(e) => setStocMinimImplicitCat(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                <label className="text-sage-700 block mb-1 font-bold">Stoc Minim Implicit (Avertizare automată stoc redus):</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={stocMinimImplicitCat}
+                  onChange={(e) => setStocMinimImplicitCat(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                />
+                <p className="text-[11px] text-sage-500 mt-1">Valoarea minimă este 0. La salvare, acest prag se va sincroniza și pe articolele de stoc existente din această categorie.</p>
               </div>
 
               <div>

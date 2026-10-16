@@ -472,6 +472,40 @@ export class MentenantaService {
       }
     }
 
+    const processedElemente = await Promise.all(
+      elementeData.map(async (el) => {
+        let furnizor = el.furnizor || null;
+        let numarFactura = el.numarFactura || null;
+        let pretUnitar = Number(el.pretUnitar || 0);
+
+        if (el.articolStocId && (!furnizor || !numarFactura)) {
+          const latestLot = await this.prisma.intrareStoc.findFirst({
+            where: { articolStocId: el.articolStocId },
+            orderBy: { dataFactura: 'desc' },
+          });
+          if (latestLot) {
+            if (!furnizor) furnizor = latestLot.furnizor;
+            if (!numarFactura) numarFactura = latestLot.numarFactura;
+            if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+          }
+        }
+
+        return {
+          sarcinaMentenantaId: el.sarcinaMentenantaId || null,
+          pilonCost: el.pilonCost,
+          descriere: el.descriere,
+          cantitate: Number(el.cantitate || 1),
+          pretUnitar,
+          costTotal: Number(el.cantitate || 1) * pretUnitar,
+          provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
+          articolStocId: el.articolStocId || null,
+          serieUnicaPiesa: el.serieUnicaPiesa || null,
+          furnizor,
+          numarFactura,
+        };
+      })
+    );
+
     const comanda = await this.prisma.comandaLucru.create({
       data: {
         numarComanda,
@@ -482,22 +516,23 @@ export class MentenantaService {
         stare: 'IN_LUCRU',
         dataDeschidere: new Date(),
         elementeComanda: {
-          create: elementeData.map((el) => ({
-            sarcinaMentenantaId: el.sarcinaMentenantaId || null,
-            pilonCost: el.pilonCost,
-            descriere: el.descriere,
-            cantitate: Number(el.cantitate || 1),
-            pretUnitar: Number(el.pretUnitar || 0),
-            costTotal: Number(el.cantitate || 1) * Number(el.pretUnitar || 0),
-            provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Standard'),
-            articolStocId: el.articolStocId || null,
-            serieUnicaPiesa: el.serieUnicaPiesa || null,
-            furnizor: el.furnizor || null,
-            numarFactura: el.numarFactura || null,
-          })),
+          create: processedElemente,
         },
       },
-      include: { elementeComanda: true, vehicul: true },
+      include: {
+        elementeComanda: {
+          include: {
+            articolStoc: {
+              include: {
+                intrariStoc: {
+                  orderBy: { dataFactura: 'desc' },
+                },
+              },
+            },
+          },
+        },
+        vehicul: true,
+      },
     });
 
     return comanda;
@@ -512,6 +547,8 @@ export class MentenantaService {
     pretUnitar: number;
     provenienta?: string;
     articolStocId?: string;
+    furnizor?: string;
+    numarFactura?: string;
   }) {
     const comanda = await this.prisma.comandaLucru.findUnique({ where: { id: comandaId } });
     if (!comanda) throw new NotFoundException('Comanda nu există.');
@@ -541,6 +578,22 @@ export class MentenantaService {
       }
     }
 
+    let furnizor = el.furnizor || null;
+    let numarFactura = el.numarFactura || null;
+    let pretUnitar = Number(el.pretUnitar || 0);
+
+    if (el.articolStocId && (!furnizor || !numarFactura)) {
+      const latestLot = await this.prisma.intrareStoc.findFirst({
+        where: { articolStocId: el.articolStocId },
+        orderBy: { dataFactura: 'desc' },
+      });
+      if (latestLot) {
+        if (!furnizor) furnizor = latestLot.furnizor;
+        if (!numarFactura) numarFactura = latestLot.numarFactura;
+        if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+      }
+    }
+
     return this.prisma.elementComandaLucru.create({
       data: {
         comandaLucruId: comandaId,
@@ -548,10 +601,21 @@ export class MentenantaService {
         pilonCost: el.pilonCost,
         descriere: el.descriere,
         cantitate: Number(el.cantitate || 1),
-        pretUnitar: Number(el.pretUnitar || 0),
-        costTotal: Number(el.cantitate || 1) * Number(el.pretUnitar || 0),
+        pretUnitar,
+        costTotal: Number(el.cantitate || 1) * pretUnitar,
         provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
         articolStocId: el.articolStocId || null,
+        furnizor,
+        numarFactura,
+      },
+      include: {
+        articolStoc: {
+          include: {
+            intrariStoc: {
+              orderBy: { dataFactura: 'desc' },
+            },
+          },
+        },
       },
     });
   }
@@ -577,11 +641,18 @@ export class MentenantaService {
           }
           try {
             const fifoRes = await this.stocuriGarantiiService.consumaStocFIFO(elem.articolStocId, elem.cantitate);
+            const furnizoriFIFO = fifoRes.loturiConsumate?.map((l: any) => l.furnizor).filter(Boolean);
+            const facturiFIFO = fifoRes.loturiConsumate?.map((l: any) => l.numarFactura).filter(Boolean);
+            const furnizorFinal = furnizoriFIFO && furnizoriFIFO.length > 0 ? Array.from(new Set(furnizoriFIFO)).join(', ') : elem.furnizor;
+            const facturaFinal = facturiFIFO && facturiFIFO.length > 0 ? Array.from(new Set(facturiFIFO)).join(', ') : elem.numarFactura;
+
             await this.prisma.elementComandaLucru.update({
               where: { id: elem.id },
               data: {
                 costTotal: fifoRes.costTotal,
                 pretUnitar: fifoRes.pretUnitarMediu,
+                furnizor: furnizorFinal,
+                numarFactura: facturaFinal,
               },
             });
           } catch (err) {
@@ -813,23 +884,59 @@ export class MentenantaService {
       }
       // Re-create elements if passed
       await this.prisma.elementComandaLucru.deleteMany({ where: { comandaLucruId: comandaId } });
+      const processedUpdateElemente = await Promise.all(
+        data.elementeComanda.map(async (el: any) => {
+          let furnizor = el.furnizor || null;
+          let numarFactura = el.numarFactura || null;
+          let pretUnitar = Number(el.pretUnitar || 0);
+
+          if (el.articolStocId && (!furnizor || !numarFactura)) {
+            const latestLot = await this.prisma.intrareStoc.findFirst({
+              where: { articolStocId: el.articolStocId },
+              orderBy: { dataFactura: 'desc' },
+            });
+            if (latestLot) {
+              if (!furnizor) furnizor = latestLot.furnizor;
+              if (!numarFactura) numarFactura = latestLot.numarFactura;
+              if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+            }
+          }
+
+          return {
+            comandaLucruId: comandaId,
+            pilonCost: el.pilonCost,
+            descriere: el.descriere,
+            cantitate: Number(el.cantitate || 1),
+            pretUnitar,
+            costTotal: Number(el.cantitate || 1) * pretUnitar,
+            provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : el.pilonCost === 'PIESA_DIRECTA' ? 'Achiziție Directă' : 'Stoc Intern'),
+            articolStocId: el.articolStocId || null,
+            furnizor,
+            numarFactura,
+          };
+        })
+      );
+
       await this.prisma.elementComandaLucru.createMany({
-        data: data.elementeComanda.map((el) => ({
-          comandaLucruId: comandaId,
-          pilonCost: el.pilonCost,
-          descriere: el.descriere,
-          cantitate: Number(el.cantitate || 1),
-          pretUnitar: Number(el.pretUnitar || 0),
-          costTotal: Number(el.cantitate || 1) * Number(el.pretUnitar || 0),
-          provenienta: el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern',
-          articolStocId: el.articolStocId || null,
-        })),
+        data: processedUpdateElemente,
       });
     }
 
     return this.prisma.comandaLucru.findUnique({
       where: { id: comandaId },
-      include: { elementeComanda: true },
+      include: {
+        elementeComanda: {
+          include: {
+            articolStoc: {
+              include: {
+                intrariStoc: {
+                  orderBy: { dataFactura: 'desc' },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -1100,6 +1207,21 @@ export class MentenantaService {
         dataFactura: true,
         valoareTotala: true,
         stare: true,
+        articole: {
+          select: {
+            id: true,
+            descrierePiesa: true,
+            codArticolFurnizor: true,
+            cantitate: true,
+            unitateMasura: true,
+            pretUnitar: true,
+            valoareFaraTVA: true,
+            valoareTVA: true,
+            cotaTVA: true,
+            stare: true,
+            articolStocId: true,
+          },
+        },
       },
       orderBy: { dataFactura: 'desc' },
       take: 2000,
@@ -1145,6 +1267,23 @@ export class MentenantaService {
       },
     });
 
+    // 10. Catalog articole stoc pentru rezoluție categorie & subcategorie
+    const articoleStocCatalog = await this.prisma.articolStoc.findMany({
+      select: {
+        id: true,
+        codArticol: true,
+        denumire: true,
+        categorie: true,
+        subcategorie: true,
+        unitateMasura: true,
+      },
+    });
+    const articoleStocMap = new Map<string, (typeof articoleStocCatalog)[0]>();
+    articoleStocCatalog.forEach((a) => {
+      if (a.id) articoleStocMap.set(a.id, a);
+      if (a.codArticol) articoleStocMap.set(a.codArticol.toUpperCase().trim(), a);
+    });
+
     // Helper mapare categorie fluid
     const mapFluidCategory = (desc: string, tipRaw?: string): { key: string; label: string } => {
       const t = (tipRaw || '').toUpperCase();
@@ -1168,6 +1307,125 @@ export class MentenantaService {
         return { key: 'ADBLUE', label: 'AdBlue' };
       }
       return { key: 'ALTE', label: 'Alte Fluide' };
+    };
+
+    // Helper mapare Főkategória & Alkategória pentru articole facturate
+    const categorizeInvoiceItem = (
+      descriere: string,
+      codArticol?: string | null,
+      articolStoc?: { categorie?: string | null; subcategorie?: string | null; unitateMasura?: string | null } | null
+    ): { categorie: string; subcategorie: string; unitateMasura: string } => {
+      // 1. Dacă articolul este deja salvat/asociat cu un ArticolStoc din baza de date
+      if (articolStoc && articolStoc.categorie) {
+        return {
+          categorie: articolStoc.categorie.trim(),
+          subcategorie: articolStoc.subcategorie?.trim() || 'General',
+          unitateMasura: articolStoc.unitateMasura || 'buc',
+        };
+      }
+
+      const d = (descriere || '').toLowerCase();
+      const cod = (codArticol || '').toUpperCase();
+
+      // 2. Anvelope & Camere
+      const matchAnvelopaDim = descriere.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
+      if (matchAnvelopaDim || /anvelop|cauciuc|pneu/i.test(d) || cod.startsWith('ANV')) {
+        const dim = matchAnvelopaDim ? matchAnvelopaDim[0].replace(/\s+/g, '') : 'Diverse Anvelope';
+        return { categorie: 'Anvelope', subcategorie: dim, unitateMasura: 'buc' };
+      }
+
+      // 3. Uleiuri & Lubrifianți
+      if (/ulei|oil|lubrifiant|unsoare|vaselin|10w40|15w40|5w30|5w40|hlp|tellus|rimula|spirax/i.test(d)) {
+        if (/motor|10w40|15w40|5w30|5w40|rimula|ck-4/i.test(d)) {
+          return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Ulei Motor', unitateMasura: 'L' };
+        }
+        if (/hidraul|hlp|tellus|vg\s*46|vg\s*68/i.test(d)) {
+          return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Ulei Hidraulic', unitateMasura: 'L' };
+        }
+        if (/transmis|cutie|punte|80w90|75w90|75w80|spirax|atf/i.test(d)) {
+          return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Ulei Transmisie / Cutie', unitateMasura: 'L' };
+        }
+        if (/vaselin|unsoare|grease|gadus/i.test(d)) {
+          return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Vaselină Mecanică', unitateMasura: 'kg' };
+        }
+        return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Alte Lubrifianți', unitateMasura: 'L' };
+      }
+
+      // 4. Antigel & Răcire
+      if (/antigel|coolant|racire|g11|g12|g13|demineraliz/i.test(d)) {
+        if (/g12|roz|organic/i.test(d)) {
+          return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel G12+ (Roz)', unitateMasura: 'L' };
+        }
+        if (/g11|albastru/i.test(d)) {
+          return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel G11 (Albastru)', unitateMasura: 'L' };
+        }
+        if (/apa|demineraliz/i.test(d)) {
+          return { categorie: 'Antigel & Răcire', subcategorie: 'Apă Demineralizată', unitateMasura: 'L' };
+        }
+        return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel Concentrat / Mixt', unitateMasura: 'L' };
+      }
+
+      // 5. AdBlue & Fluide Speciale
+      if (/adblue|uree|frana|dot\s*4|parbriz|spalare/i.test(d)) {
+        if (/adblue|uree/i.test(d)) {
+          return { categorie: 'AdBlue & Chimice', subcategorie: 'AdBlue (Soluție Uree)', unitateMasura: 'L' };
+        }
+        if (/frana|dot\s*4/i.test(d)) {
+          return { categorie: 'AdBlue & Chimice', subcategorie: 'Lichid Frână DOT 4', unitateMasura: 'L' };
+        }
+        if (/parbriz|spalare/i.test(d)) {
+          return { categorie: 'AdBlue & Chimice', subcategorie: 'Lichid Spălare Parbriz', unitateMasura: 'L' };
+        }
+        return { categorie: 'AdBlue & Chimice', subcategorie: 'Fluide Speciale', unitateMasura: 'L' };
+      }
+
+      // 6. Filtre
+      if (/filtr|cartus\s*filtr/i.test(d)) {
+        if (/ulei/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Ulei Motor', unitateMasura: 'buc' };
+        if (/aer/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Aer', unitateMasura: 'buc' };
+        if (/combustibil|motorina|carburant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Combustibil', unitateMasura: 'buc' };
+        if (/hidraul/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Hidraulic', unitateMasura: 'buc' };
+        if (/uscator|desiccant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Uscător Aer', unitateMasura: 'buc' };
+        if (/habitaclu|polen/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Habitaclu', unitateMasura: 'buc' };
+        return { categorie: 'Filtre', subcategorie: 'Filtre Diverse', unitateMasura: 'buc' };
+      }
+
+      // 7. Sistem Frânare
+      if (/placute|placuta|disc\s*frana|frana|tambur|sabot|etrier/i.test(d)) {
+        if (/placut/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Plăcuțe Frână', unitateMasura: 'set' };
+        if (/disc/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Discuri Frână', unitateMasura: 'buc' };
+        if (/tambur|sabot/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Saboți & Tamburi Frână', unitateMasura: 'set' };
+        if (/etrier|cilindru/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Etrieri & Cilindri Frână', unitateMasura: 'buc' };
+        return { categorie: 'Sistem Frânare', subcategorie: 'Componente Frânare', unitateMasura: 'buc' };
+      }
+
+      // 8. Piese Mecanice & Direcție
+      if (/pivot|bucsa|bara|amortizor|perna|curea|intinzator|rola|turbo|turbosuflanta|ambreiaj|rulment|pompa\s*apa|termostat/i.test(d)) {
+        if (/amortizor|perna/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Suspensie & Amortizoare', unitateMasura: 'buc' };
+        if (/pivot|bucsa|bara/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Articulații & Direcție', unitateMasura: 'buc' };
+        if (/curea|intinzator|rola/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Curele & Transmisie Auxiliară', unitateMasura: 'buc' };
+        if (/turbo|turbosufl/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Turbosuflante & Turbo', unitateMasura: 'buc' };
+        if (/ambreiaj|volanta/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Kit Ambreiaj & Volantă', unitateMasura: 'buc' };
+        if (/pompa\s*apa|termostat/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Pompă Apă & Termostat', unitateMasura: 'buc' };
+        return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Piese Mecanice Generale', unitateMasura: 'buc' };
+      }
+
+      // 9. Electrice & Acumulatori
+      if (/baterie|acumulator|alternator|electromotor|demaror|far|bec|led|lampa|senzor|cablu|releu/i.test(d)) {
+        if (/baterie|acumulator/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Baterii & Acumulatori', unitateMasura: 'buc' };
+        if (/alternator|electromotor|demaror/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Alternatoare & Demaroare', unitateMasura: 'buc' };
+        if (/far|bec|led|lampa|stop/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Iluminare & Semnalizare', unitateMasura: 'buc' };
+        return { categorie: 'Sisteme Electrice', subcategorie: 'Cablaje & Senzori', unitateMasura: 'buc' };
+      }
+
+      // 10. Consumabile & Atelier
+      if (/spray|degresant|pasta|silicon|colier|surub|piulita|saiba|manusi/i.test(d)) {
+        if (/spray|degresant|curatitor/i.test(d)) return { categorie: 'Consumabile & Feronerie', subcategorie: 'Spray-uri Tehnice & Curățare', unitateMasura: 'buc' };
+        if (/colier|surub|piulita|saiba/i.test(d)) return { categorie: 'Consumabile & Feronerie', subcategorie: 'Organe de Asamblare & Coliere', unitateMasura: 'buc' };
+        return { categorie: 'Consumabile & Feronerie', subcategorie: 'Consumabile Atelier', unitateMasura: 'buc' };
+      }
+
+      return { categorie: 'Alte Piese & Materiale', subcategorie: 'Diverse Piese Nespecificate', unitateMasura: 'buc' };
     };
 
     // 6. Agregare Piese, Manoperă, Anvelope & Fluide (Csere vs Potlas + Lebontás)
@@ -1813,6 +2071,227 @@ export class MentenantaService {
       }))
       .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
 
+    // H2. Raport Achiziții: Főkategóriák & Alkategóriák (Defalcare ierarhică piese facturate)
+    const categoriiAchizitiiMap: Record<string, {
+      categorie: string;
+      valoareTotalaRON: number;
+      valoareFaraTVARON: number;
+      cantitateTotala: number;
+      numarPozitii: number;
+      facturiSet: Set<string>;
+      furnizoriSet: Record<string, number>;
+      subcategoriiMap: Record<string, {
+        subcategorie: string;
+        valoareTotalaRON: number;
+        valoareFaraTVARON: number;
+        cantitateTotala: number;
+        unitateMasura: string;
+        numarPozitii: number;
+        articoleRecente: any[];
+      }>;
+    }> = {};
+
+    let totalCategoriiRON = 0;
+    let totalCategoriiFaraTVARON = 0;
+    let totalLiniiPozitii = 0;
+
+    facturiEFactura.forEach((f) => {
+      if (f.stare === 'ELIMINAT') return;
+
+      const furnizor = f.numeVanzator || 'Furnizor Necunoscut';
+      const items = f.articole || [];
+
+      if (items.length === 0) {
+        const catName = 'Alte Piese & Materiale';
+        const subName = 'Factură Nedetaliată';
+        const vCuTVA = Number(f.valoareTotala || 0);
+        const vFaraTVA = Number((vCuTVA / 1.19).toFixed(2));
+
+        if (!categoriiAchizitiiMap[catName]) {
+          categoriiAchizitiiMap[catName] = {
+            categorie: catName,
+            valoareTotalaRON: 0,
+            valoareFaraTVARON: 0,
+            cantitateTotala: 0,
+            numarPozitii: 0,
+            facturiSet: new Set(),
+            furnizoriSet: {},
+            subcategoriiMap: {},
+          };
+        }
+        const cObj = categoriiAchizitiiMap[catName];
+        cObj.valoareTotalaRON += vCuTVA;
+        cObj.valoareFaraTVARON += vFaraTVA;
+        cObj.cantitateTotala += 1;
+        cObj.numarPozitii += 1;
+        cObj.facturiSet.add(f.numarFactura);
+        cObj.furnizoriSet[furnizor] = (cObj.furnizoriSet[furnizor] || 0) + vCuTVA;
+
+        if (!cObj.subcategoriiMap[subName]) {
+          cObj.subcategoriiMap[subName] = {
+            subcategorie: subName,
+            valoareTotalaRON: 0,
+            valoareFaraTVARON: 0,
+            cantitateTotala: 0,
+            unitateMasura: 'buc',
+            numarPozitii: 0,
+            articoleRecente: [],
+          };
+        }
+        const sObj = cObj.subcategoriiMap[subName];
+        sObj.valoareTotalaRON += vCuTVA;
+        sObj.valoareFaraTVARON += vFaraTVA;
+        sObj.cantitateTotala += 1;
+        sObj.numarPozitii += 1;
+        if (sObj.articoleRecente.length < 10) {
+          sObj.articoleRecente.push({
+            id: f.id,
+            descriere: `Factura ${f.numarFactura} (${furnizor})`,
+            codArticol: '-',
+            furnizor,
+            numarFactura: f.numarFactura,
+            dataFactura: f.dataFactura,
+            cantitate: 1,
+            unitateMasura: 'buc',
+            pretUnitar: vCuTVA,
+            valoareFaraTVA: vFaraTVA,
+            valoareTotala: vCuTVA,
+            stare: f.stare,
+          });
+        }
+
+        totalCategoriiRON += vCuTVA;
+        totalCategoriiFaraTVARON += vFaraTVA;
+        totalLiniiPozitii += 1;
+      } else {
+        items.forEach((item) => {
+          const cant = Number(item.cantitate || 1);
+          const pretUnit = Number(item.pretUnitar || 0);
+          let vFaraTVA = Number(item.valoareFaraTVA || 0);
+          if (vFaraTVA === 0 && pretUnit > 0) {
+            vFaraTVA = Number((cant * pretUnit).toFixed(2));
+          }
+          let vCuTVA = Number(item.valoareTVA ? (vFaraTVA + item.valoareTVA) : (vFaraTVA * 1.19));
+          vCuTVA = Number(vCuTVA.toFixed(2));
+
+          const linkedArticol = item.articolStocId
+            ? articoleStocMap.get(item.articolStocId)
+            : item.codArticolFurnizor
+            ? articoleStocMap.get(item.codArticolFurnizor.toUpperCase().trim())
+            : null;
+          const mapped = categorizeInvoiceItem(item.descrierePiesa, item.codArticolFurnizor, linkedArticol);
+          const catName = mapped.categorie;
+          const subName = mapped.subcategorie;
+          const um = item.unitateMasura || mapped.unitateMasura || 'buc';
+
+          if (!categoriiAchizitiiMap[catName]) {
+            categoriiAchizitiiMap[catName] = {
+              categorie: catName,
+              valoareTotalaRON: 0,
+              valoareFaraTVARON: 0,
+              cantitateTotala: 0,
+              numarPozitii: 0,
+              facturiSet: new Set(),
+              furnizoriSet: {},
+              subcategoriiMap: {},
+            };
+          }
+          const cObj = categoriiAchizitiiMap[catName];
+          cObj.valoareTotalaRON += vCuTVA;
+          cObj.valoareFaraTVARON += vFaraTVA;
+          cObj.cantitateTotala += cant;
+          cObj.numarPozitii += 1;
+          cObj.facturiSet.add(f.numarFactura);
+          cObj.furnizoriSet[furnizor] = (cObj.furnizoriSet[furnizor] || 0) + vCuTVA;
+
+          if (!cObj.subcategoriiMap[subName]) {
+            cObj.subcategoriiMap[subName] = {
+              subcategorie: subName,
+              valoareTotalaRON: 0,
+              valoareFaraTVARON: 0,
+              cantitateTotala: 0,
+              unitateMasura: um,
+              numarPozitii: 0,
+              articoleRecente: [],
+            };
+          }
+          const sObj = cObj.subcategoriiMap[subName];
+          sObj.valoareTotalaRON += vCuTVA;
+          sObj.valoareFaraTVARON += vFaraTVA;
+          sObj.cantitateTotala += cant;
+          sObj.numarPozitii += 1;
+          if (sObj.articoleRecente.length < 10) {
+            sObj.articoleRecente.push({
+              id: item.id,
+              descriere: item.descrierePiesa,
+              codArticol: item.codArticolFurnizor || linkedArticol?.codArticol || '-',
+              furnizor,
+              numarFactura: f.numarFactura,
+              dataFactura: f.dataFactura,
+              cantitate: cant,
+              unitateMasura: um,
+              pretUnitar: pretUnit,
+              valoareFaraTVA: vFaraTVA,
+              valoareTotala: vCuTVA,
+              stare: item.stare,
+            });
+          }
+
+          totalCategoriiRON += vCuTVA;
+          totalCategoriiFaraTVARON += vFaraTVA;
+          totalLiniiPozitii += 1;
+        });
+      }
+    });
+
+    const achizitiiCategorii = Object.values(categoriiAchizitiiMap)
+      .map((cat) => {
+        const catRON = Number(cat.valoareTotalaRON.toFixed(2));
+        const catFaraTVARON = Number(cat.valoareFaraTVARON.toFixed(2));
+        const procentDinTotal = totalCategoriiRON > 0 ? Number(((catRON / totalCategoriiRON) * 100).toFixed(1)) : 0;
+
+        const subcategorii = Object.values(cat.subcategoriiMap)
+          .map((sub) => {
+            const subRON = Number(sub.valoareTotalaRON.toFixed(2));
+            const subFaraTVARON = Number(sub.valoareFaraTVARON.toFixed(2));
+            const procentDinCategorie = catRON > 0 ? Number(((subRON / catRON) * 100).toFixed(1)) : 0;
+            const procentSubDinTotal = totalCategoriiRON > 0 ? Number(((subRON / totalCategoriiRON) * 100).toFixed(1)) : 0;
+
+            return {
+              subcategorie: sub.subcategorie,
+              valoareTotalaRON: subRON,
+              valoareFaraTVARON: subFaraTVARON,
+              cantitateTotala: Number(sub.cantitateTotala.toFixed(2)),
+              unitateMasura: sub.unitateMasura,
+              numarPozitii: sub.numarPozitii,
+              procentDinCategorie,
+              procentDinTotal: procentSubDinTotal,
+              articoleRecente: sub.articoleRecente,
+            };
+          })
+          .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
+
+        const furnizoriPrincipali = Object.entries(cat.furnizoriSet)
+          .map(([nume, val]) => ({ nume, valoareRON: Number(val.toFixed(2)) }))
+          .sort((a, b) => b.valoareRON - a.valoareRON)
+          .slice(0, 3);
+
+        return {
+          categorie: cat.categorie,
+          valoareTotalaRON: catRON,
+          valoareFaraTVARON: catFaraTVARON,
+          cantitateTotala: Number(cat.cantitateTotala.toFixed(2)),
+          numarPozitii: cat.numarPozitii,
+          numarFacturi: cat.facturiSet.size,
+          procentDinTotal,
+          subcategorii,
+          furnizoriPrincipali,
+        };
+      })
+      .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
+
+    const numarSubcategorii = achizitiiCategorii.reduce((acc, c) => acc + c.subcategorii.length, 0);
+
     // I. Raport 4: Scadențar Mentenanță & Documente (Următoarele 30-60 Zile)
     const now = new Date();
     const documenteScadente = documenteVehicule
@@ -1895,6 +2374,11 @@ export class MentenantaService {
         numarCompletariFluide: completariPrelucrate.length,
         totalVehiculeAfectate: vehicule.length,
         totalAchizitiiEFacturaRON: Number(totalGeneralFacturiRON.toFixed(2)),
+        totalAchizitiiCategoriiRON: Number(totalCategoriiRON.toFixed(2)),
+        totalAchizitiiFaraTVARON: Number(totalCategoriiFaraTVARON.toFixed(2)),
+        numarCategoriiAchizitii: achizitiiCategorii.length,
+        numarSubcategoriiAchizitii: numarSubcategorii,
+        numarPozitiiFacturate: totalLiniiPozitii,
         numarFacturiEFactura: facturiEFactura.length,
         numarDocumenteScadente: documenteScadente.length,
         numarReviziiPreconizate: reviziiPreconizate.length,
@@ -1911,6 +2395,7 @@ export class MentenantaService {
       eficientaCostUnitar,
       analizaConsumUlei,
       achizitiiFurnizori,
+      achizitiiCategorii,
       scadentarMentenanta: {
         documenteScadente,
         reviziiPreconizate,

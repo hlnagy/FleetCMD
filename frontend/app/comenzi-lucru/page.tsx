@@ -7,10 +7,11 @@ import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
   Unlock, RotateCcw, Calendar, Truck, Loader2, Package, Minus, AlertCircle, Info,
-  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2
+  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2, Building2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import DraggableModal from '@/components/DraggableModal';
+import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
 
 // Module-level persistent cache across tab switching
 interface ComenziLucruCache {
@@ -28,6 +29,18 @@ interface ComenziLucruCache {
 const comenziCache: ComenziLucruCache = {};
 
 export default function ComenziLucruPage() {
+  const { openTab } = useTabWorkspace();
+
+  const handleOpenFacturaInEfactura = (numarFactura?: string) => {
+    if (!numarFactura || numarFactura === 'Fără Număr' || numarFactura === '-') return;
+    openTab({
+      id: '/efactura?tab=efactura',
+      title: `Factură: ${numarFactura}`,
+      href: `/efactura?tab=efactura&search=${encodeURIComponent(numarFactura)}`,
+      iconName: 'FileText',
+    });
+  };
+
   const [comenzi, setComenzi] = useState<any[]>(() => comenziCache.comenzi || []);
   const [vehicule, setVehicule] = useState<any[]>(() => comenziCache.vehicule || []);
   const [stocuri, setStocuri] = useState<any[]>(() => comenziCache.stocuri || []);
@@ -1282,18 +1295,54 @@ export default function ComenziLucruPage() {
                     </td>
 
                     <td className="p-3">
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {cl.elementeComanda && cl.elementeComanda.length > 0 ? (
                           cl.elementeComanda.map((el: any) => {
                             const prov = getProvenientaSuffix(el);
+                            const furnizor = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor;
+                            const factura = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura;
+                            const dataFactura = el.articolStoc?.intrariStoc?.[0]?.dataFactura;
+                            const pretUnit = Number(el.pretUnitar || el.articolStoc?.intrariStoc?.[0]?.pretUnitar || 0);
+
                             return (
-                              <div key={el.id} className="text-[11px] font-medium text-slate-800 flex items-center justify-between">
-                                <span>
-                                  • {el.descriere}
-                                  {prov && <span className="text-slate-500 font-normal ml-1">({prov})</span>}
-                                  {' '}({el.cantitate} buc)
-                                </span>
-                                <span className="font-mono text-sage-600 ml-2">{el.costTotal} RON</span>
+                              <div key={el.id} className="text-[11px] font-medium text-slate-800 space-y-0.5 border-b border-slate-100 last:border-0 pb-1 last:pb-0">
+                                <div className="flex items-center justify-between">
+                                  <span>
+                                    • {el.descriere}
+                                    {prov && <span className="text-slate-500 font-normal ml-1">({prov})</span>}
+                                    {' '}({el.cantitate} buc)
+                                  </span>
+                                  <span className="font-mono text-sage-700 font-bold ml-2 whitespace-nowrap">
+                                    {Number(el.costTotal || (Number(el.cantitate || 1) * pretUnit)).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                                  </span>
+                                </div>
+                                {(furnizor || factura || pretUnit > 0) && (
+                                  <div className="flex items-center space-x-1.5 flex-wrap gap-1 text-[10px] text-sage-600 pl-2">
+                                    {furnizor && (
+                                      <span className="inline-flex items-center space-x-0.5 text-sapphire-800 bg-sapphire-50 px-1.5 py-0.2 rounded border border-sapphire-200">
+                                        <Building2 className="w-2.5 h-2.5 text-sapphire-600" />
+                                        <span>{furnizor}</span>
+                                      </span>
+                                    )}
+                                    {factura && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenFacturaInEfactura(factura)}
+                                        className="inline-flex items-center space-x-0.5 text-slate-700 bg-morning-100 px-1.5 py-0.2 rounded border border-morning-300 hover:bg-sapphire-100 hover:text-sapphire-900 transition"
+                                        title="Click pentru a deschide factura în ANAF e-Factura"
+                                      >
+                                        <FileText className="w-2.5 h-2.5 text-slate-500" />
+                                        <span>Factura: <strong className="underline decoration-dotted">{factura}</strong></span>
+                                        {dataFactura && <span className="text-[9px] text-slate-500">({new Date(dataFactura).toLocaleDateString('ro-RO')})</span>}
+                                      </button>
+                                    )}
+                                    {pretUnit > 0 && (
+                                      <span className="font-mono text-slate-500">
+                                        {pretUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             );
                           })
@@ -2285,9 +2334,10 @@ export default function ComenziLucruPage() {
                   <tr>
                     <th className="p-2 border-r border-slate-300 w-10 text-center">#</th>
                     <th className="p-2 border-r border-slate-300">Descriere Operațiune / Piesă</th>
-                    <th className="p-2 border-r border-slate-300 w-24 text-center">Cant.</th>
-                    <th className="p-2 border-r border-slate-300 w-32 text-right">Preț Unitar</th>
-                    <th className="p-2 w-32 text-right">Total (RON)</th>
+                    <th className="p-2 border-r border-slate-300">Proveniență & Factură Achiziție</th>
+                    <th className="p-2 border-r border-slate-300 w-20 text-center">Cant.</th>
+                    <th className="p-2 border-r border-slate-300 w-28 text-right">Preț Unitar</th>
+                    <th className="p-2 w-28 text-right">Total (RON)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -2295,6 +2345,9 @@ export default function ComenziLucruPage() {
                     const prov = getProvenientaSuffix(el);
                     const unitPrice = Number(el.pretUnitar || 0);
                     const lineTotal = Number(el.costTotal != null ? el.costTotal : (Number(el.cantitate || 1) * unitPrice));
+                    const furnizor = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor;
+                    const factura = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura;
+                    const dataFactura = el.articolStoc?.intrariStoc?.[0]?.dataFactura;
 
                     return (
                       <tr key={idx} className="hover:bg-slate-50">
@@ -2303,6 +2356,32 @@ export default function ComenziLucruPage() {
                           <span className="font-semibold text-slate-900">{el.descriere}</span>
                           {prov && (
                             <span className="text-slate-500 font-normal ml-1.5">({prov})</span>
+                          )}
+                        </td>
+                        <td className="p-2 border-r border-slate-200">
+                          {furnizor || factura ? (
+                            <div className="space-y-0.5 text-[11px]">
+                              {furnizor && (
+                                <div className="font-bold text-slate-800 flex items-center space-x-1">
+                                  <span>🏢 {furnizor}</span>
+                                </div>
+                              )}
+                              {factura && (
+                                <div className="text-slate-600 flex items-center space-x-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFacturaInEfactura(factura)}
+                                    className="hover:underline hover:text-sapphire-700 font-medium inline-flex items-center space-x-0.5"
+                                    title="Deschide în e-Factura"
+                                  >
+                                    <span>📄 Factura: <strong>{factura}</strong></span>
+                                    {dataFactura && <span className="text-slate-500 text-[10px]">({new Date(dataFactura).toLocaleDateString('ro-RO')})</span>}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-[10px]">Stoc Intern / Nespecificat</span>
                           )}
                         </td>
                         <td className="p-2 border-r border-slate-200 font-mono text-center font-bold">{el.cantitate}</td>

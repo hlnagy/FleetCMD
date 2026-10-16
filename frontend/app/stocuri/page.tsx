@@ -11,10 +11,22 @@ import {
   ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
 
 function StocuriGarantiiContent() {
+  const { openTab } = useTabWorkspace();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
+
+  const handleOpenFacturaInEfactura = (numarFactura?: string) => {
+    if (!numarFactura || numarFactura === 'Fără Număr' || numarFactura === '-') return;
+    openTab({
+      id: '/efactura?tab=efactura',
+      title: `Factură: ${numarFactura}`,
+      href: `/efactura?tab=efactura&search=${encodeURIComponent(numarFactura)}`,
+      iconName: 'FileText',
+    });
+  };
 
   const [stocuri, setStocuri] = useState<any[]>([]);
   const [componente, setComponente] = useState<any[]>([]);
@@ -299,6 +311,10 @@ function StocuriGarantiiContent() {
   // Creare Categorie Nouă cu Stoc Minim Implicit
   const handleCreateCategorie = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (stocMinimImplicitCat < 0) {
+      alert('Pragul de alertă stoc minim nu poate fi negativ!');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
         method: 'POST',
@@ -306,7 +322,7 @@ function StocuriGarantiiContent() {
         body: JSON.stringify({
           nume: numeCategorieNoua,
           descriere: descriereCatNoua,
-          stocMinimImplicit: Number(stocMinimImplicitCat),
+          stocMinimImplicit: Math.max(0, Number(stocMinimImplicitCat) || 0),
         }),
       });
 
@@ -406,7 +422,7 @@ function StocuriGarantiiContent() {
           subcategorie,
           depozitId,
           stocCurent: Number(stocCurent),
-          stocMinim: Number(stocMinim),
+          stocMinim: Math.max(0, Number(stocMinim) || 0),
           pretUnitar: Number(pretUnitar),
           unitateMasura,
         }),
@@ -480,7 +496,7 @@ function StocuriGarantiiContent() {
         ...editingArticol,
         pretUnitar: Number(Number(editingArticol.pretUnitar || 0).toFixed(2)),
         stocCurent: Number(Number(editingArticol.stocCurent || 0).toFixed(2)),
-        stocMinim: Number(Number(editingArticol.stocMinim || 0).toFixed(2)),
+        stocMinim: Math.max(0, Number(Number(editingArticol.stocMinim || 0).toFixed(2))),
       };
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingArticol.id}`, {
         method: 'PATCH',
@@ -888,6 +904,35 @@ function StocuriGarantiiContent() {
                       <td className="p-3 font-bold text-sapphire-900">
                         {s.denumire}
                         {s.marcaUlei && <span className="text-[10px] text-sage-600 font-medium block">Marcă: {s.marcaUlei}</span>}
+                        {s.intrariStoc && s.intrariStoc.length > 0 && (
+                          <div className="mt-1 flex items-center space-x-1.5 flex-wrap gap-1 text-[11px] font-normal">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-medium">
+                              <Building2 className="w-3 h-3 text-sapphire-600" />
+                              <span>Furnizor: <strong className="font-semibold">{s.intrariStoc[0].furnizor || 'N/A'}</strong></span>
+                            </span>
+                            <span
+                              onClick={() => s.intrariStoc[0].numarFactura && handleOpenFacturaInEfactura(s.intrariStoc[0].numarFactura)}
+                              className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-morning-100 border border-morning-300 text-slate-700 font-medium ${s.intrariStoc[0].numarFactura ? 'cursor-pointer hover:bg-sapphire-100 hover:text-sapphire-800' : ''}`}
+                              title={s.intrariStoc[0].numarFactura ? 'Click pentru a deschide factura în ANAF e-Factura' : ''}
+                            >
+                              <FileText className="w-3 h-3 text-slate-500" />
+                              <span>Factura: <strong className="font-semibold underline decoration-dotted">{s.intrariStoc[0].numarFactura || 'N/A'}</strong></span>
+                              {s.intrariStoc[0].dataFactura && (
+                                <span className="text-slate-500 text-[10px]">({new Date(s.intrariStoc[0].dataFactura).toLocaleDateString('ro-RO')})</span>
+                              )}
+                            </span>
+                            {s.intrariStoc.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFifoLoturi(s)}
+                                className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                                title={`Vezi toate cele ${s.intrariStoc.length} loturi / facturi de achiziție`}
+                              >
+                                +{s.intrariStoc.length - 1} loturi anterioare
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {isAnvelopa && (
                           <div className="mt-1">
                             <button
@@ -939,7 +984,7 @@ function StocuriGarantiiContent() {
                         >
                           <span className="flex items-center space-x-1">
                             <Layers className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Loturi FIFO</span>
+                            <span>Trasabilitate Facturi (FIFO)</span>
                           </span>
                         </button>
 
@@ -1579,9 +1624,10 @@ function StocuriGarantiiContent() {
                 <input
                   type="number"
                   min="0"
+                  step="1"
                   required
                   value={stocMinimImplicitCat}
-                  onChange={(e) => setStocMinimImplicitCat(Number(e.target.value))}
+                  onChange={(e) => setStocMinimImplicitCat(Math.max(0, Number(e.target.value) || 0))}
                   className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-extrabold"
                 />
               </div>
@@ -1736,7 +1782,14 @@ function StocuriGarantiiContent() {
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Stoc Minim</label>
-                  <input type="number" value={stocMinim} onChange={(e) => setStocMinim(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-bold" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={stocMinim}
+                    onChange={(e) => setStocMinim(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-mono font-bold"
+                  />
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Preț Unitar</label>
@@ -1892,9 +1945,10 @@ function StocuriGarantiiContent() {
                   <label className="text-sage-700 block mb-1 font-bold">Stoc Minim</label>
                   <input
                     type="number"
+                    min="0"
                     step="0.01"
                     value={editingArticol.stocMinim}
-                    onChange={(e) => setEditingArticol({ ...editingArticol, stocMinim: Number(e.target.value) })}
+                    onChange={(e) => setEditingArticol({ ...editingArticol, stocMinim: Math.max(0, Number(e.target.value) || 0) })}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-extrabold text-terracotta-600"
                   />
                 </div>
@@ -2289,8 +2343,9 @@ function StocuriGarantiiContent() {
                             <th className="p-2.5">Nr. Factură & Furnizor</th>
                             <th className="p-2.5 font-mono">Cantitate Intrată</th>
                             <th className="p-2.5 font-mono">Cantitate Rămasă</th>
-                            <th className="p-2.5 font-mono">Preț Achiziție</th>
+                            <th className="p-2.5 font-mono">Preț Achiziție & Total</th>
                             <th className="p-2.5 text-center">Stare Consum</th>
+                            <th className="p-2.5 text-center">Factură Fiscală</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-morning-200">
@@ -2298,6 +2353,7 @@ function StocuriGarantiiContent() {
                             const cantRamasa = lot.cantitateRamasa ?? lot.cantitateIntrata;
                             const esteEpuizat = cantRamasa <= 0.001;
                             const estePrioritar = idx === firstActiveIdx && !esteEpuizat;
+                            const lotCostTotal = lot.pretTotal || (lot.cantitateIntrata * (lot.pretUnitar || 0));
 
                             return (
                               <tr
@@ -2343,12 +2399,17 @@ function StocuriGarantiiContent() {
                                     {cantRamasa.toFixed(2)} {viewingFifoArticol.unitateMasura}
                                   </span>
                                 </td>
-                                <td className="p-2.5 font-mono font-bold text-sapphire-900">
-                                  {Number(lot.pretUnitar || 0).toLocaleString('ro-RO', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}{' '}
-                                  RON / {viewingFifoArticol.unitateMasura}
+                                <td className="p-2.5 font-mono">
+                                  <span className="font-bold text-sapphire-900 block">
+                                    {Number(lot.pretUnitar || 0).toLocaleString('ro-RO', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}{' '}
+                                    RON / {viewingFifoArticol.unitateMasura}
+                                  </span>
+                                  <span className="text-[10px] text-sage-600 font-medium">
+                                    Total: {Number(lotCostTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                                  </span>
                                 </td>
                                 <td className="p-2.5 text-center">
                                   {esteEpuizat ? (
@@ -2364,6 +2425,21 @@ function StocuriGarantiiContent() {
                                     <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sapphire-50 text-sapphire-700 border border-sapphire-200">
                                       <span>În așteptare FIFO</span>
                                     </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  {lot.numarFactura && lot.numarFactura !== 'Fără Număr' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenFacturaInEfactura(lot.numarFactura)}
+                                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-800 text-[11px] font-bold border border-sapphire-200 transition shadow-2xs"
+                                      title="Deschide și filtrează această factură în ANAF e-Factura"
+                                    >
+                                      <FileText className="w-3.5 h-3.5 text-sapphire-600" />
+                                      <span>Vezi Factură</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">Fără document</span>
                                   )}
                                 </td>
                               </tr>

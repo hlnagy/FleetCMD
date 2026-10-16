@@ -57,8 +57,37 @@ export default function RapoartePage() {
   const [cautaConsumUlei, setCautaConsumUlei] = useState<string>('');
   const [cautaFurnizor, setCautaFurnizor] = useState<string>('');
   const [subTabScadentar, setSubTabScadentar] = useState<'documente' | 'revizii'>('documente');
+  const [subTabEfactura, setSubTabEfactura] = useState<'categorii' | 'furnizori'>('categorii');
+  const [cautaCategorieText, setCautaCategorieText] = useState<string>('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedSubcategories, setExpandedSubcategories] = useState<Record<string, boolean>>({});
   const [filtruStatusEficienta, setFiltruStatusEficienta] = useState<string>('TOATE');
   const [filtruStatusUlei, setFiltruStatusUlei] = useState<string>('TOATE');
+
+  // Toggle expand főkategória
+  const toggleCategory = (catName: string) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [catName]: prev[catName] === false ? true : false,
+    }));
+  };
+
+  // Toggle toate főkategóriáile
+  const toggleAllCategories = (expand: boolean) => {
+    const nextState: Record<string, boolean> = {};
+    (reportData?.achizitiiCategorii || []).forEach((c: any) => {
+      nextState[c.categorie] = expand;
+    });
+    setExpandedCategories(nextState);
+  };
+
+  // Toggle detalii articole alkategória
+  const toggleSubcategory = (subKey: string) => {
+    setExpandedSubcategories((prev) => ({
+      ...prev,
+      [subKey]: !prev[subKey],
+    }));
+  };
 
   // Încărcare listă inițială de vehicule
   const fetchInitialData = async () => {
@@ -186,7 +215,9 @@ export default function RapoartePage() {
       case 'CONSUM_ULEI':
         return 'Raport Consum Excesiv de Ulei & Alertă Pierderi (Scurgeri / Top-up)';
       case 'FURNIZORI_EFACTURA':
-        return 'Raport Achiziții Furnizori ANAF e-Factura';
+        return subTabEfactura === 'categorii'
+          ? 'Raport Achiziții Facturate: Főkategóriák & Alkategóriák (ANAF e-Factura)'
+          : 'Raport Achiziții Furnizori ANAF e-Factura';
       case 'SCADENTAR':
         return 'Scadențar Mentenanță & Documente (Următoarele 30-60 Zile)';
     }
@@ -249,12 +280,23 @@ export default function RapoartePage() {
         );
       });
     } else if (tipRaport === 'FURNIZORI_EFACTURA') {
-      csvRows.push('Furnizor,CIF / CUI,Numar Facturi,Total Achizitii RON,Pondere din Total (%)');
-      (reportData.achizitiiFurnizori || []).forEach((fn: any) => {
-        csvRows.push(
-          `"${fn.nume}","${fn.cif}",${fn.numarFacturi},${fn.valoareTotalaRON},${fn.procentDinTotal}%`
-        );
-      });
+      if (subTabEfactura === 'categorii') {
+        csvRows.push('Fokategoria (Main Category),Alkategoria (Subcategory),Cantitate Totala,UM,Numar Pozitii,Total Achizitii RON,Fara TVA RON,Pondere Categorie (%),Pondere Total (%)');
+        (reportData.achizitiiCategorii || []).forEach((cat: any) => {
+          (cat.subcategorii || []).forEach((sub: any) => {
+            csvRows.push(
+              `"${cat.categorie}","${sub.subcategorie}",${sub.cantitateTotala},"${sub.unitateMasura}",${sub.numarPozitii},${sub.valoareTotalaRON},${sub.valoareFaraTVARON},${sub.procentDinCategorie}%,${sub.procentDinTotal}%`
+            );
+          });
+        });
+      } else {
+        csvRows.push('Furnizor,CIF / CUI,Numar Facturi,Total Achizitii RON,Pondere din Total (%)');
+        (reportData.achizitiiFurnizori || []).forEach((fn: any) => {
+          csvRows.push(
+            `"${fn.nume}","${fn.cif}",${fn.numarFacturi},${fn.valoareTotalaRON},${fn.procentDinTotal}%`
+          );
+        });
+      }
     } else if (tipRaport === 'SCADENTAR') {
       csvRows.push('Vehicul,Numar Inmatriculare,Tip Document,Serie / Numar,Emitent,Data Expirare,Zile Ramase,Status Alert');
       (reportData.scadentarMentenanta?.documenteScadente || []).forEach((d: any) => {
@@ -306,6 +348,39 @@ export default function RapoartePage() {
       );
     });
   }, [reportData?.analizaConsumUlei, cautaConsumUlei, filtruStatusUlei]);
+
+  // Filtrare categorii & subcategorii achiziții
+  const filteredCategorii = useMemo(() => {
+    const list = reportData?.achizitiiCategorii || [];
+    if (!cautaCategorieText.trim()) return list;
+    const q = cautaCategorieText.toLowerCase();
+
+    return list
+      .map((cat: any) => {
+        const catMatches = cat.categorie?.toLowerCase().includes(q);
+        const matchingSubs = (cat.subcategorii || []).filter(
+          (sub: any) =>
+            sub.subcategorie?.toLowerCase().includes(q) ||
+            (sub.articoleRecente || []).some(
+              (art: any) =>
+                art.descriere?.toLowerCase().includes(q) ||
+                art.furnizor?.toLowerCase().includes(q) ||
+                art.numarFactura?.toLowerCase().includes(q) ||
+                art.codArticol?.toLowerCase().includes(q)
+            )
+        );
+
+        if (catMatches) return cat;
+        if (matchingSubs.length > 0) {
+          return {
+            ...cat,
+            subcategorii: matchingSubs,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }, [reportData?.achizitiiCategorii, cautaCategorieText]);
 
   // Filtrare furnizori
   const filteredFurnizori = useMemo(() => {
@@ -1318,77 +1393,453 @@ export default function RapoartePage() {
           )}
 
           {/* ======================================================= */}
-          {/* RAPORT 4: ACHIZIȚII FURNIZORI ANAF E-FACTURA */}
+          {/* RAPORT 4: ACHIZIȚII FACTURATE ANAF E-FACTURA (CATEGORII & FURNIZORI) */}
           {/* ======================================================= */}
           {tipRaport === 'FURNIZORI_EFACTURA' && (
-            <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-morning-200 dark:border-slate-800 pb-3">
+            <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-5">
+              {/* Antet Raport & Switcher Vizualizare */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-morning-200 dark:border-slate-800 pb-4">
                 <div>
                   <h2 className="text-lg font-bold text-sapphire-900 dark:text-white flex items-center gap-2">
                     <FileText className="w-5 h-5 text-sapphire-600 dark:text-indigo-400" />
-                    Raport Achiziții Furnizori (ANAF RO e-Factura)
+                    Raport Achiziții Facturate (ANAF RO e-Factura)
                   </h2>
                   <p className="text-xs text-sage-600 dark:text-slate-400 mt-0.5">
-                    Centralizează achizițiile descărcate automat din Spațiul Privat Virtual (SPV) în perioada selectată.
+                    Centralizează achizițiile din SPV e-Factura pe főkategóriák și alkategóriák de piese, materiale și fluide, cu urmărire furnizori și prețuri.
                   </p>
                 </div>
-                <div className="text-left sm:text-right">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Facturi în Perioadă</span>
-                  <span className="text-xl font-black text-sapphire-700 dark:text-indigo-400">
-                    {Number(reportData.totale?.totalAchizitiiEFacturaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
-                  </span>
+
+                {/* Sub-tab Switcher: Főkategóriák & Alkategóriák vs. Furnizori */}
+                <div className="flex items-center gap-1.5 bg-morning-100 dark:bg-slate-950 p-1 rounded-xl border border-morning-200 dark:border-slate-800 self-start lg:self-auto">
+                  <button
+                    onClick={() => setSubTabEfactura('categorii')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      subTabEfactura === 'categorii'
+                        ? 'bg-sapphire-500 dark:bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-sapphire-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Főkategóriák & Alkategóriák
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                      subTabEfactura === 'categorii'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-morning-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {reportData?.totale?.numarCategoriiAchizitii || (reportData?.achizitiiCategorii || []).length}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setSubTabEfactura('furnizori')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+                      subTabEfactura === 'furnizori'
+                        ? 'bg-sapphire-500 dark:bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-sapphire-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    Parteneri & Furnizori
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                      subTabEfactura === 'furnizori'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-morning-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {(reportData?.achizitiiFurnizori || []).length}
+                    </span>
+                  </button>
                 </div>
               </div>
 
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Caută furnizor după denumire sau cod fiscal (CIF/CUI)..."
-                  value={cautaFurnizor}
-                  onChange={(e) => setCautaFurnizor(e.target.value)}
-                  className="w-full bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-sapphire-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
-                />
-              </div>
+              {/* ===================================================== */}
+              {/* VIZUALIZARE 1: FŐKATEGÓRIÁK & ALKATEGÓRIÁK */}
+              {/* ===================================================== */}
+              {subTabEfactura === 'categorii' && (
+                <div className="space-y-4">
+                  {/* KPI Summary Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Total Achiziții Facturate</span>
+                        <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
+                        {Number(reportData?.totale?.totalAchizitiiCategoriiRON || reportData?.totale?.totalAchizitiiEFacturaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} <span className="text-xs font-semibold text-slate-500">RON</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Fără TVA: {Number(reportData?.totale?.totalAchizitiiFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                      </div>
+                    </div>
 
-              <div className="overflow-x-auto rounded-xl border border-morning-200 dark:border-slate-800 shadow-xs">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-morning-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-bold border-b border-morning-200 dark:border-slate-800">
-                    <tr>
-                      <th className="p-3">Furnizor (Denumire Partener)</th>
-                      <th className="p-3">Cod Fiscal (CIF / CUI)</th>
-                      <th className="p-3 text-right">Număr Facturi</th>
-                      <th className="p-3 text-right font-black">Valoare Totală Achiziții</th>
-                      <th className="p-3 text-right">Pondere din Total</th>
-                      <th className="p-3">Ultimele Facturi Înregistrate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-morning-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
-                    {filteredFurnizori.map((fn: any) => (
-                      <tr key={fn.cif} className="hover:bg-morning-50 dark:hover:bg-slate-850">
-                        <td className="p-3 font-bold text-sapphire-900 dark:text-white">{fn.nume}</td>
-                        <td className="p-3 text-slate-500 dark:text-slate-400 font-mono">{fn.cif}</td>
-                        <td className="p-3 text-right font-semibold text-slate-700 dark:text-slate-300">{fn.numarFacturi} facturi</td>
-                        <td className="p-3 text-right font-black text-sm text-emerald-700 dark:text-emerald-400">
-                          {Number(fn.valoareTotalaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
-                        </td>
-                        <td className="p-3 text-right font-black text-sapphire-700 dark:text-indigo-400">
-                          {fn.procentDinTotal}%
-                        </td>
-                        <td className="p-3 text-slate-500 dark:text-slate-400">
-                          <div className="flex flex-wrap gap-1">
-                            {(fn.facturiRecente || []).map((fc: any, idx: number) => (
-                              <span key={idx} className="bg-morning-100 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-700 dark:text-slate-300 font-mono">
-                                {fc.numarFactura} ({fc.valoareTotala} RON)
-                              </span>
-                            ))}
+                    <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Főkategóriák Active</span>
+                        <Layers className="w-4 h-4 text-sapphire-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
+                        {reportData?.totale?.numarCategoriiAchizitii || (reportData?.achizitiiCategorii || []).length}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Grupare principală piese & fluide
+                      </div>
+                    </div>
+
+                    <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Alkategóriák Active</span>
+                        <Disc className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                      </div>
+                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
+                        {reportData?.totale?.numarSubcategoriiAchizitii || 0}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Clase specifice piese / componente
+                      </div>
+                    </div>
+
+                    <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Poziții Facturate</span>
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
+                        {reportData?.totale?.numarPozitiiFacturate || 0}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Articole individuale înregistrate
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Toolbar căutare & Expand/Collapse */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Caută főkategória, alkategória, cod piesă sau denumire în raport..."
+                        value={cautaCategorieText}
+                        onChange={(e) => setCautaCategorieText(e.target.value)}
+                        className="w-full bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-sapphire-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                      <button
+                        onClick={() => toggleAllCategories(true)}
+                        className="px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-morning-200 dark:hover:bg-slate-700 transition"
+                      >
+                        Deschide Toate
+                      </button>
+                      <button
+                        onClick={() => toggleAllCategories(false)}
+                        className="px-2.5 py-1.5 text-[11px] font-bold rounded-lg bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-morning-200 dark:hover:bg-slate-700 transition"
+                      >
+                        Închide Toate
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Arbore Ierarhic Főkategóriák & Alkategóriák */}
+                  {filteredCategorii.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs bg-morning-50 dark:bg-slate-950 rounded-xl border border-morning-200 dark:border-slate-800">
+                      Nu s-au găsit categorii sau articole facturate pentru filtrele aplicate în această perioadă.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {filteredCategorii.map((cat: any) => {
+                        const isExpanded = expandedCategories[cat.categorie] !== false;
+
+                        return (
+                          <div
+                            key={cat.categorie}
+                            className="rounded-xl border border-morning-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900 shadow-2xs transition"
+                          >
+                            {/* Antet Főkategória (Clickable Accordion) */}
+                            <div
+                              onClick={() => toggleCategory(cat.categorie)}
+                              className="p-3.5 bg-morning-50/70 dark:bg-slate-850 hover:bg-morning-100/70 dark:hover:bg-slate-800 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-morning-200/80 dark:border-slate-800/80 select-none"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <button className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:bg-morning-200 dark:hover:bg-slate-700 transition">
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-sapphire-600 dark:text-indigo-400" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                                  )}
+                                </button>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-sm text-sapphire-950 dark:text-white">
+                                      {cat.categorie}
+                                    </span>
+                                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-sapphire-100 dark:bg-indigo-950/70 text-sapphire-800 dark:text-indigo-300 border border-sapphire-200 dark:border-indigo-800/40">
+                                      {cat.subcategorii?.length || 0} alkategória
+                                    </span>
+                                    <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-morning-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                      {cat.numarPozitii || 0} poziții
+                                    </span>
+                                    {cat.numarFacturi > 0 && (
+                                      <span className="hidden sm:inline-block text-[10px] text-slate-500 dark:text-slate-400">
+                                        ({cat.numarFacturi} facturi)
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* Furnizori principali în această főkategória */}
+                                  {cat.furnizoriPrincipali && cat.furnizoriPrincipali.length > 0 && (
+                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
+                                      <span className="text-[10px] font-semibold text-slate-400 uppercase">Top furnizori:</span>
+                                      {cat.furnizoriPrincipali.map((fp: any, idx: number) => (
+                                        <span key={idx} className="bg-white dark:bg-slate-900 px-1.5 py-0.2 rounded border border-morning-200 dark:border-slate-800 text-[10px]">
+                                          {fp.nume} ({Number(fp.valoareRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 0 })} RON)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Pondere & Valoare Főkategória */}
+                              <div className="flex items-center justify-between md:justify-end gap-5 pl-7 md:pl-0">
+                                {/* Visual progress bar pondere */}
+                                <div className="w-32 hidden sm:block">
+                                  <div className="flex justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                                    <span>Pondere Total</span>
+                                    <span className="text-sapphire-700 dark:text-indigo-400">{cat.procentDinTotal}%</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-morning-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-sapphire-500 dark:bg-indigo-500 rounded-full"
+                                      style={{ width: `${Math.min(cat.procentDinTotal || 0, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <span className="text-base font-black text-sapphire-900 dark:text-white block">
+                                    {Number(cat.valoareTotalaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                                    fără TVA: {Number(cat.valoareFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON ({cat.procentDinTotal}%)
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Corp Főkategória: Tabel Alkategóriák */}
+                            {isExpanded && (
+                              <div className="overflow-x-auto divide-y divide-morning-100 dark:divide-slate-800/60">
+                                <table className="w-full text-xs text-left">
+                                  <thead className="bg-morning-100/60 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-bold text-[10px] border-b border-morning-200 dark:border-slate-800">
+                                    <tr>
+                                      <th className="p-3 pl-6">Alkategória</th>
+                                      <th className="p-3 text-right">Cantitate Totală</th>
+                                      <th className="p-3 text-right">Linii Factură</th>
+                                      <th className="p-3 text-right w-36">Pondere în Főkategória</th>
+                                      <th className="p-3 text-right">Pondere din Total</th>
+                                      <th className="p-3 text-right font-black">Valoare Totală (RON)</th>
+                                      <th className="p-3 text-center">Articole Recente</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-morning-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                                    {(cat.subcategorii || []).map((sub: any) => {
+                                      const subKey = `${cat.categorie}_${sub.subcategorie}`;
+                                      const isSubExpanded = !!expandedSubcategories[subKey];
+
+                                      return (
+                                        <>
+                                          <tr key={sub.subcategorie} className="hover:bg-morning-50/70 dark:hover:bg-slate-850/60 transition">
+                                            <td className="p-3 pl-6">
+                                              <div className="flex items-center gap-2">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-sapphire-400 dark:bg-indigo-400" />
+                                                <span className="font-bold text-sapphire-900 dark:text-slate-200">
+                                                  {sub.subcategorie}
+                                                </span>
+                                              </div>
+                                            </td>
+                                            <td className="p-3 text-right font-semibold text-slate-700 dark:text-slate-300">
+                                              {sub.cantitateTotala.toLocaleString('ro-RO')} {sub.unitateMasura}
+                                            </td>
+                                            <td className="p-3 text-right text-slate-600 dark:text-slate-400">
+                                              {sub.numarPozitii} linii
+                                            </td>
+                                            <td className="p-3 text-right">
+                                              <div className="flex items-center justify-end gap-2">
+                                                <div className="w-16 h-1.5 bg-morning-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                  <div
+                                                    className="h-full bg-emerald-500 rounded-full"
+                                                    style={{ width: `${Math.min(sub.procentDinCategorie || 0, 100)}%` }}
+                                                  />
+                                                </div>
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 text-[11px] w-9 text-right">
+                                                  {sub.procentDinCategorie}%
+                                                </span>
+                                              </div>
+                                            </td>
+                                            <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-300">
+                                              {sub.procentDinTotal}%
+                                            </td>
+                                            <td className="p-3 text-right font-black text-sm text-sapphire-900 dark:text-white">
+                                              {Number(sub.valoareTotalaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                            </td>
+                                            <td className="p-3 text-center">
+                                              {sub.articoleRecente && sub.articoleRecente.length > 0 ? (
+                                                <button
+                                                  onClick={() => toggleSubcategory(subKey)}
+                                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition ${
+                                                    isSubExpanded
+                                                      ? 'bg-sapphire-100 dark:bg-indigo-950 text-sapphire-800 dark:text-indigo-300 border-sapphire-300 dark:border-indigo-700'
+                                                      : 'bg-morning-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-morning-200 dark:border-slate-700 hover:bg-morning-200'
+                                                  }`}
+                                                >
+                                                  {isSubExpanded ? 'Ascunde Linii' : `Linii Factură (${sub.articoleRecente.length})`}
+                                                </button>
+                                              ) : (
+                                                <span className="text-slate-400">-</span>
+                                              )}
+                                            </td>
+                                          </tr>
+
+                                          {/* Subcategory recent items drawer */}
+                                          {isSubExpanded && sub.articoleRecente && (
+                                            <tr key={`${sub.subcategorie}_drawer`} className="bg-morning-50/50 dark:bg-slate-950/70">
+                                              <td colSpan={7} className="p-3 pl-8 pr-4">
+                                                <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
+                                                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-morning-200 dark:border-slate-800">
+                                                    <span className="text-[11px] font-bold text-sapphire-900 dark:text-white flex items-center gap-1.5">
+                                                      <FileText className="w-3.5 h-3.5 text-sapphire-600 dark:text-indigo-400" />
+                                                      Exemple de articole facturate sub „{sub.subcategorie}”
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-500">
+                                                      Prețuri și furnizori preluați din facturi
+                                                    </span>
+                                                  </div>
+                                                  <div className="overflow-x-auto">
+                                                    <table className="w-full text-[11px] text-left">
+                                                      <thead>
+                                                        <tr className="text-slate-500 dark:text-slate-400 uppercase text-[9px] font-bold border-b border-morning-100 dark:border-slate-800">
+                                                          <th className="pb-1.5">Furnizor</th>
+                                                          <th className="pb-1.5">Factură / Dată</th>
+                                                          <th className="pb-1.5">Denumire Piesă / Cod</th>
+                                                          <th className="pb-1.5 text-right">Cantitate</th>
+                                                          <th className="pb-1.5 text-right">Preț Unitar</th>
+                                                          <th className="pb-1.5 text-right font-black">Valoare Totală</th>
+                                                          <th className="pb-1.5 text-center">Stare</th>
+                                                        </tr>
+                                                      </thead>
+                                                      <tbody className="divide-y divide-morning-100 dark:divide-slate-800">
+                                                        {sub.articoleRecente.map((art: any, aIdx: number) => (
+                                                          <tr key={aIdx} className="hover:bg-morning-50 dark:hover:bg-slate-850">
+                                                            <td className="py-1.5 font-semibold text-sapphire-900 dark:text-white">{art.furnizor}</td>
+                                                            <td className="py-1.5 text-slate-600 dark:text-slate-400 font-mono text-[10px]">
+                                                              {art.numarFactura} <span className="text-slate-400">({art.dataFactura ? new Date(art.dataFactura).toISOString().split('T')[0] : '-'})</span>
+                                                            </td>
+                                                            <td className="py-1.5 text-slate-700 dark:text-slate-300">
+                                                              {art.descriere}
+                                                              {art.codArticol && art.codArticol !== '-' && (
+                                                                <span className="ml-1 px-1 py-0.2 rounded bg-morning-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono text-[9px]">
+                                                                  {art.codArticol}
+                                                                </span>
+                                                             )}
+                                                            </td>
+                                                            <td className="py-1.5 text-right font-semibold text-slate-700 dark:text-slate-300">
+                                                              {art.cantitate} {art.unitateMasura}
+                                                            </td>
+                                                            <td className="py-1.5 text-right text-slate-600 dark:text-slate-400">
+                                                              {Number(art.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })}
+                                                            </td>
+                                                            <td className="py-1.5 text-right font-black text-emerald-700 dark:text-emerald-400">
+                                                              {Number(art.valoareTotala || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                                            </td>
+                                                            <td className="py-1.5 text-center">
+                                                              {art.stare === 'IMPORTAT' ? (
+                                                                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                                  IMPORTAT
+                                                                </span>
+                                                              ) : (
+                                                                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-morning-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-morning-200 dark:border-slate-700">
+                                                                  NEPROCESAT
+                                                                </span>
+                                                              )}
+                                                            </td>
+                                                          </tr>
+                                                        ))}
+                                                      </tbody>
+                                                    </table>
+                                                  </div>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ===================================================== */}
+              {/* VIZUALIZARE 2: SITUAȚIE PE PARTENERI & FURNIZORI */}
+              {/* ===================================================== */}
+              {subTabEfactura === 'furnizori' && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Caută furnizor după denumire sau cod fiscal (CIF/CUI)..."
+                      value={cautaFurnizor}
+                      onChange={(e) => setCautaFurnizor(e.target.value)}
+                      className="w-full bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-sapphire-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
+                    />
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-morning-200 dark:border-slate-800 shadow-xs">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-morning-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-bold border-b border-morning-200 dark:border-slate-800">
+                        <tr>
+                          <th className="p-3">Furnizor (Denumire Partener)</th>
+                          <th className="p-3">Cod Fiscal (CIF / CUI)</th>
+                          <th className="p-3 text-right">Număr Facturi</th>
+                          <th className="p-3 text-right font-black">Valoare Totală Achiziții</th>
+                          <th className="p-3 text-right">Pondere din Total</th>
+                          <th className="p-3">Ultimele Facturi Înregistrate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-morning-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900/60">
+                        {filteredFurnizori.map((fn: any) => (
+                          <tr key={fn.cif} className="hover:bg-morning-50 dark:hover:bg-slate-850">
+                            <td className="p-3 font-bold text-sapphire-900 dark:text-white">{fn.nume}</td>
+                            <td className="p-3 text-slate-500 dark:text-slate-400 font-mono">{fn.cif}</td>
+                            <td className="p-3 text-right font-semibold text-slate-700 dark:text-slate-300">{fn.numarFacturi} facturi</td>
+                            <td className="p-3 text-right font-black text-sm text-emerald-700 dark:text-emerald-400">
+                              {Number(fn.valoareTotalaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                            </td>
+                            <td className="p-3 text-right font-black text-sapphire-700 dark:text-indigo-400">
+                              {fn.procentDinTotal}%
+                            </td>
+                            <td className="p-3 text-slate-500 dark:text-slate-400">
+                              <div className="flex flex-wrap gap-1">
+                                {(fn.facturiRecente || []).map((fc: any, idx: number) => (
+                                  <span key={idx} className="bg-morning-100 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-700 dark:text-slate-300 font-mono">
+                                    {fc.numarFactura} ({fc.valoareTotala} RON)
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
