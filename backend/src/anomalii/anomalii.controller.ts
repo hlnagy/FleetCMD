@@ -160,6 +160,26 @@ export class AnomaliiController {
     return this.anomaliiService.upsertDocumentVehicul(body);
   }
 
+  @Post('documente-vehicule/initializare-rapida')
+  initializareDocumenteRapida(@Body() body: any) {
+    return this.anomaliiService.initializareDocumenteRapida(body);
+  }
+
+  @Get('tipuri-documente')
+  getTipuriDocumente() {
+    return this.anomaliiService.getTipuriDocumente();
+  }
+
+  @Post('tipuri-documente')
+  addTipDocument(@Body() body: any) {
+    return this.anomaliiService.addTipDocument(body);
+  }
+
+  @Delete('tipuri-documente/:cod')
+  deleteTipDocument(@Param('cod') cod: string) {
+    return this.anomaliiService.deleteTipDocument(cod);
+  }
+
   @Patch('documente-vehicule/:id')
   updateDocumentVehicul(@Param('id') id: string, @Body() body: any) {
     return this.anomaliiService.updateDocumentVehicul(id, body);

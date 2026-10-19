@@ -192,8 +192,32 @@ function SetariContent() {
   const [regulaStare, setRegulaStare] = useState('ACTIV');
 
   // ==========================================
-  // 6. STATE DOCUMENTE VEHICULE
+  // 6. STATE DOCUMENTE VEHICULE & CATALOG TIPURI
   // ==========================================
+  const [docViewMode, setDocViewMode] = useState<'matrice' | 'tipuri' | 'lista'>('matrice');
+  const [tipuriDocumente, setTipuriDocumente] = useState<any[]>([
+    { cod: 'ITP', label: 'Inspecție Tehnică Periodică (ITP)', zileAvertizare: 30, esteStandard: true, culoare: 'emerald' },
+    { cod: 'RCA', label: 'Asigurare Obligatorie (RCA)', zileAvertizare: 30, esteStandard: true, culoare: 'blue' },
+    { cod: 'ROVINIETA', label: 'Rovinietă (Taxă Drum)', zileAvertizare: 30, esteStandard: true, culoare: 'amber' },
+    { cod: 'COPIE_CONFORMA', label: 'Copie Conformă Transport', zileAvertizare: 30, esteStandard: true, culoare: 'purple' },
+    { cod: 'VERIFICARE_TAHOGRAF', label: 'Verificare Tahograf', zileAvertizare: 30, esteStandard: true, culoare: 'cyan' },
+    { cod: 'CASCO', label: 'Asigurare Facultativă (CASCO)', zileAvertizare: 30, esteStandard: true, culoare: 'indigo' },
+  ]);
+  const [searchDocVehicul, setSearchDocVehicul] = useState('');
+  const [filterDocCategorie, setFilterDocCategorie] = useState('TOATE');
+  const [filterDocStatus, setFilterDocStatus] = useState('TOATE');
+  const [docMatricePage, setDocMatricePage] = useState(1);
+  const [docListaPage, setDocListaPage] = useState(1);
+
+  // State Adăugare Tip Nou de Document
+  const [showAddTipModal, setShowAddTipModal] = useState(false);
+  const [newTipCod, setNewTipCod] = useState('');
+  const [newTipLabel, setNewTipLabel] = useState('');
+  const [newTipZile, setNewTipZile] = useState(30);
+  const [newTipDescriere, setNewTipDescriere] = useState('');
+  const [newTipCategorii, setNewTipCategorii] = useState<string[]>(['TOATE']);
+
+  // State Adăugare / Editare Document
   const [showAddDocModal, setShowAddDocModal] = useState(false);
   const [editingDoc, setEditingDoc] = useState<any>(null);
   const [docVehiculId, setDocVehiculId] = useState('');
@@ -202,6 +226,119 @@ function SetariContent() {
   const [docZileAvertizare, setDocZileAvertizare] = useState(30);
   const [docSerie, setDocSerie] = useState('');
   const [docEmitent, setDocEmitent] = useState('');
+  const [initializareRapidaLoading, setInitializareRapidaLoading] = useState(false);
+
+  // Calcule KPI Documente
+  const docKPIs = useMemo(() => {
+    let total = documente.length;
+    let expirate = 0;
+    let avertizare = 0;
+    let valide = 0;
+    const now = new Date().getTime();
+
+    documente.forEach((d) => {
+      const exp = new Date(d.dataExpirare).getTime();
+      const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        expirate++;
+      } else if (diffDays <= (d.zileAvertizareInainte || 30)) {
+        avertizare++;
+      } else {
+        valide++;
+      }
+    });
+
+    return { total, expirate, avertizare, valide };
+  }, [documente]);
+
+  // Calcule Matrice Vehicule x Documente
+  const vehiculeMatrice = useMemo(() => {
+    const docMap = new Map<string, Record<string, any>>();
+    documente.forEach((d) => {
+      const vId = d.vehiculId;
+      if (!docMap.has(vId)) {
+        docMap.set(vId, {});
+      }
+      docMap.get(vId)![d.tipDocument] = d;
+    });
+
+    const now = new Date().getTime();
+
+    return (vehicule || [])
+      .map((v) => {
+        const vDocs = docMap.get(v.id) || {};
+        const docsList = Object.values(vDocs);
+        let hasExpired = false;
+        let hasWarning = false;
+        let hasMissing = false;
+
+        tipuriDocumente.forEach((t) => {
+          const doc = vDocs[t.cod];
+          if (!doc) {
+            hasMissing = true;
+          } else {
+            const exp = new Date(doc.dataExpirare).getTime();
+            const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) hasExpired = true;
+            else if (diffDays <= (doc.zileAvertizareInainte || 30)) hasWarning = true;
+          }
+        });
+
+        return {
+          ...v,
+          docs: vDocs,
+          totalDocs: docsList.length,
+          hasExpired,
+          hasWarning,
+          hasMissing,
+        };
+      })
+      .filter((v) => {
+        if (searchDocVehicul.trim()) {
+          const q = searchDocVehicul.toLowerCase();
+          const matchIntern = (v.numarIntern || '').toLowerCase().includes(q);
+          const matchInmat = (v.numarInmatriculare || '').toLowerCase().includes(q);
+          const matchMarca = (v.marca || '').toLowerCase().includes(q);
+          if (!matchIntern && !matchInmat && !matchMarca) return false;
+        }
+        if (filterDocCategorie !== 'TOATE' && v.categorieEnum !== filterDocCategorie) {
+          return false;
+        }
+        if (filterDocStatus === 'EXPIRATE' && !v.hasExpired) return false;
+        if (filterDocStatus === 'AVERTIZARE' && !v.hasWarning) return false;
+        if (filterDocStatus === 'LIPSA' && !v.hasMissing) return false;
+        if (filterDocStatus === 'VALIDE' && (v.hasExpired || v.hasWarning)) return false;
+        return true;
+      });
+  }, [vehicule, documente, tipuriDocumente, searchDocVehicul, filterDocCategorie, filterDocStatus]);
+
+  // Calcule Listă Detaliată Documente
+  const filteredDocumenteLista = useMemo(() => {
+    return (documente || []).filter((d) => {
+      if (searchDocVehicul.trim()) {
+        const q = searchDocVehicul.toLowerCase();
+        const vIntern = (d.vehicul?.numarIntern || '').toLowerCase();
+        const vInmat = (d.vehicul?.numarInmatriculare || '').toLowerCase();
+        const tip = (d.tipDocument || '').toLowerCase();
+        const serie = (d.serieDocument || '').toLowerCase();
+        const emitent = (d.emitent || '').toLowerCase();
+        if (!vIntern.includes(q) && !vInmat.includes(q) && !tip.includes(q) && !serie.includes(q) && !emitent.includes(q)) return false;
+      }
+      if (filterDocCategorie !== 'TOATE') {
+        const v = vehicule.find((veh) => veh.id === d.vehiculId);
+        if (v && v.categorieEnum !== filterDocCategorie) return false;
+      }
+      if (filterDocStatus !== 'TOATE') {
+        const now = new Date().getTime();
+        const exp = new Date(d.dataExpirare).getTime();
+        const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+        if (filterDocStatus === 'EXPIRATE' && diffDays >= 0) return false;
+        if (filterDocStatus === 'AVERTIZARE' && (diffDays < 0 || diffDays > (d.zileAvertizareInainte || 30))) return false;
+        if (filterDocStatus === 'VALIDE' && diffDays <= (d.zileAvertizareInainte || 30)) return false;
+      }
+      return true;
+    });
+  }, [documente, vehicule, searchDocVehicul, filterDocCategorie, filterDocStatus]);
 
   // ==========================================
   // 7. STATE ALERTE PERSONALIZATE
@@ -594,6 +731,18 @@ function SetariContent() {
       if (resDocs.ok) {
         const docList = await resDocs.json();
         setDocumente(Array.isArray(docList) ? docList : []);
+      }
+
+      try {
+        const resTipuri = await fetch(`${API_BASE_URL}/anomalii/tipuri-documente`);
+        if (resTipuri.ok) {
+          const tipList = await resTipuri.json();
+          if (Array.isArray(tipList) && tipList.length > 0) {
+            setTipuriDocumente(tipList);
+          }
+        }
+      } catch (err) {
+        console.warn('Tipuri documente fallback:', err);
       }
 
       const resCust = await fetch(`${API_BASE_URL}/anomalii/alerte-personalizate`);
@@ -1204,14 +1353,32 @@ function SetariContent() {
     }
   };
 
-  const openAddDoc = () => {
+  const openAddDoc = (prefillVehId?: string, prefillTip?: string) => {
     setEditingDoc(null);
-    setDocTip('ITP');
+    setDocVehiculId(prefillVehId || (vehicule[0]?.id || ''));
+    setDocTip(prefillTip || 'ITP');
     setDocDataExpirare('');
     setDocZileAvertizare(30);
     setDocSerie('');
     setDocEmitent('');
     setShowAddDocModal(true);
+  };
+
+  const openEditDocDirect = (doc: any) => {
+    setEditingDoc(doc);
+    setDocVehiculId(doc.vehiculId || doc.vehicul?.id || '');
+    setDocTip(doc.tipDocument || 'ITP');
+    setDocDataExpirare(doc.dataExpirare ? new Date(doc.dataExpirare).toISOString().split('T')[0] : '');
+    setDocZileAvertizare(doc.zileAvertizareInainte || 30);
+    setDocSerie(doc.serieDocument || '');
+    setDocEmitent(doc.emitent || '');
+    setShowAddDocModal(true);
+  };
+
+  const setQuickDateDoc = (months: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + months);
+    setDocDataExpirare(d.toISOString().split('T')[0]);
   };
 
   const handleSaveDoc = async (e: React.FormEvent) => {
@@ -1237,12 +1404,99 @@ function SetariContent() {
       });
 
       if (res.ok) {
-        alert('Document salvat cu succes!');
         setShowAddDocModal(false);
         fetchData();
+      } else {
+        alert('Eroare la salvarea documentului.');
       }
     } catch (e) {
       alert('Eroare la salvarea documentului.');
+    }
+  };
+
+  const handleSaveTipDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTipCod.trim() || !newTipLabel.trim()) {
+      alert('Vă rugăm să introduceți codul și denumirea noului tip de document.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/anomalii/tipuri-documente`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cod: newTipCod.trim(),
+          label: newTipLabel.trim(),
+          zileAvertizare: Number(newTipZile) || 30,
+          descriere: newTipDescriere.trim(),
+          categorii: newTipCategorii,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setTipuriDocumente(updated);
+        setShowAddTipModal(false);
+        setNewTipCod('');
+        setNewTipLabel('');
+        setNewTipDescriere('');
+        alert('Tipul de document a fost adăugat cu succes!');
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut salva tipul de document'}`);
+      }
+    } catch (err) {
+      alert('Eroare de conexiune la salvarea tipului de document.');
+    }
+  };
+
+  const handleDeleteTipDocument = async (cod: string) => {
+    const confirmed = await showConfirm(
+      'Ștergere Tip Document',
+      `Sigur doriți să ștergeți tipul de document "${cod}"?`,
+      'Da, șterge',
+      'Anulează'
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/anomalii/tipuri-documente/${cod}`, { method: 'DELETE' });
+      if (res.ok) {
+        const updated = await res.json();
+        setTipuriDocumente(updated);
+      } else {
+        const err = await res.json();
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge tipul de document'}`);
+      }
+    } catch (e) {
+      alert('Eroare la ștergerea tipului de document.');
+    }
+  };
+
+  const handleInitializareRapidaFlota = async () => {
+    const confirmed = await showConfirm(
+      'Inițializare Automată Acte Flotă',
+      'Doriți să generați automat sloturile de documente lipsă pentru vehiculele din flotă conform categoriei lor (ITP, RCA, Rovinietă, Tahograf)?',
+      'Da, inițializează automat',
+      'Anulează'
+    );
+    if (!confirmed) return;
+    try {
+      setInitializareRapidaLoading(true);
+      const res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/initializare-rapida`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(data.message || 'Documentele au fost inițializate cu succes!');
+        fetchData();
+      } else {
+        alert('Eroare la inițializarea automată a documentelor.');
+      }
+    } catch (err) {
+      alert('Eroare de conexiune.');
+    } finally {
+      setInitializareRapidaLoading(false);
     }
   };
 
@@ -2552,58 +2806,606 @@ function SetariContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 6: DOCUMENTE VEHICULE */}
+      {/* TAB 6: DOCUMENTE VEHICULE (MATRICE FLOTĂ & NOMENCLATOR ACTE) */}
       {/* ========================================================================= */}
       {activeTab === 'documente' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-morning-200 shadow-xs">
-            <div>
-              <h3 className="font-extrabold text-sapphire-900 text-base">Evidență Documente Vehicule (ITP, RCA, Rovinietă)</h3>
-              <p className="text-xs text-sage-700">Monitorizarea scadențelor pentru actele vehiculelor</p>
+          {/* 1. KPI STRIP */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-sapphire-50 border border-sapphire-100 flex items-center justify-center text-sapphire-600 shrink-0">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase text-sage-600 truncate">Total Documente</p>
+                <p className="text-xl font-black text-sapphire-900 font-mono">{docKPIs.total}</p>
+              </div>
             </div>
-            <button
-              onClick={openAddDoc}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Adaugă Document Vehicul</span>
-            </button>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-emerald-200 shadow-xs flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase text-emerald-700 truncate">Acte Valabile</p>
+                <p className="text-xl font-black text-emerald-700 font-mono">{docKPIs.valide}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-amber-200 shadow-xs flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase text-amber-700 truncate">În Scadență / Avertizare</p>
+                <p className="text-xl font-black text-amber-700 font-mono">{docKPIs.avertizare}</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-2xl border border-terracotta-200 shadow-xs flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-roseash-50 border border-terracotta-100 flex items-center justify-center text-terracotta-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase text-terracotta-700 truncate">Acte Expirate</p>
+                <p className="text-xl font-black text-terracotta-700 font-mono">{docKPIs.expirate}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
-            <table className="w-full text-left border-collapse text-xs min-w-[850px]">
-              <thead>
-                <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
-                  <th className="p-3">Vehicul</th>
-                  <th className="p-3">Tip Document</th>
-                  <th className="p-3">Data Expirare</th>
-                  <th className="p-3">Notificare (Zile Înainte)</th>
-                  <th className="p-3">Serie / Emitent</th>
-                  <th className="p-3 text-right">Acțiuni</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
-                {documente.map((d) => (
-                  <tr key={d.id} className="hover:bg-morning-50 transition">
-                    <td className="p-3 font-extrabold text-sapphire-900 font-mono">
-                      {d.vehicul?.numarIntern || d.vehiculId} ({d.vehicul?.numarInmatriculare || ''})
-                    </td>
-                    <td className="p-3 font-bold text-slate-800">{d.tipDocument}</td>
-                    <td className="p-3 font-mono font-bold text-terracotta-700">
-                      {new Date(d.dataExpirare).toLocaleDateString('ro-RO')}
-                    </td>
-                    <td className="p-3 font-mono text-sage-700 font-bold">{d.zileAvertizareInainte} zile</td>
-                    <td className="p-3 text-sage-600">{d.serieDocument || d.emitent || '-'}</td>
-                    <td className="p-3 text-right space-x-2">
-                      <button onClick={() => handleDeleteDoc(d.id)} className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* 2. SUB-VIEW CONTROLS & ACTIONS */}
+          <div className="bg-white p-4 rounded-2xl border border-morning-200 shadow-xs space-y-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Selector Mod Vizualizare */}
+              <div className="flex items-center space-x-1.5 p-1 bg-morning-100 rounded-xl border border-morning-200 self-start">
+                <button
+                  type="button"
+                  onClick={() => setDocViewMode('matrice')}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                    docViewMode === 'matrice'
+                      ? 'bg-sapphire-500 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Matrice Flotă ({vehiculeMatrice.length} utilaje)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDocViewMode('tipuri')}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                    docViewMode === 'tipuri'
+                      ? 'bg-sapphire-500 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Nomenclator Tipuri Acte ({tipuriDocumente.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDocViewMode('lista')}
+                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                    docViewMode === 'lista'
+                      ? 'bg-sapphire-500 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>Listă Detaliată ({filteredDocumenteLista.length})</span>
+                </button>
+              </div>
+
+              {/* Butoane Acțiuni Rapide */}
+              <div className="flex items-center space-x-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleInitializareRapidaFlota}
+                  disabled={initializareRapidaLoading}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold transition shadow-xs disabled:opacity-50"
+                  title="Generează automat sloturile de documente lipsă conform categoriei fiecărui vehicul"
+                >
+                  <Zap className={`w-3.5 h-3.5 text-amber-600 ${initializareRapidaLoading ? 'animate-spin' : ''}`} />
+                  <span>{initializareRapidaLoading ? 'Se inițializează...' : 'Inițializare Rapidă Flotă'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddTipModal(true)}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-periwinkle-50 hover:bg-periwinkle-100 border border-periwinkle-300 text-periwinkle-900 text-xs font-bold transition shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 text-periwinkle-700" />
+                  <span>+ Tip Nou de Document</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openAddDoc()}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Înregistrează Document</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Rând Filtre & Căutare (vizibil pentru Matrice și Listă) */}
+            {docViewMode !== 'tipuri' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-morning-200">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Filtrează vehicul (număr intern, înmatriculare, marcă)..."
+                    value={searchDocVehicul}
+                    onChange={(e) => {
+                      setSearchDocVehicul(e.target.value);
+                      setDocMatricePage(1);
+                      setDocListaPage(1);
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-7 py-2 text-xs font-bold text-sapphire-900 placeholder:text-sage-500 focus:outline-none focus:border-sapphire-500"
+                  />
+                  {searchDocVehicul && (
+                    <button
+                      onClick={() => {
+                        setSearchDocVehicul('');
+                        setDocMatricePage(1);
+                        setDocListaPage(1);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-sage-400 hover:text-sapphire-900 font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <select
+                    value={filterDocCategorie}
+                    onChange={(e) => {
+                      setFilterDocCategorie(e.target.value);
+                      setDocMatricePage(1);
+                      setDocListaPage(1);
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl px-3 py-2 text-xs font-bold text-sapphire-900 focus:outline-none focus:border-sapphire-500"
+                  >
+                    <option value="TOATE">Toate Categoriile de Vehicule</option>
+                    {categoriiVehicul.map((c: any) => (
+                      <option key={c.cod || c} value={c.cod || c}>
+                        {c.label || c.nume || c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <select
+                    value={filterDocStatus}
+                    onChange={(e) => {
+                      setFilterDocStatus(e.target.value);
+                      setDocMatricePage(1);
+                      setDocListaPage(1);
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl px-3 py-2 text-xs font-bold text-sapphire-900 focus:outline-none focus:border-sapphire-500"
+                  >
+                    <option value="TOATE">Toate Stările (Expirate, Scadențe, Valide)</option>
+                    <option value="EXPIRATE">Doar cu Acte Expirate (Urgent)</option>
+                    <option value="AVERTIZARE">Doar în Avertizare / Scadență</option>
+                    <option value="LIPSA">Doar cu Documente Neînregistrate</option>
+                    <option value="VALIDE">Doar Vehicule cu Toate Actele Valabile</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* ------------------------------------------------------------- */}
+          {/* SUBVIEW 1: MATRICE FLOTĂ (SINTEZĂ PE VEHICUL)                 */}
+          {/* ------------------------------------------------------------- */}
+          {docViewMode === 'matrice' && (
+            <div className="space-y-3">
+              <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+                <table className="w-full text-left border-collapse text-xs min-w-[950px]">
+                  <thead>
+                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[11px]">
+                      <th className="p-3 sticky left-0 bg-morning-100 z-10 min-w-[200px] border-r border-morning-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        Vehicul & Categorie
+                      </th>
+                      {tipuriDocumente.map((t) => (
+                        <th key={t.cod} className="p-3 text-center min-w-[140px]">
+                          <div className="font-extrabold text-sapphire-900">{t.cod}</div>
+                          <div className="text-[10px] font-normal text-sage-500 truncate max-w-[130px] mx-auto" title={t.label}>
+                            {t.label?.replace(/\([^)]*\)/g, '').trim()}
+                          </div>
+                        </th>
+                      ))}
+                      <th className="p-3 text-right min-w-[90px]">Acțiuni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                    {vehiculeMatrice.length === 0 ? (
+                      <tr>
+                        <td colSpan={tipuriDocumente.length + 2} className="p-8 text-center text-xs text-sage-500 font-bold">
+                          Nu a fost găsit niciun vehicul conform criteriilor de filtrare selectate.
+                        </td>
+                      </tr>
+                    ) : (
+                      vehiculeMatrice
+                        .slice((docMatricePage - 1) * 20, docMatricePage * 20)
+                        .map((v) => {
+                          const catColor = getCategoryColor(v.categorieEnum);
+                          return (
+                            <tr key={v.id} className="hover:bg-morning-50 transition group">
+                              {/* Coloană Vehicul (Sticky) */}
+                              <td className="p-3 sticky left-0 bg-white group-hover:bg-morning-50 z-10 border-r border-morning-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                <div className="flex items-center space-x-2">
+                                  <div className="font-mono font-black text-sapphire-900 text-xs">
+                                    {v.numarIntern || 'FĂRĂ COD'}
+                                  </div>
+                                  <span className="font-mono font-bold text-slate-600 text-[11px]">
+                                    ({v.numarInmatriculare || '-'})
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-1.5 mt-1">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${catColor.badge}`}
+                                  >
+                                    {v.categorieEnum}
+                                  </span>
+                                  {v.marca && (
+                                    <span className="text-[10px] text-sage-500 truncate max-w-[90px]">
+                                      {v.marca} {v.model || ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Celule Tipuri Documente */}
+                              {tipuriDocumente.map((t) => {
+                                const doc = v.docs[t.cod];
+                                if (!doc) {
+                                  return (
+                                    <td key={t.cod} className="p-2 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => openAddDoc(v.id, t.cod)}
+                                        className="w-full py-1.5 px-2 border border-dashed border-morning-300 hover:border-sapphire-400 hover:bg-sapphire-50 text-sage-400 hover:text-sapphire-700 rounded-lg text-[10px] font-bold transition flex items-center justify-center space-x-1"
+                                        title={`Adaugă ${t.cod} pentru ${v.numarIntern}`}
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                        <span>Lipsă</span>
+                                      </button>
+                                    </td>
+                                  );
+                                }
+
+                                const exp = new Date(doc.dataExpirare);
+                                const now = new Date().getTime();
+                                const diffDays = Math.ceil((exp.getTime() - now) / (1000 * 60 * 60 * 24));
+                                const isExpired = diffDays < 0;
+                                const isWarning = !isExpired && diffDays <= (doc.zileAvertizareInainte || 30);
+
+                                let badgeClasses = 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100';
+                                if (isExpired) {
+                                  badgeClasses = 'bg-roseash-50 text-terracotta-700 border-terracotta-300 hover:bg-roseash-100';
+                                } else if (isWarning) {
+                                  badgeClasses = 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100';
+                                }
+
+                                return (
+                                  <td key={t.cod} className="p-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditDocDirect(doc)}
+                                      className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-mono font-bold transition flex flex-col items-center justify-center ${badgeClasses}`}
+                                      title={`Apasă pentru a edita sau șterge ${t.cod} (${doc.serieDocument || 'Fără serie'})`}
+                                    >
+                                      <div className="flex items-center space-x-1">
+                                        {isExpired && <AlertTriangle className="w-3 h-3 text-terracotta-600 shrink-0" />}
+                                        {isWarning && <Clock className="w-3 h-3 text-amber-600 shrink-0" />}
+                                        {!isExpired && !isWarning && <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />}
+                                        <span>{exp.toLocaleDateString('ro-RO')}</span>
+                                      </div>
+                                      <div className="text-[9px] font-normal opacity-85">
+                                        {isExpired ? (
+                                          <span className="font-bold text-terracotta-700">Expirat ({Math.abs(diffDays)}z)</span>
+                                        ) : isWarning ? (
+                                          <span className="font-bold text-amber-700">În {diffDays} zile</span>
+                                        ) : (
+                                          <span>Valabil</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  </td>
+                                );
+                              })}
+
+                              {/* Coloană Acțiuni */}
+                              <td className="p-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => openAddDoc(v.id)}
+                                  className="p-1.5 text-sapphire-600 hover:bg-morning-100 rounded-lg text-xs font-bold inline-flex items-center space-x-1"
+                                  title={`Adaugă alt document pentru ${v.numarIntern}`}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Act</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginare Matrice */}
+              {vehiculeMatrice.length > 20 && (
+                <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-xl border border-morning-200 text-xs text-sage-600">
+                  <div>
+                    Afișare {(docMatricePage - 1) * 20 + 1} -{' '}
+                    {Math.min(docMatricePage * 20, vehiculeMatrice.length)} din {vehiculeMatrice.length} vehicule
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      disabled={docMatricePage <= 1}
+                      onClick={() => setDocMatricePage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 disabled:opacity-40 text-sapphire-900 font-bold transition"
+                    >
+                      Anterior
+                    </button>
+                    <span className="font-bold text-sapphire-900">
+                      Pagina {docMatricePage} din {Math.ceil(vehiculeMatrice.length / 20)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={docMatricePage >= Math.ceil(vehiculeMatrice.length / 20)}
+                      onClick={() => setDocMatricePage((p) => p + 1)}
+                      className="px-3 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 disabled:opacity-40 text-sapphire-900 font-bold transition"
+                    >
+                      Următor
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* SUBVIEW 2: CATALOG TIPURI ACTE (NOMENCLATOR)                 */}
+          {/* ------------------------------------------------------------- */}
+          {docViewMode === 'tipuri' && (
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-between text-sapphire-900 text-xs">
+                <div>
+                  <p className="font-extrabold text-sapphire-950">Nomenclator Tipuri Documente & Certificate Flotă</p>
+                  <p className="text-sage-700 text-[11px]">
+                    Fiecare tip de document configurat aici devine automat o coloană în matricea de monitorizare a flotei și o opțiune la înregistrarea actelor.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddTipModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold transition shrink-0 flex items-center space-x-1.5 shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Tip Nou</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {tipuriDocumente.map((t) => {
+                  const countInFleet = documente.filter((d) => d.tipDocument === t.cod).length;
+                  return (
+                    <div
+                      key={t.cod}
+                      className="bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="font-mono font-black text-sm text-sapphire-900 bg-morning-100 px-2.5 py-0.5 rounded-lg border border-morning-200">
+                              {t.cod}
+                            </span>
+                          </div>
+                          {t.esteStandard ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                              Standard Sistem
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-periwinkle-100 text-periwinkle-800">
+                              Personalizat
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="font-extrabold text-slate-800 text-xs line-clamp-2" title={t.label}>
+                          {t.label || t.cod}
+                        </h4>
+
+                        {t.descriere && (
+                          <p className="text-[11px] text-sage-600 line-clamp-2">{t.descriere}</p>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-morning-200 space-y-2 text-xs">
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-sage-600">Preaviz alertă:</span>
+                          <span className="font-mono font-bold text-terracotta-700">
+                            {t.zileAvertizare || 30} zile în avans
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px]">
+                          <span className="text-sage-600">Acte înregistrate:</span>
+                          <span className="font-mono font-bold text-sapphire-900">
+                            {countInFleet} vehicule
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => openAddDoc(undefined, t.cod)}
+                            className="flex-1 py-1.5 px-2 bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-700 text-slate-700 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Înregistrează</span>
+                          </button>
+                          {!t.esteStandard && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTipDocument(t.cod)}
+                              className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg transition"
+                              title="Șterge acest tip de document personalizat"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* SUBVIEW 3: LISTĂ DETALIATĂ DOCUMENTE                          */}
+          {/* ------------------------------------------------------------- */}
+          {docViewMode === 'lista' && (
+            <div className="space-y-3">
+              <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
+                <table className="w-full text-left border-collapse text-xs min-w-[850px]">
+                  <thead>
+                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
+                      <th className="p-3">Vehicul</th>
+                      <th className="p-3">Tip Document</th>
+                      <th className="p-3">Data Expirare</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Preaviz</th>
+                      <th className="p-3">Serie / Emitent</th>
+                      <th className="p-3 text-right">Acțiuni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                    {filteredDocumenteLista.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-xs text-sage-500 font-bold">
+                          Nu au fost găsite documente conform filtrării selectate.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDocumenteLista
+                        .slice((docListaPage - 1) * 25, docListaPage * 25)
+                        .map((d) => {
+                          const exp = new Date(d.dataExpirare);
+                          const now = new Date().getTime();
+                          const diffDays = Math.ceil((exp.getTime() - now) / (1000 * 60 * 60 * 24));
+                          const isExpired = diffDays < 0;
+                          const isWarning = !isExpired && diffDays <= (d.zileAvertizareInainte || 30);
+
+                          return (
+                            <tr key={d.id} className="hover:bg-morning-50 transition">
+                              <td className="p-3">
+                                <div className="font-extrabold text-sapphire-900 font-mono">
+                                  {d.vehicul?.numarIntern || d.vehiculId}
+                                </div>
+                                <div className="text-[11px] text-slate-600 font-mono">
+                                  {d.vehicul?.numarInmatriculare || '-'}
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <span className="font-bold text-slate-800 bg-morning-100 px-2 py-0.5 rounded border border-morning-200 font-mono">
+                                  {d.tipDocument}
+                                </span>
+                              </td>
+                              <td className="p-3 font-mono font-bold text-slate-900">
+                                {exp.toLocaleDateString('ro-RO')}
+                              </td>
+                              <td className="p-3">
+                                {isExpired ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-roseash-100 text-terracotta-700 text-[10px] font-black uppercase">
+                                    Expirat ({Math.abs(diffDays)}z)
+                                  </span>
+                                ) : isWarning ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase">
+                                    Scadent ({diffDays}z)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                                    Valabil ({diffDays}z)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono text-sage-700 font-bold">
+                                {d.zileAvertizareInainte} zile
+                              </td>
+                              <td className="p-3 text-sage-600">
+                                {d.serieDocument || d.emitent || '-'}
+                              </td>
+                              <td className="p-3 text-right space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDocDirect(d)}
+                                  className="p-1.5 text-sapphire-600 hover:bg-morning-100 rounded-lg transition"
+                                  title="Editează document"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDoc(d.id)}
+                                  className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg transition"
+                                  title="Șterge document"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginare Listă */}
+              {filteredDocumenteLista.length > 25 && (
+                <div className="flex items-center justify-between bg-white px-4 py-2.5 rounded-xl border border-morning-200 text-xs text-sage-600">
+                  <div>
+                    Afișare {(docListaPage - 1) * 25 + 1} -{' '}
+                    {Math.min(docListaPage * 25, filteredDocumenteLista.length)} din {filteredDocumenteLista.length} documente
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      disabled={docListaPage <= 1}
+                      onClick={() => setDocListaPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 disabled:opacity-40 text-sapphire-900 font-bold transition"
+                    >
+                      Anterior
+                    </button>
+                    <span className="font-bold text-sapphire-900">
+                      Pagina {docListaPage} din {Math.ceil(filteredDocumenteLista.length / 25)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={docListaPage >= Math.ceil(filteredDocumenteLista.length / 25)}
+                      onClick={() => setDocListaPage((p) => p + 1)}
+                      className="px-3 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 disabled:opacity-40 text-sapphire-900 font-bold transition"
+                    >
+                      Următor
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -5204,54 +6006,267 @@ function SetariContent() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <FileText className="w-5 h-5 text-sapphire-500" />
-                <span>Adăugare Document Vehicul (ITP, RCA, Rovinietă)</span>
+                <span>{editingDoc ? 'Editare Document Vehicul' : 'Înregistrare Document Vehicul'}</span>
               </h3>
-              <button onClick={() => setShowAddDocModal(false)} className="text-sage-500 hover:text-sapphire-900"><X className="w-5 h-5" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddDocModal(false);
+                  setEditingDoc(null);
+                }}
+                className="text-sage-500 hover:text-sapphire-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveDoc} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveDoc} className="space-y-3.5 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Vehicul: *</label>
-                <select value={docVehiculId} onChange={(e) => setDocVehiculId(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                <select
+                  value={docVehiculId}
+                  onChange={(e) => setDocVehiculId(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                >
                   {vehicule.map((v) => (
-                    <option key={v.id} value={v.id}>{v.numarIntern} ({v.numarInmatriculare})</option>
+                    <option key={v.id} value={v.id}>
+                      {v.numarIntern || 'FĂRĂ COD'} ({v.numarInmatriculare || '-'}) — {v.categorieEnum}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Tip Document: *</label>
-                  <select value={docTip} onChange={(e) => setDocTip(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
-                    <option value="ITP">ITP (Inspecție Tehnică Periodic)</option>
-                    <option value="RCA">RCA (Asigurare Obligatorie)</option>
-                    <option value="ROVINIETA">Rovinietă (Ttaxă Drum)</option>
-                    <option value="COPIE_CONFORMA">Copie Conformă Transport</option>
-                    <option value="VERIFICARE_TAHOGRAF">Verificare Tahograf</option>
-                  </select>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-sage-700 font-bold">Tip Document: *</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddTipModal(true)}
+                    className="text-[11px] font-bold text-sapphire-600 hover:text-sapphire-800 flex items-center space-x-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>+ Definește Tip Nou</span>
+                  </button>
                 </div>
+                <select
+                  value={docTip}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDocTip(val);
+                    const tipObj = tipuriDocumente.find((t) => t.cod === val);
+                    if (tipObj?.zileAvertizare) {
+                      setDocZileAvertizare(tipObj.zileAvertizare);
+                    }
+                  }}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                >
+                  {tipuriDocumente.map((t) => (
+                    <option key={t.cod} value={t.cod}>
+                      {t.cod} — {t.label || t.cod}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Data Expirare: *</label>
-                  <input type="date" required value={docDataExpirare} onChange={(e) => setDocDataExpirare(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-sage-700 font-bold">Data Expirare: *</label>
+                  <div className="flex items-center space-x-1 text-[11px]">
+                    <span className="text-sage-500 mr-1">Preset rapid:</span>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDateDoc(6)}
+                      className="px-2 py-0.5 rounded bg-morning-100 hover:bg-morning-200 border border-morning-200 font-bold text-sapphire-900 transition"
+                    >
+                      +6 Luni
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDateDoc(12)}
+                      className="px-2 py-0.5 rounded bg-morning-100 hover:bg-morning-200 border border-morning-200 font-bold text-sapphire-900 transition"
+                    >
+                      +1 An
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuickDateDoc(24)}
+                      className="px-2 py-0.5 rounded bg-morning-100 hover:bg-morning-200 border border-morning-200 font-bold text-sapphire-900 transition"
+                    >
+                      +2 Ani
+                    </button>
+                  </div>
                 </div>
+                <input
+                  type="date"
+                  required
+                  value={docDataExpirare}
+                  onChange={(e) => setDocDataExpirare(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Notificare În Prealabil Cu (Zile):</label>
-                  <input type="number" value={docZileAvertizare} onChange={(e) => setDocZileAvertizare(Number(e.target.value))} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold" />
+                  <label className="text-sage-700 block mb-1 font-bold">Notificare În Prealabil (Zile):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="180"
+                    value={docZileAvertizare}
+                    onChange={(e) => setDocZileAvertizare(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold focus:outline-none focus:border-sapphire-500"
+                  />
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Serie Document:</label>
-                  <input value={docSerie} onChange={(e) => setDocSerie(e.target.value)} placeholder="ex: RO-981241" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                  <label className="text-sage-700 block mb-1 font-bold">Serie / Număr Document:</label>
+                  <input
+                    value={docSerie}
+                    onChange={(e) => setDocSerie(e.target.value)}
+                    placeholder="ex: RO-981241"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                  />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
-                <button type="button" onClick={() => setShowAddDocModal(false)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Document</button>
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Emitent / Asigurător (Opțional):</label>
+                <input
+                  value={docEmitent}
+                  onChange={(e) => setDocEmitent(e.target.value)}
+                  placeholder="ex: Groupama, Omniasig, RAR, CNAIR"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                />
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-morning-200">
+                {editingDoc ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDeleteDoc(editingDoc.id);
+                      setShowAddDocModal(false);
+                      setEditingDoc(null);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-roseash-100 hover:bg-roseash-200 text-terracotta-700 font-bold flex items-center space-x-1.5 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Șterge Document</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddDocModal(false);
+                      setEditingDoc(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold hover:bg-morning-300 transition"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20 transition"
+                  >
+                    {editingDoc ? 'Salvează Modificările' : 'Înregistrează Document'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 7.5: TIP NOU DE DOCUMENT (NOMENCLATOR FLOTĂ) */}
+      {/* ========================================================================= */}
+      {showAddTipModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-sapphire-500" />
+                <span>+ Tip Nou de Document (Nomenclator)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddTipModal(false)}
+                className="text-sage-500 hover:text-sapphire-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTipDocument} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">
+                  Cod Unic Document (ex: AGREERE_ADR, POLITA_CMR): *
+                </label>
+                <input
+                  required
+                  value={newTipCod}
+                  onChange={(e) =>
+                    setNewTipCod(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))
+                  }
+                  placeholder="ex: AGREERE_ADR"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold uppercase focus:outline-none focus:border-sapphire-500"
+                />
+                <p className="text-[10px] text-sage-500 mt-1">
+                  Se folosește drept identificator de coloană în matricea flotei.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Completă / Etichetă: *</label>
+                <input
+                  required
+                  value={newTipLabel}
+                  onChange={(e) => setNewTipLabel(e.target.value)}
+                  placeholder="ex: Certificat Agreere ADR Transport Mărfuri Periculoase"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Preaviz Alertă Scadență (Zile):</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={newTipZile}
+                  onChange={(e) => setNewTipZile(Number(e.target.value))}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold focus:outline-none focus:border-sapphire-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere / Observații (Opțional):</label>
+                <textarea
+                  rows={2}
+                  value={newTipDescriere}
+                  onChange={(e) => setNewTipDescriere(e.target.value)}
+                  placeholder="ex: Necesar doar pentru camioanele ce transportă mărfuri periculoase conform legii."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTipModal(false)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold hover:bg-morning-300 transition"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20 transition"
+                >
+                  Salvează Tip Document
+                </button>
               </div>
             </form>
           </div>

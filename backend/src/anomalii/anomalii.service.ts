@@ -1000,6 +1000,240 @@ export class AnomaliiService {
   }
 
   // ==========================================
+  // CATALOG TIPURI DOCUMENTE & CONFIGURARE
+  // ==========================================
+
+  public static readonly STANDARD_TIPURI_DOCUMENTE = [
+    {
+      cod: 'ITP',
+      label: 'Inspecție Tehnică Periodică (ITP)',
+      zileAvertizare: 30,
+      descriere: 'Inspecție tehnică periodică obligatorie la stațiile autorizate RAR',
+      categorii: ['TOATE'],
+      esteStandard: true,
+      culoare: 'emerald',
+    },
+    {
+      cod: 'RCA',
+      label: 'Asigurare Obligatorie (RCA)',
+      zileAvertizare: 30,
+      descriere: 'Poliță de asigurare de răspundere civilă auto obligatorie',
+      categorii: ['TOATE'],
+      esteStandard: true,
+      culoare: 'blue',
+    },
+    {
+      cod: 'ROVINIETA',
+      label: 'Rovinietă (Taxă de Drum Național)',
+      zileAvertizare: 30,
+      descriere: 'Tarif de utilizare a rețelei de drumuri naționale din România (CNAIR)',
+      categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA', 'AUTOUTILITARA', 'AUTOTURISM'],
+      esteStandard: true,
+      culoare: 'amber',
+    },
+    {
+      cod: 'COPIE_CONFORMA',
+      label: 'Copie Conformă Licență Transport',
+      zileAvertizare: 30,
+      descriere: 'Copie conformă a licenței comunitare pentru transport rutier de mărfuri (ARR)',
+      categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA', 'AUTOUTILITARA'],
+      esteStandard: true,
+      culoare: 'purple',
+    },
+    {
+      cod: 'VERIFICARE_TAHOGRAF',
+      label: 'Verificare Periodică Tahograf',
+      zileAvertizare: 30,
+      descriere: 'Dovadă verificare tahograf digital / analog și limitator viteză (valabil 2 ani)',
+      categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA'],
+      esteStandard: true,
+      culoare: 'cyan',
+    },
+    {
+      cod: 'CASCO',
+      label: 'Asigurare Facultativă (CASCO)',
+      zileAvertizare: 30,
+      descriere: 'Poliță de asigurare facultativă pentru avarii accidentale, furt sau calamități',
+      categorii: ['TOATE'],
+      esteStandard: true,
+      culoare: 'indigo',
+    },
+  ];
+
+  async getTipuriDocumente() {
+    const memory = await this.prisma.aiMemory.findFirst({
+      where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
+    });
+
+    let customTypes: any[] = [];
+    if (memory && memory.valoare) {
+      try {
+        customTypes = JSON.parse(memory.valoare);
+      } catch (e) {
+        customTypes = [];
+      }
+    }
+
+    // Include automat și orice tip existent în baza de date
+    const distinctDocs = await this.prisma.documentVehicul.findMany({
+      select: { tipDocument: true },
+      distinct: ['tipDocument'],
+    });
+
+    const standardCodes = new Set(AnomaliiService.STANDARD_TIPURI_DOCUMENTE.map((s) => s.cod));
+    const customCodes = new Set(customTypes.map((c: any) => c.cod));
+
+    for (const d of distinctDocs) {
+      if (d.tipDocument && !standardCodes.has(d.tipDocument) && !customCodes.has(d.tipDocument)) {
+        customTypes.push({
+          cod: d.tipDocument,
+          label: d.tipDocument.replace(/_/g, ' '),
+          zileAvertizare: 30,
+          descriere: 'Tip document activ în flotă',
+          categorii: ['TOATE'],
+          esteStandard: false,
+          culoare: 'slate',
+        });
+        customCodes.add(d.tipDocument);
+      }
+    }
+
+    return [...AnomaliiService.STANDARD_TIPURI_DOCUMENTE, ...customTypes];
+  }
+
+  async addTipDocument(data: { cod: string; label: string; zileAvertizare?: number; descriere?: string; categorii?: string[]; culoare?: string }) {
+    if (!data.cod || !data.label) {
+      throw new BadRequestException('Codul și denumirea tipului de document sunt obligatorii.');
+    }
+
+    const codClean = data.cod.toUpperCase().trim().replace(/[^A-Z0-9_]/g, '_');
+    const existingList = await this.getTipuriDocumente();
+    if (existingList.some((t: any) => t.cod === codClean)) {
+      throw new BadRequestException(`Tipul de document cu codul "${codClean}" există deja.`);
+    }
+
+    const memory = await this.prisma.aiMemory.findFirst({
+      where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
+    });
+
+    let customTypes: any[] = [];
+    if (memory && memory.valoare) {
+      try {
+        customTypes = JSON.parse(memory.valoare);
+      } catch (e) {
+        customTypes = [];
+      }
+    }
+
+    customTypes.push({
+      cod: codClean,
+      label: data.label.trim(),
+      zileAvertizare: Number(data.zileAvertizare) || 30,
+      descriere: data.descriere?.trim() || '',
+      categorii: Array.isArray(data.categorii) && data.categorii.length > 0 ? data.categorii : ['TOATE'],
+      esteStandard: false,
+      culoare: data.culoare || 'indigo',
+    });
+
+    if (memory) {
+      await this.prisma.aiMemory.update({
+        where: { id: memory.id },
+        data: { valoare: JSON.stringify(customTypes) },
+      });
+    } else {
+      await this.prisma.aiMemory.create({
+        data: {
+          tip: 'CONFIG',
+          cheie: 'TIPURI_DOCUMENTE_VEHICULE',
+          valoare: JSON.stringify(customTypes),
+          context: 'Configurare Nomenclator Tipuri Documente Setări',
+        },
+      });
+    }
+
+    return this.getTipuriDocumente();
+  }
+
+  async deleteTipDocument(cod: string) {
+    const codUpper = cod.toUpperCase().trim();
+    if (AnomaliiService.STANDARD_TIPURI_DOCUMENTE.some((s) => s.cod === codUpper)) {
+      throw new BadRequestException('Tipurile standard de sistem (ITP, RCA, etc.) nu pot fi șterse.');
+    }
+
+    const memory = await this.prisma.aiMemory.findFirst({
+      where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
+    });
+
+    if (memory && memory.valoare) {
+      let customTypes: any[] = [];
+      try {
+        customTypes = JSON.parse(memory.valoare);
+      } catch (e) {
+        customTypes = [];
+      }
+      customTypes = customTypes.filter((c: any) => c.cod !== codUpper);
+      await this.prisma.aiMemory.update({
+        where: { id: memory.id },
+        data: { valoare: JSON.stringify(customTypes) },
+      });
+    }
+
+    return this.getTipuriDocumente();
+  }
+
+  async initializareDocumenteRapida(body?: { vehiculId?: string }) {
+    const where: any = { stare: 'ACTIV' };
+    if (body?.vehiculId) where.id = body.vehiculId;
+
+    const vehicule = await this.prisma.vehicul.findMany({ where });
+    const tipuri = await this.getTipuriDocumente();
+
+    let createdCount = 0;
+    const now = new Date();
+    const oneYearLater = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+    for (const v of vehicule) {
+      const vCat = (v.categorieEnum || '').toUpperCase();
+
+      const applicable = tipuri.filter((t: any) => {
+        if (!t.categorii || t.categorii.includes('TOATE')) return true;
+        return t.categorii.some((c: string) => vCat.includes(c) || c.includes(vCat));
+      });
+
+      for (const t of applicable) {
+        const existing = await this.prisma.documentVehicul.findUnique({
+          where: {
+            vehiculId_tipDocument: {
+              vehiculId: v.id,
+              tipDocument: t.cod,
+            },
+          },
+        });
+
+        if (!existing) {
+          await this.prisma.documentVehicul.create({
+            data: {
+              vehiculId: v.id,
+              tipDocument: t.cod,
+              dataExpirare: oneYearLater,
+              zileAvertizareInainte: t.zileAvertizare || 30,
+              stare: 'ACTIV',
+              observatii: `Inițializat automat conform categoriei ${v.categorieEnum}`,
+            },
+          });
+          createdCount++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: `Au fost inițializate ${createdCount} documente pentru vehiculele selectate.`,
+      createdCount,
+    };
+  }
+
+  // ==========================================
   // IMPORT AUTOMAT DIN VALABILITATE ACTE MASINI (ODS)
   // ==========================================
 
