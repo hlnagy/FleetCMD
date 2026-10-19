@@ -58,13 +58,14 @@ export default function TabBar() {
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
+          const isDashboard = tab.id === '/' || tab.href === '/' || tab.title === 'Dashboard';
           return (
             <div
               key={tab.id}
               onClick={() => openTab(tab)}
               onAuxClick={(e) => {
-                // Middle click closes tab
-                if (e.button === 1) {
+                // Middle click closes tab (except Dashboard)
+                if (e.button === 1 && !isDashboard) {
                   e.preventDefault();
                   closeTab(tab.id);
                 }
@@ -74,7 +75,7 @@ export default function TabBar() {
                   ? 'bg-white dark:bg-slate-800 text-sapphire-900 dark:text-white border-morning-300 dark:border-slate-700 shadow-xs font-black relative top-[1px]'
                   : 'bg-morning-100/70 dark:bg-slate-950/50 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white/80 dark:hover:bg-slate-800/80 hover:text-slate-900'
               }`}
-              title={`${tab.title} (Clic mijloc pentru închidere)`}
+              title={isDashboard ? 'Dashboard (Panou Principal Permanent)' : `${tab.title} (Clic mijloc pentru închidere)`}
             >
               <span className={isActive ? 'text-sapphire-600 dark:text-cyan-400' : 'text-sage-500'}>
                 {getIcon(tab.iconName)}
@@ -87,17 +88,20 @@ export default function TabBar() {
                   {tab.badge}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(tab.id);
-                }}
-                className="w-4 h-4 rounded-md flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/40 transition opacity-70 group-hover:opacity-100 ml-1 cursor-pointer"
-                title="Închide fila"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              {/* Dashboard tab cannot be closed: no X button */}
+              {!isDashboard && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  className="w-4 h-4 rounded-md flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-950/40 transition opacity-70 group-hover:opacity-100 ml-1 cursor-pointer"
+                  title="Închide fila"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           );
         })}

@@ -74,6 +74,21 @@ export function resolveTabInfo(pathname: string, searchParams?: any): WorkspaceT
   };
 }
 
+export const DASHBOARD_TAB: WorkspaceTab = {
+  id: '/',
+  title: 'Dashboard',
+  href: '/',
+  iconName: 'LayoutDashboard',
+};
+
+export const ensureDashboardFirst = (tabList: WorkspaceTab[]): WorkspaceTab[] => {
+  if (!Array.isArray(tabList) || tabList.length === 0) {
+    return [DASHBOARD_TAB];
+  }
+  const filtered = tabList.filter((t) => t.id !== '/' && t.href !== '/');
+  return [DASHBOARD_TAB, ...filtered];
+};
+
 interface TabWorkspaceContextType {
   tabs: WorkspaceTab[];
   activeTabId: string;
@@ -84,7 +99,7 @@ interface TabWorkspaceContextType {
 }
 
 const TabWorkspaceContext = createContext<TabWorkspaceContextType>({
-  tabs: [{ id: '/', title: 'Dashboard', href: '/', iconName: 'LayoutDashboard' }],
+  tabs: [DASHBOARD_TAB],
   activeTabId: '/',
   openTab: () => {},
   closeTab: () => {},
@@ -99,20 +114,18 @@ function TabWorkspaceInnerProvider({ children }: { children: React.ReactNode }) 
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [tabs, setTabs] = useState<WorkspaceTab[]>([
-    { id: '/', title: 'Dashboard', href: '/', iconName: 'LayoutDashboard' }
-  ]);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([DASHBOARD_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('/');
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Restore tabs from localStorage on mount
+  // Restore tabs from localStorage on mount (always guaranteeing Dashboard is first)
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setTabs(parsed);
+          setTabs(ensureDashboardFirst(parsed));
         }
       }
     } catch (e) {
@@ -133,17 +146,18 @@ function TabWorkspaceInnerProvider({ children }: { children: React.ReactNode }) 
     }
   }, [tabs, isLoaded]);
 
-  // Synchronize active route with tabs
+  // Synchronize active route with tabs (keeping Dashboard at index 0)
   useEffect(() => {
     if (!pathname) return;
     const currentTabInfo = resolveTabInfo(pathname, searchParams);
     setActiveTabId(currentTabInfo.id);
 
     setTabs((prevTabs) => {
-      const existingIndex = prevTabs.findIndex((t) => t.id === currentTabInfo.id);
+      const ensured = ensureDashboardFirst(prevTabs);
+      const existingIndex = ensured.findIndex((t) => t.id === currentTabInfo.id);
       if (existingIndex >= 0) {
         // Update href if query params changed (e.g. ?id=...)
-        const copy = [...prevTabs];
+        const copy = [...ensured];
         copy[existingIndex] = {
           ...copy[existingIndex],
           href: currentTabInfo.href,
@@ -151,7 +165,7 @@ function TabWorkspaceInnerProvider({ children }: { children: React.ReactNode }) 
         return copy;
       } else {
         // Append new tab
-        return [...prevTabs, currentTabInfo];
+        return [...ensured, currentTabInfo];
       }
     });
   }, [pathname, searchParams]);
@@ -171,62 +185,62 @@ function TabWorkspaceInnerProvider({ children }: { children: React.ReactNode }) 
     };
 
     setTabs((prev) => {
-      const exists = prev.some((t) => t.id === newTab.id);
+      const ensured = ensureDashboardFirst(prev);
+      const exists = ensured.some((t) => t.id === newTab.id);
       if (!exists) {
-        return [...prev, newTab];
+        return [...ensured, newTab];
       }
-      return prev.map((t) => (t.id === newTab.id ? { ...t, href: newTab.href } : t));
+      return ensured.map((t) => (t.id === newTab.id ? { ...t, href: newTab.href } : t));
     });
 
     setActiveTabId(newTab.id);
     router.push(newTab.href);
   }, [router]);
 
-  // Close a tab
+  // Close a tab (Dashboard can NEVER be closed!)
   const closeTab = useCallback((tabId: string) => {
+    if (tabId === '/' || tabId === 'Dashboard') return;
+
     setTabs((prevTabs) => {
-      if (prevTabs.length <= 1) {
-        // If closing the only tab, reset to Dashboard
-        const dash: WorkspaceTab = { id: '/', title: 'Dashboard', href: '/', iconName: 'LayoutDashboard' };
-        setActiveTabId('/');
-        router.push('/');
-        return [dash];
-      }
-
       const closingIndex = prevTabs.findIndex((t) => t.id === tabId);
-      const remaining = prevTabs.filter((t) => t.id !== tabId);
+      if (closingIndex === -1) return prevTabs;
 
-      // If the closed tab was active, switch to adjacent tab
+      const remaining = prevTabs.filter((t) => t.id !== tabId);
+      const guaranteed = ensureDashboardFirst(remaining);
+
+      // If the closed tab was active, switch to adjacent or fallback to Dashboard
       if (tabId === activeTabId) {
         const nextActiveIndex = closingIndex > 0 ? closingIndex - 1 : 0;
-        const nextTab = remaining[nextActiveIndex] || remaining[0];
-        if (nextTab) {
-          setActiveTabId(nextTab.id);
-          router.push(nextTab.href);
-        }
+        const nextTab = guaranteed[nextActiveIndex] || guaranteed[0] || DASHBOARD_TAB;
+        setActiveTabId(nextTab.id);
+        router.push(nextTab.href);
       }
 
-      return remaining;
+      return guaranteed;
     });
   }, [activeTabId, router]);
 
-  // Close other tabs
+  // Close other tabs (keeping Dashboard + the target tab)
   const closeOtherTabs = useCallback((keepTabId: string) => {
     setTabs((prevTabs) => {
-      const keepTab = prevTabs.find((t) => t.id === keepTabId) || prevTabs[0];
+      if (keepTabId === '/' || keepTabId === 'Dashboard') {
+        setActiveTabId('/');
+        router.push('/');
+        return [DASHBOARD_TAB];
+      }
+      const keepTab = prevTabs.find((t) => t.id === keepTabId);
       if (keepTab) {
         setActiveTabId(keepTab.id);
         router.push(keepTab.href);
-        return [keepTab];
+        return [DASHBOARD_TAB, keepTab];
       }
-      return prevTabs;
+      return [DASHBOARD_TAB];
     });
   }, [router]);
 
   // Close all tabs -> reset to Dashboard
   const closeAllTabs = useCallback(() => {
-    const dash: WorkspaceTab = { id: '/', title: 'Dashboard', href: '/', iconName: 'LayoutDashboard' };
-    setTabs([dash]);
+    setTabs([DASHBOARD_TAB]);
     setActiveTabId('/');
     router.push('/');
   }, [router]);
