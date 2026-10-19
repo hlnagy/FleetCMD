@@ -34,6 +34,70 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
 
   const [messages, setMessages] = useState<ChatMessage[]>([initialWelcome]);
 
+  // Draggable position & Mini Collapsed state
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isMini, setIsMini] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    initialPosX: number;
+    initialPosY: number;
+    hasMoved: boolean;
+  }>({ startX: 0, startY: 0, initialPosX: 0, initialPosY: 0, hasMoved: false });
+
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load saved position & mini state from localStorage on mount
+  useEffect(() => {
+    setMounted(true);
+    try {
+      const savedMini = localStorage.getItem('fleet_ai_robi_mini');
+      const initialMini = savedMini !== null ? JSON.parse(savedMini) : false;
+      setIsMini(initialMini);
+
+      const botSize = initialMini ? 44 : 80;
+      const margin = 12;
+
+      const savedPos = localStorage.getItem('fleet_ai_robi_pos');
+      if (savedPos) {
+        const parsed = JSON.parse(savedPos);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          const clampedX = Math.min(Math.max(margin, parsed.x), window.innerWidth - botSize - margin);
+          const clampedY = Math.min(Math.max(margin, parsed.y), window.innerHeight - botSize - margin);
+          setPosition({ x: clampedX, y: clampedY });
+          return;
+        }
+      }
+
+      // Default bottom-right position
+      setPosition({
+        x: Math.max(margin, window.innerWidth - botSize - 24),
+        y: Math.max(margin, window.innerHeight - botSize - 24),
+      });
+    } catch (e) {
+      console.warn('Failed to load Robi position from localStorage', e);
+    }
+  }, []);
+
+  // Keep bot strictly inside viewport on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition((prev) => {
+        if (!prev) return null;
+        const botSize = isMini ? 44 : 80;
+        const margin = 12;
+        const clampedX = Math.min(Math.max(margin, prev.x), window.innerWidth - botSize - margin);
+        const clampedY = Math.min(Math.max(margin, prev.y), window.innerHeight - botSize - margin);
+        return { x: clampedX, y: clampedY };
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMini]);
+
   // Idle timer to trigger boredom (unatkozás) after 28 seconds of inactivity
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -210,11 +274,153 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
     setTimeout(() => setMood('idle'), 1500);
   };
 
+  // Drag & Pointer Gesture Handler (Drag vs Single Click vs Double Click)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Only primary button (left click or touch)
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+    const botSize = isMini ? 44 : 80;
+    const currentPos = position || {
+      x: window.innerWidth - botSize - 24,
+      y: window.innerHeight - botSize - 24,
+    };
+
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialPosX: currentPos.x,
+      initialPosY: currentPos.y,
+      hasMoved: false,
+    };
+
+    const target = e.currentTarget;
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const handlePointerMove = (ev: PointerEvent) => {
+      const deltaX = ev.clientX - dragRef.current.startX;
+      const deltaY = ev.clientY - dragRef.current.startY;
+
+      // Threshold of 4px to distinguish deliberate drag from click
+      if (!dragRef.current.hasMoved && (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4)) {
+        dragRef.current.hasMoved = true;
+        setIsDragging(true);
+      }
+
+      if (dragRef.current.hasMoved) {
+        const margin = 10;
+        const maxX = Math.max(margin, window.innerWidth - botSize - margin);
+        const maxY = Math.max(margin, window.innerHeight - botSize - margin);
+
+        const newX = Math.min(Math.max(margin, dragRef.current.initialPosX + deltaX), maxX);
+        const newY = Math.min(Math.max(margin, dragRef.current.initialPosY + deltaY), maxY);
+
+        setPosition({ x: newX, y: newY });
+      }
+    };
+
+    const handlePointerUp = (ev: PointerEvent) => {
+      try {
+        target.releasePointerCapture(ev.pointerId);
+      } catch (err) {}
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+
+      if (dragRef.current.hasMoved) {
+        setIsDragging(false);
+        const margin = 10;
+        const deltaX = ev.clientX - dragRef.current.startX;
+        const deltaY = ev.clientY - dragRef.current.startY;
+        const maxX = Math.max(margin, window.innerWidth - botSize - margin);
+        const maxY = Math.max(margin, window.innerHeight - botSize - margin);
+        const finalX = Math.min(Math.max(margin, dragRef.current.initialPosX + deltaX), maxX);
+        const finalY = Math.min(Math.max(margin, dragRef.current.initialPosY + deltaY), maxY);
+
+        const finalPos = { x: finalX, y: finalY };
+        setPosition(finalPos);
+        try {
+          localStorage.setItem('fleet_ai_robi_pos', JSON.stringify(finalPos));
+        } catch (err) {}
+        return;
+      }
+
+      // No drag -> Click detected!
+      // Handle Single Click vs Double Click:
+      if (clickTimerRef.current) {
+        // Second click arrived within 280ms -> DOUBLE CLICK!
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+        setIsMini((prev) => {
+          const next = !prev;
+          try {
+            localStorage.setItem('fleet_ai_robi_mini', JSON.stringify(next));
+          } catch (err) {}
+          return next;
+        });
+      } else {
+        // First click -> wait 260ms to see if a second click arrives
+        clickTimerRef.current = setTimeout(() => {
+          clickTimerRef.current = null;
+          handleToggle();
+        }, 260);
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  // Adaptive, screen-bounded placement for speech bubble dialog
+  const getBubbleStyle = (): React.CSSProperties => {
+    if (!mounted || !position) {
+      return {
+        position: 'fixed',
+        bottom: '100px',
+        right: '24px',
+        zIndex: 50,
+      };
+    }
+
+    const bubbleWidth = typeof window !== 'undefined' ? Math.min(420, window.innerWidth - 24) : 420;
+    const bubbleHeight = typeof window !== 'undefined' ? Math.min(540, window.innerHeight - 24) : 540;
+    const botSize = isMini ? 44 : 80;
+    const margin = 12;
+
+    let x = position.x;
+    let y = position.y;
+
+    // Horizontal placement: if bot is on right side of screen, bubble opens to the left
+    if (position.x > window.innerWidth / 2) {
+      x = position.x - bubbleWidth - margin;
+    } else {
+      x = position.x + botSize + margin;
+    }
+
+    // Vertical placement: if bot is in bottom half, bubble opens upwards
+    if (position.y > window.innerHeight / 2) {
+      y = position.y - bubbleHeight + botSize;
+    } else {
+      y = position.y;
+    }
+
+    // Strictly clamp within viewport
+    const clampedX = Math.min(Math.max(margin, x), window.innerWidth - bubbleWidth - margin);
+    const clampedY = Math.min(Math.max(margin, y), window.innerHeight - bubbleHeight - margin);
+
+    return {
+      position: 'fixed',
+      left: `${clampedX}px`,
+      top: `${clampedY}px`,
+      zIndex: 50,
+    };
+  };
+
   return (
     <>
       {/* Robi's Transformers Speech Bubble Dialogue Window */}
       {isOpen && (
-        <div className="fixed bottom-36 right-3 sm:bottom-8 sm:right-40 z-50">
+        <div style={getBubbleStyle()}>
           <RobiSpeechBubble
             messages={messages}
             mood={mood}
@@ -227,13 +433,32 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
         </div>
       )}
 
-      {/* Floating Transformers Robi (Sphere <-> Full Robot) in bottom-right */}
-      <div className="fixed bottom-6 right-3 sm:right-6 z-50 flex items-center justify-center">
+      {/* Floating Draggable Robi (Sphere <-> Mini <-> Full Robot) */}
+      <div
+        className={`fixed z-50 flex items-center justify-center select-none ${
+          isDragging ? 'cursor-grabbing transition-none' : 'cursor-grab transition-all duration-300'
+        }`}
+        style={
+          mounted && position
+            ? {
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+                touchAction: 'none',
+              }
+            : {
+                right: '24px',
+                bottom: '24px',
+                touchAction: 'none',
+              }
+        }
+        onPointerDown={handlePointerDown}
+      >
         <TransformerRobi
           isOpen={isOpen}
           mood={mood}
-          onToggle={handleToggle}
+          onToggle={() => {}} // Click handled cleanly by parent pointer gesture timer
           unreadCount={unreadCount}
+          isMini={isMini}
         />
       </div>
     </>

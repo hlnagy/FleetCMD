@@ -8,6 +8,7 @@ interface TransformerRobiProps {
   mood: RobotMood;
   onToggle: () => void;
   unreadCount?: number;
+  isMini?: boolean;
 }
 
 export default function TransformerRobi({
@@ -15,6 +16,7 @@ export default function TransformerRobi({
   mood,
   onToggle,
   unreadCount = 0,
+  isMini = false,
 }: TransformerRobiProps) {
   const [blink, setBlink] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -123,8 +125,13 @@ export default function TransformerRobi({
         type="button"
         onClick={onToggle}
         aria-label="Robi • Transformare Captain Planet AI"
-        className={`group relative flex items-center justify-center transition-all duration-500 ease-out focus:outline-none ${
-          isOpen ? 'w-36 h-56 sm:w-44 sm:h-68' : 'w-20 h-20'
+        title={
+          isMini
+            ? 'Robi AI (Minimizat) • Dublu-click: Mărește • Trage pentru a muta'
+            : 'Robi AI • Dublu-click: Micșorează • Trage pentru a muta'
+        }
+        className={`group relative flex items-center justify-center transition-all duration-300 ease-out focus:outline-none ${
+          isOpen ? 'w-36 h-56 sm:w-44 sm:h-68' : isMini ? 'w-11 h-11' : 'w-20 h-20'
         } ${mood === 'bored' ? 'animate-robot-bored' : 'animate-robot-float'}`}
         style={{
           filter: `drop-shadow(0 10px 28px ${c.glow})`,
@@ -134,7 +141,11 @@ export default function TransformerRobi({
         {/* STATE 1: PLANETEER ORBITAL ECO-CORE (Closed Sphere)       */}
         {/* ========================================================= */}
         {!isOpen && (
-          <div className="relative w-20 h-20 flex items-center justify-center transition-transform duration-500 transform group-hover:scale-110">
+          <div
+            className={`relative flex items-center justify-center transition-all duration-300 transform group-hover:scale-105 ${
+              isMini ? 'w-20 h-20 scale-[0.55] origin-center' : 'w-20 h-20'
+            }`}
+          >
             {/* Outer Emerald-Green Planeteer Gyro Ring (Earth & Wind) */}
             <div
               className={`absolute inset-0 rounded-full border-2 border-emerald-400/70 pointer-events-none animate-gyro-spin shadow-[0_0_15px_#10b981] ${
