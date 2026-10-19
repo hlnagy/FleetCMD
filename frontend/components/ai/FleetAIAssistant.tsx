@@ -34,10 +34,11 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
 
   const [messages, setMessages] = useState<ChatMessage[]>([initialWelcome]);
 
-  // Draggable position & Mini Collapsed state
+  // Draggable position, Physics throwing & Mini Collapsed state
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [isMini, setIsMini] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isBouncing, setIsBouncing] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   const dragRef = useRef<{
@@ -49,6 +50,9 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
   }>({ startX: 0, startY: 0, initialPosX: 0, initialPosY: 0, hasMoved: false });
 
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastClickTimeRef = useRef<number>(0);
+  const physicsAnimRef = useRef<number | null>(null);
+  const velocityHistoryRef = useRef<{ x: number; y: number; time: number }[]>([]);
 
   // Load saved position & mini state from localStorage on mount
   useEffect(() => {
@@ -274,12 +278,49 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
     setTimeout(() => setMood('idle'), 1500);
   };
 
-  // Drag & Pointer Gesture Handler (Drag vs Single Click vs Double Click)
+  // Toggle Mini / Compact mode with animation
+  const toggleMini = () => {
+    setIsMini((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('fleet_ai_robi_mini', JSON.stringify(next));
+      } catch (err) {}
+      setMood('happy');
+      setTimeout(() => setMood('idle'), 1200);
+      return next;
+    });
+  };
+
+  // Stop physics on interaction
+  const stopPhysics = () => {
+    if (physicsAnimRef.current) {
+      cancelAnimationFrame(physicsAnimRef.current);
+      physicsAnimRef.current = null;
+    }
+    setIsBouncing(false);
+  };
+
+  // Handle native double-click
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    stopPhysics();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    lastClickTimeRef.current = 0;
+    toggleMini();
+  };
+
+  // Drag, Throw & Pointer Gesture Handler with Wall-Bouncing Physics
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Only primary button (left click or touch)
+    // Only primary button (left mouse or touch)
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
-    const botSize = isMini ? 44 : 80;
+    stopPhysics();
+
+    const botSize = isMini ? 40 : 80;
     const currentPos = position || {
       x: window.innerWidth - botSize - 24,
       y: window.innerHeight - botSize - 24,
@@ -293,14 +334,18 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
       hasMoved: false,
     };
 
-    const target = e.currentTarget;
-    try {
-      target.setPointerCapture(e.pointerId);
-    } catch (err) {}
+    velocityHistoryRef.current = [{ x: e.clientX, y: e.clientY, time: performance.now() }];
 
     const handlePointerMove = (ev: PointerEvent) => {
       const deltaX = ev.clientX - dragRef.current.startX;
       const deltaY = ev.clientY - dragRef.current.startY;
+
+      // Track last 5 position samples with timestamps for throw impulse
+      const now = performance.now();
+      velocityHistoryRef.current.push({ x: ev.clientX, y: ev.clientY, time: now });
+      if (velocityHistoryRef.current.length > 5) {
+        velocityHistoryRef.current.shift();
+      }
 
       // Threshold of 4px to distinguish deliberate drag from click
       if (!dragRef.current.hasMoved && (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4)) {
@@ -321,14 +366,99 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
     };
 
     const handlePointerUp = (ev: PointerEvent) => {
-      try {
-        target.releasePointerCapture(ev.pointerId);
-      } catch (err) {}
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
 
       if (dragRef.current.hasMoved) {
         setIsDragging(false);
+
+        // Calculate release throw velocity from recent pointer samples
+        const hist = velocityHistoryRef.current;
+        let vx = 0;
+        let vy = 0;
+        if (hist.length >= 2) {
+          const oldest = hist[0];
+          const newest = hist[hist.length - 1];
+          const dt = Math.max(1, newest.time - oldest.time);
+          vx = ((newest.x - oldest.x) / dt) * 16;
+          vy = ((newest.y - oldest.y) / dt) * 16;
+        }
+
+        const throwSpeed = Math.hypot(vx, vy);
+
+        // If thrown with velocity (> 2.2px/frame), start bouncing physics!
+        if (throwSpeed > 2.2) {
+          const maxSpeed = 36;
+          if (throwSpeed > maxSpeed) {
+            vx = (vx / throwSpeed) * maxSpeed;
+            vy = (vy / throwSpeed) * maxSpeed;
+          }
+
+          setIsBouncing(true);
+          setMood('happy');
+
+          let curX = dragRef.current.initialPosX + (ev.clientX - dragRef.current.startX);
+          let curY = dragRef.current.initialPosY + (ev.clientY - dragRef.current.startY);
+          let curVx = vx;
+          let curVy = vy;
+
+          const step = () => {
+            const margin = 10;
+            const minX = margin;
+            const maxX = Math.max(margin, window.innerWidth - botSize - margin);
+            const minY = margin;
+            const maxY = Math.max(margin, window.innerHeight - botSize - margin);
+
+            curX += curVx;
+            curY += curVy;
+
+            // Air friction (gradual deceleration)
+            curVx *= 0.965;
+            curVy *= 0.965;
+
+            // Restitution bounce factor (76% of energy preserved on wall bounce)
+            const bounceRestitution = 0.76;
+
+            // Bounce off Left / Right walls
+            if (curX <= minX) {
+              curX = minX;
+              curVx = -curVx * bounceRestitution;
+            } else if (curX >= maxX) {
+              curX = maxX;
+              curVx = -curVx * bounceRestitution;
+            }
+
+            // Bounce off Top / Bottom walls
+            if (curY <= minY) {
+              curY = minY;
+              curVy = -curVy * bounceRestitution;
+            } else if (curY >= maxY) {
+              curY = maxY;
+              curVy = -curVy * bounceRestitution;
+            }
+
+            setPosition({ x: curX, y: curY });
+
+            const currentSpeed = Math.hypot(curVx, curVy);
+            if (currentSpeed > 0.25) {
+              physicsAnimRef.current = requestAnimationFrame(step);
+            } else {
+              // Stopped bouncing!
+              setIsBouncing(false);
+              setMood('idle');
+              const finalPos = { x: curX, y: curY };
+              setPosition(finalPos);
+              try {
+                localStorage.setItem('fleet_ai_robi_pos', JSON.stringify(finalPos));
+              } catch (e) {}
+            }
+          };
+
+          physicsAnimRef.current = requestAnimationFrame(step);
+          return;
+        }
+
+        // Just placed without throwing:
         const margin = 10;
         const deltaX = ev.clientX - dragRef.current.startX;
         const deltaY = ev.clientY - dragRef.current.startY;
@@ -347,23 +477,23 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
 
       // No drag -> Click detected!
       // Handle Single Click vs Double Click:
-      if (clickTimerRef.current) {
-        // Second click arrived within 280ms -> DOUBLE CLICK!
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-        setIsMini((prev) => {
-          const next = !prev;
-          try {
-            localStorage.setItem('fleet_ai_robi_mini', JSON.stringify(next));
-          } catch (err) {}
-          return next;
-        });
+      const clickNow = Date.now();
+      const diff = clickNow - lastClickTimeRef.current;
+      if (diff < 420) {
+        // DOUBLE CLICK DETECTED!
+        if (clickTimerRef.current) {
+          clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
+        lastClickTimeRef.current = 0;
+        toggleMini();
       } else {
-        // First click -> wait 260ms to see if a second click arrives
+        lastClickTimeRef.current = clickNow;
         clickTimerRef.current = setTimeout(() => {
           clickTimerRef.current = null;
+          lastClickTimeRef.current = 0;
           handleToggle();
-        }, 260);
+        }, 340);
       }
     };
 
@@ -384,7 +514,7 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
 
     const bubbleWidth = typeof window !== 'undefined' ? Math.min(420, window.innerWidth - 24) : 420;
     const bubbleHeight = typeof window !== 'undefined' ? Math.min(540, window.innerHeight - 24) : 540;
-    const botSize = isMini ? 44 : 80;
+    const botSize = isMini ? 40 : 80;
     const margin = 12;
 
     let x = position.x;
@@ -433,10 +563,14 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
         </div>
       )}
 
-      {/* Floating Draggable Robi (Sphere <-> Mini <-> Full Robot) */}
+      {/* Floating Draggable & Throwable Robi (Sphere <-> Mini <-> Full Robot) */}
       <div
         className={`fixed z-50 flex items-center justify-center select-none ${
-          isDragging ? 'cursor-grabbing transition-none' : 'cursor-grab transition-all duration-300'
+          isDragging
+            ? 'cursor-grabbing transition-none'
+            : isBouncing
+            ? 'cursor-grab transition-none'
+            : 'cursor-grab transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]'
         }`}
         style={
           mounted && position
@@ -452,11 +586,13 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
               }
         }
         onPointerDown={handlePointerDown}
+        onDoubleClick={handleDoubleClick}
       >
         <TransformerRobi
           isOpen={isOpen}
           mood={mood}
-          onToggle={() => {}} // Click handled cleanly by parent pointer gesture timer
+          onToggle={() => {}} // Handled cleanly by parent click gesture timer
+          onDoubleClick={handleDoubleClick}
           unreadCount={unreadCount}
           isMini={isMini}
         />

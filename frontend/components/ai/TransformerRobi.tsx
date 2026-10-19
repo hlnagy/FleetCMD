@@ -7,6 +7,7 @@ interface TransformerRobiProps {
   isOpen: boolean;
   mood: RobotMood;
   onToggle: () => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   unreadCount?: number;
   isMini?: boolean;
 }
@@ -15,6 +16,7 @@ export default function TransformerRobi({
   isOpen,
   mood,
   onToggle,
+  onDoubleClick,
   unreadCount = 0,
   isMini = false,
 }: TransformerRobiProps) {
@@ -124,14 +126,15 @@ export default function TransformerRobi({
       <button
         type="button"
         onClick={onToggle}
+        onDoubleClick={onDoubleClick}
         aria-label="Robi • Transformare Captain Planet AI"
         title={
           isMini
-            ? 'Robi AI (Minimizat) • Dublu-click: Mărește • Trage pentru a muta'
-            : 'Robi AI • Dublu-click: Micșorează • Trage pentru a muta'
+            ? 'Robi AI (Minimizat) • Dublu-click: Mărește • Trage sau aruncă-mă!'
+            : 'Robi AI • Dublu-click: Micșorează • Trage sau aruncă-mă!'
         }
-        className={`group relative flex items-center justify-center transition-all duration-300 ease-out focus:outline-none ${
-          isOpen ? 'w-36 h-56 sm:w-44 sm:h-68' : isMini ? 'w-11 h-11' : 'w-20 h-20'
+        className={`group relative flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] focus:outline-none ${
+          isOpen ? 'w-36 h-56 sm:w-44 sm:h-68' : isMini ? 'w-10 h-10' : 'w-20 h-20'
         } ${mood === 'bored' ? 'animate-robot-bored' : 'animate-robot-float'}`}
         style={{
           filter: `drop-shadow(0 10px 28px ${c.glow})`,
@@ -142,9 +145,9 @@ export default function TransformerRobi({
         {/* ========================================================= */}
         {!isOpen && (
           <div
-            className={`relative flex items-center justify-center transition-all duration-300 transform group-hover:scale-105 ${
-              isMini ? 'w-20 h-20 scale-[0.55] origin-center' : 'w-20 h-20'
-            }`}
+            className={`relative flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform group-hover:scale-105 ${
+              isMini ? 'scale-[0.45] origin-center' : 'scale-100 origin-center'
+            } w-20 h-20`}
           >
             {/* Outer Emerald-Green Planeteer Gyro Ring (Earth & Wind) */}
             <div
