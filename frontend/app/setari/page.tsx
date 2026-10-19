@@ -3022,28 +3022,28 @@ function SetariContent() {
           {/* ------------------------------------------------------------- */}
           {docViewMode === 'matrice' && (
             <div className="space-y-3">
-              <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
-                <table className="w-full text-left border-collapse text-xs min-w-[950px]">
-                  <thead>
-                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[11px]">
-                      <th className="p-3 sticky left-0 bg-morning-100 z-10 min-w-[200px] border-r border-morning-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+              <div className="bg-white rounded-2xl border border-morning-200 overflow-auto max-h-[calc(100vh-270px)] shadow-xs relative">
+                <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[950px]">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[11px]">
+                      <th className="p-3 sticky left-0 top-0 bg-morning-100 z-30 min-w-[200px] border-b border-r border-morning-200 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.06)]">
                         Vehicul & Categorie
                       </th>
                       {tipuriDocumente.map((t) => (
-                        <th key={t.cod} className="p-3 text-center min-w-[140px]">
+                        <th key={t.cod} className="p-3 text-center min-w-[140px] sticky top-0 bg-morning-100 z-20 border-b border-morning-200">
                           <div className="font-extrabold text-sapphire-900">{t.cod}</div>
                           <div className="text-[10px] font-normal text-sage-500 truncate max-w-[130px] mx-auto" title={t.label}>
                             {t.label?.replace(/\([^)]*\)/g, '').trim()}
                           </div>
                         </th>
                       ))}
-                      <th className="p-3 text-right min-w-[90px]">Acțiuni</th>
+                      <th className="p-3 text-right min-w-[90px] sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Acțiuni</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                  <tbody className="font-medium text-slate-700">
                     {vehiculeMatrice.length === 0 ? (
                       <tr>
-                        <td colSpan={tipuriDocumente.length + 2} className="p-8 text-center text-xs text-sage-500 font-bold">
+                        <td colSpan={tipuriDocumente.length + 2} className="p-8 text-center text-xs text-sage-500 font-bold border-b border-morning-200">
                           Nu a fost găsit niciun vehicul conform criteriilor de filtrare selectate.
                         </td>
                       </tr>
@@ -3055,7 +3055,7 @@ function SetariContent() {
                           return (
                             <tr key={v.id} className="hover:bg-morning-50 transition group">
                               {/* Coloană Vehicul (Sticky) */}
-                              <td className="p-3 sticky left-0 bg-white group-hover:bg-morning-50 z-10 border-r border-morning-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                              <td className="p-3 sticky left-0 bg-white group-hover:bg-morning-50 z-10 border-r border-b border-morning-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                                 <div className="flex items-center space-x-2">
                                   <div className="font-mono font-black text-sapphire-900 text-xs">
                                     {v.numarIntern || 'FĂRĂ COD'}
@@ -3083,7 +3083,7 @@ function SetariContent() {
                                 const doc = v.docs[t.cod];
                                 if (!doc) {
                                   return (
-                                    <td key={t.cod} className="p-2 text-center">
+                                    <td key={t.cod} className="p-2 text-center border-b border-morning-200">
                                       <button
                                         type="button"
                                         onClick={() => openAddDoc(v.id, t.cod)}
@@ -3111,7 +3111,7 @@ function SetariContent() {
                                 }
 
                                 return (
-                                  <td key={t.cod} className="p-2 text-center">
+                                  <td key={t.cod} className="p-2 text-center border-b border-morning-200">
                                     <button
                                       type="button"
                                       onClick={() => openEditDocDirect(doc)}
@@ -3139,7 +3139,7 @@ function SetariContent() {
                               })}
 
                               {/* Coloană Acțiuni */}
-                              <td className="p-3 text-right">
+                              <td className="p-3 text-right border-b border-morning-200">
                                 <button
                                   type="button"
                                   onClick={() => openAddDoc(v.id)}
@@ -3295,23 +3295,23 @@ function SetariContent() {
           {/* ------------------------------------------------------------- */}
           {docViewMode === 'lista' && (
             <div className="space-y-3">
-              <div className="bg-white rounded-2xl border border-morning-200 overflow-x-auto shadow-xs">
-                <table className="w-full text-left border-collapse text-xs min-w-[850px]">
-                  <thead>
-                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
-                      <th className="p-3">Vehicul</th>
-                      <th className="p-3">Tip Document</th>
-                      <th className="p-3">Data Expirare</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Preaviz</th>
-                      <th className="p-3">Serie / Emitent</th>
-                      <th className="p-3 text-right">Acțiuni</th>
+              <div className="bg-white rounded-2xl border border-morning-200 overflow-auto max-h-[calc(100vh-270px)] shadow-xs relative">
+                <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[850px]">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider">
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Vehicul</th>
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Tip Document</th>
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Data Expirare</th>
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Status</th>
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Preaviz</th>
+                      <th className="p-3 sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Serie / Emitent</th>
+                      <th className="p-3 text-right sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Acțiuni</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
+                  <tbody className="font-medium text-slate-700">
                     {filteredDocumenteLista.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-xs text-sage-500 font-bold">
+                        <td colSpan={7} className="p-8 text-center text-xs text-sage-500 font-bold border-b border-morning-200">
                           Nu au fost găsite documente conform filtrării selectate.
                         </td>
                       </tr>
@@ -3327,7 +3327,7 @@ function SetariContent() {
 
                           return (
                             <tr key={d.id} className="hover:bg-morning-50 transition">
-                              <td className="p-3">
+                              <td className="p-3 border-b border-morning-200">
                                 <div className="font-extrabold text-sapphire-900 font-mono">
                                   {d.vehicul?.numarIntern || d.vehiculId}
                                 </div>
@@ -3335,15 +3335,15 @@ function SetariContent() {
                                   {d.vehicul?.numarInmatriculare || '-'}
                                 </div>
                               </td>
-                              <td className="p-3">
+                              <td className="p-3 border-b border-morning-200">
                                 <span className="font-bold text-slate-800 bg-morning-100 px-2 py-0.5 rounded border border-morning-200 font-mono">
                                   {d.tipDocument}
                                 </span>
                               </td>
-                              <td className="p-3 font-mono font-bold text-slate-900">
+                              <td className="p-3 font-mono font-bold text-slate-900 border-b border-morning-200">
                                 {exp.toLocaleDateString('ro-RO')}
                               </td>
-                              <td className="p-3">
+                              <td className="p-3 border-b border-morning-200">
                                 {isExpired ? (
                                   <span className="px-2 py-0.5 rounded-full bg-roseash-100 text-terracotta-700 text-[10px] font-black uppercase">
                                     Expirat ({Math.abs(diffDays)}z)
@@ -3358,13 +3358,13 @@ function SetariContent() {
                                   </span>
                                 )}
                               </td>
-                              <td className="p-3 font-mono text-sage-700 font-bold">
+                              <td className="p-3 font-mono text-sage-700 font-bold border-b border-morning-200">
                                 {d.zileAvertizareInainte} zile
                               </td>
-                              <td className="p-3 text-sage-600">
+                              <td className="p-3 text-sage-600 border-b border-morning-200">
                                 {d.serieDocument || d.emitent || '-'}
                               </td>
-                              <td className="p-3 text-right space-x-1">
+                              <td className="p-3 text-right space-x-1 border-b border-morning-200">
                                 <button
                                   type="button"
                                   onClick={() => openEditDocDirect(d)}
