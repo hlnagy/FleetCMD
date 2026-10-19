@@ -206,6 +206,7 @@ function SetariContent() {
   const [searchDocVehicul, setSearchDocVehicul] = useState('');
   const [filterDocCategorie, setFilterDocCategorie] = useState('TOATE');
   const [filterDocStatus, setFilterDocStatus] = useState('TOATE');
+  const [ascundeFaraActe, setAscundeFaraActe] = useState<boolean>(true);
   const [docMatricePage, setDocMatricePage] = useState(1);
   const [docListaPage, setDocListaPage] = useState(1);
 
@@ -308,9 +309,10 @@ function SetariContent() {
         if (filterDocStatus === 'AVERTIZARE' && !v.hasWarning) return false;
         if (filterDocStatus === 'LIPSA' && !v.hasMissing) return false;
         if (filterDocStatus === 'VALIDE' && (v.hasExpired || v.hasWarning)) return false;
+        if (ascundeFaraActe && v.totalDocs === 0) return false;
         return true;
       });
-  }, [vehicule, documente, tipuriDocumente, searchDocVehicul, filterDocCategorie, filterDocStatus]);
+  }, [vehicule, documente, tipuriDocumente, searchDocVehicul, filterDocCategorie, filterDocStatus, ascundeFaraActe]);
 
   // Calcule Listă Detaliată Documente
   const filteredDocumenteLista = useMemo(() => {
@@ -2933,7 +2935,7 @@ function SetariContent() {
 
             {/* Rând Filtre & Căutare (vizibil pentru Matrice și Listă) */}
             {docViewMode !== 'tipuri' && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-morning-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-morning-200 items-center">
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
@@ -2997,6 +2999,20 @@ function SetariContent() {
                     <option value="VALIDE">Doar Vehicule cu Toate Actele Valabile</option>
                   </select>
                 </div>
+
+                <label className="flex items-center space-x-2 text-xs font-bold text-sapphire-900 cursor-pointer select-none bg-morning-100 hover:bg-morning-200 border border-morning-200 px-3 py-2 rounded-xl transition">
+                  <input
+                    type="checkbox"
+                    checked={ascundeFaraActe}
+                    onChange={(e) => {
+                      setAscundeFaraActe(e.target.checked);
+                      setDocMatricePage(1);
+                      setDocListaPage(1);
+                    }}
+                    className="w-4 h-4 rounded text-sapphire-600 focus:ring-sapphire-500 border-morning-300 cursor-pointer"
+                  />
+                  <span className="truncate">Ascunde vehiculele fără acte</span>
+                </label>
               </div>
             )}
           </div>
