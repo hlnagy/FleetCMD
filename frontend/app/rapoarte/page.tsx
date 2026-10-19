@@ -64,7 +64,7 @@ export default function RapoartePage() {
   const [filtruStatusEficienta, setFiltruStatusEficienta] = useState<string>('TOATE');
   const [filtruStatusUlei, setFiltruStatusUlei] = useState<string>('TOATE');
 
-  // Toggle expand főkategória
+  // Toggle expand categorie
   const toggleCategory = (catName: string) => {
     setExpandedCategories((prev) => ({
       ...prev,
@@ -72,7 +72,7 @@ export default function RapoartePage() {
     }));
   };
 
-  // Toggle toate főkategóriáile
+  // Toggle toate categoriile
   const toggleAllCategories = (expand: boolean) => {
     const nextState: Record<string, boolean> = {};
     (reportData?.achizitiiCategorii || []).forEach((c: any) => {
@@ -216,7 +216,7 @@ export default function RapoartePage() {
         return 'Raport Consum Excesiv de Ulei & Alertă Pierderi (Scurgeri / Top-up)';
       case 'FURNIZORI_EFACTURA':
         return subTabEfactura === 'categorii'
-          ? 'Raport Achiziții Facturate: Főkategóriák & Alkategóriák (ANAF e-Factura)'
+          ? 'Raport Achiziții Facturate: Categorii Principale & Subcategorii (ANAF e-Factura)'
           : 'Raport Achiziții Furnizori ANAF e-Factura';
       case 'SCADENTAR':
         return 'Scadențar Mentenanță & Documente (Următoarele 30-60 Zile)';
@@ -1405,11 +1405,11 @@ export default function RapoartePage() {
                     Raport Achiziții Facturate (ANAF RO e-Factura)
                   </h2>
                   <p className="text-xs text-sage-600 dark:text-slate-400 mt-0.5">
-                    Centralizează achizițiile din SPV e-Factura pe főkategóriák și alkategóriák de piese, materiale și fluide, cu urmărire furnizori și prețuri.
+                    Centralizează achizițiile din SPV e-Factura pe categorii principale și subcategorii de piese, materiale și fluide, cu urmărire furnizori și prețuri.
                   </p>
                 </div>
 
-                {/* Sub-tab Switcher: Főkategóriák & Alkategóriák vs. Furnizori */}
+                {/* Sub-tab Switcher: Categorii Principale & Subcategorii vs. Furnizori */}
                 <div className="flex items-center gap-1.5 bg-morning-100 dark:bg-slate-950 p-1 rounded-xl border border-morning-200 dark:border-slate-800 self-start lg:self-auto">
                   <button
                     onClick={() => setSubTabEfactura('categorii')}
@@ -1420,7 +1420,7 @@ export default function RapoartePage() {
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    Főkategóriák & Alkategóriák
+                    Categorii Principale & Subcategorii
                     <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                       subTabEfactura === 'categorii'
                         ? 'bg-white/20 text-white'
@@ -1451,7 +1451,7 @@ export default function RapoartePage() {
               </div>
 
               {/* ===================================================== */}
-              {/* VIZUALIZARE 1: FŐKATEGÓRIÁK & ALKATEGÓRIÁK */}
+              {/* VIZUALIZARE 1: CATEGORII PRINCIPALE & SUBCATEGORII    */}
               {/* ===================================================== */}
               {subTabEfactura === 'categorii' && (
                 <div className="space-y-4">
@@ -1472,7 +1472,7 @@ export default function RapoartePage() {
 
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Főkategóriák Active</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Categorii Principale Active</span>
                         <Layers className="w-4 h-4 text-sapphire-600 dark:text-indigo-400" />
                       </div>
                       <div className="text-xl font-black text-sapphire-900 dark:text-white">
@@ -1485,7 +1485,7 @@ export default function RapoartePage() {
 
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Alkategóriák Active</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Subcategorii Active</span>
                         <Disc className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
                       </div>
                       <div className="text-xl font-black text-sapphire-900 dark:text-white">
@@ -1516,7 +1516,7 @@ export default function RapoartePage() {
                       <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Caută főkategória, alkategória, cod piesă sau denumire în raport..."
+                        placeholder="Caută categorie, subcategorie, cod piesă sau denumire în raport..."
                         value={cautaCategorieText}
                         onChange={(e) => setCautaCategorieText(e.target.value)}
                         className="w-full bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-sapphire-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
@@ -1538,7 +1538,7 @@ export default function RapoartePage() {
                     </div>
                   </div>
 
-                  {/* Arbore Ierarhic Főkategóriák & Alkategóriák */}
+                  {/* Arbore Ierarhic Categorii Principale & Subcategorii */}
                   {filteredCategorii.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-xs bg-morning-50 dark:bg-slate-950 rounded-xl border border-morning-200 dark:border-slate-800">
                       Nu s-au găsit categorii sau articole facturate pentru filtrele aplicate în această perioadă.
@@ -1553,7 +1553,7 @@ export default function RapoartePage() {
                             key={cat.categorie}
                             className="rounded-xl border border-morning-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900 shadow-2xs transition"
                           >
-                            {/* Antet Főkategória (Clickable Accordion) */}
+                            {/* Antet Categorie (Clickable Accordion) */}
                             <div
                               onClick={() => toggleCategory(cat.categorie)}
                               className="p-3.5 bg-morning-50/70 dark:bg-slate-850 hover:bg-morning-100/70 dark:hover:bg-slate-800 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-morning-200/80 dark:border-slate-800/80 select-none"
@@ -1572,7 +1572,7 @@ export default function RapoartePage() {
                                       {cat.categorie}
                                     </span>
                                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-sapphire-100 dark:bg-indigo-950/70 text-sapphire-800 dark:text-indigo-300 border border-sapphire-200 dark:border-indigo-800/40">
-                                      {cat.subcategorii?.length || 0} alkategória
+                                      {cat.subcategorii?.length || 0} subcategorii
                                     </span>
                                     <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-morning-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                                       {cat.numarPozitii || 0} poziții
@@ -1583,7 +1583,7 @@ export default function RapoartePage() {
                                       </span>
                                     )}
                                   </div>
-                                  {/* Furnizori principali în această főkategória */}
+                                  {/* Furnizori principali în această categorie */}
                                   {cat.furnizoriPrincipali && cat.furnizoriPrincipali.length > 0 && (
                                     <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-1">
                                       <span className="text-[10px] font-semibold text-slate-400 uppercase">Top furnizori:</span>
@@ -1597,7 +1597,7 @@ export default function RapoartePage() {
                                 </div>
                               </div>
 
-                              {/* Pondere & Valoare Főkategória */}
+                              {/* Pondere & Valoare Categorie */}
                               <div className="flex items-center justify-between md:justify-end gap-5 pl-7 md:pl-0">
                                 {/* Visual progress bar pondere */}
                                 <div className="w-32 hidden sm:block">
@@ -1624,16 +1624,16 @@ export default function RapoartePage() {
                               </div>
                             </div>
 
-                            {/* Corp Főkategória: Tabel Alkategóriák */}
+                            {/* Corp Categorie: Tabel Subcategorii */}
                             {isExpanded && (
                               <div className="overflow-x-auto divide-y divide-morning-100 dark:divide-slate-800/60">
                                 <table className="w-full text-xs text-left">
                                   <thead className="bg-morning-100/60 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-bold text-[10px] border-b border-morning-200 dark:border-slate-800">
                                     <tr>
-                                      <th className="p-3 pl-6">Alkategória</th>
+                                      <th className="p-3 pl-6">Subcategorie</th>
                                       <th className="p-3 text-right">Cantitate Totală</th>
                                       <th className="p-3 text-right">Linii Factură</th>
-                                      <th className="p-3 text-right w-36">Pondere în Főkategória</th>
+                                      <th className="p-3 text-right w-36">Pondere în Categorie</th>
                                       <th className="p-3 text-right">Pondere din Total</th>
                                       <th className="p-3 text-right font-black">Valoare Totală (RON)</th>
                                       <th className="p-3 text-center">Articole Recente</th>

@@ -64,7 +64,7 @@ export default function TopNavigation() {
       name: 'Comenzi & Mentenanță',
       icon: Wrench,
       items: [
-        { name: 'Comenzi de Lucru (Munkalapok)', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
+        { name: 'Comenzi de Lucru (Atelier)', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
         { name: 'Profiluri Mentenanță & Planificator', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
       ],
     },

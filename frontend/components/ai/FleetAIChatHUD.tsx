@@ -85,28 +85,28 @@ export default function FleetAIChatHUD({
   // Quick Action Buttons
   const quickActions = [
     {
-      label: '📊 Flotta Állapotjelentés',
-      prompt: 'Készíts egy átfogó analitikus összefoglalót a teljes járműflottáról, az aktákról és a szervizállapotról!',
+      label: '📊 Raport Stare Flotă',
+      prompt: 'Generează un raport analitic cuprinzător pentru întreaga flotă de vehicule, documente și starea de service!',
       icon: TrendingUp,
     },
     {
-      label: '⚠️ Sürgős Akták & Lejáratok',
-      prompt: 'Mely járművek aktái jártak le vagy járnak le a következő 30 napban? Részletezd ITP, CASCO, RCA és tachográf szerint!',
+      label: '⚠️ Documente Urgente & Expirări',
+      prompt: 'Ce vehicule au documente expirate sau care expiră în următoarele 30 de zile? Detaliază pe ITP, CASCO, RCA și tahograf!',
       icon: AlertTriangle,
     },
     {
-      label: '📦 Raktárkészlet & Olajhiány',
-      prompt: 'Milyen alkatrészek és kenőanyagok vannak kritikus szinten vagy hiányoznak a raktárból?',
+      label: '📦 Stoc Piese & Fluide',
+      prompt: 'Ce piese și lubrifianți sunt la nivel critic sau lipsesc din stocul depozitului?',
       icon: Package,
     },
     {
-      label: '🔧 Nyitott Munkalapok & Költségek',
-      prompt: 'Milyen javítások vannak jelenleg folyamatban és mekkora a becsült összköltségük?',
+      label: '🔧 Comenzi Deschise & Costuri',
+      prompt: 'Ce comenzi de lucru sunt în derulare și care este costul total estimat al acestora?',
       icon: Wrench,
     },
     {
-      label: '💡 Optimalizálási Tanácsok',
-      prompt: 'Milyen költségcsökkentési és megelőző karbantartási javaslataid vannak a jelenlegi flottaadatok alapján?',
+      label: '💡 Recomandări Optimizare',
+      prompt: 'Ce sugestii de reducere a costurilor și mentenanță preventivă ai pe baza datelor actuale ale flotei?',
       icon: Sparkles,
     },
   ];
@@ -115,20 +115,20 @@ export default function FleetAIChatHUD({
   const getMoodBadge = () => {
     switch (mood) {
       case 'thinking':
-        return { text: 'Gondolkodik...', color: 'text-purple-400 bg-purple-950/70 border-purple-500/40' };
+        return { text: 'Gândește...', color: 'text-purple-400 bg-purple-950/70 border-purple-500/40' };
       case 'analyzing':
-        return { text: 'Adatelemzés...', color: 'text-amber-400 bg-amber-950/70 border-amber-500/40' };
+        return { text: 'Analiză date...', color: 'text-amber-400 bg-amber-950/70 border-amber-500/40' };
       case 'alert':
-        return { text: 'Flotta Riasztás!', color: 'text-red-400 bg-red-950/70 border-red-500/40' };
+        return { text: 'Alertă Flotă!', color: 'text-red-400 bg-red-950/70 border-red-500/40' };
       case 'happy':
-        return { text: 'Flotta Optimális', color: 'text-emerald-400 bg-emerald-950/70 border-emerald-500/40' };
+        return { text: 'Flotă Optimă', color: 'text-emerald-400 bg-emerald-950/70 border-emerald-500/40' };
       case 'bored':
-        return { text: 'Alvó Mód (zZz)', color: 'text-slate-400 bg-slate-800/70 border-slate-600/40' };
+        return { text: 'Mod Repaus (zZz)', color: 'text-slate-400 bg-slate-800/70 border-slate-600/40' };
       case 'speaking':
-        return { text: 'Válaszol...', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
+        return { text: 'Răspunde...', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
       case 'idle':
       default:
-        return { text: 'Készenlét', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
+        return { text: 'În Așteptare', color: 'text-cyan-400 bg-cyan-950/70 border-cyan-500/40' };
     }
   };
 
@@ -221,20 +221,20 @@ export default function FleetAIChatHUD({
 
     // Alert / Status Pills
     out = out.replace(
-      /\[LEJÁRT\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono uppercase mr-1">LEJÁRT</span>'
+      /\[LEJÁRT\]|\[EXPIRAT\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono uppercase mr-1">EXPIRAT</span>'
     );
     out = out.replace(
-      /\[KRITIKUS\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono uppercase mr-1">KRITIKUS</span>'
+      /\[KRITIKUS\]|\[CRITIC\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-red-900/80 border border-red-500/50 text-red-300 font-bold text-[10px] font-mono uppercase mr-1">CRITIC</span>'
     );
     out = out.replace(
-      /\[FIGYELEM\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-amber-900/80 border border-amber-500/50 text-amber-300 font-bold text-[10px] font-mono uppercase mr-1">FIGYELEM</span>'
+      /\[FIGYELEM\]|\[ATENȚIE\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-amber-900/80 border border-amber-500/50 text-amber-300 font-bold text-[10px] font-mono uppercase mr-1">ATENȚIE</span>'
     );
     out = out.replace(
-      /\[RENDBEN\]/g,
-      '<span class="px-1.5 py-0.5 rounded bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold text-[10px] font-mono uppercase mr-1">RENDBEN</span>'
+      /\[RENDBEN\]|\[OPTIM\]/g,
+      '<span class="px-1.5 py-0.5 rounded bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold text-[10px] font-mono uppercase mr-1">OPTIM</span>'
     );
 
     return out;
@@ -281,7 +281,7 @@ export default function FleetAIChatHUD({
               </span>
             </div>
             <p className="text-[10px] font-mono text-slate-400">
-              Élő adatbázis • Flotta & Akta Asszisztens
+              Bază de date în timp real • Asistent Flotă & Documente
             </p>
           </div>
         </div>
@@ -291,7 +291,7 @@ export default function FleetAIChatHUD({
           <button
             type="button"
             onClick={onClearHistory}
-            title="Beszélgetés törlése"
+            title="Șterge conversația"
             className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
@@ -299,7 +299,7 @@ export default function FleetAIChatHUD({
           <button
             type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            title={isExpanded ? 'Kicsinyítés' : 'Teljes méret'}
+            title={isExpanded ? 'Micșorează' : 'Ecran complet'}
             className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors hidden sm:block"
           >
             {isExpanded ? (
@@ -311,7 +311,7 @@ export default function FleetAIChatHUD({
           <button
             type="button"
             onClick={onClose}
-            title="Bezárás & Vissza golyóvá"
+            title="Închide fereastra"
             className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-950/40 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -324,12 +324,12 @@ export default function FleetAIChatHUD({
         <div className="px-3 py-1.5 bg-slate-900/40 border-b border-slate-800/60 flex items-center justify-between text-[11px] font-mono overflow-x-auto no-scrollbar">
           <div className="flex items-center space-x-3 text-slate-300 whitespace-nowrap">
             <span className="flex items-center space-x-1">
-              <span className="text-slate-500">Jármű:</span>
+              <span className="text-slate-500">Vehicule:</span>
               <strong className="text-cyan-400 font-bold">{kpi.totalVehicles}</strong>
             </span>
             <span className="text-slate-700">•</span>
             <span className="flex items-center space-x-1">
-              <span className="text-slate-500">Lejárt:</span>
+              <span className="text-slate-500">Expirate:</span>
               <strong
                 className={`font-bold ${
                   kpi.expiredDocs > 0 ? 'text-red-400 animate-pulse' : 'text-emerald-400'
@@ -340,12 +340,12 @@ export default function FleetAIChatHUD({
             </span>
             <span className="text-slate-700">•</span>
             <span className="flex items-center space-x-1">
-              <span className="text-slate-500">30 napon belül:</span>
+              <span className="text-slate-500">În 30 de zile:</span>
               <strong className="text-amber-400 font-bold">{kpi.imminentDocs}</strong>
             </span>
             <span className="text-slate-700">•</span>
             <span className="flex items-center space-x-1">
-              <span className="text-slate-500">Készlethiány:</span>
+              <span className="text-slate-500">Stoc critic:</span>
               <strong className="text-rose-400 font-bold">{kpi.lowStockItems}</strong>
             </span>
           </div>
@@ -381,7 +381,7 @@ export default function FleetAIChatHUD({
               className={`flex flex-col ${isAI ? 'items-start' : 'items-end'}`}
             >
               <div className="flex items-center space-x-1.5 mb-1 text-[10px] font-mono text-slate-400 px-1">
-                <span>{isAI ? 'ROBI' : 'TE'}</span>
+                <span>{isAI ? 'ROBI' : 'TU'}</span>
                 <span>•</span>
                 <span>{msg.timestamp}</span>
               </div>
@@ -408,7 +408,7 @@ export default function FleetAIChatHUD({
         {isLoading && (
           <div className="flex flex-col items-start">
             <div className="flex items-center space-x-1.5 mb-1 text-[10px] font-mono text-cyan-400 px-1">
-              <span>ROBI ELEMZÉSE</span>
+              <span>ANALIZĂ ROBI</span>
               <span className="animate-ping">•</span>
             </div>
             <div className="rounded-2xl rounded-tl-sm p-3.5 bg-slate-900/90 border border-cyan-500/40 text-slate-100 flex items-center space-x-3 shadow-lg">
@@ -418,7 +418,7 @@ export default function FleetAIChatHUD({
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
               <span className="text-xs font-mono text-cyan-300">
-                Flottaadatbázis lekérdezése és analízis folyamatban...
+                Interogare bază de date flotă și analiză în curs...
               </span>
             </div>
           </div>
@@ -439,17 +439,17 @@ export default function FleetAIChatHUD({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Kérdezz a flottáról, aktákról, költségekről, alkatrészekről..."
+            placeholder="Întreabă despre flotă, documente, costuri, piese..."
             className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-400/80 focus:ring-1 focus:ring-cyan-400/50 resize-none font-sans"
           />
           <div className="absolute right-2 bottom-2 text-[9px] font-mono text-slate-500 pointer-events-none hidden sm:block">
-            Shift+Enter új sor
+            Shift+Enter rând nou
           </div>
         </div>
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
-          aria-label="Üzenet küldése"
+          aria-label="Trimite mesaj"
           className="h-12 w-12 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/25 hover:opacity-95 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
           <Send className="w-5 h-5 text-white" />

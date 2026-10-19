@@ -1298,10 +1298,10 @@ export class MentenantaService {
         return { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie' };
       }
       if (t.includes('ANTIGEL') || /antigel|g11|g12|racire/i.test(d)) {
-        return { key: 'ANTIGEL', label: 'Antigel / Hűtőfolyadék' };
+        return { key: 'ANTIGEL', label: 'Antigel / Lichid Răcire' };
       }
       if (t.includes('VASELIN') || /vaselin|unsoare|grease/i.test(d)) {
-        return { key: 'VASELINA', label: 'Vaselină / Zsír' };
+        return { key: 'VASELINA', label: 'Vaselină / Unsoare' };
       }
       if (t.includes('ADBLUE') || /adblue|uree/i.test(d)) {
         return { key: 'ADBLUE', label: 'AdBlue' };
@@ -1458,8 +1458,8 @@ export class MentenantaService {
       ULEI_MOTOR: { key: 'ULEI_MOTOR', label: 'Ulei Motor', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
       ULEI_HIDRAULIC: { key: 'ULEI_HIDRAULIC', label: 'Ulei Hidraulic', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
       ULEI_TRANSMISIE: { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
-      ANTIGEL: { key: 'ANTIGEL', label: 'Antigel / Hűtőfolyadék', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
-      VASELINA: { key: 'VASELINA', label: 'Vaselină / Zsír', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      ANTIGEL: { key: 'ANTIGEL', label: 'Antigel / Lichid Răcire', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
+      VASELINA: { key: 'VASELINA', label: 'Vaselină / Unsoare', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
       ADBLUE: { key: 'ADBLUE', label: 'AdBlue', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
       ALTE: { key: 'ALTE', label: 'Alte Fluide', totalLitri: 0, totalCost: 0, csereLitri: 0, csereCost: 0, potlasLitri: 0, potlasCost: 0 },
     };

@@ -28,7 +28,7 @@ Conectez în timp real întreaga flotă de vehicule, documentele, facturile din 
 - 📦 **Stoc & Lubrifianți:** Niveluri critice de piese și uleiuri
 - 🔧 **Service & Comenzi:** Reparații deschise și costuri estimate
 
-*Apasă pe oricare dintre sugestiile de mai sus sau scrie-mi o întrebare! (Răspund în Română și Maghiară / Beszélek románul és magyarul is!)*`,
+*Apasă pe oricare dintre sugestiile de mai sus sau scrie-mi o întrebare!*`,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   };
 

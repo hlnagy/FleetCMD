@@ -2919,13 +2919,13 @@ function SetariContent() {
           {/* ========================================================= */}
           {auditViewMode === 'table' ? (
             <div className="space-y-2">
-              {/* VÍZSZINTES OLDALCSÚSZKA VEZÉRLŐSÁV */}
+              {/* GLISOR ORIZONTAL PENTRU TABEL */}
               <div className="p-3 bg-gradient-to-r from-sapphire-50 via-white to-sapphire-50 rounded-2xl border border-sapphire-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center space-x-2 text-xs text-sapphire-900 font-extrabold shrink-0">
                   <Sliders className="w-4 h-4 text-sapphire-600 shrink-0" />
-                  <span>Oldalcsúszka (Vízszintes görgetés):</span>
+                  <span>Glisor Orizontal (Derulare tabel):</span>
                   <span className="text-[11px] font-medium text-sage-600 hidden md:inline">
-                    Húzza a csúszkát vagy kattintson a nyilakra az összes oszlop eléréséhez
+                    Glisați bara sau faceți clic pe săgeți pentru a accesa toate coloanele
                   </span>
                 </div>
 
@@ -2934,7 +2934,7 @@ function SetariContent() {
                     type="button"
                     onClick={() => scrollAuditBy(-250)}
                     className="p-2 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900 transition shrink-0 shadow-xs active:scale-95"
-                    title="Görgetés balra"
+                    title="Derulare la stânga"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -2948,7 +2948,7 @@ function SetariContent() {
                       value={auditScrollPercent}
                       onChange={handleAuditSliderChange}
                       className="w-full h-2.5 bg-morning-200 rounded-lg appearance-none cursor-pointer accent-sapphire-600 transition"
-                      aria-label="Oldalcsúszka táblázat görgetéséhez"
+                      aria-label="Glisor derulare orizontală tabel"
                     />
                   </div>
 
@@ -2956,7 +2956,7 @@ function SetariContent() {
                     type="button"
                     onClick={() => scrollAuditBy(250)}
                     className="p-2 rounded-xl bg-white border border-morning-200 hover:bg-morning-100 text-sapphire-900 transition shrink-0 shadow-xs active:scale-95"
-                    title="Görgetés jobbra"
+                    title="Derulare la dreapta"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -2971,7 +2971,7 @@ function SetariContent() {
                     }}
                     className="px-3 py-1.5 rounded-xl bg-sapphire-100 hover:bg-sapphire-200 text-sapphire-900 font-extrabold text-[11px] shrink-0 transition"
                   >
-                    {auditScrollPercent > 50 ? '⏮ Bal szél' : 'Jobb szél ⏭'}
+                    {auditScrollPercent > 50 ? '⏮ Stânga' : 'Dreapta ⏭'}
                   </button>
                 </div>
               </div>
@@ -3082,7 +3082,7 @@ function SetariContent() {
                 <div className="p-2.5 bg-morning-50 rounded-xl border border-morning-200 flex items-center justify-between gap-3 text-xs">
                   <span className="text-[11px] font-bold text-sage-600 flex items-center space-x-1">
                     <Sliders className="w-3.5 h-3.5 text-sapphire-600" />
-                    <span>Alsó oldalcsúszka:</span>
+                    <span>Glisor inferior:</span>
                   </span>
                   <div className="flex items-center space-x-2 flex-1 max-w-sm">
                     <button

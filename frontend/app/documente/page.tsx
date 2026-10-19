@@ -665,7 +665,7 @@ export default function DocumenteVehiculePage() {
                     title="Click pentru sortare după număr înmatriculare / utilaj"
                   >
                     <div className="flex items-center space-x-1.5">
-                      <span>Vehicul / Rendszám</span>
+                      <span>Vehicul / Nr. Înmatriculare</span>
                       {renderSortIcon('vehicul')}
                     </div>
                   </th>
@@ -702,10 +702,10 @@ export default function DocumenteVehiculePage() {
                   <th
                     className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group text-center"
                     onClick={() => handleSort('zile')}
-                    title="Click pentru sortare după zile rămase / urgență lejárat"
+                    title="Click pentru sortare după zile rămase / urgență expirare"
                   >
                     <div className="flex items-center justify-center space-x-1.5">
-                      <span>Valabilitate / Lejárat</span>
+                      <span>Valabilitate / Expirare</span>
                       {renderSortIcon('zile')}
                     </div>
                   </th>
@@ -938,7 +938,7 @@ export default function DocumenteVehiculePage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-sage-700 font-bold block text-xs">
-                    {editingDoc ? 'Vehicul / Rendszám (Recunoscut Automat):' : 'Selectează Utilaj / Vehicul: *'}
+                    {editingDoc ? 'Vehicul / Nr. Înmatriculare (Recunoscut Automat):' : 'Selectează Utilaj / Vehicul: *'}
                   </label>
                   {editingDoc && (
                     <button
@@ -961,7 +961,7 @@ export default function DocumenteVehiculePage() {
                     return (
                       <div className="flex items-center justify-between p-3 rounded-xl bg-morning-100 border border-morning-300 shadow-2xs">
                         <div className="flex items-center space-x-3">
-                          {/* Rendszám tábla dizájn */}
+                          {/* Format plăcuță înmatriculare */}
                           <div className="flex items-center bg-white rounded-md border-2 border-slate-700 shadow-xs overflow-hidden">
                             <div className="bg-blue-700 text-white font-black text-[9px] px-1.5 py-1.5 flex flex-col items-center justify-center leading-none">
                               <span>RO</span>

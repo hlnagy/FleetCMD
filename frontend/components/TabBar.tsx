@@ -128,7 +128,7 @@ export default function TabBar() {
 
                 <div className="pt-1 space-y-1">
                   {[
-                    { title: 'Comenzi de Lucru (Munkalapok)', href: '/comenzi-lucru', icon: Wrench },
+                    { title: 'Comenzi de Lucru (Atelier)', href: '/comenzi-lucru', icon: Wrench },
                     { title: 'ANAF e-Factura (Import)', href: '/efactura?tab=efactura', icon: FileText },
                     { title: 'Recepție Manuală Factură', href: '/efactura?tab=manual', icon: ShoppingCart },
                     { title: 'Gestiune Stoc Piese', href: '/stocuri?tab=stoc', icon: PackageCheck },

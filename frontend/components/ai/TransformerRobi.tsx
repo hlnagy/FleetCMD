@@ -122,7 +122,7 @@ export default function TransformerRobi({
       <button
         type="button"
         onClick={onToggle}
-        aria-label="Robi • Captain Planet AI átalakítása"
+        aria-label="Robi • Transformare Captain Planet AI"
         className={`group relative flex items-center justify-center transition-all duration-500 ease-out focus:outline-none ${
           isOpen ? 'w-36 h-56 sm:w-44 sm:h-68' : 'w-20 h-20'
         } ${mood === 'bored' ? 'animate-robot-bored' : 'animate-robot-float'}`}

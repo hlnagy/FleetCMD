@@ -325,8 +325,8 @@ export default function FleetRobotOrb({
         <div className="absolute bottom-full right-0 mb-3 pointer-events-none transition-all duration-200 z-40 whitespace-nowrap">
           <div className="bg-slate-950/90 backdrop-blur-md border border-cyan-500/40 text-cyan-200 text-xs px-3 py-1.5 rounded-xl shadow-2xl shadow-cyan-950/50 flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-            <span className="font-semibold tracking-wide">Robi • AI Flotta Drón</span>
-            <span className="text-[10px] text-slate-400">Kattints az aktiváláshoz</span>
+            <span className="font-semibold tracking-wide">Robi • Dronă Asistent Flotă</span>
+            <span className="text-[10px] text-slate-400">Click pentru asistent AI</span>
           </div>
         </div>
       )}

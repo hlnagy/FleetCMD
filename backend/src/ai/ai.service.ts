@@ -1426,9 +1426,9 @@ Sintaxă strictă markdown: [Text Vizibil](cale_url). În interiorul parantezelo
 Exemple exacte:
 - Factură specifică: [FBV26.4001321](/efactura?search=FBV26.4001321)
 - Fișă tehnică vehicul: [CV-06-CRA](/fisa-tehnica?search=CV-06-CRA)
-- Modul anvelope: [Gumiabroncs nyilvántartás](/anvelope)
-- Modul comenzi service: [Munkalapok](/comenzi-lucru)
-- Modul stocuri: [Raktárkészlet](/stocuri)
+- Modul anvelope: [Gestiune Anvelope](/anvelope)
+- Modul comenzi service: [Comenzi de Lucru](/comenzi-lucru)
+- Modul stocuri: [Gestiune Stoc](/stocuri)
 Păstrează linkurile scurte, elegante și doar la 1-3 referințe cheie per mesaj!
 
 TERMENI TEHNICI ȘI LIMBAJ AUTO (CRITIC):
