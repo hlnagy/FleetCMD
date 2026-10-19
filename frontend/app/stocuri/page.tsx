@@ -893,7 +893,7 @@ function StocuriGarantiiContent() {
               </thead>
               <tbody className="divide-y divide-morning-200">
                 {stocuriAfisate.map((s) => {
-                  const esteCritic = (Number(s.stocMinim) || 0) > 0 && Number(s.stocCurent) <= Number(s.stocMinim);
+                  const esteCritic = (Number(s.stocMinim) || 0) > 0 && Number(s.stocCurent) < Number(s.stocMinim);
                   const isAnvelopa = (s.categorie || '').toLowerCase().includes('anvelop') || (s.codArticol || '').startsWith('ANV');
                   return (
                     <tr key={s.id} className={`hover:bg-morning-50 transition ${esteCritic ? 'bg-roseash-50' : ''}`}>

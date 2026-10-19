@@ -1549,9 +1549,10 @@ export class AnomaliiService {
 
     articoleStoc.forEach((art) => {
       const min = Number(art.stocMinim) || 0;
-      // Alertă de stoc critic se generează DOAR dacă există un prag minim definit (> 0) și stocul scade sub sau la nivelul acestuia!
-      // Dacă stocMinim este 0, monitorizarea de stoc minim este dezactivată explicit (nu generează alertă).
-      if (min > 0 && art.stocCurent <= min) {
+      // Alertă de stoc critic se generează DOAR dacă există un prag minim definit (> 0) și stocul scade sub acest prag!
+      // Dacă stocMinim este 0, monitorizarea este dezactivată.
+      // Dacă stocul este egal cu stocMinim, cantitatea este optimă (nu este sub limită).
+      if (min > 0 && art.stocCurent < min) {
         const esteEpuizat = art.stocCurent <= 0;
         const lipsa = Math.max(0, min - art.stocCurent);
         listaAlerte.push({

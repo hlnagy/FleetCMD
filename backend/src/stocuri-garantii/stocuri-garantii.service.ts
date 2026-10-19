@@ -595,9 +595,9 @@ export class StocuriGarantiiService {
     });
 
     if (filters?.statusStoc === 'CRITIC') {
-      return articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent <= (Number(a.stocMinim) || 0));
+      return articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
     } else if (filters?.statusStoc === 'IN_STOC') {
-      return articole.filter((a) => (Number(a.stocMinim) || 0) <= 0 || a.stocCurent > (Number(a.stocMinim) || 0));
+      return articole.filter((a) => (Number(a.stocMinim) || 0) <= 0 || a.stocCurent >= (Number(a.stocMinim) || 0));
     }
 
     return articole;
@@ -607,8 +607,8 @@ export class StocuriGarantiiService {
     const articole = await this.prisma.articolStoc.findMany({
       include: { depozit: true },
     });
-    // Doar articolele care au un stoc minim configurat (> 0) și stocul este sub sau egal cu acesta
-    const critice = articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent <= (Number(a.stocMinim) || 0));
+    // Doar articolele care au un stoc minim configurat (> 0) și stocul este strict sub acesta
+    const critice = articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
     return {
       numarArticoleCritice: critice.length,
       articoleCritice: critice.map((a) => ({
