@@ -210,6 +210,11 @@ function SetariContent() {
   const [docMatricePage, setDocMatricePage] = useState(1);
   const [docListaPage, setDocListaPage] = useState(1);
 
+  // Stare Sortare Matrice Documente Flotă
+  const [docSortCol, setDocSortCol] = useState<string>('vehicul'); // 'vehicul' sau codul tipului de document (ex. 'RCA', 'ITP')
+  const [docVehiculSortMode, setDocVehiculSortMode] = useState<'abc' | 'categorie'>('abc');
+  const [docSortDir, setDocSortDir] = useState<'asc' | 'desc'>('asc');
+
   // State Adăugare Tip Nou de Document
   const [showAddTipModal, setShowAddTipModal] = useState(false);
   const [newTipCod, setNewTipCod] = useState('');
@@ -265,7 +270,7 @@ function SetariContent() {
 
     const now = new Date().getTime();
 
-    return (vehicule || [])
+    const filtered = (vehicule || [])
       .map((v) => {
         const vDocs = docMap.get(v.id) || {};
         const docsList = Object.values(vDocs);
@@ -312,7 +317,50 @@ function SetariContent() {
         if (ascundeFaraActe && v.totalDocs === 0) return false;
         return true;
       });
-  }, [vehicule, documente, tipuriDocumente, searchDocVehicul, filterDocCategorie, filterDocStatus, ascundeFaraActe]);
+
+    return [...filtered].sort((a, b) => {
+      if (docSortCol === 'vehicul') {
+        if (docVehiculSortMode === 'abc') {
+          const codeA = (a.numarIntern || a.numarInmatriculare || '').toLowerCase();
+          const codeB = (b.numarIntern || b.numarInmatriculare || '').toLowerCase();
+          return codeA.localeCompare(codeB, 'ro', { numeric: true, sensitivity: 'base' });
+        } else {
+          // 'categorie'
+          const catA = (a.categorieEnum || '').toLowerCase();
+          const catB = (b.categorieEnum || '').toLowerCase();
+          const catComp = catA.localeCompare(catB, 'ro');
+          if (catComp !== 0) return catComp;
+          const codeA = (a.numarIntern || a.numarInmatriculare || '').toLowerCase();
+          const codeB = (b.numarIntern || b.numarInmatriculare || '').toLowerCase();
+          return codeA.localeCompare(codeB, 'ro', { numeric: true, sensitivity: 'base' });
+        }
+      } else {
+        // Sortare după un anumit tip de document (ex. RCA, ITP, etc.)
+        const docA = a.docs[docSortCol];
+        const docB = b.docs[docSortCol];
+
+        if (!docA && !docB) {
+          const codeA = (a.numarIntern || a.numarInmatriculare || '').toLowerCase();
+          const codeB = (b.numarIntern || b.numarInmatriculare || '').toLowerCase();
+          return codeA.localeCompare(codeB, 'ro', { numeric: true });
+        }
+        // Actele lipsă sunt plasate întotdeauna la final pentru a evidenția actele existente
+        if (!docA) return 1;
+        if (!docB) return -1;
+
+        const timeA = new Date(docA.dataExpirare).getTime();
+        const timeB = new Date(docB.dataExpirare).getTime();
+
+        if (timeA !== timeB) {
+          return docSortDir === 'asc' ? timeA - timeB : timeB - timeA;
+        }
+
+        const codeA = (a.numarIntern || a.numarInmatriculare || '').toLowerCase();
+        const codeB = (b.numarIntern || b.numarInmatriculare || '').toLowerCase();
+        return codeA.localeCompare(codeB, 'ro', { numeric: true });
+      }
+    });
+  }, [vehicule, documente, tipuriDocumente, searchDocVehicul, filterDocCategorie, filterDocStatus, ascundeFaraActe, docSortCol, docVehiculSortMode, docSortDir]);
 
   // Calcule Listă Detaliată Documente
   const filteredDocumenteLista = useMemo(() => {
@@ -3026,17 +3074,94 @@ function SetariContent() {
                 <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[950px]">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[11px]">
-                      <th className="p-3 sticky left-0 top-0 bg-morning-100 z-30 min-w-[200px] border-b border-r border-morning-200 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.06)]">
-                        Vehicul & Categorie
+                      <th
+                        onClick={() => {
+                          if (docSortCol !== 'vehicul') {
+                            setDocSortCol('vehicul');
+                            setDocVehiculSortMode('abc');
+                          } else {
+                            setDocVehiculSortMode((prev) => (prev === 'abc' ? 'categorie' : 'abc'));
+                          }
+                          setDocMatricePage(1);
+                        }}
+                        className={`p-3 sticky left-0 top-0 z-30 min-w-[220px] border-b border-r border-morning-200 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.06)] cursor-pointer select-none transition group ${
+                          docSortCol === 'vehicul'
+                            ? 'bg-morning-200/90 text-sapphire-950 font-black'
+                            : 'bg-morning-100 hover:bg-morning-200'
+                        }`}
+                        title="Apasă pentru a schimba sortarea: Alfabetic (A-Z) ⟷ Categorie Flotă"
+                      >
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="truncate">Vehicul & Categorie</span>
+                          <span className="inline-flex items-center space-x-1 text-[10px] font-black tracking-normal px-2 py-0.5 rounded-md bg-white border border-morning-300 text-sapphire-800 shadow-xs shrink-0">
+                            {docSortCol === 'vehicul' && docVehiculSortMode === 'abc' && (
+                              <>
+                                <ArrowUp className="w-3 h-3 text-sapphire-600" />
+                                <span>Alfabetic A-Z</span>
+                              </>
+                            )}
+                            {docSortCol === 'vehicul' && docVehiculSortMode === 'categorie' && (
+                              <>
+                                <Layers className="w-3 h-3 text-sapphire-600" />
+                                <span>Categorie</span>
+                              </>
+                            )}
+                            {docSortCol !== 'vehicul' && (
+                              <span className="text-sage-500 font-normal group-hover:text-sapphire-800 flex items-center space-x-1">
+                                <ArrowUpDown className="w-3 h-3" />
+                                <span>Sortează</span>
+                              </span>
+                            )}
+                          </span>
+                        </div>
                       </th>
-                      {tipuriDocumente.map((t) => (
-                        <th key={t.cod} className="p-3 text-center min-w-[140px] sticky top-0 bg-morning-100 z-20 border-b border-morning-200">
-                          <div className="font-extrabold text-sapphire-900">{t.cod}</div>
-                          <div className="text-[10px] font-normal text-sage-500 truncate max-w-[130px] mx-auto" title={t.label}>
-                            {t.label?.replace(/\([^)]*\)/g, '').trim()}
-                          </div>
-                        </th>
-                      ))}
+                      {tipuriDocumente.map((t) => {
+                        const isSorted = docSortCol === t.cod;
+                        return (
+                          <th
+                            key={t.cod}
+                            onClick={() => {
+                              if (docSortCol !== t.cod) {
+                                setDocSortCol(t.cod);
+                                setDocSortDir('asc');
+                              } else {
+                                setDocSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                              }
+                              setDocMatricePage(1);
+                            }}
+                            className={`p-3 text-center min-w-[145px] sticky top-0 z-20 border-b border-morning-200 cursor-pointer select-none transition group ${
+                              isSorted
+                                ? 'bg-sapphire-100/80 border-b-2 border-b-sapphire-500 text-sapphire-950 font-black shadow-inner'
+                                : 'bg-morning-100 hover:bg-morning-200/80'
+                            }`}
+                            title={`Apasă pentru a sorta vehiculele după data de expirare a documentului ${t.cod} (${isSorted && docSortDir === 'asc' ? 'Crescător: cele mai urgente întâi' : 'Descrescător: cele mai noi întâi'})`}
+                          >
+                            <div className="flex items-center justify-center space-x-1">
+                              <span className="font-extrabold text-sapphire-900 group-hover:text-sapphire-600 transition">
+                                {t.cod}
+                              </span>
+                              {isSorted ? (
+                                docSortDir === 'asc' ? (
+                                  <span className="inline-flex items-center text-[9px] font-black bg-sapphire-600 text-white px-1.5 py-0.5 rounded shadow-2xs">
+                                    <ArrowUp className="w-2.5 h-2.5 mr-0.5" />
+                                    Exp.
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center text-[9px] font-black bg-sapphire-600 text-white px-1.5 py-0.5 rounded shadow-2xs">
+                                    <ArrowDown className="w-2.5 h-2.5 mr-0.5" />
+                                    Exp.
+                                  </span>
+                                )
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-sage-400 opacity-0 group-hover:opacity-100 transition" />
+                              )}
+                            </div>
+                            <div className="text-[10px] font-normal text-sage-500 truncate max-w-[130px] mx-auto mt-0.5" title={t.label}>
+                              {t.label?.replace(/\([^)]*\)/g, '').trim()}
+                            </div>
+                          </th>
+                        );
+                      })}
                       <th className="p-3 text-right min-w-[90px] sticky top-0 bg-morning-100 z-20 border-b border-morning-200">Acțiuni</th>
                     </tr>
                   </thead>
@@ -3080,10 +3205,11 @@ function SetariContent() {
 
                               {/* Celule Tipuri Documente */}
                               {tipuriDocumente.map((t) => {
+                                const isSortedCol = docSortCol === t.cod;
                                 const doc = v.docs[t.cod];
                                 if (!doc) {
                                   return (
-                                    <td key={t.cod} className="p-2 text-center border-b border-morning-200">
+                                    <td key={t.cod} className={`p-2 text-center border-b border-morning-200 ${isSortedCol ? 'bg-sapphire-50/30' : ''}`}>
                                       <button
                                         type="button"
                                         onClick={() => openAddDoc(v.id, t.cod)}
@@ -3111,7 +3237,7 @@ function SetariContent() {
                                 }
 
                                 return (
-                                  <td key={t.cod} className="p-2 text-center border-b border-morning-200">
+                                  <td key={t.cod} className={`p-2 text-center border-b border-morning-200 ${isSortedCol ? 'bg-sapphire-50/30' : ''}`}>
                                     <button
                                       type="button"
                                       onClick={() => openEditDocDirect(doc)}
