@@ -792,3 +792,69 @@ html.gray .swal2-html-container {
 }
 
 
+
+/* ========================================================================= */
+/* REGULI TIPĂRIRE & EXPORT PDF ULTRA-PROFESIONIST (A4 PORTRAIT)           */
+/* ========================================================================= */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 14mm 12mm;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 9.5pt !important;
+    line-height: 1.35 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ascundere elemente de navigare și interactive */
+  header, nav, footer, .print\:hidden, input[type="text"], input[type="search"] {
+    display: none !important;
+  }
+
+  /* Stiluri carduri și containere în print */
+  .pleasant-card, .bg-white, .rounded-2xl, .rounded-xl {
+    box-shadow: none !important;
+    border-radius: 6px !important;
+  }
+
+  /* Evitare tăiere neplăcută a cardurilor și tabelelor între pagini */
+  .pleasant-card, tr, figure, .print-avoid-break, .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  th, td {
+    padding: 5px 7px !important;
+    font-size: 8.5pt !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Expandare containere cu scroll */
+  .overflow-x-auto, .max-h-96, .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}

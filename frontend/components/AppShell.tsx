@@ -63,15 +63,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Authenticated -> render full operational cockpit with TopNavigation, TabBar & widescreen workspace
   return (
     <TabWorkspaceProvider>
-      <div className="min-h-screen w-full flex flex-col bg-morning-100 text-sapphire-900 transition-colors duration-200">
-        <TopNavigation />
-        <TabBar />
-        <main className="flex-1 p-3 sm:p-5 overflow-y-auto w-full">
+      <div className="min-h-screen w-full flex flex-col bg-morning-100 text-sapphire-900 transition-colors duration-200 print:bg-white print:min-h-0 print:block">
+        <div className="print:hidden">
+          <TopNavigation />
+          <TabBar />
+        </div>
+        <main className="flex-1 p-3 sm:p-5 overflow-y-auto w-full print:p-0 print:m-0 print:overflow-visible print:block">
           {children}
         </main>
-        <OptiBaseFooter variant="light" />
+        <div className="print:hidden">
+          <OptiBaseFooter variant="light" />
+        </div>
       </div>
-      <FleetAIAssistant />
+      <div className="print:hidden">
+        <FleetAIAssistant />
+      </div>
     </TabWorkspaceProvider>
   );
 }

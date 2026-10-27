@@ -443,18 +443,44 @@ export default function RapoartePage() {
   return (
     <div className="space-y-6">
       {/* ========================================================= */}
-      {/* ANTET TIPĂRIRE / ANTET OFICIAL (VIZIBIL DOAR LA PRINT) */}
+      {/* ANTET TIPĂRIRE / ANTET OFICIAL EXECUTIV (VIZIBIL DOAR LA PRINT) */}
       {/* ========================================================= */}
-      <div className="hidden print:block bg-white text-black p-6 border-b-2 border-black mb-6">
+      <div className="hidden print:block bg-white text-slate-900 border-b-2 border-slate-900 pb-4 mb-6">
         <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight">FLEET-CMD | SISTEM MANAGEMENT FLOTĂ</h1>
-            <p className="text-sm font-semibold text-slate-700 mt-1">{getTitluRaportCurent()}</p>
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-black tracking-widest uppercase bg-slate-900 text-white px-2 py-0.5 rounded">
+                FLEET-CMD
+              </span>
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Enterprise CMMS & FMS
+              </span>
+            </div>
+            <h1 className="text-xl font-black tracking-tight text-slate-900 pt-1">
+              {getTitluRaportCurent()}
+            </h1>
+            <p className="text-xs font-medium text-slate-600">
+              Sistem integrat de evidență tehnică, consumuri, costuri de mentenanță și gestiune flotă
+            </p>
           </div>
-          <div className="text-right text-xs">
-            <p><strong>Data Generării:</strong> {new Date().toLocaleString('ro-RO')}</p>
-            <p><strong>Nivel Agregare:</strong> {getDescriereAgregare()}</p>
-            <p><strong>Perioada Analizată:</strong> {getDescrierePerioada()}</p>
+
+          <div className="text-right text-[11px] space-y-1 border-l-2 border-slate-200 pl-4 min-w-[220px]">
+            <p className="flex justify-between gap-2">
+              <span className="text-slate-500">Data & Ora Emiterii:</span>
+              <strong className="font-mono text-slate-900">{new Date().toLocaleString('ro-RO')}</strong>
+            </p>
+            <p className="flex justify-between gap-2">
+              <span className="text-slate-500">Nivel Agregare:</span>
+              <strong className="text-slate-900">{getDescriereAgregare()}</strong>
+            </p>
+            <p className="flex justify-between gap-2">
+              <span className="text-slate-500">Perioadă Analizată:</span>
+              <strong className="text-slate-900">{getDescrierePerioada()}</strong>
+            </p>
+            <p className="flex justify-between gap-2">
+              <span className="text-slate-500">Monedă Referință:</span>
+              <strong className="text-slate-900 font-mono">RON (Leu românesc)</strong>
+            </p>
           </div>
         </div>
       </div>
@@ -941,7 +967,7 @@ export default function RapoartePage() {
 
               {/* Sub-taburi pentru liste itemizate și detalii */}
               <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-morning-200 dark:border-slate-800 pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-morning-200 dark:border-slate-800 pb-3 print:hidden">
                   <div className="flex flex-wrap items-center gap-1.5 bg-morning-100 dark:bg-slate-950 p-1 rounded-xl border border-morning-200 dark:border-slate-800">
                     <button
                       onClick={() => setSubTabCheltuieli('fluide_detaliu')}
@@ -986,10 +1012,16 @@ export default function RapoartePage() {
                   </div>
                 </div>
 
+                <div className="hidden print:block mb-2 pt-1 border-t border-slate-200">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Detaliere Înregistrări & Operațiuni — {subTabCheltuieli === 'fluide_detaliu' ? 'Fluide & Uleiuri' : subTabCheltuieli === 'anvelope' ? 'Anvelope Montate' : subTabCheltuieli === 'comenzi_piese' ? 'Piese Consumate' : 'Centralizator pe Utilaje'}
+                  </h3>
+                </div>
+
                 {/* A. Detaliu Operațiuni Fluide */}
                 {subTabCheltuieli === 'fluide_detaliu' && (
                   <div className="space-y-3">
-                    <div className="relative">
+                    <div className="relative print:hidden">
                       <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
                         type="text"
@@ -1043,7 +1075,7 @@ export default function RapoartePage() {
                 {/* B. Anvelope Montate */}
                 {subTabCheltuieli === 'anvelope' && (
                   <div className="space-y-3">
-                    <div className="relative">
+                    <div className="relative print:hidden">
                       <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
                         type="text"
@@ -1089,7 +1121,7 @@ export default function RapoartePage() {
                 {/* C. Piese Consumate pe Comenzi */}
                 {subTabCheltuieli === 'comenzi_piese' && (
                   <div className="space-y-3">
-                    <div className="relative">
+                    <div className="relative print:hidden">
                       <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
                         type="text"
@@ -1188,7 +1220,7 @@ export default function RapoartePage() {
                     Calculează costul real per 100 KM rulați sau per Oră lucrată (MTH) pe baza cheltuielilor totale și a variației contorului în perioadă.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 print:hidden">
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Filtrează Diagnostic:</span>
                   <select
                     value={filtruStatusEficienta}
@@ -1204,7 +1236,7 @@ export default function RapoartePage() {
                 </div>
               </div>
 
-              <div className="relative">
+              <div className="relative print:hidden">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                 <input
                   type="text"
@@ -1300,7 +1332,7 @@ export default function RapoartePage() {
                     Identifică utilajele unde cantitatea completată între revizii depășește normele admise sau indică defecțiuni mecanice.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 print:hidden">
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Diagnostic:</span>
                   <select
                     value={filtruStatusUlei}
@@ -1315,7 +1347,7 @@ export default function RapoartePage() {
                 </div>
               </div>
 
-              <div className="relative">
+              <div className="relative print:hidden">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                 <input
                   type="text"
@@ -1511,7 +1543,7 @@ export default function RapoartePage() {
                   </div>
 
                   {/* Toolbar căutare & Expand/Collapse */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 print:hidden">
                     <div className="relative flex-1">
                       <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
@@ -1858,7 +1890,7 @@ export default function RapoartePage() {
                     Evidențiază documentele de circulație expirate sau scadente în curând (ITP, RCA, Rovinietă, Tahograf) și reviziile tehnice preconizate.
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 bg-morning-100 dark:bg-slate-950 p-1 rounded-xl border border-morning-200 dark:border-slate-800">
+                <div className="flex items-center gap-1.5 bg-morning-100 dark:bg-slate-950 p-1 rounded-xl border border-morning-200 dark:border-slate-800 print:hidden">
                   <button
                     onClick={() => setSubTabScadentar('documente')}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${
@@ -1994,6 +2026,24 @@ export default function RapoartePage() {
           )}
         </div>
       )}
+
+      {/* ========================================================= */}
+      {/* FOOTER OFICIAL TIPĂRIRE / SEMNĂTURĂ & VERIFICARE */}
+      {/* ========================================================= */}
+      <div className="hidden print:flex justify-between items-end pt-6 mt-8 border-t-2 border-slate-800 text-[10px] text-slate-600 break-inside-avoid">
+        <div className="space-y-1">
+          <p className="font-bold text-slate-900 uppercase tracking-wider">
+            FLEET-CMD ENTERPRISE CMMS • Document oficial generat automat
+          </p>
+          <p className="text-slate-500 text-[9px]">
+            Datele prezentate în acest raport sunt conforme cu înregistrările din baza de date a flotei la data emiterii.
+          </p>
+        </div>
+        <div className="text-right space-y-4">
+          <p className="font-bold text-slate-800 text-[10px]">Semnătură & Ștampilă Autorizată</p>
+          <div className="w-56 border-b border-dashed border-slate-400"></div>
+        </div>
+      </div>
     </div>
   );
 }
