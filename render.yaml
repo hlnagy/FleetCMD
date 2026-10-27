@@ -8,4 +8,4 @@ services:
     startCommand: npm run start
     envVars:
       - key: NODE_VERSION
-        value: 20.11.0
+        value: 20.18.0
