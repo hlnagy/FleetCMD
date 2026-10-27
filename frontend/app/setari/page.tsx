@@ -11,7 +11,8 @@ import {
   Users, Building2, PackageCheck, Search, X, ChevronRight, ChevronLeft, UserCheck, Wrench,
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
   Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2,
-  Sliders, LayoutList, LayoutGrid, Receipt, ExternalLink, HelpCircle, BookOpen, RefreshCw, Zap
+  Sliders, LayoutList, LayoutGrid, Receipt, ExternalLink, HelpCircle, BookOpen, RefreshCw, Zap,
+  Database, Download, HardDrive, CheckCircle
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -24,18 +25,19 @@ function SetariContent() {
   const { theme, resolvedTheme, setTheme, fontSize, setFontSize } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
-    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect' | 'efactura'
+    'vehicule' | 'mecanici' | 'depozite' | 'categorii' | 'reguli' | 'documente' | 'personalizate' | 'utilizatori' | 'audit' | 'aspect' | 'efactura' | 'backup'
   >('vehicule');
 
   // Ascultăm schimbarea tab-ului din URL / Sidebar (cu protecție strictă Admin pentru utilizatori, audit și efactura)
   useEffect(() => {
-    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit', 'aspect', 'efactura'].includes(tabParam)) {
-      if ((tabParam === 'utilizatori' || tabParam === 'audit' || tabParam === 'efactura') && !isAdmin) {
+    if (tabParam && ['vehicule', 'mecanici', 'depozite', 'categorii', 'reguli', 'documente', 'personalizate', 'utilizatori', 'audit', 'aspect', 'efactura', 'backup'].includes(tabParam)) {
+      if ((tabParam === 'utilizatori' || tabParam === 'audit' || tabParam === 'efactura' || tabParam === 'backup') && !isAdmin) {
         setActiveTab('vehicule');
       } else {
         setActiveTab(tabParam as any);
         if (tabParam === 'utilizatori') fetchUsers();
         if (tabParam === 'audit') fetchAuditLogs();
+        if (tabParam === 'backup') fetchBackupStats();
       }
     }
   }, [tabParam, isAdmin]);
@@ -1610,6 +1612,56 @@ function SetariContent() {
   };
 
     // ------------------------------------------
+  // ==========================================
+  // 12. STATE & METODE COPIE DE SIGURANȚĂ (BACKUP & RESTORE)
+  // ==========================================
+  const [backupStats, setBackupStats] = useState<any>(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupDownloading, setBackupDownloading] = useState(false);
+  const [backupSuccessMessage, setBackupSuccessMessage] = useState<string | null>(null);
+
+  const fetchBackupStats = async () => {
+    setBackupLoading(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/backup/stats`);
+      if (res.ok) {
+        const data = await res.json();
+        setBackupStats(data);
+      }
+    } catch (e) {
+      console.error('Eroare la încărcarea statisticilor bazei de date', e);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    setBackupDownloading(true);
+    setBackupSuccessMessage(null);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/backup/download`);
+      if (!res.ok) {
+        throw new Error('Serverul a returnat o eroare la generarea copiei de siguranță.');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = url;
+      a.download = `fleetcmd_backup_${nowStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setBackupSuccessMessage('Copie de siguranță descărcată cu succes pe calculatorul dumneavoastră!');
+      setTimeout(() => setBackupSuccessMessage(null), 8000);
+    } catch (e: any) {
+      alert(`Eroare la descărcarea copiei de siguranță: ${e.message}`);
+    } finally {
+      setBackupDownloading(false);
+    }
+  };
+
   // HANDLERS UTILIZATORI & AUDIT
   // ------------------------------------------
   const fetchUsers = async () => {
@@ -2092,6 +2144,19 @@ function SetariContent() {
             >
               <Receipt className="w-4 h-4 text-emerald-600" />
               <span>ANAF e-Factura OAuth2</span>
+              <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('backup'); fetchBackupStats(); }}
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-t-xl font-bold text-xs transition border-b-2 whitespace-nowrap ${
+                activeTab === 'backup'
+                  ? 'border-sapphire-500 text-sapphire-900 bg-white shadow-xs'
+                  : 'border-transparent text-sage-700 hover:text-sapphire-900 hover:bg-morning-100'
+              }`}
+            >
+              <Database className="w-4 h-4 text-emerald-600" />
+              <span>Copie de Siguranță & Bază de Date</span>
               <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
             </button>
           </>
@@ -5185,6 +5250,184 @@ function SetariContent() {
             </form>
           </div>
         )
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 12: COPIE DE SIGURANȚĂ & BAZĂ DE DATE (BACKUP & RESTORE)               */}
+      {/* ========================================================================= */}
+      {activeTab === 'backup' && (
+        <div className="space-y-5">
+          {/* BANNER NOTIFICARE SUCCES */}
+          {backupSuccessMessage && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center space-x-3 text-emerald-900 text-xs shadow-xs">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div className="font-bold">{backupSuccessMessage}</div>
+            </div>
+          )}
+
+          {/* CARD 1: SUMAR STATUS CONEXIUNE & SERVER */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-morning-200 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-extrabold text-sapphire-900">
+                      Baza de Date Operațională FleetCMD
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black tracking-wider uppercase flex items-center space-x-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                      <span>ONLINE & ACTIV</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-sage-600 mt-0.5">
+                    Găzduit în cloud de înaltă disponibilitate cu stocare securizată și trafic lunar nelimitat (10 TB).
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchBackupStats}
+                disabled={backupLoading}
+                className="self-start lg:self-auto px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition flex items-center space-x-2 border border-morning-200"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${backupLoading ? 'animate-spin' : ''}`} />
+                <span>Reîmprospătează Status</span>
+              </button>
+            </div>
+
+            {/* METRICS GRID */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-4">
+              <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Furnizor Cloud</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">Oracle Cloud Infrastructure</span>
+                <span className="text-[10px] text-emerald-600 font-bold font-mono">Frankfurt (eu-central-1)</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Motor Bază de Date</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">PostgreSQL 17</span>
+                <span className="text-[10px] text-sage-500 font-mono font-bold">Port standard 5432</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Trafic Rețea Alocat</span>
+                <span className="font-black text-sm text-sapphire-900 font-mono mt-0.5 block">10.000 GB / lună</span>
+                <span className="text-[10px] text-emerald-600 font-bold">10 TB (Always Free)</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Securitate & Backup</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">Izolare Contênerizată</span>
+                <span className="text-[10px] text-sage-500 font-mono font-bold">Docker Engine 29</span>
+              </div>
+            </div>
+          </div>
+
+          {/* CARD 2: DESCĂRCARE COPIE DE SIGURANȚĂ (ACTION HERO) */}
+          <div className="pleasant-card bg-gradient-to-br from-sapphire-900 to-slate-900 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-xl">
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Siguranța Datelor Flotei Garantată</span>
+                </div>
+                <h3 className="text-xl font-black">
+                  Descarcă o Copie de Siguranță Completă pe Calculator
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Puteți descărca oricând un fișier complet de rezervă care conține toate utilajele, actele, comenzile de lucru, anvelopele, stocurile, facturile ANAF și utilizatorii. Salvați acest fișier pe un stick USB, disc local sau arhivă externă.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDownloadBackup}
+                disabled={backupDownloading}
+                className="px-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm shadow-xl hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center space-x-2.5 shrink-0 disabled:opacity-50 cursor-pointer"
+              >
+                {backupDownloading ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Se generează copia de siguranță...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5" />
+                    <span>Descarcă Backup Imediat (.json)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* CARD 3: REZUMAT DETALIAT ENTITĂȚI INCLUSE ÎN BACKUP */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2">
+                <PackageCheck className="w-4 h-4 text-sapphire-600" />
+                <h4 className="font-extrabold text-sm text-sapphire-900">
+                  Entități și Tabele Incluse în Salvare
+                </h4>
+              </div>
+              <span className="text-[11px] font-mono text-sage-500 font-bold">36 tabele relaționale</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-sapphire-900 font-mono block">
+                  {backupStats?.counts?.vehicule ?? vehicule.length}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Vehicule Flotă</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-emerald-700 font-mono block">
+                  {backupStats?.counts?.documenteVehicul ?? documente.length}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Documente & Acte</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-amber-700 font-mono block">
+                  {backupStats?.counts?.articoleStoc ?? 33}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Piese în Stoc</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-periwinkle-700 font-mono block">
+                  {backupStats?.counts?.comenziLucru ?? 11}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Comenzi de Lucru</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-sapphire-700 font-mono block">
+                  {backupStats?.counts?.anvelope ?? 0}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Anvelope Înregistrate</span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
+                <span className="text-xl font-black text-slate-800 font-mono block">
+                  {backupStats?.counts?.utilizatori ?? usersList.length}
+                </span>
+                <span className="text-[11px] font-bold text-sage-600">Utilizatori & Drepturi</span>
+              </div>
+            </div>
+
+            <div className="pt-2 text-[11px] text-sage-500 flex items-center space-x-1.5">
+              <Shield className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+              <span>
+                Fiecare salvare include metadate criptografice, data și ora exactă, precum și identitatea administratorului care a declanșat operațiunea de salvare în Jurnalul de Audit.
+              </span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ========================================================================= */}

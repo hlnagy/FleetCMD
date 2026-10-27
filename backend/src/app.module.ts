@@ -13,6 +13,7 @@ import { AnvelopeModule } from './anvelope/anvelope.module';
 import { StocuriGarantiiModule } from './stocuri-garantii/stocuri-garantii.module';
 import { EFacturaModule } from './efactura/efactura.module';
 import { AiModule } from './ai/ai.module';
+import { BackupModule } from './backup/backup.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AiModule } from './ai/ai.module';
     StocuriGarantiiModule,
     EFacturaModule,
     AiModule,
+    BackupModule,
   ],
   providers: [
     {
