@@ -452,8 +452,59 @@ export class AnomaliiService {
     if (!norma) {
       throw new NotFoundException('Norma de categorie nu a fost găsită.');
     }
+
+    // Ștergem și configurările individuale propagate pe vehiculele din această categorie
+    if (norma.categorieEnum && norma.tipLichid) {
+      const vehicule = await this.prisma.vehicul.findMany({
+        where: { categorieEnum: norma.categorieEnum },
+        select: { id: true },
+      });
+      const vIds = vehicule.map((v) => v.id);
+      if (vIds.length > 0) {
+        await this.prisma.configurareUleiVehicul.deleteMany({
+          where: {
+            vehiculId: { in: vIds },
+            tipLichid: norma.tipLichid,
+          },
+        });
+      }
+    }
+
     await this.prisma.configurareUleiCategorie.delete({ where: { id } });
     return { succes: true, mesaj: 'Norma a fost ștearsă cu succes.' };
+  }
+
+  async stergeNormaCategorieDupaTip(categorieEnum: string, tipLichid: string) {
+    const norma = await this.prisma.configurareUleiCategorie.findUnique({
+      where: {
+        categorieEnum_tipLichid: { categorieEnum, tipLichid },
+      },
+    });
+
+    if (norma) {
+      await this.prisma.configurareUleiCategorie.delete({
+        where: { id: norma.id },
+      });
+    }
+
+    const vehicule = await this.prisma.vehicul.findMany({
+      where: { categorieEnum },
+      select: { id: true },
+    });
+    const vIds = vehicule.map((v) => v.id);
+    if (vIds.length > 0) {
+      await this.prisma.configurareUleiVehicul.deleteMany({
+        where: {
+          vehiculId: { in: vIds },
+          tipLichid,
+        },
+      });
+    }
+
+    return {
+      succes: true,
+      mesaj: `Norma pentru "${tipLichid}" a fost ștearsă / dezactivată de pe categoria "${categorieEnum}".`,
+    };
   }
 
   async getStatusSchimburiUleiVehicul(vehiculId: string) {

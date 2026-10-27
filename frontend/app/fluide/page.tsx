@@ -330,6 +330,7 @@ export default function FluidePage() {
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<'TOATE' | 'MTH' | 'KM'>('TOATE');
   const [searchNorme, setSearchNorme] = useState<string>('');
   const [configViewMode, setConfigViewMode] = useState<'CARDS' | 'TABLE'>('CARDS');
+  const [filtreazaDoarNormeActive, setFiltreazaDoarNormeActive] = useState<boolean>(false);
 
   // Modal Editare / Configurare Normă Fluid pe Categorie
   const [modalNormaOpen, setModalNormaOpen] = useState<boolean>(false);
@@ -883,26 +884,36 @@ export default function FluidePage() {
     }
   };
 
-  const handleStergeConfigCategorie = async (normaId: string, tipFluid: string) => {
-    const fluidLabel = TIP_LICHID_LABELS[tipFluid] || tipFluid;
+  const handleStergeConfigCategorie = async (normaId?: string, tipFluid?: string, catNume?: string) => {
+    const targetCat = catNume || selectedCatObj?.nume;
+    const targetFluid = tipFluid || modalNormaTipLichid;
+    const fluidLabel = TIP_LICHID_LABELS[targetFluid] || targetFluid?.replace(/_/g, ' ');
     const confirmed = await showConfirm(
-      'Ștergere Normă Categorie',
-      `Sigur doriți să ștergeți norma pentru ${fluidLabel}?`,
-      'Da, șterge',
+      'Ștergere / Dezactivare Normă Fluid',
+      `Sigur doriți să ștergeți / dezactivați norma pentru "${fluidLabel}" din categoria "${targetCat?.replace(/_/g, ' ')}"?\n\nToate utilajele din această categorie NU vor mai necesita și nu vor mai monitoriza acest schimb de ulei/fluid.`,
+      'Da, șterge norma',
       'Anulează'
     );
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei/categorie/${normaId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
+      let res: Response | null = null;
+      if (normaId) {
+        res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei/categorie/${normaId}`, {
+          method: 'DELETE',
+        });
+      } else if (targetCat && targetFluid) {
+        res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei/categorie-tip/${encodeURIComponent(targetCat)}/${encodeURIComponent(targetFluid)}`, {
+          method: 'DELETE',
+        });
+      }
+      if (res && res.ok) {
         alert('Norma a fost ștearsă cu succes.');
         await fetchCategoriiNorme();
         await fetchInitialData();
+        setModalNormaOpen(false);
       } else {
-        const err = await res.json();
+        const err = res ? await res.json() : {};
         alert(`Eroare: ${err.message || 'Nu s-a putut șterge norma'}`);
       }
     } catch (e) {
@@ -1809,7 +1820,7 @@ export default function FluidePage() {
                                   : isSelected ? 'text-slate-300' : 'text-slate-400'
                               }`}
                             >
-                              {numarNorme > 0 ? `${numarNorme} norme` : 'Implicite'}
+                              {numarNorme > 0 ? `${numarNorme} active` : 'Fără norme (0)'}
                             </span>
                           </div>
                         </div>
@@ -2013,163 +2024,239 @@ export default function FluidePage() {
                   </div>
 
                   <div className="flex items-center space-x-2 shrink-0">
-                    <span className="text-xs font-bold text-slate-700 bg-morning-100 px-3 py-1.5 rounded-xl border border-morning-200">
-                      {selectedCatObj.norme?.length || 0} din {FLUIDE_CATEGORII_CONFIG.length} fluide configurate
-                    </span>
+                    <div className="flex items-center bg-morning-100 p-0.5 rounded-xl border border-morning-200 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setFiltreazaDoarNormeActive(false)}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                          !filtreazaDoarNormeActive
+                            ? 'bg-white text-sapphire-900 shadow-2xs'
+                            : 'text-sage-600 hover:text-sapphire-900'
+                        }`}
+                      >
+                        Toate ({FLUIDE_CATEGORII_CONFIG.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltreazaDoarNormeActive(true)}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer flex items-center space-x-1 ${
+                          filtreazaDoarNormeActive
+                            ? 'bg-white text-sapphire-900 shadow-2xs'
+                            : 'text-sage-600 hover:text-sapphire-900'
+                        }`}
+                      >
+                        <span>Doar Active</span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold font-mono">
+                          {selectedCatObj.norme?.length || 0}
+                        </span>
+                      </button>
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
                       className="px-3.5 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Adaugă Normă</span>
+                      <span>Configurează Normă</span>
                     </button>
                   </div>
                 </div>
 
                 {/* GRID CARDURI INTERACTIVE PENTRU TOATE FLUIDELE DIN CATEGORIE */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {FLUIDE_CATEGORII_CONFIG.map((fluid) => {
-                    const existingNorm = (selectedCatObj.norme || []).find((n: any) => n.tipLichid === fluid.key);
-                    const isCustom = !!existingNorm;
+                {(() => {
+                  const activeNormeCount = selectedCatObj.norme?.length || 0;
+                  const fluidsToDisplay = FLUIDE_CATEGORII_CONFIG.filter((fluid) => {
+                    if (!filtreazaDoarNormeActive) return true;
+                    return (selectedCatObj.norme || []).some((n: any) => n.tipLichid === fluid.key);
+                  });
 
-                    // Valori afișate (personalizate sau standard de referință)
-                    const displayInterval = isCustom
-                      ? isCatKm
-                        ? `${Number(existingNorm.intervalKm).toLocaleString('ro-RO')} KM`
-                        : `${Number(existingNorm.intervalMth).toLocaleString('ro-RO')} mTH`
-                      : isCatKm
-                      ? `${fluid.key === 'ULEI_MOTOR' ? '15.000' : '30.000'} KM (Standard)`
-                      : `${fluid.key === 'ULEI_MOTOR' ? '250' : '500'} mTH (Standard)`;
-
-                    const displayTimp = isCustom && existingNorm.intervalLuni
-                      ? `sau maxim ${existingNorm.intervalLuni} luni`
-                      : 'sau 12 luni';
-
-                    const displayAvertizare = isCustom
-                      ? isCatKm
-                        ? `cu ${Number(existingNorm.pragAvertizareKm || 1000).toLocaleString('ro-RO')} KM înainte`
-                        : `cu ${Number(existingNorm.pragAvertizareMth || 50).toLocaleString('ro-RO')} mTH înainte`
-                      : isCatKm
-                      ? 'cu 1.000 KM înainte'
-                      : 'cu 50 mTH înainte';
-
+                  if (fluidsToDisplay.length === 0) {
                     return (
-                      <div
-                        key={fluid.key}
-                        className={`pleasant-card rounded-2xl p-5 border transition flex flex-col justify-between space-y-4 bg-white shadow-2xs hover:shadow-sm ${
-                          isCustom
-                            ? 'border-sapphire-300 ring-1 ring-sapphire-100'
-                            : 'border-morning-200 hover:border-morning-300'
-                        }`}
-                      >
-                        {/* ANTET CARD FLUID */}
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center space-x-2.5">
-                              <div
-                                className={`p-2 rounded-xl ${
-                                  fluid.accentColor === 'amber'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : fluid.accentColor === 'blue'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : fluid.accentColor === 'indigo'
-                                    ? 'bg-indigo-100 text-indigo-800'
-                                    : fluid.accentColor === 'emerald'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : fluid.accentColor === 'rose'
-                                    ? 'bg-roseash-100 text-terracotta-700'
-                                    : 'bg-morning-200 text-sapphire-900'
-                                }`}
-                              >
-                                <Droplets className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <h4 className="font-extrabold text-sm text-sapphire-900">{fluid.nume}</h4>
-                                <span className="text-[10px] font-mono text-sage-500 uppercase">{fluid.key}</span>
-                              </div>
-                            </div>
-
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                                isCustom
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : 'bg-morning-100 text-slate-500 border border-morning-200'
-                              }`}
-                            >
-                              {isCustom ? 'Normă Activă' : 'Implicit'}
-                            </span>
-                          </div>
-
-                          <p className="text-[11px] text-sage-600 line-clamp-2 leading-relaxed">
-                            {fluid.descriere}
+                      <div className="py-12 text-center space-y-3.5 bg-morning-50/70 rounded-2xl border-2 border-dashed border-morning-200 p-8">
+                        <div className="w-12 h-12 rounded-2xl bg-white border border-morning-200 flex items-center justify-center mx-auto text-sage-400 shadow-2xs">
+                          <Droplets className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="font-extrabold text-sm text-sapphire-900">
+                            Nicio normă activă pe categoria &quot;{selectedCatObj.nume.replace(/_/g, ' ')}&quot;
+                          </h4>
+                          <p className="text-xs text-sage-600 max-w-md mx-auto leading-relaxed">
+                            Utilajele din această categorie (ex. stații concasoare electrice, benzi de agregate sau semiremorci fără motor) nu necesită schimburi de ulei și nu vor genera alerte sau depășiri în matricea flotei.
                           </p>
                         </div>
-
-                        {/* METRICI CARD */}
-                        <div className="p-3.5 bg-morning-50/70 rounded-xl border border-morning-200 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-sage-600">Interval Schimb:</span>
-                            <div className="text-right">
-                              <span className="font-mono font-black text-sm text-sapphire-900 block">
-                                {displayInterval}
-                              </span>
-                              <span className="text-[10px] font-medium text-sage-500">
-                                {displayTimp}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="pt-2 border-t border-morning-200/80 flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-sage-600">Prag Avertizare:</span>
-                            <span className="font-mono font-bold text-xs text-terracotta-700">
-                              {displayAvertizare}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* ACȚIUNI CARD */}
-                        <div className="pt-2 border-t border-morning-200 flex items-center justify-between">
-                          <span className="text-[11px] text-sage-500 font-semibold">
-                            {selectedCatObj.totalVehicule} utilaje
-                          </span>
-
-                          <div className="flex items-center space-x-1.5">
-                            {isCustom ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleStergeConfigCategorie(existingNorm.id, fluid.key)}
-                                  title="Resetează la valoarea implicită"
-                                  className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
-                                  className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs border border-sapphire-200 transition flex items-center space-x-1 cursor-pointer"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                  <span>Editează</span>
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
-                                className="px-3 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-2xs transition flex items-center space-x-1 cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Configurează</span>
-                              </button>
-                            )}
-                          </div>
+                        <div className="pt-2 flex items-center justify-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => setFiltreazaDoarNormeActive(false)}
+                            className="px-4 py-2 rounded-xl bg-white hover:bg-morning-100 text-sapphire-900 font-bold text-xs border border-morning-200 shadow-2xs transition cursor-pointer"
+                          >
+                            Afișează toate cele 10 fluide
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                            className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Adaugă o normă</span>
+                          </button>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {fluidsToDisplay.map((fluid) => {
+                        const existingNorm = (selectedCatObj.norme || []).find((n: any) => n.tipLichid === fluid.key);
+                        const isCustom = !!existingNorm;
+
+                        return (
+                          <div
+                            key={fluid.key}
+                            className={`pleasant-card rounded-2xl p-5 border transition flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-sm ${
+                              isCustom
+                                ? 'bg-white border-sapphire-300 ring-1 ring-sapphire-100'
+                                : 'bg-morning-50/50 border-morning-200 hover:border-morning-300 opacity-80 hover:opacity-100'
+                            }`}
+                          >
+                            {/* ANTET CARD FLUID */}
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center space-x-2.5">
+                                  <div
+                                    className={`p-2 rounded-xl ${
+                                      isCustom
+                                        ? fluid.accentColor === 'amber'
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : fluid.accentColor === 'blue'
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : fluid.accentColor === 'indigo'
+                                          ? 'bg-indigo-100 text-indigo-800'
+                                          : fluid.accentColor === 'emerald'
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : fluid.accentColor === 'rose'
+                                          ? 'bg-roseash-100 text-terracotta-700'
+                                          : 'bg-morning-200 text-sapphire-900'
+                                        : 'bg-morning-200 text-sage-400'
+                                    }`}
+                                  >
+                                    <Droplets className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className={`font-extrabold text-sm ${isCustom ? 'text-sapphire-900' : 'text-sage-700'}`}>
+                                      {fluid.nume}
+                                    </h4>
+                                    <span className="text-[10px] font-mono text-sage-500 uppercase">{fluid.key}</span>
+                                  </div>
+                                </div>
+
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                    isCustom
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : 'bg-morning-200 text-sage-500 border border-morning-300'
+                                  }`}
+                                >
+                                  {isCustom ? 'Normă Activă' : 'Fără Normă (Nu se aplică)'}
+                                </span>
+                              </div>
+
+                              <p className="text-[11px] text-sage-600 line-clamp-2 leading-relaxed">
+                                {fluid.descriere}
+                              </p>
+                            </div>
+
+                            {/* METRICI CARD */}
+                            <div className={`p-3.5 rounded-xl border space-y-2.5 ${
+                              isCustom ? 'bg-morning-50/70 border-morning-200' : 'bg-white border-morning-200'
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-sage-600">Interval Schimb:</span>
+                                <div className="text-right">
+                                  {isCustom ? (
+                                    <>
+                                      <span className="font-mono font-black text-sm text-sapphire-900 block">
+                                        {isCatKm
+                                          ? `${Number(existingNorm.intervalKm).toLocaleString('ro-RO')} KM`
+                                          : `${Number(existingNorm.intervalMth).toLocaleString('ro-RO')} mTH`}
+                                      </span>
+                                      <span className="text-[10px] font-medium text-sage-500">
+                                        {existingNorm.intervalLuni ? `sau maxim ${existingNorm.intervalLuni} luni` : 'fără limită timp'}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="font-mono font-bold text-xs text-sage-400 block">
+                                        Fără schimb programat
+                                      </span>
+                                      <span className="text-[10px] text-sage-400">
+                                        Nu se aplică pe această categorie
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-morning-200/80 flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-sage-600">Prag Avertizare:</span>
+                                <span className={`font-mono text-xs ${isCustom ? 'font-bold text-terracotta-700' : 'text-sage-400'}`}>
+                                  {isCustom ? (
+                                    isCatKm
+                                      ? `cu ${Number(existingNorm.pragAvertizareKm || 1000).toLocaleString('ro-RO')} KM înainte`
+                                      : `cu ${Number(existingNorm.pragAvertizareMth || 50).toLocaleString('ro-RO')} mTH înainte`
+                                  ) : (
+                                    'Dezactivat (Fără alerte)'
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* ACȚIUNI CARD */}
+                            <div className="pt-2 border-t border-morning-200 flex items-center justify-between">
+                              <span className="text-[11px] text-sage-500 font-semibold">
+                                {selectedCatObj.totalVehicule} utilaje
+                              </span>
+
+                              <div className="flex items-center space-x-1.5">
+                                {isCustom ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStergeConfigCategorie(existingNorm.id, fluid.key, selectedCatObj.nume)}
+                                      title="Șterge / Dezactivează această normă (nu se va mai cere schimbul)"
+                                      className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
+                                      className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs border border-sapphire-200 transition flex items-center space-x-1 cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                      <span>Editează</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
+                                    className="px-3 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-2xs transition flex items-center space-x-1 cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Activează Normă</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )
           )}
@@ -3216,32 +3303,52 @@ export default function FluidePage() {
                 </div>
 
                 {/* Butoane Acțiune Modal */}
-                <div className="flex justify-end space-x-2.5 pt-3 border-t border-morning-200 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setModalNormaOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold text-xs hover:bg-morning-300 transition cursor-pointer"
-                  >
-                    Anulează
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isModalSaving}
-                    className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 disabled:opacity-50 transition flex items-center space-x-1.5 cursor-pointer"
-                  >
-                    {isModalSaving ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Se salvează norma...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Salvează Norma de Categorie</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                {(() => {
+                  const existingInModal = (cat?.norme || []).find((n: any) => n.tipLichid === modalNormaTipLichid);
+
+                  return (
+                    <div className="flex items-center justify-between pt-3 border-t border-morning-200 shrink-0">
+                      <div>
+                        {existingInModal && (
+                          <button
+                            type="button"
+                            onClick={() => handleStergeConfigCategorie(existingInModal.id, modalNormaTipLichid, modalNormaCategorie)}
+                            className="px-3.5 py-2 rounded-xl bg-roseash-50 hover:bg-roseash-100 text-terracotta-700 font-bold text-xs border border-roseash-200 transition flex items-center space-x-1.5 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-terracotta-600" />
+                            <span>Șterge / Dezactivează această normă</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setModalNormaOpen(false)}
+                          className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-bold text-xs hover:bg-morning-300 transition cursor-pointer"
+                        >
+                          Anulează
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isModalSaving}
+                          className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md shadow-sapphire-600/20 disabled:opacity-50 transition flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          {isModalSaving ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Se salvează norma...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{existingInModal ? 'Actualizează Norma' : 'Activează Norma'}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </form>
             </div>
           </div>

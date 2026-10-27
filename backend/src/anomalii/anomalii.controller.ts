@@ -90,6 +90,14 @@ export class AnomaliiController {
     return this.anomaliiService.stergeConfigurareUleiCategorie(id);
   }
 
+  @Delete('configurare-ulei/categorie-tip/:categorieEnum/:tipLichid')
+  stergeNormaCategorieDupaTip(
+    @Param('categorieEnum') categorieEnum: string,
+    @Param('tipLichid') tipLichid: string,
+  ) {
+    return this.anomaliiService.stergeNormaCategorieDupaTip(categorieEnum, tipLichid);
+  }
+
   @Post('configurare-ulei')
   salveazaConfigurare(@Body() body: any) {
     return this.anomaliiService.salveazaConfigurareUlei(body);
