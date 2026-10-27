@@ -573,6 +573,18 @@ model DocumentVehicul {
   @@index([vehiculId, dataExpirare])
 }
 
+model DocumentFisier {
+  id        String   @id @default(uuid())
+  filename  String   @unique
+  nume      String
+  mimetype  String
+  marime    Int
+  continut  Bytes
+  createdAt DateTime @default(now())
+
+  @@index([filename])
+}
+
 model RegulaAlertaMentenanta {
   id                 String                  @id @default(uuid())
   denumireOperatiune String                  // ex: "Schimb ulei motor", "Suflare filtru aer"

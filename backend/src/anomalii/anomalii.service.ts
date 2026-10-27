@@ -1006,9 +1006,66 @@ export class AnomaliiService {
     });
   }
 
+  async salveazaDocumentFisierInDb(data: {
+    filename: string;
+    nume: string;
+    mimetype: string;
+    marime: number;
+    filePath?: string;
+    buffer?: Buffer;
+  }) {
+    try {
+      let buf = data.buffer;
+      if (!buf && data.filePath && fs.existsSync(data.filePath)) {
+        buf = fs.readFileSync(data.filePath);
+      }
+      if (!buf) return null;
+
+      return await this.prisma.documentFisier.upsert({
+        where: { filename: data.filename },
+        update: {
+          nume: data.nume,
+          mimetype: data.mimetype,
+          marime: data.marime,
+          continut: buf,
+        },
+        create: {
+          filename: data.filename,
+          nume: data.nume,
+          mimetype: data.mimetype,
+          marime: data.marime,
+          continut: buf,
+        },
+      });
+    } catch (e) {
+      console.error('Eroare la salvarea fișierului în baza de date Oracle:', e);
+      return null;
+    }
+  }
+
+  async getDocumentFisierDinDb(filename: string) {
+    return this.prisma.documentFisier.findUnique({
+      where: { filename },
+    });
+  }
+
+  async stergeDocumentFisierDinDb(fisierUrl?: string | null) {
+    if (!fisierUrl) return;
+    const cleanFilename = path.basename(fisierUrl);
+    try {
+      await this.prisma.documentFisier.deleteMany({
+        where: { filename: cleanFilename },
+      });
+    } catch (e) {
+      // Ignorăm eroarea dacă nu exista în DB
+    }
+  }
+
   private unlinkDocumentFile(fisierUrl?: string | null) {
     if (!fisierUrl) return;
     const cleanFilename = path.basename(fisierUrl);
+    this.stergeDocumentFisierDinDb(fisierUrl);
+
     const candidates = [
       path.resolve(process.cwd(), 'uploads', 'documente', cleanFilename),
       path.resolve(process.cwd(), 'backend', 'uploads', 'documente', cleanFilename),

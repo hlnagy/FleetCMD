@@ -226,8 +226,18 @@ export class AnomaliiController {
       limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
     }),
   )
-  uploadDocumentFisier(@UploadedFile() file: Express.Multer.File) {
+  async uploadDocumentFisier(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Niciun fișier nu a fost încărcat.');
+
+    // Salvăm conținutul binar în baza de date Oracle pentru persistență garantată (chiar și la restart Render)
+    await this.anomaliiService.salveazaDocumentFisierInDb({
+      filename: file.filename,
+      nume: file.originalname,
+      mimetype: file.mimetype,
+      marime: file.size,
+      filePath: file.path,
+    });
+
     return {
       fisierUrl: `/anomalii/documente-vehicule/fisier/${file.filename}`,
       fisierNume: file.originalname,
@@ -239,12 +249,8 @@ export class AnomaliiController {
   // Descărcare / Afișare fișier scanat atașat (acces public pentru preview inline în browser / iframe / img)
   @Public()
   @Get('documente-vehicule/fisier/:filename')
-  descarcaFisierDocument(@Param('filename') filename: string, @Res() res: Response) {
+  async descarcaFisierDocument(@Param('filename') filename: string, @Res() res: Response) {
     const cleanFilename = path.basename(filename);
-    const filePath = findUploadedFile(cleanFilename);
-    if (!filePath) {
-      throw new NotFoundException('Fișierul căutat nu există pe server.');
-    }
 
     const ext = path.extname(cleanFilename).toLowerCase();
     const mimeTypes: Record<string, string> = {
@@ -257,13 +263,31 @@ export class AnomaliiController {
       '.svg': 'image/svg+xml',
     };
 
-    if (mimeTypes[ext]) {
-      res.setHeader('Content-Type', mimeTypes[ext]);
+    // 1. Verificăm mai întâi dacă fișierul există local pe disc
+    const filePath = findUploadedFile(cleanFilename);
+    if (filePath && fs.existsSync(filePath)) {
+      if (mimeTypes[ext]) {
+        res.setHeader('Content-Type', mimeTypes[ext]);
+      }
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Content-Disposition', `inline; filename="${cleanFilename}"`);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(filePath);
     }
-    res.removeHeader('X-Frame-Options');
-    res.setHeader('Content-Disposition', `inline; filename="${cleanFilename}"`);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(filePath);
+
+    // 2. Dacă pe disc nu există (ex. Render a restartat containerul / ephemeral disk),
+    // îl luăm direct din baza de date persistentă Oracle!
+    const dbFisier = await this.anomaliiService.getDocumentFisierDinDb(cleanFilename);
+    if (dbFisier && dbFisier.continut) {
+      const mime = dbFisier.mimetype || mimeTypes[ext] || 'application/octet-stream';
+      res.setHeader('Content-Type', mime);
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Content-Disposition', `inline; filename="${dbFisier.nume || cleanFilename}"`);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(Buffer.from(dbFisier.continut));
+    }
+
+    throw new NotFoundException('Fișierul căutat nu există pe server.');
   }
 
   // Import automat din ODS local sau cale specificată
