@@ -1315,10 +1315,12 @@ export class MentenantaService {
       codArticol?: string | null,
       articolStoc?: { categorie?: string | null; subcategorie?: string | null; unitateMasura?: string | null } | null
     ): { categorie: string; subcategorie: string; unitateMasura: string } => {
-      // 1. Dacă articolul este deja salvat/asociat cu un ArticolStoc din baza de date
-      if (articolStoc && articolStoc.categorie) {
+      // 1. Dacă articolul este deja salvat/asociat cu un ArticolStoc din baza de date (și nu are categorie generică temporară)
+      if (articolStoc && articolStoc.categorie && articolStoc.categorie.toUpperCase() !== 'PIESE_AUTO') {
+        let cat = articolStoc.categorie.trim();
+        if (cat.toLowerCase() === 'piese statie de sortare') cat = 'Piese Stație de Sortare';
         return {
-          categorie: articolStoc.categorie.trim(),
+          categorie: cat,
           subcategorie: articolStoc.subcategorie?.trim() || 'General',
           unitateMasura: articolStoc.unitateMasura || 'buc',
         };
@@ -1327,14 +1329,32 @@ export class MentenantaService {
       const d = (descriere || '').toLowerCase();
       const cod = (codArticol || '').toUpperCase();
 
-      // 2. Anvelope & Camere
+      // 2. Stație de sortare & benzi transportoare
+      if (/banda\s*transportoare|statie|sortare|ciur|concasor|clema\s*banda/i.test(d)) {
+        return {
+          categorie: 'Piese Stație de Sortare',
+          subcategorie: /banda/i.test(d) ? 'Benzi Transportoare' : 'Utilaje Sortare',
+          unitateMasura: 'buc',
+        };
+      }
+
+      // 3. Anvelope & Camere
       const matchAnvelopaDim = descriere.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
       if (matchAnvelopaDim || /anvelop|cauciuc|pneu/i.test(d) || cod.startsWith('ANV')) {
         const dim = matchAnvelopaDim ? matchAnvelopaDim[0].replace(/\s+/g, '') : 'Diverse Anvelope';
         return { categorie: 'Anvelope', subcategorie: dim, unitateMasura: 'buc' };
       }
 
-      // 3. Uleiuri & Lubrifianți
+      // 4. Sistem Frânare (Mecanică Frână - Evaluat înaintea fluidelor chimice pentru a nu confunda discurile/plăcuțele cu lichid de frână!)
+      if (/placute|placuta|disc\s*frana|tambur|sabot|ferodo|etrier|camera\s*fran|cama\s*frana|supapa\s*frana|frana/i.test(d) && !/lichid|dot\s*[345]|ulei.*frana/i.test(d)) {
+        if (/placut/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Plăcuțe Frână', unitateMasura: 'set' };
+        if (/disc/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Discuri Frână', unitateMasura: 'buc' };
+        if (/tambur|sabot|ferodo/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Saboți & Tamburi Frână', unitateMasura: 'set' };
+        if (/etrier|cilindru/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Etrieri & Cilindri Frână', unitateMasura: 'buc' };
+        return { categorie: 'Sistem Frânare', subcategorie: 'Componente Frânare', unitateMasura: 'buc' };
+      }
+
+      // 5. Uleiuri & Lubrifianți
       if (/ulei|oil|lubrifiant|unsoare|vaselin|10w40|15w40|5w30|5w40|hlp|tellus|rimula|spirax/i.test(d)) {
         if (/motor|10w40|15w40|5w30|5w40|rimula|ck-4/i.test(d)) {
           return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Ulei Motor', unitateMasura: 'L' };
@@ -1351,7 +1371,7 @@ export class MentenantaService {
         return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Alte Lubrifianți', unitateMasura: 'L' };
       }
 
-      // 4. Antigel & Răcire
+      // 6. Antigel & Răcire
       if (/antigel|coolant|racire|g11|g12|g13|demineraliz/i.test(d)) {
         if (/g12|roz|organic/i.test(d)) {
           return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel G12+ (Roz)', unitateMasura: 'L' };
@@ -1365,12 +1385,12 @@ export class MentenantaService {
         return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel Concentrat / Mixt', unitateMasura: 'L' };
       }
 
-      // 5. AdBlue & Fluide Speciale
-      if (/adblue|uree|frana|dot\s*4|parbriz|spalare/i.test(d)) {
+      // 7. AdBlue & Fluide Speciale (Exclusiv fluide chimice)
+      if (/adblue|uree|lichid.*frana|dot\s*[345]|parbriz|spalare/i.test(d)) {
         if (/adblue|uree/i.test(d)) {
           return { categorie: 'AdBlue & Chimice', subcategorie: 'AdBlue (Soluție Uree)', unitateMasura: 'L' };
         }
-        if (/frana|dot\s*4/i.test(d)) {
+        if (/lichid.*frana|dot\s*[345]/i.test(d)) {
           return { categorie: 'AdBlue & Chimice', subcategorie: 'Lichid Frână DOT 4', unitateMasura: 'L' };
         }
         if (/parbriz|spalare/i.test(d)) {
@@ -1379,7 +1399,7 @@ export class MentenantaService {
         return { categorie: 'AdBlue & Chimice', subcategorie: 'Fluide Speciale', unitateMasura: 'L' };
       }
 
-      // 6. Filtre
+      // 8. Filtre
       if (/filtr|cartus\s*filtr/i.test(d)) {
         if (/ulei/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Ulei Motor', unitateMasura: 'buc' };
         if (/aer/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Aer', unitateMasura: 'buc' };
@@ -1390,35 +1410,36 @@ export class MentenantaService {
         return { categorie: 'Filtre', subcategorie: 'Filtre Diverse', unitateMasura: 'buc' };
       }
 
-      // 7. Sistem Frânare
-      if (/placute|placuta|disc\s*frana|frana|tambur|sabot|etrier/i.test(d)) {
-        if (/placut/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Plăcuțe Frână', unitateMasura: 'set' };
-        if (/disc/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Discuri Frână', unitateMasura: 'buc' };
-        if (/tambur|sabot/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Saboți & Tamburi Frână', unitateMasura: 'set' };
-        if (/etrier|cilindru/i.test(d)) return { categorie: 'Sistem Frânare', subcategorie: 'Etrieri & Cilindri Frână', unitateMasura: 'buc' };
-        return { categorie: 'Sistem Frânare', subcategorie: 'Componente Frânare', unitateMasura: 'buc' };
+      // 9. Piese Motor & Injecție
+      if (/injector|piston|segment|camasa|supapa|chiulasa|vibrochen|arbore|biele|garnitura.*chiulasa/i.test(d)) {
+        return {
+          categorie: 'Piese Motor',
+          subcategorie: /injector/i.test(d) ? 'Injectoare & Injecție' : 'Componente Motor',
+          unitateMasura: 'buc',
+        };
       }
 
-      // 8. Piese Mecanice & Direcție
-      if (/pivot|bucsa|bara|amortizor|perna|curea|intinzator|rola|turbo|turbosuflanta|ambreiaj|rulment|pompa\s*apa|termostat/i.test(d)) {
+      // 10. Piese Mecanice & Direcție & Rulmenți
+      if (/pivot|bucsa|bara|amortizor|perna|curea|intinzator|rola|turbo|turbosuflanta|ambreiaj|rulment|pompa\s*apa|termostat|butuc|prezon|caseta/i.test(d)) {
         if (/amortizor|perna/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Suspensie & Amortizoare', unitateMasura: 'buc' };
-        if (/pivot|bucsa|bara/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Articulații & Direcție', unitateMasura: 'buc' };
+        if (/pivot|bucsa|bara|caseta/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Articulații & Direcție', unitateMasura: 'buc' };
         if (/curea|intinzator|rola/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Curele & Transmisie Auxiliară', unitateMasura: 'buc' };
         if (/turbo|turbosufl/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Turbosuflante & Turbo', unitateMasura: 'buc' };
         if (/ambreiaj|volanta/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Kit Ambreiaj & Volantă', unitateMasura: 'buc' };
         if (/pompa\s*apa|termostat/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Pompă Apă & Termostat', unitateMasura: 'buc' };
+        if (/rulment|butuc|prezon/i.test(d)) return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Butuci & Rulmenți Roată', unitateMasura: 'buc' };
         return { categorie: 'Piese Mecanice & Direcție', subcategorie: 'Piese Mecanice Generale', unitateMasura: 'buc' };
       }
 
-      // 9. Electrice & Acumulatori
-      if (/baterie|acumulator|alternator|electromotor|demaror|far|bec|led|lampa|senzor|cablu|releu/i.test(d)) {
+      // 11. Electrice & Acumulatori
+      if (/baterie|acumulator|alternator|electromotor|demaror|far|bec|led|lampa|senzor|cablu|releu|regulator.*tensiune/i.test(d)) {
         if (/baterie|acumulator/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Baterii & Acumulatori', unitateMasura: 'buc' };
-        if (/alternator|electromotor|demaror/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Alternatoare & Demaroare', unitateMasura: 'buc' };
-        if (/far|bec|led|lampa|stop/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Iluminare & Semnalizare', unitateMasura: 'buc' };
+        if (/alternator|electromotor|demaror|regulator/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Alternatoare & Demaroare', unitateMasura: 'buc' };
+        if (/far|bec|led|lampa|stop|proiector/i.test(d)) return { categorie: 'Sisteme Electrice', subcategorie: 'Iluminare & Semnalizare', unitateMasura: 'buc' };
         return { categorie: 'Sisteme Electrice', subcategorie: 'Cablaje & Senzori', unitateMasura: 'buc' };
       }
 
-      // 10. Consumabile & Atelier
+      // 12. Consumabile & Atelier
       if (/spray|degresant|pasta|silicon|colier|surub|piulita|saiba|manusi/i.test(d)) {
         if (/spray|degresant|curatitor/i.test(d)) return { categorie: 'Consumabile & Feronerie', subcategorie: 'Spray-uri Tehnice & Curățare', unitateMasura: 'buc' };
         if (/colier|surub|piulita|saiba/i.test(d)) return { categorie: 'Consumabile & Feronerie', subcategorie: 'Organe de Asamblare & Coliere', unitateMasura: 'buc' };
@@ -2143,7 +2164,7 @@ export class MentenantaService {
         sObj.valoareFaraTVARON += vFaraTVA;
         sObj.cantitateTotala += 1;
         sObj.numarPozitii += 1;
-        if (sObj.articoleRecente.length < 10) {
+        if (sObj.articoleRecente.length < 50) {
           sObj.articoleRecente.push({
             id: f.id,
             descriere: `Factura ${f.numarFactura} (${furnizor})`,
@@ -2174,9 +2195,11 @@ export class MentenantaService {
           let vCuTVA = Number(item.valoareTVA ? (vFaraTVA + item.valoareTVA) : (vFaraTVA * 1.19));
           vCuTVA = Number(vCuTVA.toFixed(2));
 
+          // Evităm maparea automată pe coduri generice de linie (ex: 27627746-1 = CIF-Linie)
+          const isGenericInvoiceLineCode = item.codArticolFurnizor && /^\d{6,10}-\d+$/.test(item.codArticolFurnizor.trim());
           const linkedArticol = item.articolStocId
             ? articoleStocMap.get(item.articolStocId)
-            : item.codArticolFurnizor
+            : (item.codArticolFurnizor && !isGenericInvoiceLineCode)
             ? articoleStocMap.get(item.codArticolFurnizor.toUpperCase().trim())
             : null;
           const mapped = categorizeInvoiceItem(item.descrierePiesa, item.codArticolFurnizor, linkedArticol);

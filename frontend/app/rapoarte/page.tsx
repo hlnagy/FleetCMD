@@ -1487,6 +1487,21 @@ export default function RapoartePage() {
               {/* ===================================================== */}
               {subTabEfactura === 'categorii' && (
                 <div className="space-y-4">
+                  {/* Provenance Info Box */}
+                  <div className="bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-xl p-3.5 flex items-start gap-3 text-xs text-blue-950 dark:text-blue-200 print:hidden">
+                    <Info className="w-4 h-4 text-sapphire-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-extrabold text-[12px] text-sapphire-950 dark:text-white mb-0.5">
+                        Proveniența & Precizia Datelor din acest Raport (ANAF SPV e-Factura)
+                      </div>
+                      <div className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                        Toate sumele și articolele sunt preluate <strong>direct și automat din facturile electronice originale</strong> înregistrate de furnizorii dvs. în sistemul ANAF.
+                        Pentru maximă transparență contabilă, fiecare categorie și subcategorie afișează separat atât <strong>valoarea fără TVA (netto)</strong>, cât și <strong>valoarea cu TVA (brutto)</strong>.
+                        Apăsați pe butonul <em>„Linii Factură”</em> din dreptul oricărei subcategorii pentru a vedea fiecare factură, furnizor, dată și piesă individuală.
+                      </div>
+                    </div>
+                  </div>
+
                   {/* KPI Summary Cards */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
@@ -1667,8 +1682,9 @@ export default function RapoartePage() {
                                       <th className="p-3 text-right">Linii Factură</th>
                                       <th className="p-3 text-right w-36">Pondere în Categorie</th>
                                       <th className="p-3 text-right">Pondere din Total</th>
-                                      <th className="p-3 text-right font-black">Valoare Totală (RON)</th>
-                                      <th className="p-3 text-center">Articole Recente</th>
+                                      <th className="p-3 text-right font-black text-emerald-800 dark:text-emerald-400">Valoare Fără TVA (Net)</th>
+                                      <th className="p-3 text-right font-black text-sapphire-900 dark:text-white">Valoare Cu TVA (Brut)</th>
+                                      <th className="p-3 text-center">Linii Factură</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-morning-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
@@ -1709,7 +1725,10 @@ export default function RapoartePage() {
                                             <td className="p-3 text-right font-bold text-slate-700 dark:text-slate-300">
                                               {sub.procentDinTotal}%
                                             </td>
-                                            <td className="p-3 text-right font-black text-sm text-sapphire-900 dark:text-white">
+                                            <td className="p-3 text-right font-bold text-xs text-emerald-700 dark:text-emerald-400">
+                                              {Number(sub.valoareFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                            </td>
+                                            <td className="p-3 text-right font-black text-xs text-sapphire-900 dark:text-white">
                                               {Number(sub.valoareTotalaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                                             </td>
                                             <td className="p-3 text-center">
@@ -1733,7 +1752,7 @@ export default function RapoartePage() {
                                           {/* Subcategory recent items drawer */}
                                           {isSubExpanded && sub.articoleRecente && (
                                             <tr key={`${sub.subcategorie}_drawer`} className="bg-morning-50/50 dark:bg-slate-950/70">
-                                              <td colSpan={7} className="p-3 pl-8 pr-4">
+                                              <td colSpan={8} className="p-3 pl-8 pr-4">
                                                 <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
                                                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-morning-200 dark:border-slate-800">
                                                     <span className="text-[11px] font-bold text-sapphire-900 dark:text-white flex items-center gap-1.5">
@@ -1753,7 +1772,8 @@ export default function RapoartePage() {
                                                           <th className="pb-1.5">Denumire Piesă / Cod</th>
                                                           <th className="pb-1.5 text-right">Cantitate</th>
                                                           <th className="pb-1.5 text-right">Preț Unitar</th>
-                                                          <th className="pb-1.5 text-right font-black">Valoare Totală</th>
+                                                          <th className="pb-1.5 text-right font-bold text-emerald-700 dark:text-emerald-400">Fără TVA</th>
+                                                          <th className="pb-1.5 text-right font-black">Cu TVA</th>
                                                           <th className="pb-1.5 text-center">Stare</th>
                                                         </tr>
                                                       </thead>
@@ -1775,10 +1795,13 @@ export default function RapoartePage() {
                                                             <td className="py-1.5 text-right font-semibold text-slate-700 dark:text-slate-300">
                                                               {art.cantitate} {art.unitateMasura}
                                                             </td>
-                                                            <td className="py-1.5 text-right text-slate-600 dark:text-slate-400">
+                                                            <td className="py-1.5 text-right text-slate-600 dark:text-slate-400 font-mono text-[10px]">
                                                               {Number(art.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })}
                                                             </td>
-                                                            <td className="py-1.5 text-right font-black text-emerald-700 dark:text-emerald-400">
+                                                            <td className="py-1.5 text-right font-bold text-emerald-700 dark:text-emerald-400 font-mono text-[10px]">
+                                                              {Number(art.valoareFaraTVA || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                                                            </td>
+                                                            <td className="py-1.5 text-right font-black text-sapphire-900 dark:text-white font-mono text-[10px]">
                                                               {Number(art.valoareTotala || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                                                             </td>
                                                             <td className="py-1.5 text-center">
