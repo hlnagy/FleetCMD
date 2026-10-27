@@ -22,18 +22,19 @@ import { AnomaliiService } from './anomalii.service';
 import { Public } from '../auth/public.decorator';
 
 function getUploadDir(): string {
-  if (fs.existsSync(path.resolve(process.cwd(), 'uploads', 'documente'))) {
-    return path.resolve(process.cwd(), 'uploads', 'documente');
+  const candidates = [
+    path.resolve(process.cwd(), 'uploads', 'documente'),
+    path.resolve(process.cwd(), 'backend', 'uploads', 'documente'),
+    path.resolve(__dirname, '..', '..', 'uploads', 'documente'),
+    path.resolve(__dirname, '..', '..', '..', 'uploads', 'documente'),
+    path.resolve(__dirname, '..', '..', '..', 'backend', 'uploads', 'documente'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
   }
-  if (fs.existsSync(path.resolve(process.cwd(), 'backend', 'uploads', 'documente'))) {
-    return path.resolve(process.cwd(), 'backend', 'uploads', 'documente');
-  }
-  if (fs.existsSync(path.resolve(process.cwd(), 'backend'))) {
-    const p = path.resolve(process.cwd(), 'backend', 'uploads', 'documente');
-    fs.mkdirSync(p, { recursive: true });
-    return p;
-  }
-  const defaultP = path.resolve(process.cwd(), 'uploads', 'documente');
+  const defaultP = fs.existsSync(path.resolve(process.cwd(), 'backend'))
+    ? path.resolve(process.cwd(), 'backend', 'uploads', 'documente')
+    : path.resolve(process.cwd(), 'uploads', 'documente');
   fs.mkdirSync(defaultP, { recursive: true });
   return defaultP;
 }
@@ -44,6 +45,8 @@ function findUploadedFile(filename: string): string | null {
     path.resolve(process.cwd(), 'uploads', 'documente', clean),
     path.resolve(process.cwd(), 'backend', 'uploads', 'documente', clean),
     path.resolve(__dirname, '..', '..', 'uploads', 'documente', clean),
+    path.resolve(__dirname, '..', '..', '..', 'uploads', 'documente', clean),
+    path.resolve(__dirname, '..', '..', '..', 'backend', 'uploads', 'documente', clean),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;

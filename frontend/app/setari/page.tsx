@@ -12,7 +12,8 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
   Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2,
   Sliders, LayoutList, LayoutGrid, Receipt, ExternalLink, HelpCircle, BookOpen, RefreshCw, Zap,
-  Database, Download, HardDrive, CheckCircle
+  Database, Download, HardDrive, CheckCircle,
+  Paperclip, UploadCloud
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
@@ -234,6 +235,10 @@ function SetariContent() {
   const [docZileAvertizare, setDocZileAvertizare] = useState(30);
   const [docSerie, setDocSerie] = useState('');
   const [docEmitent, setDocEmitent] = useState('');
+  const [docFisierUrl, setDocFisierUrl] = useState<string | null>(null);
+  const [docFisierNume, setDocFisierNume] = useState<string | null>(null);
+  const [docFisierMarime, setDocFisierMarime] = useState<number | null>(null);
+  const [isUploadingDocFile, setIsUploadingDocFile] = useState<boolean>(false);
   const [initializareRapidaLoading, setInitializareRapidaLoading] = useState(false);
 
   // Calcule KPI Documente
@@ -1413,6 +1418,9 @@ function SetariContent() {
     setDocZileAvertizare(30);
     setDocSerie('');
     setDocEmitent('');
+    setDocFisierUrl(null);
+    setDocFisierNume(null);
+    setDocFisierMarime(null);
     setShowAddDocModal(true);
   };
 
@@ -1424,6 +1432,9 @@ function SetariContent() {
     setDocZileAvertizare(doc.zileAvertizareInainte || 30);
     setDocSerie(doc.serieDocument || '');
     setDocEmitent(doc.emitent || '');
+    setDocFisierUrl(doc.fisierUrl || null);
+    setDocFisierNume(doc.fisierNume || null);
+    setDocFisierMarime(doc.fisierMarime || null);
     setShowAddDocModal(true);
   };
 
@@ -1431,6 +1442,64 @@ function SetariContent() {
     const d = new Date();
     d.setMonth(d.getMonth() + months);
     setDocDataExpirare(d.toISOString().split('T')[0]);
+  };
+
+  const handleUploadDocFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      alert('Fișierul depășește limita maximă de 25 MB.');
+      return;
+    }
+
+    setIsUploadingDocFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDocFisierUrl(data.fisierUrl);
+        setDocFisierNume(data.fisierNume);
+        setDocFisierMarime(data.fisierMarime);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la încărcarea fișierului: ${err.message || 'Eroare server'}`);
+      }
+    } catch (err) {
+      alert('Eroare de rețea la încărcarea fișierului pe server.');
+    } finally {
+      setIsUploadingDocFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveDocFile = async () => {
+    if (editingDoc && editingDoc.fisierUrl) {
+      const confirmed = await showConfirm(
+        'Ștergere fișier scanat',
+        'Sigur doriți să eliminați fișierul atașat acestui document?',
+        'Da, elimină',
+        'Anulează'
+      );
+      if (!confirmed) return;
+      try {
+        await fetch(`${API_BASE_URL}/anomalii/documente-vehicule/${editingDoc.id}/fisier`, {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.error('Eroare la ștergerea fișierului de pe server:', e);
+      }
+    }
+    setDocFisierUrl(null);
+    setDocFisierNume(null);
+    setDocFisierMarime(null);
   };
 
   const handleSaveDoc = async (e: React.FormEvent) => {
@@ -1452,6 +1521,9 @@ function SetariContent() {
           zileAvertizareInainte: Number(docZileAvertizare),
           serieDocument: docSerie,
           emitent: docEmitent,
+          fisierUrl: docFisierUrl,
+          fisierNume: docFisierNume,
+          fisierMarime: docFisierMarime,
         }),
       });
 
@@ -3309,11 +3381,23 @@ function SetariContent() {
                                       className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-mono font-bold transition flex flex-col items-center justify-center ${badgeClasses}`}
                                       title={`Apasă pentru a edita sau șterge ${t.cod} (${doc.serieDocument || 'Fără serie'})`}
                                     >
-                                      <div className="flex items-center space-x-1">
+                                      <div className="flex items-center justify-center space-x-1">
                                         {isExpired && <AlertTriangle className="w-3 h-3 text-terracotta-600 shrink-0" />}
                                         {isWarning && <Clock className="w-3 h-3 text-amber-600 shrink-0" />}
                                         {!isExpired && !isWarning && <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />}
                                         <span>{exp.toLocaleDateString('ro-RO')}</span>
+                                        {doc.fisierUrl && (
+                                          <span
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              window.open(`${API_BASE_URL}${doc.fisierUrl}`, '_blank');
+                                            }}
+                                            title={`Deschide fișier scanat / PDF: ${doc.fisierNume || 'Document'}`}
+                                            className="ml-1 p-0.5 rounded bg-sapphire-100/90 hover:bg-sapphire-200 text-sapphire-900 shadow-2xs transition inline-flex items-center cursor-pointer"
+                                          >
+                                            <Paperclip className="w-2.5 h-2.5" />
+                                          </span>
+                                        )}
                                       </div>
                                       <div className="text-[9px] font-normal opacity-85">
                                         {isExpired ? (
@@ -3556,6 +3640,16 @@ function SetariContent() {
                                 {d.serieDocument || d.emitent || '-'}
                               </td>
                               <td className="p-3 text-right space-x-1 border-b border-morning-200">
+                                {d.fisierUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(`${API_BASE_URL}${d.fisierUrl}`, '_blank')}
+                                    className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                    title={`Vizualizează scan atașat (${d.fisierNume || 'Document'})`}
+                                  >
+                                    <Paperclip className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => openEditDocDirect(d)}
@@ -6522,6 +6616,85 @@ function SetariContent() {
                   placeholder="ex: Groupama, Omniasig, RAR, CNAIR"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
                 />
+              </div>
+
+              {/* FIȘIER SCANAT / POZĂ / PDF DOCUMENT */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sage-700 font-bold flex items-center space-x-1">
+                    <Paperclip className="w-3.5 h-3.5 text-sapphire-600" />
+                    <span>Atașează Scanare / PDF Document:</span>
+                  </label>
+                  <span className="text-[10px] text-sage-500 font-mono">Max 25 MB • PDF, JPG, PNG</span>
+                </div>
+
+                {docFisierUrl ? (
+                  <div className="p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="p-2 rounded-lg bg-sapphire-100 text-sapphire-700 shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-sapphire-900 truncate max-w-[220px]" title={docFisierNume || 'Document atașat'}>
+                          {docFisierNume || 'Fișier scanat atașat'}
+                        </div>
+                        {docFisierMarime && (
+                          <div className="text-[10px] text-sage-500 font-mono">
+                            {(docFisierMarime / 1024 / 1024).toFixed(2)} MB • Salvat pe Oracle Cloud
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5 shrink-0">
+                      <a
+                        href={`${API_BASE_URL}${docFisierUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-sapphire-100 text-sapphire-700 border border-sapphire-300 font-bold text-[11px] transition flex items-center space-x-1 cursor-pointer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Vizualizează</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleRemoveDocFile}
+                        className="p-1.5 text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
+                        title="Elimină fișierul atașat"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative border-2 border-dashed border-morning-300 hover:border-sapphire-400 bg-morning-50/50 hover:bg-sapphire-50/30 rounded-xl p-4 text-center transition cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={handleUploadDocFile}
+                      disabled={isUploadingDocFile}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <div className="flex flex-col items-center justify-center space-y-1">
+                      {isUploadingDocFile ? (
+                        <div className="flex items-center space-x-2 text-sapphire-600 font-bold text-xs py-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Se încarcă fișierul pe serverul Oracle...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-6 h-6 text-sapphire-500" />
+                          <p className="text-xs font-bold text-sapphire-900">
+                            Apasă aici sau trage fișierul (Drag & Drop)
+                          </p>
+                          <p className="text-[10px] text-sage-500">
+                            Poliță RCA, Talon ITP, Certificat Casco, Copie Conformă (PDF sau Poză)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-morning-200">
