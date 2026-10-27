@@ -6,7 +6,7 @@ import {
   BarChart3, DollarSign, Layers, Wrench, ShieldAlert, Search, Filter,
   Download, Truck, RefreshCw, Award, Droplets, Calendar, Printer,
   Car, Disc, Check, Info, ChevronDown, ChevronRight, Sparkles, AlertTriangle,
-  FileText, Clock, TrendingUp, AlertOctagon, CheckCircle2, XCircle
+  FileText, Clock, TrendingUp, AlertOctagon, CheckCircle2, XCircle, Package
 } from 'lucide-react';
 
 type TipRaport = 'CHELTUIELI_TOTAL' | 'COST_UNITAR' | 'CONSUM_ULEI' | 'FURNIZORI_EFACTURA' | 'SCADENTAR';
@@ -1495,9 +1495,9 @@ export default function RapoartePage() {
                         Proveniența & Precizia Datelor din acest Raport (ANAF SPV e-Factura)
                       </div>
                       <div className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                        Toate sumele și articolele sunt preluate <strong>direct și automat din facturile electronice originale</strong> înregistrate de furnizorii dvs. în sistemul ANAF.
-                        Pentru maximă transparență contabilă, fiecare categorie și subcategorie afișează separat atât <strong>valoarea fără TVA (netto)</strong>, cât și <strong>valoarea cu TVA (brutto)</strong>.
-                        Apăsați pe butonul <em>„Linii Factură”</em> din dreptul oricărei subcategorii pentru a vedea fiecare factură, furnizor, dată și piesă individuală.
+                        Acest raport include <strong>strict și exclusiv facturile și articolele PROCESATE</strong> (care au fost recepționate în <strong>Depozite/Stoc</strong> sau montate <strong>Direct pe Vehicule</strong> prin Comenzi de Lucru).
+                        Facturile neprocesate din SPV și cele eliminate/ignorate sunt <strong>complet excluse</strong> din statistici.
+                        Pentru transparență deplină, fiecare poziție afișează destinația exactă (depozitul sau numărul de înmatriculare și categoria vehiculului pe care s-a montat piesa).
                       </div>
                     </div>
                   </div>
@@ -1506,53 +1506,53 @@ export default function RapoartePage() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Total Achiziții Facturate</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Total Piese Procesate</span>
                         <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                       </div>
-                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
-                        {Number(reportData?.totale?.totalAchizitiiCategoriiRON || reportData?.totale?.totalAchizitiiEFacturaRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} <span className="text-xs font-semibold text-slate-500">RON</span>
+                      <div className="text-xl font-black text-emerald-700 dark:text-emerald-400">
+                        {Number(reportData?.totale?.totalAchizitiiFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} <span className="text-xs font-semibold text-slate-500">RON</span>
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Fără TVA: {Number(reportData?.totale?.totalAchizitiiFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                        Cu TVA: {Number(reportData?.totale?.totalAchizitiiCategoriiRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                       </div>
                     </div>
 
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Categorii Principale Active</span>
-                        <Layers className="w-4 h-4 text-sapphire-600 dark:text-indigo-400" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Intrate în Depozite (Stoc)</span>
+                        <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div className="text-xl font-black text-sapphire-900 dark:text-white">
-                        {reportData?.totale?.numarCategoriiAchizitii || (reportData?.achizitiiCategorii || []).length}
+                        {Number(reportData?.totale?.totalInStocFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} <span className="text-xs font-semibold text-slate-500">RON</span>
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Grupare principală piese & fluide
+                        Cu TVA: {Number(reportData?.totale?.totalInStocRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                       </div>
                     </div>
 
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Subcategorii Active</span>
-                        <Disc className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Direct pe Vehicule</span>
+                        <Truck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                       </div>
-                      <div className="text-xl font-black text-sapphire-900 dark:text-white">
-                        {reportData?.totale?.numarSubcategoriiAchizitii || 0}
+                      <div className="text-xl font-black text-purple-700 dark:text-purple-300">
+                        {Number(reportData?.totale?.totalDirectVehiculeFaraTVARON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} <span className="text-xs font-semibold text-slate-500">RON</span>
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Clase specifice piese / componente
+                        Cu TVA: {Number(reportData?.totale?.totalDirectVehiculeRON || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                       </div>
                     </div>
 
                     <div className="bg-morning-50 dark:bg-slate-950 border border-morning-200 dark:border-slate-800 rounded-xl p-3.5">
                       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider">Poziții Facturate</span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider">Poziții Procesate</span>
                         <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div className="text-xl font-black text-sapphire-900 dark:text-white">
                         {reportData?.totale?.numarPozitiiFacturate || 0}
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Articole individuale înregistrate
+                        din {reportData?.totale?.numarFacturiEFactura || 0} facturi procesate
                       </div>
                     </div>
                   </div>
@@ -1752,7 +1752,7 @@ export default function RapoartePage() {
                                           {/* Subcategory recent items drawer */}
                                           {isSubExpanded && sub.articoleRecente && (
                                             <tr key={`${sub.subcategorie}_drawer`} className="bg-morning-50/50 dark:bg-slate-950/70">
-                                              <td colSpan={8} className="p-3 pl-8 pr-4">
+                                              <td colSpan={9} className="p-3 pl-8 pr-4">
                                                 <div className="bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-xl p-3 shadow-2xs">
                                                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-morning-200 dark:border-slate-800">
                                                     <span className="text-[11px] font-bold text-sapphire-900 dark:text-white flex items-center gap-1.5">
@@ -1774,6 +1774,7 @@ export default function RapoartePage() {
                                                           <th className="pb-1.5 text-right">Preț Unitar</th>
                                                           <th className="pb-1.5 text-right font-bold text-emerald-700 dark:text-emerald-400">Fără TVA</th>
                                                           <th className="pb-1.5 text-right font-black">Cu TVA</th>
+                                                          <th className="pb-1.5 text-center">Destinație & Vehicul</th>
                                                           <th className="pb-1.5 text-center">Stare</th>
                                                         </tr>
                                                       </thead>
@@ -1805,15 +1806,23 @@ export default function RapoartePage() {
                                                               {Number(art.valoareTotala || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
                                                             </td>
                                                             <td className="py-1.5 text-center">
-                                                              {art.stare === 'IMPORTAT' ? (
-                                                                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                                                  IMPORTAT
+                                                              {art.destinatie === 'DIRECT_VEHICUL' ? (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-purple-50 text-purple-900 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60" title={`Montat pe ${art.vehiculNumar} (${art.vehiculCategorie})`}>
+                                                                  <Truck className="w-2.5 h-2.5 shrink-0" />
+                                                                  {art.vehiculNumar} <span className="text-[8px] text-purple-600 dark:text-purple-400">({art.vehiculCategorie || 'Utilaj'})</span>
+                                                                  {art.numarComanda && <span className="font-mono text-[8px] opacity-75">· {art.numarComanda}</span>}
                                                                 </span>
                                                               ) : (
-                                                                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-morning-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-morning-200 dark:border-slate-700">
-                                                                  NEPROCESAT
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-900 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60" title={art.destinatieNume || 'În Depozit'}>
+                                                                  <Package className="w-2.5 h-2.5 shrink-0" />
+                                                                  {art.depozitNume || 'Depozit Central'}
                                                                 </span>
                                                               )}
+                                                            </td>
+                                                            <td className="py-1.5 text-center">
+                                                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                                IMPORTAT
+                                                              </span>
                                                             </td>
                                                           </tr>
                                                         ))}

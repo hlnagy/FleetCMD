@@ -1194,10 +1194,17 @@ export class MentenantaService {
       if (endFilter) dateFilterEFactura.dataFactura.lte = endFilter;
     }
 
+    // 7. Achiziții e-Factura Procesate (Exclusiv articole intrate în depozite sau montate direct pe vehicule)
     const facturiEFactura = await this.prisma.eFacturaFactura.findMany({
       where: {
         ...dateFilterEFactura,
         tipFactura: 'FACTURA',
+        stare: { in: ['IMPORTAT_TOTAL', 'IMPORTAT_PARȚIAL', 'IMPORTAT'] },
+        articole: {
+          some: {
+            stare: 'IMPORTAT',
+          },
+        },
       },
       select: {
         id: true,
@@ -1208,6 +1215,9 @@ export class MentenantaService {
         valoareTotala: true,
         stare: true,
         articole: {
+          where: {
+            stare: 'IMPORTAT',
+          },
           select: {
             id: true,
             descrierePiesa: true,
@@ -1220,6 +1230,7 @@ export class MentenantaService {
             cotaTVA: true,
             stare: true,
             articolStocId: true,
+            comandaLucruId: true,
           },
         },
       },
@@ -1276,6 +1287,12 @@ export class MentenantaService {
         categorie: true,
         subcategorie: true,
         unitateMasura: true,
+        depozit: {
+          select: {
+            id: true,
+            nume: true,
+          },
+        },
       },
     });
     const articoleStocMap = new Map<string, (typeof articoleStocCatalog)[0]>();
@@ -1283,6 +1300,35 @@ export class MentenantaService {
       if (a.id) articoleStocMap.set(a.id, a);
       if (a.codArticol) articoleStocMap.set(a.codArticol.toUpperCase().trim(), a);
     });
+
+    // Rezoluție comenzi de lucru pentru articole montate direct pe vehicule
+    const comandaLucruIds = new Set<string>();
+    facturiEFactura.forEach((f) => {
+      f.articole.forEach((a) => {
+        if (a.comandaLucruId) comandaLucruIds.add(a.comandaLucruId);
+      });
+    });
+
+    const comenziLucruDirecte = await this.prisma.comandaLucru.findMany({
+      where: { id: { in: Array.from(comandaLucruIds) } },
+      select: {
+        id: true,
+        numarComanda: true,
+        vehiculId: true,
+        vehicul: {
+          select: {
+            id: true,
+            numarIntern: true,
+            numarInmatriculare: true,
+            marca: true,
+            model: true,
+            categorieEnum: true,
+          },
+        },
+      },
+    });
+    const comenziDirecteMap = new Map<string, (typeof comenziLucruDirecte)[0]>();
+    comenziLucruDirecte.forEach((cl) => comenziDirecteMap.set(cl.id, cl));
 
     // Helper mapare categorie fluid
     const mapFluidCategory = (desc: string, tipRaw?: string): { key: string; label: string } => {
@@ -2045,16 +2091,19 @@ export class MentenantaService {
       return b.litriPotlas - a.litriPotlas;
     });
 
-    // H. Raport 3: Achiziții Furnizori ANAF e-Factura
+    // H. Raport 3: Achiziții Furnizori ANAF e-Factura & Piese Procesate (Exclusiv intrate în stoc sau montate direct pe vehicule)
     const furnizoriMap: Record<string, {
       cif: string;
       nume: string;
       numarFacturi: number;
       valoareTotalaRON: number;
+      valoareFaraTVARON: number;
       facturi: any[];
     }> = {};
 
     let totalGeneralFacturiRON = 0;
+    let totalGeneralFacturiFaraTVARON = 0;
+
     facturiEFactura.forEach((f) => {
       const cif = (f.cifVanzator || '').replace(/^RO/i, '').trim();
       const nume = f.numeVanzator || 'Furnizor Necunoscut';
@@ -2065,19 +2114,41 @@ export class MentenantaService {
           nume,
           numarFacturi: 0,
           valoareTotalaRON: 0,
+          valoareFaraTVARON: 0,
           facturi: [],
         };
       }
-      furnizoriMap[key].numarFacturi += 1;
-      furnizoriMap[key].valoareTotalaRON += f.valoareTotala;
-      totalGeneralFacturiRON += f.valoareTotala;
-      if (furnizoriMap[key].facturi.length < 5) {
-        furnizoriMap[key].facturi.push({
-          numarFactura: f.numarFactura,
-          dataFactura: f.dataFactura,
-          valoareTotala: Number(f.valoareTotala.toFixed(2)),
-          stare: f.stare,
-        });
+
+      // Sume calculate strict pe baza articolelor procesate
+      let factCuTVA = 0;
+      let factFaraTVA = 0;
+      (f.articole || []).forEach((item) => {
+        const cant = Number(item.cantitate || 1);
+        const pretUnit = Number(item.pretUnitar || 0);
+        let vFara = Number(item.valoareFaraTVA || 0);
+        if (vFara === 0 && pretUnit > 0) vFara = Number((cant * pretUnit).toFixed(2));
+        let vCu = Number(item.valoareTVA ? (vFara + item.valoareTVA) : (vFara * 1.19));
+        vCu = Number(vCu.toFixed(2));
+        factCuTVA += vCu;
+        factFaraTVA += vFara;
+      });
+
+      if (factCuTVA > 0 || factFaraTVA > 0) {
+        furnizoriMap[key].numarFacturi += 1;
+        furnizoriMap[key].valoareTotalaRON += factCuTVA;
+        furnizoriMap[key].valoareFaraTVARON += factFaraTVA;
+        totalGeneralFacturiRON += factCuTVA;
+        totalGeneralFacturiFaraTVARON += factFaraTVA;
+        if (furnizoriMap[key].facturi.length < 10) {
+          furnizoriMap[key].facturi.push({
+            numarFactura: f.numarFactura,
+            dataFactura: f.dataFactura,
+            valoareTotala: Number(factCuTVA.toFixed(2)),
+            valoareFaraTVA: Number(factFaraTVA.toFixed(2)),
+            stare: f.stare,
+            numarArticoleProcesate: f.articole.length,
+          });
+        }
       }
     });
 
@@ -2087,12 +2158,13 @@ export class MentenantaService {
         nume: fn.nume,
         numarFacturi: fn.numarFacturi,
         valoareTotalaRON: Number(fn.valoareTotalaRON.toFixed(2)),
+        valoareFaraTVARON: Number(fn.valoareFaraTVARON.toFixed(2)),
         procentDinTotal: totalGeneralFacturiRON > 0 ? Number(((fn.valoareTotalaRON / totalGeneralFacturiRON) * 100).toFixed(1)) : 0,
         facturiRecente: fn.facturi,
       }))
       .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
 
-    // H2. Raport Achiziții: Főkategóriák & Alkategóriák (Defalcare ierarhică piese facturate)
+    // H2. Raport Achiziții: Categorii & Destinație (Depozite vs Direct pe Utilaje)
     const categoriiAchizitiiMap: Record<string, {
       categorie: string;
       valoareTotalaRON: number;
@@ -2114,19 +2186,70 @@ export class MentenantaService {
 
     let totalCategoriiRON = 0;
     let totalCategoriiFaraTVARON = 0;
+    let totalInStocRON = 0;
+    let totalInStocFaraTVARON = 0;
+    let totalDirectVehiculeRON = 0;
+    let totalDirectVehiculeFaraTVARON = 0;
     let totalLiniiPozitii = 0;
 
     facturiEFactura.forEach((f) => {
-      if (f.stare === 'ELIMINAT') return;
-
       const furnizor = f.numeVanzator || 'Furnizor Necunoscut';
       const items = f.articole || [];
 
-      if (items.length === 0) {
-        const catName = 'Alte Piese & Materiale';
-        const subName = 'Factură Nedetaliată';
-        const vCuTVA = Number(f.valoareTotala || 0);
-        const vFaraTVA = Number((vCuTVA / 1.19).toFixed(2));
+      items.forEach((item) => {
+        const cant = Number(item.cantitate || 1);
+        const pretUnit = Number(item.pretUnitar || 0);
+        let vFaraTVA = Number(item.valoareFaraTVA || 0);
+        if (vFaraTVA === 0 && pretUnit > 0) {
+          vFaraTVA = Number((cant * pretUnit).toFixed(2));
+        }
+        let vCuTVA = Number(item.valoareTVA ? (vFaraTVA + item.valoareTVA) : (vFaraTVA * 1.19));
+        vCuTVA = Number(vCuTVA.toFixed(2));
+
+        const linkedArticol = item.articolStocId ? articoleStocMap.get(item.articolStocId) : null;
+        const cl = item.comandaLucruId ? comenziDirecteMap.get(item.comandaLucruId) : null;
+
+        // Filtru opțional de vehicul dacă a fost selectat unul specific
+        if (vehiculIds.length === 1 && (query.vehiculId && query.vehiculId !== 'ALL')) {
+          if (cl && cl.vehiculId !== vehiculIds[0]) return;
+        }
+
+        let destinatie: 'DEPOZIT' | 'DIRECT_VEHICUL' = 'DEPOZIT';
+        let destinatieNume = 'Depozit Central Atelier';
+        let vehiculNumar: string | null = null;
+        let vehiculCategorie: string | null = null;
+        let depozitNume: string | null = null;
+
+        if (cl && cl.vehicul) {
+          destinatie = 'DIRECT_VEHICUL';
+          vehiculNumar = cl.vehicul.numarInmatriculare;
+          vehiculCategorie = cl.vehicul.categorieEnum;
+          destinatieNume = `Montat pe ${vehiculNumar} (${vehiculCategorie})`;
+          totalDirectVehiculeRON += vCuTVA;
+          totalDirectVehiculeFaraTVARON += vFaraTVA;
+        } else {
+          destinatie = 'DEPOZIT';
+          depozitNume = linkedArticol?.depozit?.nume || 'Depozit Central Atelier';
+          destinatieNume = `În Depozit: ${depozitNume}`;
+          totalInStocRON += vCuTVA;
+          totalInStocFaraTVARON += vFaraTVA;
+        }
+
+        // Mapare categorie
+        let catName = 'Alte Piese & Materiale';
+        let subName = 'Diverse';
+
+        if (linkedArticol && linkedArticol.categorie && linkedArticol.categorie.toUpperCase() !== 'PIESE_AUTO') {
+          catName = linkedArticol.categorie.trim();
+          if (catName.toLowerCase() === 'piese statie de sortare') catName = 'Piese Stație de Sortare';
+          subName = linkedArticol.subcategorie?.trim() || 'General';
+        } else {
+          const mapped = categorizeInvoiceItem(item.descrierePiesa, item.codArticolFurnizor, linkedArticol);
+          catName = mapped.categorie;
+          subName = mapped.subcategorie;
+        }
+
+        const um = item.unitateMasura || linkedArticol?.unitateMasura || 'buc';
 
         if (!categoriiAchizitiiMap[catName]) {
           categoriiAchizitiiMap[catName] = {
@@ -2143,7 +2266,7 @@ export class MentenantaService {
         const cObj = categoriiAchizitiiMap[catName];
         cObj.valoareTotalaRON += vCuTVA;
         cObj.valoareFaraTVARON += vFaraTVA;
-        cObj.cantitateTotala += 1;
+        cObj.cantitateTotala += cant;
         cObj.numarPozitii += 1;
         cObj.facturiSet.add(f.numarFactura);
         cObj.furnizoriSet[furnizor] = (cObj.furnizoriSet[furnizor] || 0) + vCuTVA;
@@ -2154,7 +2277,7 @@ export class MentenantaService {
             valoareTotalaRON: 0,
             valoareFaraTVARON: 0,
             cantitateTotala: 0,
-            unitateMasura: 'buc',
+            unitateMasura: um,
             numarPozitii: 0,
             articoleRecente: [],
           };
@@ -2162,109 +2285,35 @@ export class MentenantaService {
         const sObj = cObj.subcategoriiMap[subName];
         sObj.valoareTotalaRON += vCuTVA;
         sObj.valoareFaraTVARON += vFaraTVA;
-        sObj.cantitateTotala += 1;
+        sObj.cantitateTotala += cant;
         sObj.numarPozitii += 1;
         if (sObj.articoleRecente.length < 50) {
           sObj.articoleRecente.push({
-            id: f.id,
-            descriere: `Factura ${f.numarFactura} (${furnizor})`,
-            codArticol: '-',
+            id: item.id,
+            descriere: item.descrierePiesa,
+            codArticol: item.codArticolFurnizor || linkedArticol?.codArticol || '-',
             furnizor,
             numarFactura: f.numarFactura,
             dataFactura: f.dataFactura,
-            cantitate: 1,
-            unitateMasura: 'buc',
-            pretUnitar: vCuTVA,
+            cantitate: cant,
+            unitateMasura: um,
+            pretUnitar: pretUnit,
             valoareFaraTVA: vFaraTVA,
             valoareTotala: vCuTVA,
-            stare: f.stare,
+            stare: item.stare,
+            destinatie,
+            destinatieNume,
+            vehiculNumar,
+            vehiculCategorie,
+            depozitNume,
+            numarComanda: cl?.numarComanda || null,
           });
         }
 
         totalCategoriiRON += vCuTVA;
         totalCategoriiFaraTVARON += vFaraTVA;
         totalLiniiPozitii += 1;
-      } else {
-        items.forEach((item) => {
-          const cant = Number(item.cantitate || 1);
-          const pretUnit = Number(item.pretUnitar || 0);
-          let vFaraTVA = Number(item.valoareFaraTVA || 0);
-          if (vFaraTVA === 0 && pretUnit > 0) {
-            vFaraTVA = Number((cant * pretUnit).toFixed(2));
-          }
-          let vCuTVA = Number(item.valoareTVA ? (vFaraTVA + item.valoareTVA) : (vFaraTVA * 1.19));
-          vCuTVA = Number(vCuTVA.toFixed(2));
-
-          // Evităm maparea automată pe coduri generice de linie (ex: 27627746-1 = CIF-Linie)
-          const isGenericInvoiceLineCode = item.codArticolFurnizor && /^\d{6,10}-\d+$/.test(item.codArticolFurnizor.trim());
-          const linkedArticol = item.articolStocId
-            ? articoleStocMap.get(item.articolStocId)
-            : (item.codArticolFurnizor && !isGenericInvoiceLineCode)
-            ? articoleStocMap.get(item.codArticolFurnizor.toUpperCase().trim())
-            : null;
-          const mapped = categorizeInvoiceItem(item.descrierePiesa, item.codArticolFurnizor, linkedArticol);
-          const catName = mapped.categorie;
-          const subName = mapped.subcategorie;
-          const um = item.unitateMasura || mapped.unitateMasura || 'buc';
-
-          if (!categoriiAchizitiiMap[catName]) {
-            categoriiAchizitiiMap[catName] = {
-              categorie: catName,
-              valoareTotalaRON: 0,
-              valoareFaraTVARON: 0,
-              cantitateTotala: 0,
-              numarPozitii: 0,
-              facturiSet: new Set(),
-              furnizoriSet: {},
-              subcategoriiMap: {},
-            };
-          }
-          const cObj = categoriiAchizitiiMap[catName];
-          cObj.valoareTotalaRON += vCuTVA;
-          cObj.valoareFaraTVARON += vFaraTVA;
-          cObj.cantitateTotala += cant;
-          cObj.numarPozitii += 1;
-          cObj.facturiSet.add(f.numarFactura);
-          cObj.furnizoriSet[furnizor] = (cObj.furnizoriSet[furnizor] || 0) + vCuTVA;
-
-          if (!cObj.subcategoriiMap[subName]) {
-            cObj.subcategoriiMap[subName] = {
-              subcategorie: subName,
-              valoareTotalaRON: 0,
-              valoareFaraTVARON: 0,
-              cantitateTotala: 0,
-              unitateMasura: um,
-              numarPozitii: 0,
-              articoleRecente: [],
-            };
-          }
-          const sObj = cObj.subcategoriiMap[subName];
-          sObj.valoareTotalaRON += vCuTVA;
-          sObj.valoareFaraTVARON += vFaraTVA;
-          sObj.cantitateTotala += cant;
-          sObj.numarPozitii += 1;
-          if (sObj.articoleRecente.length < 10) {
-            sObj.articoleRecente.push({
-              id: item.id,
-              descriere: item.descrierePiesa,
-              codArticol: item.codArticolFurnizor || linkedArticol?.codArticol || '-',
-              furnizor,
-              numarFactura: f.numarFactura,
-              dataFactura: f.dataFactura,
-              cantitate: cant,
-              unitateMasura: um,
-              pretUnitar: pretUnit,
-              valoareFaraTVA: vFaraTVA,
-              valoareTotala: vCuTVA,
-              stare: item.stare,
-            });
-          }
-
-          totalCategoriiRON += vCuTVA;
-          totalCategoriiFaraTVARON += vFaraTVA;
-          totalLiniiPozitii += 1;
-        });
-      }
+      });
     });
 
     const achizitiiCategorii = Object.values(categoriiAchizitiiMap)
@@ -2282,11 +2331,11 @@ export class MentenantaService {
 
             return {
               subcategorie: sub.subcategorie,
-              valoareTotalaRON: subRON,
-              valoareFaraTVARON: subFaraTVARON,
-              cantitateTotala: Number(sub.cantitateTotala.toFixed(2)),
+              cantitateTotala: Number(sub.cantitateTotala.toFixed(1)),
               unitateMasura: sub.unitateMasura,
               numarPozitii: sub.numarPozitii,
+              valoareTotalaRON: subRON,
+              valoareFaraTVARON: subFaraTVARON,
               procentDinCategorie,
               procentDinTotal: procentSubDinTotal,
               articoleRecente: sub.articoleRecente,
@@ -2303,12 +2352,12 @@ export class MentenantaService {
           categorie: cat.categorie,
           valoareTotalaRON: catRON,
           valoareFaraTVARON: catFaraTVARON,
-          cantitateTotala: Number(cat.cantitateTotala.toFixed(2)),
+          cantitateTotala: Number(cat.cantitateTotala.toFixed(1)),
           numarPozitii: cat.numarPozitii,
           numarFacturi: cat.facturiSet.size,
           procentDinTotal,
-          subcategorii,
           furnizoriPrincipali,
+          subcategorii,
         };
       })
       .sort((a, b) => b.valoareTotalaRON - a.valoareTotalaRON);
@@ -2399,6 +2448,10 @@ export class MentenantaService {
         totalAchizitiiEFacturaRON: Number(totalGeneralFacturiRON.toFixed(2)),
         totalAchizitiiCategoriiRON: Number(totalCategoriiRON.toFixed(2)),
         totalAchizitiiFaraTVARON: Number(totalCategoriiFaraTVARON.toFixed(2)),
+        totalInStocRON: Number(totalInStocRON.toFixed(2)),
+        totalInStocFaraTVARON: Number(totalInStocFaraTVARON.toFixed(2)),
+        totalDirectVehiculeRON: Number(totalDirectVehiculeRON.toFixed(2)),
+        totalDirectVehiculeFaraTVARON: Number(totalDirectVehiculeFaraTVARON.toFixed(2)),
         numarCategoriiAchizitii: achizitiiCategorii.length,
         numarSubcategoriiAchizitii: numarSubcategorii,
         numarPozitiiFacturate: totalLiniiPozitii,
