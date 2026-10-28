@@ -194,6 +194,14 @@ export class StocuriGarantiiService {
         ],
       },
       {
+        nume: 'Alte',
+        descriere: 'Alte piese, componente și materiale diverse',
+        stocMinimImplicit: 1,
+        subcategorii: [
+          'Alte piese',
+        ],
+      },
+      {
         nume: 'Anvelope',
         descriere: 'Anvelope camioane, semiremorci și utilaje grele',
         stocMinimImplicit: 4,

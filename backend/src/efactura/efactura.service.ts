@@ -1132,7 +1132,7 @@ export class EFacturaService implements OnModuleInit {
     }
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
-    const catName = data.categorieNume || 'Piese Mecanice & Direcție';
+    const catName = data.categorieNume || 'Alte';
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
 
     const isFluid =
@@ -1218,7 +1218,7 @@ export class EFacturaService implements OnModuleInit {
           codArticol,
           denumire: item.descrierePiesa,
           categorie: catName,
-          subcategorie: data.subcategorieNume || null,
+          subcategorie: data.subcategorieNume || (catName.trim().toLowerCase() === 'alte' ? 'Alte piese' : null),
           stocCurent: effectiveCantitate,
           stocMinim: defaultMin,
           pretUnitar: effectivePretUnitar,
@@ -1768,7 +1768,7 @@ export class EFacturaService implements OnModuleInit {
           furnizor: furnizorNume,
           numarFactura: numarFactura,
           serieUnicaPiesa: data.serieUnica?.trim() || null,
-          categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+          categorie: data.categorie || 'Alte',
           subcategorie: data.subcategorie || null,
           observatiiIntern: data.observatiiIntern || null,
         },
@@ -1815,7 +1815,7 @@ export class EFacturaService implements OnModuleInit {
               furnizor: furnizorNume,
               numarFactura: numarFactura,
               serieUnicaPiesa: data.serieUnica?.trim() || null,
-              categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+              categorie: data.categorie || 'Alte',
               subcategorie: data.subcategorie || null,
               observatiiIntern: data.observatiiIntern || null,
             },
@@ -1899,7 +1899,7 @@ export class EFacturaService implements OnModuleInit {
                   furnizor: furnizorNume,
                   numarFactura: numarFactura,
                   serieUnicaPiesa: data.serieUnica?.trim() || null,
-                  categorie: data.categorie || 'Piese Mecanice & Mentenanță',
+                  categorie: data.categorie || 'Alte',
                   subcategorie: data.subcategorie || null,
                   observatiiIntern: data.observatiiIntern || null,
                 },
@@ -1925,7 +1925,7 @@ export class EFacturaService implements OnModuleInit {
             data: {
               codArticol: item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`,
               denumire: item.descrierePiesa,
-              categorie: data.categorie || 'Piese Mecanice & Direcție',
+              categorie: data.categorie || 'Alte',
               subcategorie: data.subcategorie || null,
               observatiiIntern: data.observatiiIntern || null,
               depozitId: primDepozit?.id || 'depozit-default',

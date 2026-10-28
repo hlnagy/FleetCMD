@@ -114,10 +114,18 @@ function findDynamicSubcat(desc: string, subcats: any[]): string {
 }
 
 function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []): CategoryResolution {
+  // Găsim categoria "Alte" din DB (sau fallback 'Alte') și subcategoria "Alte piese"
+  const alteCat = categorii.find(c => (c.nume || '').trim().toLowerCase() === 'alte')
+    || categorii.find(c => /alte/i.test(c.nume || ''));
+  const alteSub = alteCat?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume
+    || (alteCat?.subcategorii && alteCat.subcategorii.length > 0 ? alteCat.subcategorii[0].nume : 'Alte piese');
+  const defaultCatNume = alteCat?.nume || 'Alte';
+  const defaultSubNume = alteSub || 'Alte piese';
+
   if (!descriere || !Array.isArray(categorii) || categorii.length === 0) {
     return {
-      categorie: categorii[0]?.nume || 'Alte',
-      subcategorie: '',
+      categorie: defaultCatNume,
+      subcategorie: defaultSubNume,
       confidence: 'LOW',
     };
   }
@@ -214,8 +222,9 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     else if (/perna|bucsa|bucse/i.test(desc)) matchedSub = subcats.find(s => /buc|pern/i.test(s.nume))?.nume || '';
     else matchedSub = subcats[0]?.nume || '';
   } else {
-    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE
+    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE (excluzând categoria 'Alte' pentru a evita potriviri false)
     for (const c of categorii) {
+      if ((c.nume || '').trim().toLowerCase() === 'alte') continue;
       const cSubcats = c.subcategorii || [];
       const dynSub = findDynamicSubcat(desc, cSubcats);
       if (dynSub) {
@@ -227,9 +236,18 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     }
   }
 
+  // DACĂ PROGRAMUL NU A RECUNOSCUT CATEGORIA (confidence LOW) -> IMPLICIT "Alte" & "Alte piese"
+  if (!matchedCat) {
+    return {
+      categorie: defaultCatNume,
+      subcategorie: defaultSubNume,
+      confidence: 'LOW',
+    };
+  }
+
   return {
-    categorie: matchedCat?.nume || categorii[0]?.nume || 'Alte',
-    subcategorie: matchedSub,
+    categorie: matchedCat.nume,
+    subcategorie: matchedSub || (matchedCat.nume.trim().toLowerCase() === 'alte' ? defaultSubNume : ''),
     confidence,
   };
 }
@@ -402,8 +420,8 @@ function EFacturaContent() {
   const [isImportSerializat, setIsImportSerializat] = useState(false);
   const [seriiList, setSeriiList] = useState<Array<{ id: number; serie: string; dot: string }>>([]);
   const [targetDepozitId, setTargetDepozitId] = useState('');
-  const [targetCategorie, setTargetCategorie] = useState('PIESE_AUTO');
-  const [targetSubcategorie, setTargetSubcategorie] = useState('');
+  const [targetCategorie, setTargetCategorie] = useState('Alte');
+  const [targetSubcategorie, setTargetSubcategorie] = useState('Alte piese');
   const [codArticolCalculat, setCodArticolCalculat] = useState('');
   const [pretUnitarImport, setPretUnitarImport] = useState<number>(0);
   const [isGarantieGratuita, setIsGarantieGratuita] = useState<boolean>(false);
@@ -431,8 +449,8 @@ function EFacturaContent() {
   const [dataComandaDirect, setDataComandaDirect] = useState(new Date().toISOString().slice(0, 10));
   const [selectedMecaniciList, setSelectedMecaniciList] = useState<string[]>([]);
   const [valoareContorDirectText, setValoareContorDirectText] = useState<string>('');
-  const [targetCategorieDirect, setTargetCategorieDirect] = useState('Piese Mecanice & Direcție');
-  const [targetSubcategorieDirect, setTargetSubcategorieDirect] = useState('');
+  const [targetCategorieDirect, setTargetCategorieDirect] = useState('Alte');
+  const [targetSubcategorieDirect, setTargetSubcategorieDirect] = useState('Alte piese');
   const [observatiiInternPiesa, setObservatiiInternPiesa] = useState('');
   const [cantitateDepozitImport, setCantitateDepozitImport] = useState<number>(1);
   const [observatiiComanda, setObservatiiComanda] = useState('');
@@ -1255,7 +1273,7 @@ function EFacturaContent() {
           forceNew: modAlocareMasina === 'NOUA' ? forceNewComanda : false,
           cantitate: cantitateAlocataNum,
           pretUnitar: isGarantieGratuita ? 0 : Number(pretUnitarImport),
-          categorie: targetCategorieDirect || 'Piese Mecanice & Mentenanță',
+          categorie: targetCategorieDirect || 'Alte',
           subcategorie: targetSubcategorieDirect || undefined,
           observatiiIntern: observatiiInternPiesa.trim() || undefined,
           areGarantie: areGarantieProducator || isImportSerializat,
@@ -3429,8 +3447,15 @@ function EFacturaContent() {
                   <select
                     value={targetCategorie}
                     onChange={(e) => {
-                      setTargetCategorie(e.target.value);
-                      setTargetSubcategorie('');
+                      const val = e.target.value;
+                      setTargetCategorie(val);
+                      const catObj = categoriiStoc.find((c: any) => c.nume === val || c.id === val);
+                      if (val.trim().toLowerCase() === 'alte') {
+                        const alteSub = catObj?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume || 'Alte piese';
+                        setTargetSubcategorie(alteSub);
+                      } else {
+                        setTargetSubcategorie('');
+                      }
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
@@ -3498,7 +3523,10 @@ function EFacturaContent() {
                     <option value="">-- Fără Subcategorie (Doar Categoria Principală) --</option>
                     {(() => {
                       const currentCatObj = categoriiStoc.find((c: any) => c.nume === targetCategorie || c.id === targetCategorie);
-                      const availableSubcats = currentCatObj?.subcategorii || [];
+                      let availableSubcats = [...(currentCatObj?.subcategorii || [])];
+                      if (targetCategorie.trim().toLowerCase() === 'alte' && !availableSubcats.some((s: any) => (s.nume || '').trim().toLowerCase() === 'alte piese')) {
+                        availableSubcats.unshift({ id: 'alte-piese-opt', nume: 'Alte piese' });
+                      }
                       return availableSubcats.map((sub: any) => (
                         <option key={sub.id || sub.nume} value={sub.nume}>
                            {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
@@ -4144,8 +4172,15 @@ function EFacturaContent() {
                     <select
                       value={targetCategorieDirect}
                       onChange={(e) => {
-                        setTargetCategorieDirect(e.target.value);
-                        setTargetSubcategorieDirect('');
+                        const val = e.target.value;
+                        setTargetCategorieDirect(val);
+                        const catObj = categoriiStoc.find((c: any) => c.nume === val || c.id === val);
+                        if (val.trim().toLowerCase() === 'alte') {
+                          const alteSub = catObj?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume || 'Alte piese';
+                          setTargetSubcategorieDirect(alteSub);
+                        } else {
+                          setTargetSubcategorieDirect('');
+                        }
                       }}
                       className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs"
                     >
@@ -4165,7 +4200,10 @@ function EFacturaContent() {
                       <option value="">-- Fără Subcategorie --</option>
                       {(() => {
                         const currentCatObj = categoriiStoc.find((c: any) => c.nume === targetCategorieDirect || c.id === targetCategorieDirect);
-                        const availableSubcats = currentCatObj?.subcategorii || [];
+                        let availableSubcats = [...(currentCatObj?.subcategorii || [])];
+                        if (targetCategorieDirect.trim().toLowerCase() === 'alte' && !availableSubcats.some((s: any) => (s.nume || '').trim().toLowerCase() === 'alte piese')) {
+                          availableSubcats.unshift({ id: 'alte-piese-opt-dir', nume: 'Alte piese' });
+                        }
                         return availableSubcats.map((sub: any) => (
                           <option key={sub.id || sub.nume} value={sub.nume}>
                             {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
