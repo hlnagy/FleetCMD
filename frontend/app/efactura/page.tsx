@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
-import { showConfirm } from '@/lib/swal';
+import { showConfirm, showToast } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -346,6 +346,10 @@ function EFacturaContent() {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   // MODALS
+  // PAGINARE EFICIENTĂ PENTRU TABEL FACTURI
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
   const [showFurnizoriExclusiModal, setShowFurnizoriExclusiModal] = useState(false);
   const [selectedFactura, setSelectedFacturaRaw] = useState<any>(() => efacturaCache.selectedFactura || null);
   const setSelectedFactura = (val: any) => {
@@ -1208,22 +1212,30 @@ function EFacturaContent() {
       /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
       /anvelop|cauciuc|pneu/i.test(targetCategorieDirect || '');
     if (isItemTire) {
-      alert(
-        '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
-        'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul: Anvelope & Siguranță (Harta Axe).'
+      showToast(
+        'Anvelopele se montează exclusiv din meniul Anvelope & Siguranță!',
+        'warning',
+        3500
       );
       return;
     }
 
     if (!selectedVehiculId) {
-      alert('Vă rugăm să selectați un vehicul din flotă.');
+      showToast('Vă rugăm să selectați un vehicul din flotă.', 'warning');
       return;
     }
 
     if (modAlocareMasina === 'EXISTENTA' && !selectedComandaLucruId) {
-      alert('Vă rugăm să selectați o comandă de lucru deschisă pentru acest vehicul.');
+      showToast('Vă rugăm să selectați o comandă de lucru deschisă.', 'warning');
       return;
     }
+
+    const updatedItemId = importingItem.id;
+    const targetFacturaId = selectedFactura?.id || importingItem.facturaId;
+    const cantitateAlocataNum = Number(cantitateAlocata || 1);
+    const cantitateProcesataVeche = Number(importingItem.cantitateProcesata || 0);
+    const esteComplet = (cantitateProcesataVeche + cantitateAlocataNum) >= (importingItem.cantitate - 0.0001);
+    const newStareItem = esteComplet ? 'IMPORTAT' : 'NEPROCESAT';
 
     setSavingAlocareDirecta(true);
     try {
@@ -1241,7 +1253,7 @@ function EFacturaContent() {
           observatii: observatiiComanda,
           autoFinalize: autoFinalizeComanda,
           forceNew: modAlocareMasina === 'NOUA' ? forceNewComanda : false,
-          cantitate: Number(cantitateAlocata || 1),
+          cantitate: cantitateAlocataNum,
           pretUnitar: isGarantieGratuita ? 0 : Number(pretUnitarImport),
           categorie: targetCategorieDirect || 'Piese Mecanice & Mentenanță',
           subcategorie: targetSubcategorieDirect || undefined,
@@ -1255,25 +1267,58 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.mesaj || 'Piesa a fost alocată cu succes pe comanda de lucru!');
+        showToast(data.mesaj || 'Piesa a fost alocată cu succes pe comanda de lucru!', 'success');
         setImportingItem(null);
-        fetchData();
 
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
         if (selectedFactura) {
-          const updatedFact = await (await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`)).json();
-          const hasRemainingUnprocessed = updatedFact.articole?.some((a: any) => a.stare === 'NEPROCESAT');
-          if (!hasRemainingUnprocessed) {
+          const newArticole = (selectedFactura.articole || []).map((a: any) =>
+            a.id === updatedItemId
+              ? {
+                  ...a,
+                  stare: newStareItem,
+                  cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
+                }
+              : a
+          );
+          const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+          if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura(updatedFact);
+            setSelectedFactura({ ...selectedFactura, articole: newArticole });
           }
         }
+
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (f.id !== targetFacturaId) return f;
+            const newArticole = (f.articole || []).map((a: any) =>
+              a.id === updatedItemId
+                ? {
+                    ...a,
+                    stare: newStareItem,
+                    cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
+                  }
+                : a
+            );
+            const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+            return {
+              ...f,
+              stare: hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL',
+              articole: newArticole,
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+
+        fetchData(true);
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message || 'Nu s-a putut aloca piesa pe mașină.'}`);
+        showToast(`Eroare: ${err.message || 'Nu s-a putut aloca piesa pe mașină.'}`, 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la alocarea piesei pe mașină.');
+      showToast('Eroare la alocarea piesei pe mașină.', 'error', 4000);
     } finally {
       setSavingAlocareDirecta(false);
     }
@@ -1295,6 +1340,12 @@ function EFacturaContent() {
       const cantitateReala = isConversie
         ? Number((cantitateFacturaDeImportat * Number(volumAmbalaj)).toFixed(2))
         : cantitateFacturaDeImportat;
+
+      const updatedItemId = importingItem.id;
+      const targetFacturaId = selectedFactura?.id || importingItem.facturaId;
+      const cantitateProcesataVeche = Number(importingItem.cantitateProcesata || 0);
+      const esteComplet = (cantitateProcesataVeche + cantitateFacturaDeImportat) >= (importingItem.cantitate - 0.0001);
+      const newStareItem = esteComplet ? 'IMPORTAT' : 'NEPROCESAT';
 
       const res = await fetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/importa`, {
         method: 'POST',
@@ -1322,25 +1373,58 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.mesaj || 'Articol importat cu succes în stoc!');
+        showToast(data.mesaj || 'Articol importat cu succes în stoc!', 'success');
         setImportingItem(null);
-        fetchData();
 
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
         if (selectedFactura) {
-          const updatedFact = await (await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`)).json();
-          const hasRemainingUnprocessed = updatedFact.articole?.some((a: any) => a.stare === 'NEPROCESAT');
-          if (!hasRemainingUnprocessed) {
+          const newArticole = (selectedFactura.articole || []).map((a: any) =>
+            a.id === updatedItemId
+              ? {
+                  ...a,
+                  stare: data.item?.stare || newStareItem,
+                  cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
+                }
+              : a
+          );
+          const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+          if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura(updatedFact);
+            setSelectedFactura({ ...selectedFactura, articole: newArticole });
           }
         }
+
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (f.id !== targetFacturaId) return f;
+            const newArticole = (f.articole || []).map((a: any) =>
+              a.id === updatedItemId
+                ? {
+                    ...a,
+                    stare: data.item?.stare || newStareItem,
+                    cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
+                  }
+                : a
+            );
+            const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+            return {
+              ...f,
+              stare: hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL',
+              articole: newArticole,
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+
+        fetchData(true);
       } else {
         const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        showToast(`Eroare: ${err.message}`, 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la importul articolului în stoc.');
+      showToast('Eroare la importul articolului în stoc.', 'error', 4000);
     }
   };
 
@@ -1355,25 +1439,51 @@ function EFacturaContent() {
     if (!confirmed) return;
 
     try {
+      const targetFacturaId = selectedFactura?.id;
       const res = await fetch(`${API_BASE_URL}/efactura/items/${itemId}/elimina`, {
         method: 'POST',
       });
 
       if (res.ok) {
-        alert(`Linia "${descriere}" a fost marcată ca Exclusă / Servicii.`);
-        fetchData();
+        showToast(`Linia "${descriere}" a fost marcată ca Exclusă / Servicii.`, 'success');
+
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
         if (selectedFactura) {
-          const updatedFact = await (await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`)).json();
-          const hasRemainingUnprocessed = updatedFact.articole?.some((a: any) => a.stare === 'NEPROCESAT');
-          if (!hasRemainingUnprocessed) {
+          const newArticole = (selectedFactura.articole || []).map((a: any) =>
+            a.id === itemId ? { ...a, stare: 'ELIMINAT' } : a
+          );
+          const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+          if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura(updatedFact);
+            setSelectedFactura({ ...selectedFactura, articole: newArticole });
           }
         }
+
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (f.id !== targetFacturaId) return f;
+            const newArticole = (f.articole || []).map((a: any) =>
+              a.id === itemId ? { ...a, stare: 'ELIMINAT' } : a
+            );
+            const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+            const hasImportat = newArticole.some((a: any) => a.stare === 'IMPORTAT');
+            return {
+              ...f,
+              stare: hasRemaining ? (hasImportat ? 'IMPORTAT_PARȚIAL' : 'NEPROCESAT') : (hasImportat ? 'IMPORTAT_TOTAL' : 'ELIMINAT'),
+              articole: newArticole,
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+
+        fetchData(true);
+      } else {
+        showToast('Eroare la eliminarea liniei.', 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la eliminarea liniei.');
+      showToast('Eroare la eliminarea liniei.', 'error', 4000);
     }
   };
 
@@ -1394,6 +1504,25 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
+        showToast(data.mesaj || `Factura ${numar} a fost exclusă complet.`, 'success');
+
+        if (selectedFactura?.id === facturaId) {
+          setSelectedFactura(null);
+        }
+
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms) - factura dispare imediat din tabel
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (f.id !== facturaId) return f;
+            return {
+              ...f,
+              stare: 'ELIMINAT',
+              articole: (f.articole || []).map((a: any) => ({ ...a, stare: 'ELIMINAT' })),
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
 
         // Găsim CUI-ul furnizorului pentru opțiunea de excludere automată permanentă
         const fact = facturi.find((f) => f.id === facturaId);
@@ -1424,20 +1553,16 @@ function EFacturaContent() {
           }
         }
 
-        alert(data.mesaj || `Factura ${numar} a fost exclusă complet.`);
-        fetchData();
-        if (selectedFactura?.id === facturaId) {
-          setSelectedFactura(null);
-        }
+        fetchData(true);
       } else {
-        alert('Eroare la excluderea facturii.');
+        showToast('Eroare la excluderea facturii.', 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la procesarea excluderii facturii.');
+      showToast('Eroare la procesarea excluderii facturii.', 'error', 4000);
     }
   };
 
-  // SORT HANDLER (Toggle ASC/DESC or switch sort column)
+    // SORT HANDLER (Toggle ASC/DESC or switch sort column)
   const handleSort = (key: 'furnizor' | 'numarFactura' | 'dataFactura' | 'valoareTotala') => {
     if (sortKey === key) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -1530,6 +1655,17 @@ function EFacturaContent() {
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
+  // RESET PAGINARE LA FILTRARE SAU SORTARE
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, stareFilter, lunaFilter, sortKey, sortDirection]);
+
+  const totalPages = Math.ceil(facturiFiltrate.length / pageSize) || 1;
+  const paginatedFacturi = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return facturiFiltrate.slice(start, start + pageSize);
+  }, [facturiFiltrate, currentPage, pageSize]);
+
   // MULTI-SELECTION HELPERS FOR INVOICES
   const eligibleFacturi = facturiFiltrate.filter((f) => {
     const s = getStareFactura(f);
@@ -1554,15 +1690,17 @@ function EFacturaContent() {
   const handleBulkEliminaFacturi = async () => {
     if (selectedFacturaIds.length === 0) return;
 
+    const count = selectedFacturaIds.length;
     const confirmed = await showConfirm(
       'Exclude Facturile Selectate (Excludere în Masă)',
-      `Sigur doriți să excludeți cele ${selectedFacturaIds.length} facturi selectate?\n\nToate articolele acestor facturi vor fi marcate ca Servicii / Cheltuieli operaționale și nu vor fi introduse în stoc.`,
-      `Da, exclude ${selectedFacturaIds.length} facturi`,
+      `Sigur doriți să excludeți cele ${count} facturi selectate?\n\nToate articolele acestor facturi vor fi marcate ca Servicii / Cheltuieli operaționale și nu vor fi introduse în stoc.`,
+      `Da, exclude ${count} facturi`,
       'Anulează'
     );
     if (!confirmed) return;
 
     try {
+      const idsSet = new Set(selectedFacturaIds);
       const res = await fetch(`${API_BASE_URL}/efactura/facturi/bulk-elimina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1571,14 +1709,29 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.mesaj || `${selectedFacturaIds.length} facturi au fost excluse.`);
+        showToast(data.mesaj || `${count} facturi au fost excluse.`, 'success');
         setSelectedFacturaIds([]);
-        fetchData();
+
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (!idsSet.has(f.id)) return f;
+            return {
+              ...f,
+              stare: 'ELIMINAT',
+              articole: (f.articole || []).map((a: any) => ({ ...a, stare: 'ELIMINAT' })),
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+
+        fetchData(true);
       } else {
-        alert('Eroare la excluderea în masă a facturilor.');
+        showToast('Eroare la excluderea în masă a facturilor.', 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la procesarea excluderii în masă.');
+      showToast('Eroare la procesarea excluderii în masă.', 'error', 4000);
     }
   };
 
@@ -1605,15 +1758,17 @@ function EFacturaContent() {
   const handleBulkEliminaItems = async () => {
     if (selectedItemIds.length === 0) return;
 
+    const count = selectedItemIds.length;
     const confirmed = await showConfirm(
       'Exclude Liniile Selectate (Excludere în Masă)',
-      `Sigur doriți să excludeți cele ${selectedItemIds.length} linii selectate?\n\nAcestea vor fi marcate ca Servicii / Cheltuieli operaționale și nu vor fi adăugate în stoc.`,
-      `Da, exclude ${selectedItemIds.length} linii`,
+      `Sigur doriți să excludeți cele ${count} linii selectate?\n\nAcestea vor fi marcate ca Servicii / Cheltuieli operaționale și nu vor fi adăugate în stoc.`,
+      `Da, exclude ${count} linii`,
       'Anulează'
     );
     if (!confirmed) return;
 
     try {
+      const idsSet = new Set(selectedItemIds);
       const res = await fetch(`${API_BASE_URL}/efactura/items/bulk-elimina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1622,27 +1777,50 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.mesaj || `${selectedItemIds.length} linii au fost excluse.`);
+        showToast(data.mesaj || `${count} linii au fost excluse.`, 'success');
         setSelectedItemIds([]);
-        fetchData();
+
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
         if (selectedFactura) {
-          const updatedFact = await (await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`)).json();
-          const hasRemainingUnprocessed = updatedFact.articole?.some((a: any) => a.stare === 'NEPROCESAT');
-          if (!hasRemainingUnprocessed) {
+          const newArticole = (selectedFactura.articole || []).map((a: any) =>
+            idsSet.has(a.id) ? { ...a, stare: 'ELIMINAT' } : a
+          );
+          const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+          if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura(updatedFact);
+            setSelectedFactura({ ...selectedFactura, articole: newArticole });
           }
         }
+
+        setFacturi((prev) => {
+          const updated = prev.map((f) => {
+            if (f.id !== selectedFactura?.id) return f;
+            const newArticole = (f.articole || []).map((a: any) =>
+              idsSet.has(a.id) ? { ...a, stare: 'ELIMINAT' } : a
+            );
+            const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
+            const hasImportat = newArticole.some((a: any) => a.stare === 'IMPORTAT');
+            return {
+              ...f,
+              stare: hasRemaining ? (hasImportat ? 'IMPORTAT_PARȚIAL' : 'NEPROCESAT') : (hasImportat ? 'IMPORTAT_TOTAL' : 'ELIMINAT'),
+              articole: newArticole,
+            };
+          });
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+
+        fetchData(true);
       } else {
-        alert('Eroare la excluderea în masă a liniilor.');
+        showToast('Eroare la excluderea în masă a liniilor.', 'error', 4000);
       }
     } catch (e) {
-      alert('Eroare la procesarea excluderii liniilor.');
+      showToast('Eroare la procesarea excluderii liniilor.', 'error', 4000);
     }
   };
 
-  const totalFacturiValoare = facturi.reduce((acc, f) => acc + (f.valoareTotala || 0), 0);
+    const totalFacturiValoare = facturi.reduce((acc, f) => acc + (f.valoareTotala || 0), 0);
   const facturiNeprocesateCount = facturi.filter((f) => {
     const s = getStareFactura(f);
     return s === 'NEPROCESAT' || s === 'IMPORTAT_PARȚIAL';
@@ -2123,7 +2301,7 @@ function EFacturaContent() {
             </thead>
             <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
               {facturiFiltrate.length > 0 ? (
-                facturiFiltrate.map((f, index) => (
+                paginatedFacturi.map((f, index) => (
                   <tr
                     key={f.id}
                     className={`${index % 2 === 1 ? 'bg-slate-50/90 dark:bg-[#142232]' : 'bg-white dark:bg-[#111D28]'} hover:bg-sapphire-50/80 dark:hover:bg-[#1A2D40] transition ${selectedFacturaIds.includes(f.id) ? '!bg-amber-50/80 dark:!bg-amber-950/40' : ''}`}
@@ -2212,6 +2390,67 @@ function EFacturaContent() {
               )}
             </tbody>
           </table>
+
+          {/* BARA PAGINARE OPTIMIZATĂ PENTRU PERFORMANȚĂ & VITEZĂ */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-white border-t border-morning-200 text-xs select-none">
+              <div className="text-sage-600 font-medium">
+                Afișate <span className="font-bold text-sapphire-900 font-mono">{(currentPage - 1) * pageSize + 1}</span> - <span className="font-bold text-sapphire-900 font-mono">{Math.min(currentPage * pageSize, facturiFiltrate.length)}</span> din <span className="font-bold text-sapphire-900 font-mono">{facturiFiltrate.length}</span> facturi
+              </div>
+              <div className="flex items-center space-x-2">
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1 bg-morning-100 border border-morning-300 rounded-lg text-xs font-bold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-sapphire-500"
+                >
+                  <option value={25}>25 pe pagină</option>
+                  <option value={50}>50 pe pagină</option>
+                  <option value={100}>100 pe pagină</option>
+                  <option value={200}>200 pe pagină</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(1)}
+                  className="px-2.5 py-1 rounded-lg border border-morning-300 bg-white hover:bg-morning-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition"
+                  title="Prima pagină"
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 rounded-lg border border-morning-300 bg-white hover:bg-morning-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition"
+                >
+                  Anterior
+                </button>
+                <span className="px-2.5 font-bold text-sapphire-900">
+                  Pagina <span className="font-mono text-sapphire-700">{currentPage}</span> din <span className="font-mono">{totalPages}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1 rounded-lg border border-morning-300 bg-white hover:bg-morning-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition"
+                >
+                  Următor
+                </button>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                  className="px-2.5 py-1 rounded-lg border border-morning-300 bg-white hover:bg-morning-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold transition"
+                  title="Ultima pagină"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2241,6 +2480,29 @@ function EFacturaContent() {
                 >
                   <FileText className="w-4 h-4 text-white" />
                   <span>Deschide Factură PDF (SPV)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!showRawXml && selectedFactura && !selectedFactura.xmlRawContent) {
+                      try {
+                        const res = await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`);
+                        if (res.ok) {
+                          const full = await res.json();
+                          setSelectedFactura({ ...selectedFactura, xmlRawContent: full.xmlRawContent });
+                        }
+                      } catch (e) {
+                        console.error('XML fetch error:', e);
+                      }
+                    }
+                    setShowRawXml(!showRawXml);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 text-slate-700 font-bold text-xs flex items-center space-x-1 border border-morning-300 transition cursor-pointer"
+                  title="Vizualizează conținutul brut UBL 2.1 XML"
+                >
+                  <Code className="w-4 h-4 text-slate-500" />
+                  <span>{showRawXml ? 'Ascunde XML' : 'Arată XML Brut'}</span>
                 </button>
 
                 <button onClick={() => { setSelectedFactura(null); setShowRawXml(false); }} className="text-sage-500 hover:text-sapphire-900">

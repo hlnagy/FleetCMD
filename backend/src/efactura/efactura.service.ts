@@ -992,7 +992,22 @@ export class EFacturaService implements OnModuleInit {
 
     return this.prisma.eFacturaFactura.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        idDescarcare: true,
+        numarInregistrare: true,
+        cifVanzator: true,
+        numeVanzator: true,
+        cifCumparator: true,
+        numarFactura: true,
+        dataFactura: true,
+        dataMesaj: true,
+        valoareTotala: true,
+        moneda: true,
+        tipFactura: true,
+        stare: true,
+        createdAt: true,
+        updatedAt: true,
         articole: true,
       },
       orderBy: { dataFactura: 'desc' },

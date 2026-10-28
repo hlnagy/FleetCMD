@@ -84,6 +84,37 @@ export const showWarning = async (title: string, htmlOrText?: string) => {
 /**
  * Dialog de Confirmare (Da / Nu) Centrat pe Ecran
  */
+/**
+ * Notificare Toast Non-Blocantă (Top-Right / Auto-Dismiss)
+ */
+export const showToast = async (
+  title: string,
+  icon: 'success' | 'error' | 'warning' | 'info' = 'success',
+  timer = 2500
+) => {
+  if (typeof window === 'undefined') return;
+  const Swal = (await import('sweetalert2')).default;
+  const Toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.onmouseenter = Swal.stopTimer;
+      toast.onmouseleave = Swal.resumeTimer;
+    },
+    customClass: {
+      popup: 'pleasant-card rounded-xl px-4 py-3 shadow-xl border border-morning-200 text-sapphire-900 text-xs font-bold z-[999999]',
+      title: 'text-xs md:text-sm font-bold text-sapphire-900',
+    },
+  });
+  return Toast.fire({
+    icon,
+    title,
+  });
+};
+
 export const showConfirm = async (
   title: string,
   text: string,
