@@ -252,6 +252,32 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
   };
 }
 
+async function extractApiErrorMessage(res: Response, fallbackMsg: string): Promise<string> {
+  if (res.status === 401) {
+    return 'Sesiunea a expirat! Vă rugăm să vă autentificați din nou.';
+  }
+  if (res.status === 403) {
+    return 'Acces restricționat: nu aveți permisiunea necesară pentru această operațiune.';
+  }
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    return 'Serverul se inițializează sau nu a răspuns la timp. Vă rugăm să reîncercați în câteva secunde.';
+  }
+  try {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const err = await res.json();
+      const rawMsg = Array.isArray(err?.message) ? err.message.join(', ') : err?.message;
+      if (rawMsg) return String(rawMsg);
+    } else {
+      const text = await res.text();
+      if (text && text.length < 300) return text;
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return `${fallbackMsg} (HTTP ${res.status})`;
+}
+
 // Module-level persistent cache across tab switching
 interface EFacturaPersistentCache {
   facturi?: any[];
@@ -267,12 +293,13 @@ interface EFacturaPersistentCache {
   lunaFilter?: string;
   activeTab?: 'efactura' | 'manual' | 'istoric';
   lastFetchTime?: number;
+  lastToken?: string | null;
 }
 
 const efacturaCache: EFacturaPersistentCache = {};
 
 function EFacturaContent() {
-  const { user: authUser, isAdmin, authFetch } = useAuth();
+  const { user: authUser, token: authToken, isAdmin, authFetch } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
@@ -525,7 +552,7 @@ function EFacturaContent() {
         });
       }
 
-      const res = await fetch(`${API_BASE_URL}/efactura/upload`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ files: payloadFiles }),
@@ -536,8 +563,8 @@ function EFacturaContent() {
         alert(data.mesaj);
         fetchData();
       } else {
-        const err = await res.json();
-        alert(`Eroare la importul fișierelor: ${err.message || 'Eroare necunoscută'}`);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare necunoscută');
+        alert(`Eroare la importul fișierelor: ${errMsg}`);
       }
     } catch (e: any) {
       alert(`Eroare la încărcarea fișierelor: ${e.message}`);
@@ -555,11 +582,11 @@ function EFacturaContent() {
       }
 
       const [resConfig, resFact, resDep, resIntrari, resStoc] = await Promise.all([
-        fetch(`${API_BASE_URL}/efactura/config`),
-        fetch(`${API_BASE_URL}/efactura/facturi`),
-        fetch(`${API_BASE_URL}/stocuri-garantii/depozite`),
-        fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`),
-        fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`),
+        authFetch(`${API_BASE_URL}/efactura/config`),
+        authFetch(`${API_BASE_URL}/efactura/facturi`),
+        authFetch(`${API_BASE_URL}/stocuri-garantii/depozite`),
+        authFetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`),
+        authFetch(`${API_BASE_URL}/stocuri-garantii/stocuri`),
       ]);
 
       if (resConfig.ok) {
@@ -574,6 +601,10 @@ function EFacturaContent() {
         setFacturi(safeList);
         efacturaCache.facturi = safeList;
         efacturaCache.lastFetchTime = Date.now();
+        efacturaCache.lastToken = authToken || null;
+      } else if (resFact.status !== 401 && !silent) {
+        const errMsg = await extractApiErrorMessage(resFact, 'Nu s-a putut încărca lista de facturi.');
+        showToast(errMsg, 'error', 4000);
       }
 
       if (resDep.ok) {
@@ -601,7 +632,7 @@ function EFacturaContent() {
       // Încărcare categorii stoc cu retry
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
+          const resCat = await authFetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
           if (resCat.ok) {
             const cData = await resCat.json();
             const merged = [
@@ -643,7 +674,7 @@ function EFacturaContent() {
               console.error('Eroare polling status sync:', e);
             }
           }, 2000);
-        } else if (resConfig.ok && (await resConfig.clone().json())?.stareCronAuto) {
+        } else if (resConfig.ok && efacturaCache.config?.stareCronAuto) {
           // AUTO-SYNC INTELIGENT
           const cfg = efacturaCache.config;
           const lastSyncTime = cfg?.ultimulSyncSucces ? new Date(cfg.ultimulSyncSucces).getTime() : 0;
@@ -667,7 +698,7 @@ function EFacturaContent() {
   const fetchComenziDeschise = async () => {
     try {
       setLoadingComenziDeschise(true);
-      const res = await fetch(`${API_BASE_URL}/efactura/comenzi-deschise`);
+      const res = await authFetch(`${API_BASE_URL}/efactura/comenzi-deschise`);
       if (res.ok) {
         const data = await res.json();
         const deschise = Array.isArray(data.comenziDeschise) ? data.comenziDeschise : [];
@@ -702,7 +733,7 @@ function EFacturaContent() {
   const fetchFurnizoriExclusi = async () => {
     try {
       setLoadingFurnizoriExclusi(true);
-      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`);
+      const res = await authFetch(`${API_BASE_URL}/efactura/furnizori-exclusi`);
       if (res.ok) {
         const data = await res.json();
         setFurnizoriExclusiList(Array.isArray(data) ? data : []);
@@ -723,7 +754,7 @@ function EFacturaContent() {
 
     setSavingExclus(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -742,8 +773,8 @@ function EFacturaContent() {
         fetchFurnizoriExclusi();
         fetchData();
       } else {
-        const err = await res.json();
-        alert(`Eroare: ${err.message}`);
+        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut adăuga furnizorul.');
+        alert(`Eroare: ${errMsg}`);
       }
     } catch (e) {
       alert('Eroare de comunicare cu serverul.');
@@ -758,13 +789,16 @@ function EFacturaContent() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
         const data = await res.json();
         alert(data.mesaj || 'Regula a fost ștearsă.');
         fetchFurnizoriExclusi();
+      } else {
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la ștergerea regulii.');
+        alert(`Eroare: ${errMsg}`);
       }
     } catch (e) {
       alert('Eroare la ștergerea regulii.');
@@ -773,11 +807,14 @@ function EFacturaContent() {
 
   const handleToggleFurnizorExclus = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}/toggle`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/furnizori-exclusi/${id}/toggle`, {
         method: 'PATCH',
       });
       if (res.ok) {
         fetchFurnizoriExclusi();
+      } else {
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la actualizarea regulii.');
+        showToast(errMsg, 'error', 4000);
       }
     } catch (e) {
       console.error(e);
@@ -787,7 +824,7 @@ function EFacturaContent() {
   const handleManualBevetelez = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`, {
+      const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -824,8 +861,8 @@ function EFacturaContent() {
         setBevSerieUnica('');
         setBevAreGarantie(false);
       } else {
-        const err = await res.json();
-        alert(`Eroare la recepție: ${err.message || 'Eroare necunoscută'}`);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare necunoscută');
+        alert(`Eroare la recepție: ${errMsg}`);
       }
     } catch (e) {
       alert('Eroare la recepția mărfii.');
@@ -851,10 +888,15 @@ function EFacturaContent() {
     if (authUser?.rol === 'VIEWER') return;
     const now = Date.now();
     const hasCache = efacturaCache.facturi && efacturaCache.facturi.length > 0;
-    const isFresh = hasCache && (now - (efacturaCache.lastFetchTime || 0) < 60000);
+    const sameToken = efacturaCache.lastToken === (authToken || null);
+    const isFresh = hasCache && sameToken && (now - (efacturaCache.lastFetchTime || 0) < 60000);
+
+    if (!sameToken) {
+      setSelectedFactura(null);
+    }
 
     if (!isFresh) {
-      fetchData(Boolean(hasCache));
+      fetchData(Boolean(hasCache && sameToken));
     }
 
     if (typeof window !== 'undefined') {
@@ -893,7 +935,7 @@ function EFacturaContent() {
         }
       }
     }
-  }, [isAdmin, router]);
+  }, [isAdmin, authToken, router]);
 
   // FORCE SYNC HANDLER (MANUAL SYNCHRONIZATION WITH ANAF SPV)
   const handleForceSync = async (customZile?: number) => {
@@ -929,8 +971,8 @@ function EFacturaContent() {
           }
         }, 2000);
       } else {
-        const err = await res.json();
-        alert(`Eroare Sincronizare: ${err.message}`);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la sincronizarea ANAF.');
+        alert(`Eroare Sincronizare: ${errMsg}`);
         setSyncing(false);
       }
     } catch (e) {
@@ -1167,7 +1209,7 @@ function EFacturaContent() {
     if (!newCatNume.trim()) return;
     setSavingNewCat(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
+      const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nume: newCatNume.trim() }),
@@ -1181,8 +1223,8 @@ function EFacturaContent() {
         setNewCatNume('');
         await fetchData();
       } else {
-        const err = await res.json();
-        alert(`Eroare la crearea categoriei: ${err.message || 'Verificați datele'}`);
+        const errMsg = await extractApiErrorMessage(res, 'Verificați datele');
+        alert(`Eroare la crearea categoriei: ${errMsg}`);
       }
     } catch (e) {
       alert('Eroare la salvarea noii categorii.');
@@ -1196,7 +1238,7 @@ function EFacturaContent() {
     if (!newSubcatNume.trim()) return;
     setSavingNewSubcat(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/subcategorii`, {
+      const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/subcategorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1212,8 +1254,8 @@ function EFacturaContent() {
         setNewSubcatNume('');
         await fetchData();
       } else {
-        const err = await res.json();
-        alert(`Eroare la crearea subcategoriei: ${err.message || 'Verificați datele'}`);
+        const errMsg = await extractApiErrorMessage(res, 'Verificați datele');
+        alert(`Eroare la crearea subcategoriei: ${errMsg}`);
       }
     } catch (e) {
       alert('Eroare la salvarea noii subcategorii.');
@@ -1257,7 +1299,7 @@ function EFacturaContent() {
 
     setSavingAlocareDirecta(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/aloca-direct-masina`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/aloca-direct-masina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1332,8 +1374,8 @@ function EFacturaContent() {
 
         fetchData(true);
       } else {
-        const err = await res.json();
-        showToast(`Eroare: ${err.message || 'Nu s-a putut aloca piesa pe mașină.'}`, 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut aloca piesa pe mașină.');
+        showToast(`Eroare: ${errMsg}`, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la alocarea piesei pe mașină.', 'error', 4000);
@@ -1365,7 +1407,7 @@ function EFacturaContent() {
       const esteComplet = (cantitateProcesataVeche + cantitateFacturaDeImportat) >= (importingItem.cantitate - 0.0001);
       const newStareItem = esteComplet ? 'IMPORTAT' : 'NEPROCESAT';
 
-      const res = await fetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/importa`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/importa`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1438,8 +1480,8 @@ function EFacturaContent() {
 
         fetchData(true);
       } else {
-        const err = await res.json();
-        showToast(`Eroare: ${err.message}`, 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la importul articolului în stoc.');
+        showToast(`Eroare: ${errMsg}`, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la importul articolului în stoc.', 'error', 4000);
@@ -1458,7 +1500,7 @@ function EFacturaContent() {
 
     try {
       const targetFacturaId = selectedFactura?.id;
-      const res = await fetch(`${API_BASE_URL}/efactura/items/${itemId}/elimina`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/items/${itemId}/elimina`, {
         method: 'POST',
       });
 
@@ -1498,7 +1540,8 @@ function EFacturaContent() {
 
         fetchData(true);
       } else {
-        showToast('Eroare la eliminarea liniei.', 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la eliminarea liniei.');
+        showToast(errMsg, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la eliminarea liniei.', 'error', 4000);
@@ -1516,7 +1559,7 @@ function EFacturaContent() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/efactura/facturi/${facturaId}/elimina-tot`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/facturi/${facturaId}/elimina-tot`, {
         method: 'POST',
       });
 
@@ -1557,7 +1600,7 @@ function EFacturaContent() {
           );
 
           if (autoExclusConfirm) {
-            await fetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
+            const resExclus = await authFetch(`${API_BASE_URL}/efactura/furnizori-exclusi`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1567,13 +1610,18 @@ function EFacturaContent() {
                 aplicaRetroactiv: true,
               }),
             });
+            if (!resExclus.ok) {
+              const errExMsg = await extractApiErrorMessage(resExclus, 'Nu s-a putut adăuga regula de excludere automată.');
+              showToast(errExMsg, 'error', 5000);
+            }
             fetchFurnizoriExclusi();
           }
         }
 
         fetchData(true);
       } else {
-        showToast('Eroare la excluderea facturii.', 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la excluderea facturii.');
+        showToast(errMsg, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la procesarea excluderii facturii.', 'error', 4000);
@@ -1719,7 +1767,7 @@ function EFacturaContent() {
 
     try {
       const idsSet = new Set(selectedFacturaIds);
-      const res = await fetch(`${API_BASE_URL}/efactura/facturi/bulk-elimina`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/facturi/bulk-elimina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ facturaIds: selectedFacturaIds }),
@@ -1746,7 +1794,8 @@ function EFacturaContent() {
 
         fetchData(true);
       } else {
-        showToast('Eroare la excluderea în masă a facturilor.', 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la excluderea în masă a facturilor.');
+        showToast(errMsg, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la procesarea excluderii în masă.', 'error', 4000);
@@ -1787,7 +1836,7 @@ function EFacturaContent() {
 
     try {
       const idsSet = new Set(selectedItemIds);
-      const res = await fetch(`${API_BASE_URL}/efactura/items/bulk-elimina`, {
+      const res = await authFetch(`${API_BASE_URL}/efactura/items/bulk-elimina`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemIds: selectedItemIds }),
@@ -1831,7 +1880,8 @@ function EFacturaContent() {
 
         fetchData(true);
       } else {
-        showToast('Eroare la excluderea în masă a liniilor.', 'error', 4000);
+        const errMsg = await extractApiErrorMessage(res, 'Eroare la excluderea în masă a liniilor.');
+        showToast(errMsg, 'error', 5000);
       }
     } catch (e) {
       showToast('Eroare la procesarea excluderii liniilor.', 'error', 4000);
@@ -2505,10 +2555,13 @@ function EFacturaContent() {
                   onClick={async () => {
                     if (!showRawXml && selectedFactura && !selectedFactura.xmlRawContent) {
                       try {
-                        const res = await fetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`);
+                        const res = await authFetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}`);
                         if (res.ok) {
                           const full = await res.json();
                           setSelectedFactura({ ...selectedFactura, xmlRawContent: full.xmlRawContent });
+                        } else if (res.status !== 401) {
+                          const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut încărca XML-ul facturii.');
+                          showToast(errMsg, 'error', 4000);
                         }
                       } catch (e) {
                         console.error('XML fetch error:', e);

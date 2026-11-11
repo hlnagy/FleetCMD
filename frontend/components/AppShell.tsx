@@ -9,6 +9,7 @@ import { TabWorkspaceProvider } from '@/lib/TabWorkspaceContext';
 import { ShieldCheck } from 'lucide-react';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
 import FleetAIAssistant from '@/components/ai/FleetAIAssistant';
+import { API_BASE_URL } from '@/lib/api';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -16,21 +17,46 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    // Interceptor global pentru atașarea automată a token-ului de autorizare pe toate apelurile fetch
+    // Interceptor global pentru atașarea automată a token-ului de autorizare și detecția sesiunilor expirate (401)
     if (typeof window !== 'undefined' && !(window as any).__fleetFetchIntercepted) {
       (window as any).__fleetFetchIntercepted = true;
       const originalFetch = window.fetch;
       window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+        const urlStr =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+            ? input.toString()
+            : input?.url || '';
+        const isBackendRequest =
+          urlStr.startsWith(API_BASE_URL) ||
+          urlStr.includes('/api/backend') ||
+          urlStr.includes('localhost:3001') ||
+          urlStr.includes('127.0.0.1:3001') ||
+          urlStr.includes('fleetcmd.onrender.com');
+
         const token = localStorage.getItem('fleetcmd_token');
-        if (token) {
+        if (token && token !== 'local-token' && isBackendRequest) {
           init = init || {};
-          const headers = new Headers(init.headers || {});
+          const headers = new Headers(
+            init.headers || (input instanceof Request ? input.headers : undefined) || {}
+          );
           if (!headers.has('Authorization')) {
             headers.set('Authorization', `Bearer ${token}`);
           }
           init.headers = headers;
         }
-        return originalFetch(input, init);
+
+        const response = await originalFetch(input, init);
+        if (
+          response.status === 401 &&
+          isBackendRequest &&
+          !urlStr.includes('/auth/login') &&
+          localStorage.getItem('fleetcmd_token')
+        ) {
+          window.dispatchEvent(new Event('fleetcmd:unauthorized'));
+        }
+        return response;
       };
     }
   }, []);

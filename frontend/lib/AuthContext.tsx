@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from './api';
+import { showToast } from './swal';
 
 export type UserRole = 'ADMIN' | 'OPERATOR' | 'VIEWER';
 
@@ -26,10 +27,58 @@ interface AuthContextType {
   canEdit: (module?: string) => boolean;
   login: (identifier: string, parola: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
+  sessionExpiredMsg: string | null;
+  clearSessionExpiredMsg: () => void;
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
   updateCurrentUser: (data: Partial<User>) => void;
+}
+
+function parseJwtPayload(jwtToken: string): { exp?: number; iat?: number; sub?: string } | null {
+  try {
+    const parts = jwtToken.split('.');
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const jsonPayload = decodeURIComponent(
+      atob(padded)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenLocallyExpired(jwtToken: string | null): boolean {
+  if (!jwtToken || jwtToken === 'local-token') return true;
+  const payload = parseJwtPayload(jwtToken);
+  if (!payload) return true;
+
+  if (typeof window !== 'undefined') {
+    const storedExpiresAt = localStorage.getItem('fleetcmd_expires_at');
+    if (storedExpiresAt) {
+      const expMs = Number(storedExpiresAt);
+      if (!Number.isNaN(expMs) && expMs > 0) {
+        return Date.now() >= expMs;
+      }
+    }
+  }
+
+  if (typeof payload.exp === 'number') {
+    return payload.exp * 1000 <= Date.now();
+  }
+  return false;
+}
+
+function clearStoredSession() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('fleetcmd_user');
+  localStorage.removeItem('fleetcmd_token');
+  localStorage.removeItem('fleetcmd_expires_at');
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,37 +99,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [sessionExpiredMsg, setSessionExpiredMsg] = useState<string | null>(null);
+
+  const sessionActiveRef = useRef(false);
+  const expiryNotifiedRef = useRef(false);
+  const lastServerCheckRef = useRef(0);
+
+  const expireSession = useCallback(() => {
+    const hadSession =
+      sessionActiveRef.current ||
+      (typeof window !== 'undefined' &&
+        (Boolean(localStorage.getItem('fleetcmd_token')) || Boolean(localStorage.getItem('fleetcmd_user'))));
+
+    clearStoredSession();
+    sessionActiveRef.current = false;
+    setUser(null);
+    setToken(null);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', '/');
+    }
+    setIsLoginModalOpen(true);
+
+    if (hadSession && !expiryNotifiedRef.current) {
+      expiryNotifiedRef.current = true;
+      const msg = 'Sesiunea anterioară a expirat. Vă rugăm să vă autentificați din nou.';
+      setSessionExpiredMsg(msg);
+      showToast('Sesiunea a expirat! Vă rugăm să vă autentificați din nou.', 'warning', 4500);
+    }
+  }, []);
+
+  const clearSessionExpiredMsg = useCallback(() => {
+    setSessionExpiredMsg(null);
+  }, []);
 
   useEffect(() => {
-    // Load persisted user or default to Admin
+    // Load persisted session and verify JWT validity
+    let validStoredToken: string | null = null;
     try {
       const storedUser = localStorage.getItem('fleetcmd_user');
       const storedToken = localStorage.getItem('fleetcmd_token');
 
-      if (storedUser) {
+      if (storedUser && storedToken && storedToken !== 'local-token' && !isTokenLocallyExpired(storedToken)) {
         setUser(JSON.parse(storedUser));
-        setToken(storedToken || 'local-token');
+        setToken(storedToken);
+        sessionActiveRef.current = true;
+        expiryNotifiedRef.current = false;
+        validStoredToken = storedToken;
       } else {
-        // No active session -> require login on WOW start page
-        setUser(null);
-        setToken(null);
+        if (storedUser || storedToken) {
+          expireSession();
+        } else {
+          setUser(null);
+          setToken(null);
+        }
       }
     } catch (e) {
+      clearStoredSession();
+      sessionActiveRef.current = false;
       setUser(null);
       setToken(null);
     } finally {
       setLoading(false);
     }
 
-    // Sincronizare profil utilizator curent cu datele din baza de date
-    const currentToken = localStorage.getItem('fleetcmd_token');
-    if (currentToken) {
+    // Sincronizare profil utilizator curent cu datele din baza de date & verificare token pe server
+    if (validStoredToken) {
+      lastServerCheckRef.current = Date.now();
       fetch(`${API_BASE_URL}/auth/users`, {
-        headers: { Authorization: `Bearer ${currentToken}` },
+        headers: { Authorization: `Bearer ${validStoredToken}` },
       })
         .then((res) => {
           if (res.status === 401) {
-            logout();
+            expireSession();
             return null;
           }
           return res.json();
@@ -91,6 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (!prev) return null;
               const freshUser = users.find((u) => u.id === prev.id || u.username === prev.username);
               if (freshUser) {
+                if (freshUser.activ === false) {
+                  expireSession();
+                  return null;
+                }
                 const updated = {
                   ...prev,
                   id: freshUser.id,
@@ -111,7 +205,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(() => {});
     }
-  }, []);
+  }, [expireSession]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleUnauthorizedEvent = () => {
+      expireSession();
+    };
+
+    const handleFocusOrVisibility = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (!sessionActiveRef.current) return;
+
+      const currentToken = localStorage.getItem('fleetcmd_token');
+      if (!currentToken || isTokenLocallyExpired(currentToken)) {
+        expireSession();
+        return;
+      }
+
+      // Dacă au trecut peste 5 minute de la ultima verificare pe server, validăm discret sesiunea
+      const now = Date.now();
+      if (now - lastServerCheckRef.current > 5 * 60 * 1000) {
+        lastServerCheckRef.current = now;
+        fetch(`${API_BASE_URL}/auth/users`, {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        })
+          .then((res) => {
+            if (res.status === 401) {
+              expireSession();
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener('fleetcmd:unauthorized', handleUnauthorizedEvent);
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    return () => {
+      window.removeEventListener('fleetcmd:unauthorized', handleUnauthorizedEvent);
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+    };
+  }, [expireSession]);
 
   const login = async (identifier: string, parola: string) => {
     try {
@@ -123,14 +261,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (res.ok) {
         const data = await res.json();
+        expiryNotifiedRef.current = false;
+        sessionActiveRef.current = true;
+        lastServerCheckRef.current = Date.now();
+        setSessionExpiredMsg(null);
         setUser(data.user);
         setToken(data.token);
         localStorage.setItem('fleetcmd_user', JSON.stringify(data.user));
         localStorage.setItem('fleetcmd_token', data.token);
+
+        const payload = parseJwtPayload(data.token);
+        if (payload?.exp && payload?.iat && payload.exp > payload.iat) {
+          const ttlMs = (payload.exp - payload.iat) * 1000;
+          localStorage.setItem('fleetcmd_expires_at', String(Date.now() + ttlMs));
+        } else {
+          localStorage.removeItem('fleetcmd_expires_at');
+        }
+
         setIsLoginModalOpen(false);
         return { success: true };
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         return { success: false, message: err.message || 'Autentificare eșuată' };
       }
     } catch (e: any) {
@@ -139,8 +290,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('fleetcmd_user');
-    localStorage.removeItem('fleetcmd_token');
+    expiryNotifiedRef.current = false;
+    sessionActiveRef.current = false;
+    clearStoredSession();
+    setSessionExpiredMsg(null);
     setUser(null);
     setToken(null);
     if (typeof window !== 'undefined') {
@@ -163,6 +316,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const authFetch = async (url: string, options: RequestInit = {}) => {
+    const activeToken =
+      token || (typeof window !== 'undefined' ? localStorage.getItem('fleetcmd_token') : null);
     const headers = new Headers(options.headers || {});
     if (user) {
       headers.set('x-user-id', user.id);
@@ -170,8 +325,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers.set('x-user-name', encodeURIComponent(user.nume));
       headers.set('x-user-role', user.rol);
     }
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
+    if (activeToken && activeToken !== 'local-token') {
+      headers.set('Authorization', `Bearer ${activeToken}`);
     }
 
     const res = await fetch(url, {
@@ -179,9 +334,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers,
     });
 
-    if (res.status === 401 && user) {
+    if (res.status === 401 && !url.includes('/auth/login') && (user || activeToken)) {
       // Sesiune invalidată pe server sau expirată
-      logout();
+      expireSession();
     }
 
     return res;
@@ -208,6 +363,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         canEdit,
         login,
         logout,
+        sessionExpiredMsg,
+        clearSessionExpiredMsg,
         isLoginModalOpen,
         setIsLoginModalOpen,
         authFetch,

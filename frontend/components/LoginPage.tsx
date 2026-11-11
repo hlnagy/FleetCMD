@@ -24,7 +24,7 @@ import OptiBaseFooter from '@/components/OptiBaseFooter';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, sessionExpiredMsg, clearSessionExpiredMsg } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [parola, setParola] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +40,7 @@ export default function LoginPage() {
       return;
     }
 
+    clearSessionExpiredMsg();
     setErrorMsg('');
     setLoading(true);
 
@@ -187,6 +188,14 @@ export default function LoginPage() {
                 Introduceți datele contului de utilizator pentru a continua
               </p>
             </div>
+
+            {/* Session Expired Notice */}
+            {sessionExpiredMsg && !errorMsg && (
+              <div className="mb-5 p-3.5 bg-amber-950/40 border border-amber-500/50 rounded-2xl text-amber-200 text-xs font-bold flex items-center space-x-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>{sessionExpiredMsg}</span>
+              </div>
+            )}
 
             {/* Error Message */}
             {errorMsg && (

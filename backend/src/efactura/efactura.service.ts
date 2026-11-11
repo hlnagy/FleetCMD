@@ -1403,7 +1403,12 @@ export class EFacturaService implements OnModuleInit {
   async eliminaToataFactura(facturaId: string) {
     const factura = await this.prisma.eFacturaFactura.findUnique({
       where: { id: facturaId },
-      include: { articole: true },
+      select: {
+        id: true,
+        numarFactura: true,
+        numeVanzator: true,
+        _count: { select: { articole: true } },
+      },
     });
 
     if (!factura) throw new NotFoundException('Factura nu a fost găsită.');
@@ -1421,11 +1426,28 @@ export class EFacturaService implements OnModuleInit {
 
     const updatedFactura = await this.prisma.eFacturaFactura.findUnique({
       where: { id: facturaId },
-      include: { articole: true },
+      select: {
+        id: true,
+        idDescarcare: true,
+        numarInregistrare: true,
+        cifVanzator: true,
+        numeVanzator: true,
+        cifCumparator: true,
+        numarFactura: true,
+        dataFactura: true,
+        dataMesaj: true,
+        valoareTotala: true,
+        moneda: true,
+        tipFactura: true,
+        stare: true,
+        createdAt: true,
+        updatedAt: true,
+        articole: true,
+      },
     });
 
     return {
-      mesaj: ` Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura.articole.length} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
+      mesaj: ` Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura._count.articole} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
       factura: updatedFactura,
     };
   }
