@@ -30,7 +30,7 @@ export const ROUTE_TAB_DEFINITIONS: Record<string, { title: string; iconName: st
   '/stocuri?tab=anvelope_stoc': { title: 'Magazie Anvelope', iconName: 'CircleDot' },
   '/stocuri?tab=depozite': { title: 'Depozite Flotă', iconName: 'Building2' },
   '/stocuri?tab=componente': { title: 'Garanții Piese', iconName: 'ShieldCheck' },
-  '/anvelope': { title: 'Anvelope & Harta Axe', iconName: 'CircleDot' },
+  '/anvelope': { title: 'Anvelope', iconName: 'CircleDot' },
   '/fluide': { title: 'Uleiuri & Fluide', iconName: 'Droplets' },
   '/alerte': { title: 'Alerte Active', iconName: 'ShieldAlert' },
   '/rapoarte': { title: 'Rapoarte & Analitică', iconName: 'BarChart3' },

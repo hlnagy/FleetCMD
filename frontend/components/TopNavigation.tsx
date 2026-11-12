@@ -66,6 +66,7 @@ export default function TopNavigation() {
       items: [
         { name: 'Comenzi de Lucru (Atelier)', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
         { name: 'Profiluri Mentenanță & Planificator', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
+        { name: 'Anvelope', href: '/anvelope', icon: CircleDot, desc: 'Poziționare anvelope pe axe utilaje' },
       ],
     },
     {
@@ -87,8 +88,7 @@ export default function TopNavigation() {
         { name: '2. Magazie Centrală Anvelope (Serii)', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot, desc: 'Anvelope cu serii unice și rulaj' },
         { name: '3. Depozite Flotă & Transferuri', href: '/stocuri?tab=depozite', icon: Building2, desc: 'Ateliere, magazii și mișcări interne' },
         { name: '4. Garanții Componente Serializate', href: '/stocuri?tab=componente', icon: ShieldCheck, desc: 'Piese montate aflate în perioada de garanție' },
-        { name: '5. Anvelope & Harta Axe', href: '/anvelope', icon: CircleDot, desc: 'Poziționare anvelope pe axe utilaje' },
-        { name: '6. Uleiuri & Fluide Flotă', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
+        { name: '5. Uleiuri & Fluide Flotă', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
       ],
     },
     {
