@@ -155,6 +155,46 @@ export function parseModel(desc: string): string {
   return d.length > 45 ? d.substring(0, 45) : d || 'Standard';
 }
 
+export function isTireDescription(descriere?: string, cod?: string, categorie?: string): boolean {
+  const desc = String(descriere || '').trim();
+  const dLow = desc.toLowerCase();
+  const code = String(cod || '').trim().toUpperCase();
+  if (!desc && !code && !categorie) return false;
+  if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
+  if (code === 'ECO' && /eco/i.test(desc)) return false;
+  if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
+
+  return (
+    /anvelop/i.test(String(categorie || '')) ||
+    /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) ||
+    dLow.includes('anvelop') ||
+    dLow.includes('cauciuc') ||
+    dLow.includes('r22.5') ||
+    dLow.includes('r17.5') ||
+    dLow.includes('r20') ||
+    dLow.includes('r24') ||
+    code.startsWith('ANV')
+  );
+}
+
+export function isEcoValoareLine(descriere?: string, cod?: string, hasTireOnInvoice = false): boolean {
+  const desc = String(descriere || '').trim();
+  const code = String(cod || '').trim().toUpperCase();
+  if (!desc && !code) return false;
+  if (/\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) || code.startsWith('ANV')) {
+    return false;
+  }
+  if (/taxa\s*ulei|timbru\s*verde|ecopact|pungi|sacosa|proiector|panou\s*led|bec\s*led/i.test(desc) && code !== 'ECO') {
+    return false;
+  }
+  if (code === 'ECO' && /eco/i.test(desc)) return true;
+  if (/\beco\s*-?\s*val(?:oare|or|ue)\b/i.test(desc)) return true;
+  if (hasTireOnInvoice && /^(?:eco\s*-?\s*taxa|ecotaxa|taxa\s*eco|taxa\s*mediu|taxa\s*anvelop)/i.test(desc)) {
+    return true;
+  }
+  return false;
+}
+
 @Injectable()
 export class EFacturaService implements OnModuleInit {
   private readonly logger = new Logger(EFacturaService.name);
@@ -1089,6 +1129,7 @@ export class EFacturaService implements OnModuleInit {
     oreGarantie?: number;
     serieUnica?: string;
     esteAnvelopa?: boolean;
+    includeEcovalor?: boolean;
     codDot?: string;
     seriiIndividuale?: Array<{
       serie: string;
@@ -1134,6 +1175,9 @@ export class EFacturaService implements OnModuleInit {
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'Alte';
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
+    const esteAnvelopa =
+      data.esteAnvelopa === true ||
+      isTireDescription(item.descrierePiesa, codArticol, catName);
 
     const isFluid =
       catName.toLowerCase().includes('ulei') ||
@@ -1149,18 +1193,89 @@ export class EFacturaService implements OnModuleInit {
       ? Number((cantitateFacturaConsumata * Number(data.volumAmbalaj)).toFixed(2)) 
       : (data.cantitateRealaStoc && !isConversie ? Number(data.cantitateRealaStoc) : cantitateFacturaConsumata);
 
-    // Calcul valoare proporțională linie factură pentru cantitatea consumată
-    const effectivePretTotal = Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
+    // Detecție și calcul automat ECOVALOARE de pe factură pentru anvelope
+    let ecoPerTire = 0;
+    const ecoConsumptions: Array<{ ecoItem: any; take: number }> = [];
+    const isFreeWarrantyCustom = typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom === 0;
+
+    if (esteAnvelopa && data.includeEcovalor !== false && !isFreeWarrantyCustom && !isConversie) {
+      const facturaItems = await this.prisma.eFacturaItem.findMany({
+        where: { facturaId: item.facturaId },
+        orderBy: { numarLinie: 'asc' },
+      });
+
+      const ecoItems = facturaItems.filter(
+        (fi) =>
+          fi.id !== item.id &&
+          fi.stare === 'NEPROCESAT' &&
+          isEcoValoareLine(fi.descrierePiesa, fi.codArticolFurnizor, true) &&
+          fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
+      );
+
+      if (ecoItems.length > 0) {
+        const ecoRemainingQty = ecoItems.reduce(
+          (sum, e) => sum + Math.max(0, e.cantitate - Number(e.cantitateProcesata || 0)),
+          0
+        );
+        const tireItemsRemainingQty = facturaItems
+          .filter(
+            (fi) =>
+              fi.stare === 'NEPROCESAT' &&
+              isTireDescription(fi.descrierePiesa, fi.codArticolFurnizor) &&
+              fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
+          )
+          .reduce(
+            (sum, t) => sum + Math.max(0, t.cantitate - Number(t.cantitateProcesata || 0)),
+            0
+          );
+
+        const isLumpSumEco = tireItemsRemainingQty > 0 && ecoRemainingQty < tireItemsRemainingQty - 0.05;
+        const ecoUnitsPerTire = isLumpSumEco ? ecoRemainingQty / tireItemsRemainingQty : 1;
+        const ecoUnitsToConsume = Math.min(
+          ecoRemainingQty,
+          Number((cantitateFacturaConsumata * ecoUnitsPerTire).toFixed(4))
+        );
+
+        let leftToConsume = ecoUnitsToConsume;
+        let ecoValueConsumed = 0;
+
+        for (const eco of ecoItems) {
+          if (leftToConsume <= 0.0001) break;
+          const ecoRem = Math.max(0, Number((eco.cantitate - Number(eco.cantitateProcesata || 0)).toFixed(4)));
+          if (ecoRem <= 0) continue;
+          const take = Math.min(ecoRem, leftToConsume);
+          const ecoUnitPret = Number(
+            eco.pretUnitar || (eco.cantitate > 0 ? eco.valoareFaraTVA / eco.cantitate : 0) || 0
+          );
+          ecoValueConsumed += take * ecoUnitPret;
+          ecoConsumptions.push({ ecoItem: eco, take });
+          leftToConsume = Number((leftToConsume - take).toFixed(4));
+        }
+
+        if (cantitateFacturaConsumata > 0 && ecoValueConsumed > 0) {
+          ecoPerTire = Number((ecoValueConsumed / cantitateFacturaConsumata).toFixed(2));
+        }
+      }
+    }
 
     // Preț unitar în stoc:
     let effectivePretUnitar = 0;
     if (typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom >= 0) {
       effectivePretUnitar = Number(Number(data.pretUnitarCustom).toFixed(4));
     } else if (isConversie && effectiveCantitate > 0) {
-      effectivePretUnitar = Number((effectivePretTotal / effectiveCantitate).toFixed(4));
+      const baseTotal = Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
+      effectivePretUnitar = Number((baseTotal / effectiveCantitate).toFixed(4));
     } else {
-      effectivePretUnitar = Number(Number(item.pretUnitar || 0).toFixed(2));
+      effectivePretUnitar = Number((Number(item.pretUnitar || 0) + ecoPerTire).toFixed(2));
     }
+
+    // Calcul valoare totală recepție pentru cantitatea consumată (include ECOVALOARE / preț custom)
+    const effectivePretTotal =
+      effectivePretUnitar === 0
+        ? 0
+        : typeof data.pretUnitarCustom === 'number' || ecoPerTire > 0
+          ? Number((effectivePretUnitar * effectiveCantitate).toFixed(2))
+          : Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
 
     const effectiveUM = data.unitateMasuraCustom || (isFluid ? 'L' : normalizedUM);
 
@@ -1232,9 +1347,12 @@ export class EFacturaService implements OnModuleInit {
 
     // 3. Înregistrare Recepție IntrareStoc cu cantitateRamasa pentru FIFO
     const observatiiInternText = data.observatiiIntern ? ` • Notă: ${data.observatiiIntern}` : '';
+    const ecoObservatieText = ecoPerTire > 0 && effectivePretUnitar > 0
+      ? ` • Include ECOVALOARE (+${ecoPerTire.toFixed(2)} RON/buc)`
+      : '';
     const observatiiReceptie = isConversie
-      ? `Importat din e-Factura. Despachetat: ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / cantitateFacturaConsumata)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${observatiiInternText}`
-      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${observatiiInternText}`;
+      ? `Importat din e-Factura. Despachetat: ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / cantitateFacturaConsumata)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${observatiiInternText}`
+      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${observatiiInternText}`;
 
     await this.prisma.intrareStoc.create({
       data: {
@@ -1252,16 +1370,6 @@ export class EFacturaService implements OnModuleInit {
     });
 
     // 4. Înregistrare Serii Individuale (pentru anvelope sau componente serializate)
-    const esteAnvelopa =
-      data.esteAnvelopa === true ||
-      catName.toLowerCase().includes('anvelop') ||
-      item.descrierePiesa.toLowerCase().includes('anvelop') ||
-      item.descrierePiesa.toLowerCase().includes('r22.5') ||
-      item.descrierePiesa.toLowerCase().includes('r17.5') ||
-      item.descrierePiesa.toLowerCase().includes('r20') ||
-      item.descrierePiesa.toLowerCase().includes('cauciuc') ||
-      (codArticol || '').toUpperCase().startsWith('ANV');
-
     if (Array.isArray(data.seriiIndividuale) && data.seriiIndividuale.length > 0) {
       for (const s of data.seriiIndividuale) {
         const serieText = String(s.serie || '').trim();
@@ -1349,7 +1457,27 @@ export class EFacturaService implements OnModuleInit {
       },
     });
 
-    // 6. Închidere automată a liniilor de reducere / garanție financiară dacă s-a importat garanție gratuită (0 RON)
+    // 6. Închidere / consum automat al liniilor de ECOVALOARE aferente anvelopelor importate
+    if (ecoConsumptions.length > 0 && effectivePretUnitar > 0) {
+      for (const { ecoItem, take } of ecoConsumptions) {
+        const prevProc = Number(ecoItem.cantitateProcesata || 0);
+        const newProc = Math.min(ecoItem.cantitate, Number((prevProc + take).toFixed(4)));
+        const ecoComplete = newProc >= ecoItem.cantitate - 0.0001;
+        await this.prisma.eFacturaItem.update({
+          where: { id: ecoItem.id },
+          data: {
+            cantitateProcesata: newProc,
+            stare: ecoComplete ? 'IMPORTAT' : 'NEPROCESAT',
+            articolStocId: ecoItem.articolStocId || articol.id,
+            observatiiIntern: ecoComplete
+              ? `Inclus automat în prețul anvelopelor (+${ecoPerTire.toFixed(2)} RON/buc)`
+              : `Inclus parțial în prețul anvelopelor (${newProc}/${ecoItem.cantitate} ${ecoItem.unitateMasura || 'buc'})`,
+          },
+        });
+      }
+    }
+
+    // 7. Închidere automată a liniilor de reducere / garanție financiară dacă s-a importat garanție gratuită (0 RON)
     if (effectivePretUnitar === 0 || (item.factura && item.factura.valoareTotala === 0)) {
       const remainingItems = await this.prisma.eFacturaItem.findMany({
         where: { facturaId: item.facturaId, stare: 'NEPROCESAT' },
@@ -1370,17 +1498,34 @@ export class EFacturaService implements OnModuleInit {
     }
 
     const cantRamasaDupa = Math.max(0, Number((item.cantitate - nouaCantitateProcesata).toFixed(2)));
+    const ecoMesajSuffix = ecoPerTire > 0 && effectivePretUnitar > 0
+      ? ` (+${ecoPerTire.toFixed(2)} RON/buc ECOVALOARE inclusă automat)`
+      : '';
     const mesajSucces = isConversie
       ? `Articolul "${item.descrierePiesa}" a fost recepționat în stoc: ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM} (despachetat din ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'})!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}`
-      : `Articolul "${item.descrierePiesa}" (${cantitateFacturaConsumata} ${item.unitateMasura}) a fost importat în stoc!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
+      : `Articolul "${item.descrierePiesa}" (${cantitateFacturaConsumata} ${item.unitateMasura}) a fost importat în stoc${ecoMesajSuffix}!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}${data.areGarantie ? ' Înregistrat în Garanții Componente!' : ''}`;
 
-    // 7. Recalculare imediată a stării facturii mamă (dacă toate articolele sunt procesate, se marchează automat IMPORTAT_TOTAL / ELIMINAT)
+    // 8. Recalculare imediată a stării facturii mamă (dacă toate articolele sunt procesate, se marchează automat IMPORTAT_TOTAL / ELIMINAT)
     await this.recalculeazaStareFactura(item.facturaId);
+
+    const [updatedArticole, updatedFactura] = await Promise.all([
+      this.prisma.eFacturaItem.findMany({
+        where: { facturaId: item.facturaId },
+        orderBy: { numarLinie: 'asc' },
+      }),
+      this.prisma.eFacturaFactura.findUnique({
+        where: { id: item.facturaId },
+        select: { id: true, stare: true },
+      }),
+    ]);
 
     return {
       mesaj: mesajSucces,
       item: updatedItem,
       articolStoc: articol,
+      ecoValoareInclusaPerBuc: ecoPerTire,
+      articole: updatedArticole,
+      facturaStare: updatedFactura?.stare,
     };
   }
 

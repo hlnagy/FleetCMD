@@ -451,6 +451,8 @@ function EFacturaContent() {
   const [targetSubcategorie, setTargetSubcategorie] = useState('Alte piese');
   const [codArticolCalculat, setCodArticolCalculat] = useState('');
   const [pretUnitarImport, setPretUnitarImport] = useState<number>(0);
+  const [includeEcovalor, setIncludeEcovalor] = useState<boolean>(true);
+  const [ecovalorPerBuc, setEcovalorPerBuc] = useState<number>(0);
   const [isGarantieGratuita, setIsGarantieGratuita] = useState<boolean>(false);
   const [areGarantieProducator, setAreGarantieProducator] = useState<boolean>(false);
   const [durataGarantieLuni, setDurataGarantieLuni] = useState<number>(24);
@@ -998,6 +1000,97 @@ function EFacturaContent() {
     );
   };
 
+  const isAnvelopaItemHelper = (art: any, categorieNume?: string): boolean => {
+    if (!art && !categorieNume) return false;
+    const desc = String(art?.descrierePiesa || '').trim();
+    const dLow = desc.toLowerCase();
+    const code = String(art?.codArticolFurnizor || '').trim().toUpperCase();
+    if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
+    if (code === 'ECO' && /eco/i.test(desc)) return false;
+    if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
+
+    return (
+      /anvelop/i.test(String(categorieNume || '')) ||
+      /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) ||
+      dLow.includes('anvelop') ||
+      dLow.includes('cauciuc') ||
+      dLow.includes('r22.5') ||
+      dLow.includes('r17.5') ||
+      dLow.includes('r20') ||
+      dLow.includes('r24') ||
+      code.startsWith('ANV')
+    );
+  };
+
+  const isEcoValoareItemHelper = (art: any, facturaArticole: any[] = []): boolean => {
+    if (!art) return false;
+    const desc = String(art.descrierePiesa || '').trim();
+    const code = String(art.codArticolFurnizor || '').trim().toUpperCase();
+    if (!desc && !code) return false;
+    if (/\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) || code.startsWith('ANV')) {
+      return false;
+    }
+    if (/taxa\s*ulei|timbru\s*verde|ecopact|pungi|sacosa|proiector|panou\s*led|bec\s*led/i.test(desc) && code !== 'ECO') {
+      return false;
+    }
+    if (code === 'ECO' && /eco/i.test(desc)) return true;
+    if (/\beco\s*-?\s*val(?:oare|or|ue)\b/i.test(desc)) return true;
+    const hasTireOnInvoice = (facturaArticole || []).some((fi: any) => isAnvelopaItemHelper(fi));
+    if (hasTireOnInvoice && /^(?:eco\s*-?\s*taxa|ecotaxa|taxa\s*eco|taxa\s*mediu|taxa\s*anvelop)/i.test(desc)) {
+      return true;
+    }
+    return false;
+  };
+
+  const computeEcoValoarePerBuc = (item: any, facturaArticole: any[] = []): { ecoPerBuc: number; ecoRemainingQty: number } => {
+    if (!item || !Array.isArray(facturaArticole)) return { ecoPerBuc: 0, ecoRemainingQty: 0 };
+    const ecoItems = facturaArticole.filter(
+      (fi: any) =>
+        fi.id !== item.id &&
+        fi.stare === 'NEPROCESAT' &&
+        isEcoValoareItemHelper(fi, facturaArticole) &&
+        Number(fi.cantitate || 0) - Number(fi.cantitateProcesata || 0) > 0.0001
+    );
+    if (ecoItems.length === 0) return { ecoPerBuc: 0, ecoRemainingQty: 0 };
+
+    const ecoRemainingQty = ecoItems.reduce(
+      (sum: number, e: any) => sum + Math.max(0, Number(e.cantitate || 0) - Number(e.cantitateProcesata || 0)),
+      0
+    );
+    const tireItemsRemainingQty = facturaArticole
+      .filter(
+        (fi: any) =>
+          fi.stare === 'NEPROCESAT' &&
+          isAnvelopaItemHelper(fi) &&
+          Number(fi.cantitate || 0) - Number(fi.cantitateProcesata || 0) > 0.0001
+      )
+      .reduce(
+        (sum: number, t: any) => sum + Math.max(0, Number(t.cantitate || 0) - Number(t.cantitateProcesata || 0)),
+        0
+      );
+
+    const isLumpSumEco = tireItemsRemainingQty > 0 && ecoRemainingQty < tireItemsRemainingQty - 0.05;
+    const ecoUnitsPerTire = isLumpSumEco ? ecoRemainingQty / tireItemsRemainingQty : 1;
+
+    // Calculăm valoarea ecovaloare aferentă unei singure bucăți de anvelopă
+    let left = ecoUnitsPerTire;
+    let ecoValSum = 0;
+    for (const eco of ecoItems) {
+      if (left <= 0.0001) break;
+      const rem = Math.max(0, Number(eco.cantitate || 0) - Number(eco.cantitateProcesata || 0));
+      if (rem <= 0) continue;
+      const take = Math.min(rem, left);
+      const unitPret = Number(eco.pretUnitar || (eco.cantitate > 0 ? eco.valoareFaraTVA / eco.cantitate : 0) || 0);
+      ecoValSum += take * unitPret;
+      left = Number((left - take).toFixed(4));
+    }
+
+    return {
+      ecoPerBuc: Number(ecoValSum.toFixed(2)),
+      ecoRemainingQty,
+    };
+  };
+
   // OPEN IMPORT MODAL FOR A SINGLE ITEM
   const openImportItemModal = (item: any, isSerializat = false, startAsDirectMasina = false) => {
     setImportingItem(item);
@@ -1015,10 +1108,9 @@ function EFacturaContent() {
 
     setCodArticolCalculat(code);
 
-    const isAnvelopaText = /anvelop|r22\.5|r17\.5|r20|r24|cauciuc/i.test(item.descrierePiesa) || (rawCode || '').toUpperCase().startsWith('ANV');
-
     // Rezolvare inteligentă Categorie & Subcategorie din baza de date
     const resCat = resolveCategoryAndSubcategory(item.descrierePiesa, categoriiStoc);
+    const isAnvelopaText = isAnvelopaItemHelper(item, resCat.categorie);
 
     if (resCat.confidence !== 'LOW') {
       setSugestieDetectata({
@@ -1083,13 +1175,22 @@ function EFacturaContent() {
     setVolumAmbalaj(initVol);
     setUmConversie(pkg.detectedUnit || 'L');
 
+    // Detecție și adăugare automată ECOVALOARE pentru anvelope
+    const ecoInfo = (isAnvelopaText && !isZeroFactura && !enableConversion)
+      ? computeEcoValoarePerBuc(item, selectedFactura?.articole || [])
+      : { ecoPerBuc: 0, ecoRemainingQty: 0 };
+
+    setEcovalorPerBuc(ecoInfo.ecoPerBuc);
+    setIncludeEcovalor(ecoInfo.ecoPerBuc > 0);
+
     if (isZeroFactura) {
       setPretUnitarImport(0);
     } else if (enableConversion && initVol > 0) {
       const unitPretLitri = Number((Number(item.pretUnitar || 0) / initVol).toFixed(2));
       setPretUnitarImport(unitPretLitri);
     } else {
-      setPretUnitarImport(item.pretUnitar || 0);
+      const basePret = Number(item.pretUnitar || 0);
+      setPretUnitarImport(ecoInfo.ecoPerBuc > 0 ? Number((basePret + ecoInfo.ecoPerBuc).toFixed(2)) : basePret);
     }
     
     // Inițializare listă de serii per bucată
@@ -1426,7 +1527,8 @@ function EFacturaContent() {
           luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
           kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
           serieUnica: areGarantieProducator ? serieUnicaCustom.trim() : undefined,
-          esteAnvelopa: targetCategorie === 'ANVELOPE' || /anvelop|r22\.5|r17\.5|r20|r24|cauciuc/i.test(importingItem.descrierePiesa),
+          esteAnvelopa: /anvelop/i.test(targetCategorie) || isAnvelopaItemHelper(importingItem),
+          includeEcovalor: !isGarantieGratuita && ecovalorPerBuc > 0 ? includeEcovalor : false,
           seriiIndividuale: isImportSerializat ? seriiList.map((s) => ({ serie: s.serie, dot: s.dot })) : undefined,
         }),
       });
@@ -1436,41 +1538,51 @@ function EFacturaContent() {
         showToast(data.mesaj || 'Articol importat cu succes în stoc!', 'success');
         setImportingItem(null);
 
-        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms) - include și liniile ECOVALOARE absorbite automat
+        const updatedArticoleFromApi = Array.isArray(data.articole) ? data.articole : null;
+
         if (selectedFactura) {
-          const newArticole = (selectedFactura.articole || []).map((a: any) =>
-            a.id === updatedItemId
-              ? {
-                  ...a,
-                  stare: data.item?.stare || newStareItem,
-                  cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
-                }
-              : a
-          );
+          const newArticole = updatedArticoleFromApi
+            ? updatedArticoleFromApi
+            : (selectedFactura.articole || []).map((a: any) =>
+                a.id === updatedItemId
+                  ? {
+                      ...a,
+                      stare: data.item?.stare || newStareItem,
+                      cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
+                    }
+                  : a
+              );
           const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
           if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura({ ...selectedFactura, articole: newArticole });
+            setSelectedFactura({
+              ...selectedFactura,
+              stare: data.facturaStare || selectedFactura.stare,
+              articole: newArticole,
+            });
           }
         }
 
         setFacturi((prev) => {
           const updated = prev.map((f) => {
             if (f.id !== targetFacturaId) return f;
-            const newArticole = (f.articole || []).map((a: any) =>
-              a.id === updatedItemId
-                ? {
-                    ...a,
-                    stare: data.item?.stare || newStareItem,
-                    cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
-                  }
-                : a
-            );
+            const newArticole = updatedArticoleFromApi
+              ? updatedArticoleFromApi
+              : (f.articole || []).map((a: any) =>
+                  a.id === updatedItemId
+                    ? {
+                        ...a,
+                        stare: data.item?.stare || newStareItem,
+                        cantitateProcesata: (a.cantitateProcesata || 0) + cantitateFacturaDeImportat,
+                      }
+                    : a
+                );
             const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
             return {
               ...f,
-              stare: hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL',
+              stare: data.facturaStare || (hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL'),
               articole: newArticole,
             };
           });
@@ -2686,6 +2798,13 @@ function EFacturaContent() {
                                    Reducere / Garanție
                                 </span>
                               )}
+                              {isEcoValoareItemHelper(art, selectedFactura?.articole || []) && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-teal-100 text-teal-900 border border-teal-300 shadow-2xs">
+                                  {art.stare === 'IMPORTAT'
+                                    ? 'Ecovalor inclus în anvelope'
+                                    : 'Taxă Eco Anvelope (se adaugă automat la import)'}
+                                </span>
+                              )}
                             </div>
                             {art.observatiiIntern && (
                               <div className="text-[11px] text-sapphire-800 bg-sapphire-50 border border-sapphire-200 px-1.5 py-0.5 rounded-md font-semibold w-fit flex items-center space-x-1">
@@ -2765,7 +2884,11 @@ function EFacturaContent() {
                             ) : (
                               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-fit">
                                 <Check className="w-3 h-3" />
-                                <span>Importat în Stoc</span>
+                                <span>
+                                  {isEcoValoareItemHelper(art, selectedFactura?.articole || [])
+                                    ? 'Inclus în Anvelope'
+                                    : 'Importat în Stoc'}
+                                </span>
                               </span>
                             )
                           )}
@@ -3922,14 +4045,52 @@ function EFacturaContent() {
                       checked={isGarantieGratuita}
                       onChange={(e) => {
                         setIsGarantieGratuita(e.target.checked);
-                        if (e.target.checked) setPretUnitarImport(0);
-                        else setPretUnitarImport(importingItem.pretUnitar || 0);
+                        if (e.target.checked) {
+                          setPretUnitarImport(0);
+                        } else {
+                          const basePret = Number(importingItem.pretUnitar || 0);
+                          setPretUnitarImport(
+                            includeEcovalor && ecovalorPerBuc > 0
+                              ? Number((basePret + ecovalorPerBuc).toFixed(2))
+                              : basePret
+                          );
+                        }
                       }}
                       className="w-3.5 h-3.5 rounded border-purple-300 text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
                     />
                     <span>Garanție Gratuită (0 RON)</span>
                   </label>
                 </div>
+
+                {!isGarantieGratuita && ecovalorPerBuc > 0 && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-start justify-between gap-2">
+                    <label className="flex items-start space-x-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeEcovalor}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIncludeEcovalor(checked);
+                          const basePret = Number(importingItem.pretUnitar || 0);
+                          setPretUnitarImport(
+                            checked
+                              ? Number((basePret + ecovalorPerBuc).toFixed(2))
+                              : basePret
+                          );
+                        }}
+                        className="mt-0.5 w-3.5 h-3.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                      />
+                      <div className="text-[11px] leading-tight">
+                        <span className="font-extrabold text-emerald-950 block">
+                          Include automat ECOVALOARE (+{ecovalorPerBuc.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc)
+                        </span>
+                        <span className="text-emerald-800 font-mono">
+                          Anvelopă {Number(importingItem.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Ecovalor {ecovalorPerBuc.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = <b>{Number((Number(importingItem.pretUnitar || 0) + ecovalorPerBuc).toFixed(2)).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc</b>
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
                 {!isGarantieGratuita ? (
                   <input
