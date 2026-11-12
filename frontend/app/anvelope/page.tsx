@@ -1231,7 +1231,12 @@ export default function AnvelopePage() {
                       {stocAnvelopeFiltrate.length > 0 ? (
                         stocAnvelopeFiltrate.map((a: any) => {
                           const isSelected = selectedAnvelopaDinStocId === a.id;
-                          const isSerialized = a.tipSursa === 'ANVELOPA_RULATA' || a.tipSursa === 'ANVELOPA_INDIVIDUALA';
+                          const isSerialized =
+                            a.tipSursa === 'ANVELOPA_RULATA' ||
+                            a.tipSursa === 'ANVELOPA_INDIVIDUALA' ||
+                            a.tipSursa === 'ANVELOPA_NOUA_INDIVIDUALA' ||
+                            Boolean(a.serieAnvelopa);
+                          const isRulata = a.tipSursa === 'ANVELOPA_RULATA';
                           return (
                             <div
                               key={a.id}
@@ -1242,32 +1247,50 @@ export default function AnvelopePage() {
                                   : 'bg-white border-morning-200 hover:border-sapphire-300 hover:bg-sapphire-50/50 text-slate-700'
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center flex-wrap gap-1.5">
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase font-mono tracking-wider ${
-                                    isSelected 
-                                      ? 'bg-white/20 text-white' 
-                                      : isSerialized 
-                                        ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                                    isSelected
+                                      ? 'bg-white/20 text-white'
+                                      : isSerialized
+                                        ? isRulata
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                         : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   }`}>
-                                    {isSerialized ? ` SN: ${a.serieAnvelopa}` : ` Lot Stoc (${a.stocDisponibil} buc)`}
+                                    {isSerialized ? `SN: ${a.serieAnvelopa}` : `Lot Stoc (${a.stocDisponibil} buc)`}
                                   </span>
+                                  {isSerialized && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                                      isSelected
+                                        ? 'bg-white/15 text-white'
+                                        : isRulata
+                                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                          : 'bg-sapphire-50 text-sapphire-700 border border-sapphire-200'
+                                    }`}>
+                                      {isRulata ? 'RULATĂ' : 'NOUĂ'}
+                                    </span>
+                                  )}
                                   <span className={`font-mono font-bold text-[11px] ${isSelected ? 'text-sapphire-100' : 'text-sapphire-800'}`}>
                                     {a.dimensiune}
                                   </span>
+                                  {a.codDot && (
+                                    <span className={`font-mono text-[10px] ${isSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
+                                      • DOT {a.codDot}
+                                    </span>
+                                  )}
                                 </div>
-                                <div className="font-mono font-extrabold text-[11px]">
+                                <div className="font-mono font-extrabold text-[11px] shrink-0">
                                   {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                                 </div>
                               </div>
 
-                              <div className="mt-1.5 flex items-center justify-between">
-                                <p className={`font-bold text-xs ${isSelected ? 'text-white' : 'text-sapphire-950'}`}>
+                              <div className="mt-1.5 flex items-center justify-between gap-3">
+                                <p className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-sapphire-950'}`}>
                                   {a.marca} {a.model}
                                 </p>
-                                <span className={`text-[10px] font-medium ${isSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
-                                   {a.depozitNume || 'Depozit Central'}
+                                <span className={`text-[10px] font-medium shrink-0 ${isSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
+                                  {a.depozitNume || 'Depozit Central'}
                                 </span>
                               </div>
                             </div>
