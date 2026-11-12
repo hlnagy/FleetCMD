@@ -400,6 +400,9 @@ function EFacturaContent() {
   const setSelectedFactura = (val: any) => {
     setSelectedFacturaRaw(val);
     efacturaCache.selectedFactura = val;
+    if (!val || (selectedFactura && val.id !== selectedFactura.id)) {
+      setShowRepartizarePanel(false);
+    }
   };
   const [showRawXml, setShowRawXml] = useState(false);
 
@@ -453,6 +456,17 @@ function EFacturaContent() {
   const [pretUnitarImport, setPretUnitarImport] = useState<number>(0);
   const [includeEcovalor, setIncludeEcovalor] = useState<boolean>(true);
   const [ecovalorPerBuc, setEcovalorPerBuc] = useState<number>(0);
+  const [includeCostSuplimentar, setIncludeCostSuplimentar] = useState<boolean>(true);
+  const [extraFeeInfo, setExtraFeeInfo] = useState<{
+    feeItems: any[];
+    feeTotal: number;
+    feePerInvoiceUnit: number;
+  }>({ feeItems: [], feeTotal: 0, feePerInvoiceUnit: 0 });
+  const [showRepartizarePanel, setShowRepartizarePanel] = useState<boolean>(false);
+  const [repFeeItemIds, setRepFeeItemIds] = useState<string[]>([]);
+  const [repTargetItemIds, setRepTargetItemIds] = useState<string[]>([]);
+  const [repMod, setRepMod] = useState<'PROPORTIONAL_VALOARE' | 'EGAL_LINIE' | 'EGAL_BUCATA'>('PROPORTIONAL_VALOARE');
+  const [savingRepartizare, setSavingRepartizare] = useState<boolean>(false);
   const [isGarantieGratuita, setIsGarantieGratuita] = useState<boolean>(false);
   const [areGarantieProducator, setAreGarantieProducator] = useState<boolean>(false);
   const [durataGarantieLuni, setDurataGarantieLuni] = useState<number>(24);
@@ -500,13 +514,41 @@ function EFacturaContent() {
   const [volumAmbalaj, setVolumAmbalaj] = useState<number | string>(1);
   const [umConversie, setUmConversie] = useState<'L' | 'kg'>('L');
 
+  const recomputeImportPret = (opts?: {
+    isFree?: boolean;
+    conversie?: boolean;
+    vol?: string | number;
+    ecoOn?: boolean;
+    ecoVal?: number;
+    feeOn?: boolean;
+    feeUnitVal?: number;
+  }) => {
+    if (!importingItem) return;
+    const isFree = opts?.isFree ?? isGarantieGratuita;
+    if (isFree) {
+      setPretUnitarImport(0);
+      return;
+    }
+    const basePret = Number(importingItem.pretUnitar || 0);
+    const feeOn = opts?.feeOn ?? includeCostSuplimentar;
+    const feeUnit = feeOn ? (opts?.feeUnitVal ?? extraFeeInfo.feePerInvoiceUnit ?? 0) : 0;
+    const ecoOn = opts?.ecoOn ?? includeEcovalor;
+    const ecoUnit = ecoOn ? (opts?.ecoVal ?? ecovalorPerBuc ?? 0) : 0;
+    const conv = opts?.conversie ?? esteConversieVolum;
+    const volNum = parseFloat(String(opts?.vol ?? volumAmbalaj)) || 1;
+    if (conv && volNum > 0) {
+      setPretUnitarImport(Number(((basePret + feeUnit) / volNum).toFixed(2)));
+    } else {
+      setPretUnitarImport(Number((basePret + ecoUnit + feeUnit).toFixed(2)));
+    }
+  };
+
   // Modificare manuală a volumului per ambalaj cu recalculare dinamică preț unitar
   const handleVolumAmbalajChange = (newVal: string | number) => {
     setVolumAmbalaj(newVal);
     const volNum = parseFloat(String(newVal));
     if (esteConversieVolum && !isGarantieGratuita && !isNaN(volNum) && volNum > 0 && importingItem) {
-      const rawPret = Number(importingItem.pretUnitar || 0);
-      setPretUnitarImport(Number((rawPret / volNum).toFixed(2)));
+      recomputeImportPret({ conversie: true, vol: volNum });
     }
   };
 
@@ -514,13 +556,7 @@ function EFacturaContent() {
   const handleToggleConversieVolum = (active: boolean) => {
     setEsteConversieVolum(active);
     if (!isGarantieGratuita && importingItem) {
-      if (active) {
-        const volNum = parseFloat(String(volumAmbalaj)) || 1;
-        const rawPret = Number(importingItem.pretUnitar || 0);
-        setPretUnitarImport(Number((rawPret / volNum).toFixed(2)));
-      } else {
-        setPretUnitarImport(Number(importingItem.pretUnitar || 0));
-      }
+      recomputeImportPret({ conversie: active });
     }
   };
 
@@ -1091,6 +1127,219 @@ function EFacturaContent() {
     };
   };
 
+  const isCostSuplimentarCandidateHelper = (art: any, facturaArticole: any[] = []): boolean => {
+    if (!art) return false;
+    if (typeof art.valoareFaraTVA === 'number' && art.valoareFaraTVA <= 0) return false;
+    const desc = String(art.descrierePiesa || '').trim();
+    const code = String(art.codArticolFurnizor || '').trim().toUpperCase();
+    if (!desc && !code) return false;
+    if (isAnvelopaItemHelper(art)) return false;
+    if (isEcoValoareItemHelper(art, facturaArticole) || (code === 'ECO' && /eco/i.test(desc))) return false;
+    if (isReducereSauFinanciar(art)) return false;
+    if (
+      /c\.m\.r|scrisoare\s*transport|ecopact|proiector|panou\s*led|bec\s*led|intrerupator|sig\s*aut/i.test(desc) &&
+      !/curierat|livrare|expediere/i.test(desc)
+    ) {
+      return false;
+    }
+
+    return (
+      /^(?:servicii\s*(?:de\s*)?(?:transport|curierat|curier|livrare|expediere)|refacturare\s*transport|cheltuieli\s*(?:de\s*)?(?:transport|livrare|expediere|curierat)|taxa\s*(?:de\s*)?(?:transport|curier|curierat|livrare|expediere|ramburs|logistica|ambalaj|manipulare|urgenta|timbru\s*verde|mediu|ulei)|cost\s*(?:de\s*)?(?:transport|livrare|curier)|transport(?:\s|$|-|:)|curierat|cheltuieli\s*expediere|livrare\s*curier|ambalaj|paletizare|srvramburs)/i.test(desc) ||
+      /\b(?:taxa\s*(?:de\s*)?(?:transport|curier|curierat|livrare|expediere|ramburs|ulei|mediu\s*ulei)|servicii\s*curierat|cheltuieli\s*livrare|refacturare\s*transport)\b/i.test(desc) ||
+      code.includes('TRANS') ||
+      code.includes('CURIER') ||
+      code === '0.3 LEI'
+    );
+  };
+
+  const computeExtraFeesForSinglePart = (
+    item: any,
+    facturaArticole: any[] = [],
+  ): { feeItems: any[]; feeTotal: number; feePerInvoiceUnit: number } => {
+    if (!item || !Array.isArray(facturaArticole)) return { feeItems: [], feeTotal: 0, feePerInvoiceUnit: 0 };
+    const neprocesatOthers = facturaArticole.filter(
+      (fi: any) =>
+        fi.id !== item.id &&
+        fi.stare === 'NEPROCESAT' &&
+        Number(fi.cantitate || 0) - Number(fi.cantitateProcesata || 0) > 0.0001
+    );
+    const feeItems = neprocesatOthers.filter((fi: any) =>
+      isCostSuplimentarCandidateHelper(fi, facturaArticole)
+    );
+    if (feeItems.length === 0) return { feeItems: [], feeTotal: 0, feePerInvoiceUnit: 0 };
+
+    // Doar dacă acesta este SINGURUL articol/piesă rămas de procesat pe factură
+    const otherRealParts = neprocesatOthers.filter(
+      (fi: any) =>
+        !isCostSuplimentarCandidateHelper(fi, facturaArticole) &&
+        !isEcoValoareItemHelper(fi, facturaArticole) &&
+        !isReducereSauFinanciar(fi)
+    );
+    if (otherRealParts.length > 0) return { feeItems: [], feeTotal: 0, feePerInvoiceUnit: 0 };
+
+    const feeTotal = Number(
+      feeItems
+        .reduce((sum: number, f: any) => {
+          const remRatio = f.cantitate > 0 ? Math.max(0, f.cantitate - Number(f.cantitateProcesata || 0)) / f.cantitate : 0;
+          const lineTotal = Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0));
+          return sum + lineTotal * remRatio;
+        }, 0)
+        .toFixed(2)
+    );
+
+    const itemRem = Math.max(0, Number(item.cantitate || 0) - Number(item.cantitateProcesata || 0));
+    const feePerInvoiceUnit = itemRem > 0 && feeTotal > 0 ? Number((feeTotal / itemRem).toFixed(4)) : 0;
+    return { feeItems, feeTotal, feePerInvoiceUnit };
+  };
+
+  const openRepartizareCosturiPanel = (factura: any) => {
+    const cleanItems = (factura?.articole || []).filter(
+      (a: any) => a.stare === 'NEPROCESAT' && Number(a.cantitateProcesata || 0) <= 0.0001 && Number(a.cantitate || 0) > 0
+    );
+    const detectedFees = cleanItems.filter((a: any) =>
+      isCostSuplimentarCandidateHelper(a, factura?.articole || [])
+    );
+    const detectedSet = new Set(detectedFees.map((f: any) => f.id));
+    const targets = cleanItems.filter(
+      (a: any) =>
+        !detectedSet.has(a.id) &&
+        !isEcoValoareItemHelper(a, factura?.articole || []) &&
+        !isReducereSauFinanciar(a)
+    );
+    setRepFeeItemIds(detectedFees.map((f: any) => f.id));
+    setRepTargetItemIds(targets.map((t: any) => t.id));
+    setRepMod('PROPORTIONAL_VALOARE');
+    setShowRepartizarePanel(true);
+  };
+
+  const handleApplyRepartizareCosturi = async (
+    overrideFeeIds?: string[],
+    overrideTargetIds?: string[],
+    overrideMod?: 'PROPORTIONAL_VALOARE' | 'EGAL_LINIE' | 'EGAL_BUCATA',
+  ) => {
+    if (!selectedFactura) return;
+    const feeIds = overrideFeeIds || repFeeItemIds;
+    const targetIds = overrideTargetIds || repTargetItemIds;
+    const mod = overrideMod || repMod;
+    if (feeIds.length === 0 || targetIds.length === 0) {
+      showToast('Selectați cel puțin un cost suplimentar și cel puțin un articol destinație.', 'warning');
+      return;
+    }
+
+    setSavingRepartizare(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/efactura/facturi/${selectedFactura.id}/repartizeaza-costuri`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          feeItemIds: feeIds,
+          targetItemIds: targetIds,
+          modRepartizare: mod,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.mesaj || 'Costurile au fost repartizate cu succes pe articole!', 'success');
+        setShowRepartizarePanel(false);
+
+        const newArticole = Array.isArray(data.articole) ? data.articole : selectedFactura.articole;
+        const newStare = data.facturaStare || selectedFactura.stare;
+
+        setSelectedFactura({
+          ...selectedFactura,
+          stare: newStare,
+          articole: newArticole,
+        });
+        setFacturi((prev) => {
+          const updated = prev.map((f) =>
+            f.id === selectedFactura.id ? { ...f, stare: newStare, articole: newArticole } : f
+          );
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+        fetchData(true);
+      } else {
+        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut aplica repartizarea costurilor.');
+        showToast(`Eroare: ${errMsg}`, 'error', 5000);
+      }
+    } catch {
+      showToast('Eroare la repartizarea costurilor suplimentare.', 'error', 4000);
+    } finally {
+      setSavingRepartizare(false);
+    }
+  };
+
+  const repPreviewData = useMemo(() => {
+    if (!selectedFactura || !showRepartizarePanel) return { totalFee: 0, rows: [] as any[] };
+    const articole = selectedFactura.articole || [];
+    const feeSet = new Set(repFeeItemIds);
+    const targetSet = new Set(repTargetItemIds);
+    const feeItems = articole.filter((a: any) => feeSet.has(a.id));
+    const targetItems = articole.filter((a: any) => targetSet.has(a.id) && !feeSet.has(a.id));
+
+    const totalFee = Number(
+      feeItems
+        .reduce((sum: number, f: any) => {
+          const v = Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0));
+          return sum + Math.max(0, v);
+        }, 0)
+        .toFixed(2)
+    );
+
+    if (totalFee <= 0 || targetItems.length === 0) {
+      return { totalFee, rows: [] as any[] };
+    }
+
+    const meta = targetItems.map((t: any) => {
+      const oldTotal = Number(
+        (t.valoareFaraTVA > 0 ? t.valoareFaraTVA : Number(t.pretUnitar || 0) * Number(t.cantitate || 0)).toFixed(2)
+      );
+      return { item: t, oldTotal };
+    });
+
+    const sumValues = meta.reduce((s: number, m: any) => s + Math.max(0, m.oldTotal), 0);
+    const sumQty = meta.reduce((s: number, m: any) => s + Math.max(0, Number(m.item.cantitate || 0)), 0);
+    const effectiveMod = repMod === 'PROPORTIONAL_VALOARE' && sumValues <= 0 ? 'EGAL_LINIE' : repMod;
+
+    const rawShares = meta.map((m: any) => {
+      if (effectiveMod === 'EGAL_LINIE') return totalFee / meta.length;
+      if (effectiveMod === 'EGAL_BUCATA') return totalFee * (Number(m.item.cantitate || 0) / (sumQty || 1));
+      return totalFee * (Math.max(0, m.oldTotal) / (sumValues || 1));
+    });
+
+    const shares = rawShares.map((s: number) => Number(s.toFixed(2)));
+    const roundedSum = Number(shares.reduce((a: number, b: number) => a + b, 0).toFixed(2));
+    const diff = Number((totalFee - roundedSum).toFixed(2));
+    if (Math.abs(diff) > 0 && shares.length > 0) {
+      let maxIdx = 0;
+      for (let i = 1; i < shares.length; i++) {
+        if (shares[i] >= shares[maxIdx]) maxIdx = i;
+      }
+      shares[maxIdx] = Number((shares[maxIdx] + diff).toFixed(2));
+    }
+
+    const rows = meta.map((m: any, idx: number) => {
+      const share = shares[idx] || 0;
+      const qty = Number(m.item.cantitate || 1);
+      const newTotal = Number((m.oldTotal + share).toFixed(2));
+      const newUnitPret = Number((newTotal / qty).toFixed(4));
+      const addPerUnit = Number((share / qty).toFixed(2));
+      return {
+        id: m.item.id,
+        descrierePiesa: m.item.descrierePiesa,
+        cantitate: qty,
+        unitateMasura: m.item.unitateMasura || 'buc',
+        oldUnitPret: Number(m.item.pretUnitar || 0),
+        addPerUnit,
+        share,
+        newUnitPret,
+        newTotal,
+      };
+    });
+
+    return { totalFee, rows };
+  }, [selectedFactura, showRepartizarePanel, repFeeItemIds, repTargetItemIds, repMod]);
+
   // OPEN IMPORT MODAL FOR A SINGLE ITEM
   const openImportItemModal = (item: any, isSerializat = false, startAsDirectMasina = false) => {
     setImportingItem(item);
@@ -1175,7 +1424,7 @@ function EFacturaContent() {
     setVolumAmbalaj(initVol);
     setUmConversie(pkg.detectedUnit || 'L');
 
-    // Detecție și adăugare automată ECOVALOARE pentru anvelope
+    // Detecție și adăugare automată ECOVALOARE pentru anvelope + costuri suplimentare (dacă este piesă unică)
     const ecoInfo = (isAnvelopaText && !isZeroFactura && !enableConversion)
       ? computeEcoValoarePerBuc(item, selectedFactura?.articole || [])
       : { ecoPerBuc: 0, ecoRemainingQty: 0 };
@@ -1183,14 +1432,21 @@ function EFacturaContent() {
     setEcovalorPerBuc(ecoInfo.ecoPerBuc);
     setIncludeEcovalor(ecoInfo.ecoPerBuc > 0);
 
+    const feeInfo = !isZeroFactura
+      ? computeExtraFeesForSinglePart(item, selectedFactura?.articole || [])
+      : { feeItems: [], feeTotal: 0, feePerInvoiceUnit: 0 };
+    setExtraFeeInfo(feeInfo);
+    setIncludeCostSuplimentar(feeInfo.feeTotal > 0);
+
     if (isZeroFactura) {
       setPretUnitarImport(0);
     } else if (enableConversion && initVol > 0) {
-      const unitPretLitri = Number((Number(item.pretUnitar || 0) / initVol).toFixed(2));
+      const unitPretLitri = Number(((Number(item.pretUnitar || 0) + feeInfo.feePerInvoiceUnit) / initVol).toFixed(2));
       setPretUnitarImport(unitPretLitri);
     } else {
       const basePret = Number(item.pretUnitar || 0);
-      setPretUnitarImport(ecoInfo.ecoPerBuc > 0 ? Number((basePret + ecoInfo.ecoPerBuc).toFixed(2)) : basePret);
+      const addedTotal = (ecoInfo.ecoPerBuc || 0) + (feeInfo.feePerInvoiceUnit || 0);
+      setPretUnitarImport(addedTotal > 0 ? Number((basePret + addedTotal).toFixed(2)) : basePret);
     }
     
     // Inițializare listă de serii per bucată
@@ -1423,6 +1679,10 @@ function EFacturaContent() {
           luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
           kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
           serieUnica: areGarantieProducator ? serieUnicaCustom.trim() : undefined,
+          includeFeeItemIds:
+            !isGarantieGratuita && includeCostSuplimentar && extraFeeInfo.feeItems.length > 0
+              ? extraFeeInfo.feeItems.map((f: any) => f.id)
+              : undefined,
         }),
       });
 
@@ -1431,41 +1691,51 @@ function EFacturaContent() {
         showToast(data.mesaj || 'Piesa a fost alocată cu succes pe comanda de lucru!', 'success');
         setImportingItem(null);
 
-        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms)
+        // ACTUALIZARE OPTIMISTĂ INSTANTANEE (0 ms) - include și liniile de costuri suplimentare absorbite
+        const updatedArticoleFromApi = Array.isArray(data.articole) ? data.articole : null;
+
         if (selectedFactura) {
-          const newArticole = (selectedFactura.articole || []).map((a: any) =>
-            a.id === updatedItemId
-              ? {
-                  ...a,
-                  stare: newStareItem,
-                  cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
-                }
-              : a
-          );
+          const newArticole = updatedArticoleFromApi
+            ? updatedArticoleFromApi
+            : (selectedFactura.articole || []).map((a: any) =>
+                a.id === updatedItemId
+                  ? {
+                      ...a,
+                      stare: newStareItem,
+                      cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
+                    }
+                  : a
+              );
           const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
           if (!hasRemaining) {
             setSelectedFactura(null);
           } else {
-            setSelectedFactura({ ...selectedFactura, articole: newArticole });
+            setSelectedFactura({
+              ...selectedFactura,
+              stare: data.facturaStare || selectedFactura.stare,
+              articole: newArticole,
+            });
           }
         }
 
         setFacturi((prev) => {
           const updated = prev.map((f) => {
             if (f.id !== targetFacturaId) return f;
-            const newArticole = (f.articole || []).map((a: any) =>
-              a.id === updatedItemId
-                ? {
-                    ...a,
-                    stare: newStareItem,
-                    cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
-                  }
-                : a
-            );
+            const newArticole = updatedArticoleFromApi
+              ? updatedArticoleFromApi
+              : (f.articole || []).map((a: any) =>
+                  a.id === updatedItemId
+                    ? {
+                        ...a,
+                        stare: newStareItem,
+                        cantitateProcesata: (a.cantitateProcesata || 0) + cantitateAlocataNum,
+                      }
+                    : a
+                );
             const hasRemaining = newArticole.some((a: any) => a.stare === 'NEPROCESAT');
             return {
               ...f,
-              stare: hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL',
+              stare: data.facturaStare || (hasRemaining ? 'IMPORTAT_PARȚIAL' : 'IMPORTAT_TOTAL'),
               articole: newArticole,
             };
           });
@@ -1529,6 +1799,10 @@ function EFacturaContent() {
           serieUnica: areGarantieProducator ? serieUnicaCustom.trim() : undefined,
           esteAnvelopa: /anvelop/i.test(targetCategorie) || isAnvelopaItemHelper(importingItem),
           includeEcovalor: !isGarantieGratuita && ecovalorPerBuc > 0 ? includeEcovalor : false,
+          includeFeeItemIds:
+            !isGarantieGratuita && includeCostSuplimentar && extraFeeInfo.feeItems.length > 0
+              ? extraFeeInfo.feeItems.map((f: any) => f.id)
+              : undefined,
           seriiIndividuale: isImportSerializat ? seriiList.map((s) => ({ serie: s.serie, dot: s.dot })) : undefined,
         }),
       });
@@ -2703,20 +2977,298 @@ function EFacturaContent() {
 
             {/* TABEL ARTICOLE DIN FACTURĂ */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[11px] font-extrabold text-sage-700 uppercase tracking-wider block">
                   Linii Factură / Articole extrase din UBL 2.1:
                 </span>
-                {eligibleItems.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={toggleSelectAllItems}
-                    className="text-[11px] text-sapphire-700 hover:text-sapphire-900 font-bold hover:underline"
-                  >
-                    {selectedItemIds.length === eligibleItems.length ? 'Deselectează toate liniile' : 'Selectează toate liniile'}
-                  </button>
-                )}
+                <div className="flex items-center space-x-3">
+                  {(selectedFactura.articole || []).filter((a: any) => a.stare === 'NEPROCESAT' && Number(a.cantitateProcesata || 0) <= 0.0001).length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => showRepartizarePanel ? setShowRepartizarePanel(false) : openRepartizareCosturiPanel(selectedFactura)}
+                      className="px-2.5 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 font-bold text-[11px] transition cursor-pointer"
+                      title="Include transportul, curieratul sau alte taxe în prețul articolelor din factură"
+                    >
+                      {showRepartizarePanel ? 'Ascunde Repartizarea Costurilor' : '⚖️ Repartizează Transport / Taxe'}
+                    </button>
+                  )}
+                  {eligibleItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllItems}
+                      className="text-[11px] text-sapphire-700 hover:text-sapphire-900 font-bold hover:underline"
+                    >
+                      {selectedItemIds.length === eligibleItems.length ? 'Deselectează toate liniile' : 'Selectează toate liniile'}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* DETECȚIE INTELIGENTĂ TRANSPORT / CURIERAT / TAXE */}
+              {!showRepartizarePanel && (() => {
+                const artList = selectedFactura.articole || [];
+                const cleanUnproc = artList.filter(
+                  (a: any) => a.stare === 'NEPROCESAT' && Number(a.cantitateProcesata || 0) <= 0.0001 && Number(a.cantitate || 0) > 0
+                );
+                const detectedFees = cleanUnproc.filter((a: any) => isCostSuplimentarCandidateHelper(a, artList));
+                const feeSet = new Set(detectedFees.map((f: any) => f.id));
+                const targets = cleanUnproc.filter(
+                  (a: any) => !feeSet.has(a.id) && !isEcoValoareItemHelper(a, artList) && !isReducereSauFinanciar(a)
+                );
+                if (detectedFees.length === 0 || targets.length === 0) return null;
+
+                const feeSum = Number(
+                  detectedFees
+                    .reduce((s: number, f: any) => s + Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0)), 0)
+                    .toFixed(2)
+                );
+                if (feeSum <= 0) return null;
+                const feeNames = detectedFees.map((f: any) => f.descrierePiesa).join(' + ');
+
+                if (targets.length === 1) {
+                  const singleTarget = targets[0];
+                  const addPerUnit = singleTarget.cantitate > 0 ? Number((feeSum / singleTarget.cantitate).toFixed(2)) : feeSum;
+                  return (
+                    <div className="p-3 bg-cyan-50/90 border border-cyan-300 rounded-xl flex items-center justify-between gap-3 flex-wrap animate-fade-in">
+                      <div className="text-xs text-cyan-950">
+                        <span className="font-extrabold">
+                          Cost suplimentar detectat: {feeSum.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                        </span>
+                        <span className="text-cyan-800 ml-1.5">({feeNames})</span>
+                        <div className="text-[11px] text-cyan-900 mt-0.5">
+                          Există un singur articol pe factură (<b>{singleTarget.descrierePiesa}</b>) → poți adăuga automat <b>+{addPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{singleTarget.unitateMasura || 'buc'}</b> înainte de import.
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={savingRepartizare}
+                          onClick={() => handleApplyRepartizareCosturi(detectedFees.map((f: any) => f.id), [singleTarget.id], 'EGAL_LINIE')}
+                          className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                        >
+                          {savingRepartizare ? 'Se aplică...' : `Include în Articol (+${addPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc)`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openRepartizareCosturiPanel(selectedFactura)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-morning-100 text-cyan-900 border border-cyan-300 font-bold text-xs transition cursor-pointer"
+                        >
+                          Personalizează
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-3 bg-cyan-50/90 border border-cyan-300 rounded-xl flex items-center justify-between gap-3 flex-wrap animate-fade-in">
+                    <div className="text-xs text-cyan-950">
+                      <span className="font-extrabold">
+                        Cost suplimentar detectat: {feeSum.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                      </span>
+                      <span className="text-cyan-800 ml-1.5">({feeNames})</span>
+                      <div className="text-[11px] text-cyan-900 mt-0.5">
+                        Există <b>{targets.length} articole</b> neprocesate — poți repartiza acest cost proporțional sau egal pe piese înainte de import.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openRepartizareCosturiPanel(selectedFactura)}
+                      className="px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer shrink-0"
+                    >
+                      Repartizează pe Piese ({targets.length})
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* PANEL REPARTIZARE COSTURI SUPLIMENTARE PE ARTICOLE */}
+              {showRepartizarePanel && (() => {
+                const cleanUnproc = (selectedFactura.articole || []).filter(
+                  (a: any) =>
+                    a.stare === 'NEPROCESAT' &&
+                    Number(a.cantitateProcesata || 0) <= 0.0001 &&
+                    Number(a.cantitate || 0) > 0 &&
+                    !isEcoValoareItemHelper(a, selectedFactura.articole || []) &&
+                    !isReducereSauFinanciar(a)
+                );
+                const feeIdSet = new Set(repFeeItemIds);
+                const availableTargets = cleanUnproc.filter((a: any) => !feeIdSet.has(a.id));
+
+                return (
+                  <div className="p-4 bg-gradient-to-br from-cyan-50/90 to-sapphire-50/60 border-2 border-cyan-400 rounded-2xl space-y-3 shadow-sm animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-cyan-200 pb-2">
+                      <div>
+                        <h4 className="text-xs font-black text-cyan-950 uppercase tracking-wider">
+                          Repartizare Costuri Suplimentare (Transport / Curierat / Taxe) pe Piese
+                        </h4>
+                        <p className="text-[11px] text-cyan-900">
+                          Alege liniile de cost și modul în care se distribuie valoarea lor pe articolele din factură.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRepartizarePanel(false)}
+                        className="px-2.5 py-1 rounded-lg bg-white hover:bg-morning-100 text-slate-600 text-xs font-bold border border-morning-300"
+                      >
+                        Închide
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {/* 1. Linii de cost (Taxe / Transport) */}
+                      <div className="bg-white border border-cyan-200 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold text-cyan-950 uppercase">
+                            1. Liniile de Cost / Taxă de Repartizat
+                          </span>
+                          <span className="text-xs font-mono font-black text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded">
+                            Total: {repPreviewData.totalFee.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                          </span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto divide-y divide-morning-100">
+                          {cleanUnproc.map((a: any) => {
+                            const checked = feeIdSet.has(a.id);
+                            const lineVal = Number(a.valoareFaraTVA > 0 ? a.valoareFaraTVA : (a.pretUnitar || 0) * (a.cantitate || 0));
+                            return (
+                              <label key={a.id} className="flex items-center justify-between py-1.5 px-1 hover:bg-cyan-50/60 rounded cursor-pointer text-xs">
+                                <span className="flex items-center space-x-2 min-w-0 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setRepFeeItemIds((prev) => [...prev, a.id]);
+                                        setRepTargetItemIds((prev) => prev.filter((id) => id !== a.id));
+                                      } else {
+                                        setRepFeeItemIds((prev) => prev.filter((id) => id !== a.id));
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded accent-cyan-600 shrink-0"
+                                  />
+                                  <span className={`truncate ${checked ? 'font-extrabold text-cyan-950' : 'text-slate-700'}`}>
+                                    {a.descrierePiesa}
+                                  </span>
+                                </span>
+                                <span className="font-mono font-bold text-slate-800 shrink-0">
+                                  {lineVal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 2. Mod distribuție + Articole destinație */}
+                      <div className="bg-white border border-cyan-200 rounded-xl p-3 space-y-2.5">
+                        <span className="text-[11px] font-extrabold text-cyan-950 uppercase block">
+                          2. Metodă de Repartizare & Articole Destinație ({repTargetItemIds.length}/{availableTargets.length})
+                        </span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                          {[
+                            { id: 'PROPORTIONAL_VALOARE', label: 'Proporțional (Valoare)', hint: 'Piesa mai scumpă preia proporțional mai mult' },
+                            { id: 'EGAL_LINIE', label: 'Egal pe Linie', hint: 'Aceeași sumă pe fiecare rând bifat' },
+                            { id: 'EGAL_BUCATA', label: 'Egal pe Bucată', hint: 'Împărțit egal la numărul total de bucăți' },
+                          ].map((opt) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setRepMod(opt.id as any)}
+                              title={opt.hint}
+                              className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                                repMod === opt.id
+                                  ? 'bg-cyan-600 text-white border-cyan-700 shadow-2xs'
+                                  : 'bg-morning-50 hover:bg-morning-100 text-slate-700 border-morning-200'
+                              }`}
+                            >
+                              <div className="text-[11px] font-extrabold leading-tight">{opt.label}</div>
+                              <div className={`text-[9px] mt-0.5 leading-tight ${repMod === opt.id ? 'text-cyan-100' : 'text-sage-600'}`}>
+                                {opt.hint}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="max-h-32 overflow-y-auto divide-y divide-morning-100 border-t border-morning-100 pt-1">
+                          {availableTargets.map((t: any) => {
+                            const isSelected = repTargetItemIds.includes(t.id);
+                            return (
+                              <label key={t.id} className="flex items-center justify-between py-1 px-1 hover:bg-morning-50 rounded cursor-pointer text-xs">
+                                <span className="flex items-center space-x-2 min-w-0 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setRepTargetItemIds((prev) => [...prev, t.id]);
+                                      else setRepTargetItemIds((prev) => prev.filter((id) => id !== t.id));
+                                    }}
+                                    className="w-3.5 h-3.5 rounded accent-cyan-600 shrink-0"
+                                  />
+                                  <span className="truncate font-semibold text-sapphire-900">{t.descrierePiesa}</span>
+                                </span>
+                                <span className="font-mono text-[11px] text-sage-700 shrink-0">
+                                  {t.cantitate} {t.unitateMasura} × {Number(t.pretUnitar || 0).toFixed(2)} RON
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Previzualizare live prețuri noi */}
+                    {repPreviewData.rows.length > 0 && (
+                      <div className="bg-white border border-cyan-200 rounded-xl overflow-x-auto">
+                        <table className="w-full text-left text-[11px] border-collapse">
+                          <thead>
+                            <tr className="bg-cyan-50 text-cyan-950 font-extrabold uppercase border-b border-cyan-200">
+                              <th className="p-2">Articol Destinație</th>
+                              <th className="p-2">Cant.</th>
+                              <th className="p-2">Preț Inițial/buc</th>
+                              <th className="p-2">+Adaos Cost/buc</th>
+                              <th className="p-2">Preț Nou Intrare/buc</th>
+                              <th className="p-2 text-right">Total Nou Articol</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-morning-100">
+                            {repPreviewData.rows.map((r: any) => (
+                              <tr key={r.id}>
+                                <td className="p-2 font-bold text-sapphire-900">{r.descrierePiesa}</td>
+                                <td className="p-2 font-mono">{r.cantitate} {r.unitateMasura}</td>
+                                <td className="p-2 font-mono text-sage-700">{r.oldUnitPret.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
+                                <td className="p-2 font-mono font-bold text-cyan-700">+{r.addPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON ({r.share.toFixed(2)} tot)</td>
+                                <td className="p-2 font-mono font-extrabold text-emerald-700">{r.newUnitPret.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} RON</td>
+                                <td className="p-2 font-mono font-extrabold text-right text-sapphire-950">{r.newTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end space-x-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowRepartizarePanel(false)}
+                        className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-morning-100 text-slate-700 font-bold text-xs border border-morning-300 cursor-pointer"
+                      >
+                        Anulează
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingRepartizare || repPreviewData.totalFee <= 0 || repPreviewData.rows.length === 0}
+                        onClick={() => handleApplyRepartizareCosturi()}
+                        className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                      >
+                        {savingRepartizare
+                          ? 'Se aplică repartizarea...'
+                          : `Aplică Repartizarea (${repPreviewData.totalFee.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON)`}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* BARA ACȚIUNI ÎN MASĂ PENTRU LINII FACTURĂ */}
               {selectedItemIds.length > 0 && (
@@ -2805,6 +3357,13 @@ function EFacturaContent() {
                                     : 'Taxă Eco Anvelope (se adaugă automat la import)'}
                                 </span>
                               )}
+                              {isCostSuplimentarCandidateHelper(art, selectedFactura?.articole || []) && (
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-cyan-100 text-cyan-900 border border-cyan-300 shadow-2xs">
+                                  {art.stare === 'IMPORTAT'
+                                    ? 'Cost repartizat pe piese'
+                                    : 'Transport / Taxă (repartizabilă)'}
+                                </span>
+                              )}
                             </div>
                             {art.observatiiIntern && (
                               <div className="text-[11px] text-sapphire-800 bg-sapphire-50 border border-sapphire-200 px-1.5 py-0.5 rounded-md font-semibold w-fit flex items-center space-x-1">
@@ -2887,7 +3446,11 @@ function EFacturaContent() {
                                 <span>
                                   {isEcoValoareItemHelper(art, selectedFactura?.articole || [])
                                     ? 'Inclus în Anvelope'
-                                    : 'Importat în Stoc'}
+                                    : (isCostSuplimentarCandidateHelper(art, selectedFactura?.articole || []) ||
+                                       (art.observatiiIntern || '').startsWith('Repartizat pe ') ||
+                                       (art.observatiiIntern || '').startsWith('Inclus automat în costul'))
+                                      ? 'Repartizat pe Piese'
+                                      : 'Importat în Stoc'}
                                 </span>
                               </span>
                             )
@@ -4045,16 +4608,7 @@ function EFacturaContent() {
                       checked={isGarantieGratuita}
                       onChange={(e) => {
                         setIsGarantieGratuita(e.target.checked);
-                        if (e.target.checked) {
-                          setPretUnitarImport(0);
-                        } else {
-                          const basePret = Number(importingItem.pretUnitar || 0);
-                          setPretUnitarImport(
-                            includeEcovalor && ecovalorPerBuc > 0
-                              ? Number((basePret + ecovalorPerBuc).toFixed(2))
-                              : basePret
-                          );
-                        }
+                        recomputeImportPret({ isFree: e.target.checked });
                       }}
                       className="w-3.5 h-3.5 rounded border-purple-300 text-purple-600 focus:ring-purple-500 cursor-pointer accent-purple-600"
                     />
@@ -4071,12 +4625,7 @@ function EFacturaContent() {
                         onChange={(e) => {
                           const checked = e.target.checked;
                           setIncludeEcovalor(checked);
-                          const basePret = Number(importingItem.pretUnitar || 0);
-                          setPretUnitarImport(
-                            checked
-                              ? Number((basePret + ecovalorPerBuc).toFixed(2))
-                              : basePret
-                          );
+                          recomputeImportPret({ ecoOn: checked });
                         }}
                         className="mt-0.5 w-3.5 h-3.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
                       />
@@ -4086,6 +4635,31 @@ function EFacturaContent() {
                         </span>
                         <span className="text-emerald-800 font-mono">
                           Anvelopă {Number(importingItem.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Ecovalor {ecovalorPerBuc.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} = <b>{Number((Number(importingItem.pretUnitar || 0) + ecovalorPerBuc).toFixed(2)).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc</b>
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {!isGarantieGratuita && extraFeeInfo.feeTotal > 0 && (
+                  <div className="p-2.5 bg-cyan-50 border border-cyan-300 rounded-xl flex items-start justify-between gap-2">
+                    <label className="flex items-start space-x-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeCostSuplimentar}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIncludeCostSuplimentar(checked);
+                          recomputeImportPret({ feeOn: checked });
+                        }}
+                        className="mt-0.5 w-3.5 h-3.5 rounded border-cyan-400 text-cyan-600 focus:ring-cyan-500 cursor-pointer accent-cyan-600"
+                      />
+                      <div className="text-[11px] leading-tight">
+                        <span className="font-extrabold text-cyan-950 block">
+                          Include cost suplimentar: {extraFeeInfo.feeItems.map((f: any) => f.descrierePiesa).join(' + ')} (+{extraFeeInfo.feeTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON total)
+                        </span>
+                        <span className="text-cyan-800 font-mono">
+                          +{extraFeeInfo.feePerInvoiceUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{importingItem.unitateMasura || 'buc'} adăugat în prețul de intrare în stoc
                         </span>
                       </div>
                     </label>
@@ -4493,14 +5067,30 @@ function EFacturaContent() {
                           checked={isGarantieGratuita}
                           onChange={(e) => {
                             setIsGarantieGratuita(e.target.checked);
-                            if (e.target.checked) setPretUnitarImport(0);
-                            else setPretUnitarImport(importingItem.pretUnitar || 0);
+                            recomputeImportPret({ isFree: e.target.checked });
                           }}
                           className="w-3 h-3 rounded accent-purple-600"
                         />
                         <span>0 RON (Garanție)</span>
                       </label>
                     </div>
+                    {!isGarantieGratuita && extraFeeInfo.feeTotal > 0 && (
+                      <label className="flex items-center space-x-1.5 mb-1.5 p-1.5 bg-cyan-50 border border-cyan-300 rounded-lg cursor-pointer text-[10px] font-bold text-cyan-950">
+                        <input
+                          type="checkbox"
+                          checked={includeCostSuplimentar}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIncludeCostSuplimentar(checked);
+                            recomputeImportPret({ feeOn: checked });
+                          }}
+                          className="w-3 h-3 rounded accent-cyan-600 shrink-0"
+                        />
+                        <span className="truncate" title={extraFeeInfo.feeItems.map((f: any) => f.descrierePiesa).join(' + ')}>
+                          Include {extraFeeInfo.feeItems.map((f: any) => f.descrierePiesa).join(' + ')} (+{extraFeeInfo.feePerInvoiceUnit.toFixed(2)} RON/buc)
+                        </span>
+                      </label>
+                    )}
                     <div className="flex items-center space-x-1.5">
                       <input
                         type="number"

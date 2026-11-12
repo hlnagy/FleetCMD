@@ -179,6 +179,20 @@ export class EFacturaController {
     return this.efacturaService.eliminaToataFactura(id);
   }
 
+  // REPARTIZARE COSTURI SUPLIMENTARE (TRANSPORT, CURIER, TAXE) PE ARTICOLELE DIN FACTURĂ
+  @Post('facturi/:id/repartizeaza-costuri')
+  async repartizeazaCosturiPePiese(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      feeItemIds: string[];
+      targetItemIds: string[];
+      modRepartizare: 'PROPORTIONAL_VALOARE' | 'EGAL_LINIE' | 'EGAL_BUCATA';
+    },
+  ) {
+    return this.efacturaService.repartizeazaCosturiPePiese(id, body);
+  }
+
   // TÖMEGES FACTURA KIIKTATÁS (BULK EXCLUDE FACTURI)
   @Post('facturi/bulk-elimina')
   async bulkEliminaFacturi(@Body() body: { facturaIds: string[] }) {

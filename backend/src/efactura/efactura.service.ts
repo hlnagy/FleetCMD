@@ -195,6 +195,35 @@ export function isEcoValoareLine(descriere?: string, cod?: string, hasTireOnInvo
   return false;
 }
 
+export function isCostSuplimentarCandidate(
+  descriere?: string,
+  cod?: string,
+  valoareFaraTVA?: number,
+): boolean {
+  if (typeof valoareFaraTVA === 'number' && valoareFaraTVA <= 0) return false;
+  const desc = String(descriere || '').trim();
+  const code = String(cod || '').trim().toUpperCase();
+  if (!desc && !code) return false;
+
+  if (isTireDescription(desc, code)) return false;
+  if (isEcoValoareLine(desc, code, false) || (code === 'ECO' && /eco/i.test(desc))) return false;
+  if (/reducere|discount|discont|storno|bonificatie|rabat|remiza/i.test(desc)) return false;
+  if (
+    /c\.m\.r|scrisoare\s*transport|ecopact|proiector|panou\s*led|bec\s*led|intrerupator|sig\s*aut/i.test(desc) &&
+    !/curierat|livrare|expediere/i.test(desc)
+  ) {
+    return false;
+  }
+
+  return (
+    /^(?:servicii\s*(?:de\s*)?(?:transport|curierat|curier|livrare|expediere)|refacturare\s*transport|cheltuieli\s*(?:de\s*)?(?:transport|livrare|expediere|curierat)|taxa\s*(?:de\s*)?(?:transport|curier|curierat|livrare|expediere|ramburs|logistica|ambalaj|manipulare|urgenta|timbru\s*verde|mediu|ulei)|cost\s*(?:de\s*)?(?:transport|livrare|curier)|transport(?:\s|$|-|:)|curierat|cheltuieli\s*expediere|livrare\s*curier|ambalaj|paletizare|srvramburs)/i.test(desc) ||
+    /\b(?:taxa\s*(?:de\s*)?(?:transport|curier|curierat|livrare|expediere|ramburs|ulei|mediu\s*ulei)|servicii\s*curierat|cheltuieli\s*livrare|refacturare\s*transport)\b/i.test(desc) ||
+    code.includes('TRANS') ||
+    code.includes('CURIER') ||
+    code === '0.3 LEI'
+  );
+}
+
 @Injectable()
 export class EFacturaService implements OnModuleInit {
   private readonly logger = new Logger(EFacturaService.name);
@@ -1130,6 +1159,7 @@ export class EFacturaService implements OnModuleInit {
     serieUnica?: string;
     esteAnvelopa?: boolean;
     includeEcovalor?: boolean;
+    includeFeeItemIds?: string[];
     codDot?: string;
     seriiIndividuale?: Array<{
       serie: string;
@@ -1193,67 +1223,108 @@ export class EFacturaService implements OnModuleInit {
       ? Number((cantitateFacturaConsumata * Number(data.volumAmbalaj)).toFixed(2)) 
       : (data.cantitateRealaStoc && !isConversie ? Number(data.cantitateRealaStoc) : cantitateFacturaConsumata);
 
-    // Detecție și calcul automat ECOVALOARE de pe factură pentru anvelope
+    // Detecție și calcul automat ECOVALOARE de pe factură pentru anvelope + costuri suplimentare selectate (Transport / Curier / Taxe)
     let ecoPerTire = 0;
     const ecoConsumptions: Array<{ ecoItem: any; take: number }> = [];
+    let extraFeeTotalApplied = 0;
+    let extraFeePerInvoiceUnit = 0;
+    const feeConsumptions: Array<{ feeItem: any; takeQty: number }> = [];
     const isFreeWarrantyCustom = typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom === 0;
 
-    if (esteAnvelopa && data.includeEcovalor !== false && !isFreeWarrantyCustom && !isConversie) {
-      const facturaItems = await this.prisma.eFacturaItem.findMany({
-        where: { facturaId: item.facturaId },
-        orderBy: { numarLinie: 'asc' },
-      });
+    if (!isFreeWarrantyCustom) {
+      const needFacturaItems =
+        (esteAnvelopa && data.includeEcovalor !== false && !isConversie) ||
+        (Array.isArray(data.includeFeeItemIds) && data.includeFeeItemIds.length > 0);
 
-      const ecoItems = facturaItems.filter(
-        (fi) =>
-          fi.id !== item.id &&
-          fi.stare === 'NEPROCESAT' &&
-          isEcoValoareLine(fi.descrierePiesa, fi.codArticolFurnizor, true) &&
-          fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
-      );
+      if (needFacturaItems) {
+        const facturaItems = await this.prisma.eFacturaItem.findMany({
+          where: { facturaId: item.facturaId },
+          orderBy: { numarLinie: 'asc' },
+        });
 
-      if (ecoItems.length > 0) {
-        const ecoRemainingQty = ecoItems.reduce(
-          (sum, e) => sum + Math.max(0, e.cantitate - Number(e.cantitateProcesata || 0)),
-          0
-        );
-        const tireItemsRemainingQty = facturaItems
-          .filter(
+        if (esteAnvelopa && data.includeEcovalor !== false && !isConversie) {
+          const ecoItems = facturaItems.filter(
             (fi) =>
+              fi.id !== item.id &&
               fi.stare === 'NEPROCESAT' &&
-              isTireDescription(fi.descrierePiesa, fi.codArticolFurnizor) &&
+              isEcoValoareLine(fi.descrierePiesa, fi.codArticolFurnizor, true) &&
               fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
-          )
-          .reduce(
-            (sum, t) => sum + Math.max(0, t.cantitate - Number(t.cantitateProcesata || 0)),
-            0
           );
 
-        const isLumpSumEco = tireItemsRemainingQty > 0 && ecoRemainingQty < tireItemsRemainingQty - 0.05;
-        const ecoUnitsPerTire = isLumpSumEco ? ecoRemainingQty / tireItemsRemainingQty : 1;
-        const ecoUnitsToConsume = Math.min(
-          ecoRemainingQty,
-          Number((cantitateFacturaConsumata * ecoUnitsPerTire).toFixed(4))
-        );
+          if (ecoItems.length > 0) {
+            const ecoRemainingQty = ecoItems.reduce(
+              (sum, e) => sum + Math.max(0, e.cantitate - Number(e.cantitateProcesata || 0)),
+              0
+            );
+            const tireItemsRemainingQty = facturaItems
+              .filter(
+                (fi) =>
+                  fi.stare === 'NEPROCESAT' &&
+                  isTireDescription(fi.descrierePiesa, fi.codArticolFurnizor) &&
+                  fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
+              )
+              .reduce(
+                (sum, t) => sum + Math.max(0, t.cantitate - Number(t.cantitateProcesata || 0)),
+                0
+              );
 
-        let leftToConsume = ecoUnitsToConsume;
-        let ecoValueConsumed = 0;
+            const isLumpSumEco = tireItemsRemainingQty > 0 && ecoRemainingQty < tireItemsRemainingQty - 0.05;
+            const ecoUnitsPerTire = isLumpSumEco ? ecoRemainingQty / tireItemsRemainingQty : 1;
+            const ecoUnitsToConsume = Math.min(
+              ecoRemainingQty,
+              Number((cantitateFacturaConsumata * ecoUnitsPerTire).toFixed(4))
+            );
 
-        for (const eco of ecoItems) {
-          if (leftToConsume <= 0.0001) break;
-          const ecoRem = Math.max(0, Number((eco.cantitate - Number(eco.cantitateProcesata || 0)).toFixed(4)));
-          if (ecoRem <= 0) continue;
-          const take = Math.min(ecoRem, leftToConsume);
-          const ecoUnitPret = Number(
-            eco.pretUnitar || (eco.cantitate > 0 ? eco.valoareFaraTVA / eco.cantitate : 0) || 0
-          );
-          ecoValueConsumed += take * ecoUnitPret;
-          ecoConsumptions.push({ ecoItem: eco, take });
-          leftToConsume = Number((leftToConsume - take).toFixed(4));
+            let leftToConsume = ecoUnitsToConsume;
+            let ecoValueConsumed = 0;
+
+            for (const eco of ecoItems) {
+              if (leftToConsume <= 0.0001) break;
+              const ecoRem = Math.max(0, Number((eco.cantitate - Number(eco.cantitateProcesata || 0)).toFixed(4)));
+              if (ecoRem <= 0) continue;
+              const take = Math.min(ecoRem, leftToConsume);
+              const ecoUnitPret = Number(
+                eco.pretUnitar || (eco.cantitate > 0 ? eco.valoareFaraTVA / eco.cantitate : 0) || 0
+              );
+              ecoValueConsumed += take * ecoUnitPret;
+              ecoConsumptions.push({ ecoItem: eco, take });
+              leftToConsume = Number((leftToConsume - take).toFixed(4));
+            }
+
+            if (cantitateFacturaConsumata > 0 && ecoValueConsumed > 0) {
+              ecoPerTire = Number((ecoValueConsumed / cantitateFacturaConsumata).toFixed(2));
+            }
+          }
         }
 
-        if (cantitateFacturaConsumata > 0 && ecoValueConsumed > 0) {
-          ecoPerTire = Number((ecoValueConsumed / cantitateFacturaConsumata).toFixed(2));
+        if (Array.isArray(data.includeFeeItemIds) && data.includeFeeItemIds.length > 0) {
+          const requestedFeeSet = new Set(data.includeFeeItemIds);
+          const ratioOfItemRemaining =
+            cantitateFacturaRamasa > 0 ? Math.min(1, cantitateFacturaConsumata / cantitateFacturaRamasa) : 1;
+
+          const selectedFees = facturaItems.filter(
+            (fi) =>
+              fi.id !== item.id &&
+              requestedFeeSet.has(fi.id) &&
+              fi.stare === 'NEPROCESAT' &&
+              fi.cantitate - Number(fi.cantitateProcesata || 0) > 0.0001
+          );
+
+          for (const fee of selectedFees) {
+            const feeRemQty = Math.max(0, Number((fee.cantitate - Number(fee.cantitateProcesata || 0)).toFixed(4)));
+            if (feeRemQty <= 0) continue;
+            const takeQty = Math.min(feeRemQty, Number((feeRemQty * ratioOfItemRemaining).toFixed(4)));
+            const feeLineTotal = Number(
+              fee.valoareFaraTVA > 0 ? fee.valoareFaraTVA : (fee.pretUnitar || 0) * fee.cantitate
+            );
+            const feeUnitEffective = fee.cantitate > 0 ? feeLineTotal / fee.cantitate : 0;
+            extraFeeTotalApplied += takeQty * feeUnitEffective;
+            feeConsumptions.push({ feeItem: fee, takeQty });
+          }
+
+          if (cantitateFacturaConsumata > 0 && extraFeeTotalApplied > 0) {
+            extraFeePerInvoiceUnit = Number((extraFeeTotalApplied / cantitateFacturaConsumata).toFixed(4));
+          }
         }
       }
     }
@@ -1263,17 +1334,17 @@ export class EFacturaService implements OnModuleInit {
     if (typeof data.pretUnitarCustom === 'number' && data.pretUnitarCustom >= 0) {
       effectivePretUnitar = Number(Number(data.pretUnitarCustom).toFixed(4));
     } else if (isConversie && effectiveCantitate > 0) {
-      const baseTotal = Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
+      const baseTotal = Number((item.pretUnitar * cantitateFacturaConsumata + extraFeeTotalApplied).toFixed(2));
       effectivePretUnitar = Number((baseTotal / effectiveCantitate).toFixed(4));
     } else {
-      effectivePretUnitar = Number((Number(item.pretUnitar || 0) + ecoPerTire).toFixed(2));
+      effectivePretUnitar = Number((Number(item.pretUnitar || 0) + ecoPerTire + extraFeePerInvoiceUnit).toFixed(2));
     }
 
-    // Calcul valoare totală recepție pentru cantitatea consumată (include ECOVALOARE / preț custom)
+    // Calcul valoare totală recepție pentru cantitatea consumată (include ECOVALOARE / costuri suplimentare / preț custom)
     const effectivePretTotal =
       effectivePretUnitar === 0
         ? 0
-        : typeof data.pretUnitarCustom === 'number' || ecoPerTire > 0
+        : typeof data.pretUnitarCustom === 'number' || ecoPerTire > 0 || extraFeeTotalApplied > 0
           ? Number((effectivePretUnitar * effectiveCantitate).toFixed(2))
           : Number((item.pretUnitar * cantitateFacturaConsumata).toFixed(2));
 
@@ -1350,9 +1421,12 @@ export class EFacturaService implements OnModuleInit {
     const ecoObservatieText = ecoPerTire > 0 && effectivePretUnitar > 0
       ? ` • Include ECOVALOARE (+${ecoPerTire.toFixed(2)} RON/buc)`
       : '';
+    const feeObservatieText = extraFeeTotalApplied > 0 && effectivePretUnitar > 0
+      ? ` • Include costuri suplimentare (+${extraFeeTotalApplied.toFixed(2)} RON)`
+      : '';
     const observatiiReceptie = isConversie
-      ? `Importat din e-Factura. Despachetat: ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / cantitateFacturaConsumata)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${observatiiInternText}`
-      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${observatiiInternText}`;
+      ? `Importat din e-Factura. Despachetat: ${cantitateFacturaConsumata} ${item.unitateMasura || 'buc'} x ${data.volumAmbalaj || (effectiveCantitate / cantitateFacturaConsumata)} ${effectiveUM} = ${effectiveCantitate} ${effectiveUM} la ${effectivePretUnitar.toFixed(2)} RON/${effectiveUM}. (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${feeObservatieText}${observatiiInternText}`
+      : `Importat automat din ANAF e-Factura (ID descarcare: ${item.factura.idDescarcare})${data.areGarantie ? ' • Înregistrat în Garanții Componente' : ''}${ecoObservatieText}${feeObservatieText}${observatiiInternText}`;
 
     await this.prisma.intrareStoc.create({
       data: {
@@ -1477,6 +1551,26 @@ export class EFacturaService implements OnModuleInit {
       }
     }
 
+    // 6b. Închidere / consum automat al liniilor de costuri suplimentare (Transport / Curier / Taxe) incluse la import
+    if (feeConsumptions.length > 0 && effectivePretUnitar > 0) {
+      for (const { feeItem, takeQty } of feeConsumptions) {
+        const prevProc = Number(feeItem.cantitateProcesata || 0);
+        const newProc = Math.min(feeItem.cantitate, Number((prevProc + takeQty).toFixed(4)));
+        const feeComplete = newProc >= feeItem.cantitate - 0.0001;
+        await this.prisma.eFacturaItem.update({
+          where: { id: feeItem.id },
+          data: {
+            cantitateProcesata: newProc,
+            stare: feeComplete ? 'IMPORTAT' : 'NEPROCESAT',
+            articolStocId: feeItem.articolStocId || articol.id,
+            observatiiIntern: feeComplete
+              ? `Inclus automat în costul articolului "${item.descrierePiesa}"`
+              : `Inclus parțial în "${item.descrierePiesa}" (${newProc}/${feeItem.cantitate} ${feeItem.unitateMasura || 'buc'})`,
+          },
+        });
+      }
+    }
+
     // 7. Închidere automată a liniilor de reducere / garanție financiară dacă s-a importat garanție gratuită (0 RON)
     if (effectivePretUnitar === 0 || (item.factura && item.factura.valoareTotala === 0)) {
       const remainingItems = await this.prisma.eFacturaItem.findMany({
@@ -1594,6 +1688,176 @@ export class EFacturaService implements OnModuleInit {
     return {
       mesaj: ` Factura "${factura.numarFactura} - ${factura.numeVanzator}" (${factura._count.articole} linii) a fost exclusă complet (marcată ca Servicii / Cheltuială operațională).`,
       factura: updatedFactura,
+    };
+  }
+
+  // REPARTIZARE COSTURI SUPLIMENTARE (TRANSPORT, CURIERAT, TAXE) PE ARTICOLELE NEPROCESATE DIN FACTURĂ
+  async repartizeazaCosturiPePiese(
+    facturaId: string,
+    data: {
+      feeItemIds: string[];
+      targetItemIds: string[];
+      modRepartizare: 'PROPORTIONAL_VALOARE' | 'EGAL_LINIE' | 'EGAL_BUCATA';
+    },
+  ) {
+    const feeIds = Array.from(new Set(data?.feeItemIds || [])).filter(Boolean);
+    const targetIds = Array.from(new Set(data?.targetItemIds || [])).filter(Boolean);
+    const mod = data?.modRepartizare || 'PROPORTIONAL_VALOARE';
+
+    if (feeIds.length === 0) {
+      throw new BadRequestException('Selectați cel puțin o linie de cost suplimentar (transport, curier, taxă).');
+    }
+    if (targetIds.length === 0) {
+      throw new BadRequestException('Selectați cel puțin un articol destinație pe care să se repartizeze costul.');
+    }
+
+    const feeSet = new Set(feeIds);
+    if (targetIds.some((id) => feeSet.has(id))) {
+      throw new BadRequestException('Aceeași linie nu poate fi simultan cost suplimentar și articol destinație.');
+    }
+
+    const factura = await this.prisma.eFacturaFactura.findUnique({
+      where: { id: facturaId },
+      include: { articole: { orderBy: { numarLinie: 'asc' } } },
+    });
+    if (!factura) {
+      throw new NotFoundException('Factura nu a fost găsită.');
+    }
+
+    const feeItems = factura.articole.filter((a) => feeSet.has(a.id));
+    if (feeItems.length !== feeIds.length) {
+      throw new BadRequestException('Unele linii de cost selectate nu aparțin acestei facturi.');
+    }
+    for (const f of feeItems) {
+      if (f.stare !== 'NEPROCESAT' || Number(f.cantitateProcesata || 0) > 0.0001) {
+        throw new BadRequestException(`Linia "${f.descrierePiesa}" este deja procesată și nu mai poate fi repartizată.`);
+      }
+    }
+
+    const targetSet = new Set(targetIds);
+    const targetItems = factura.articole.filter((a) => targetSet.has(a.id));
+    if (targetItems.length !== targetIds.length) {
+      throw new BadRequestException('Unele articole destinație nu aparțin acestei facturi.');
+    }
+    for (const t of targetItems) {
+      if (t.stare !== 'NEPROCESAT' || Number(t.cantitateProcesata || 0) > 0.0001) {
+        throw new BadRequestException(`Articolul "${t.descrierePiesa}" este deja procesat/importat parțial.`);
+      }
+      if (!t.cantitate || t.cantitate <= 0) {
+        throw new BadRequestException(`Articolul "${t.descrierePiesa}" nu are o cantitate pozitivă validă.`);
+      }
+    }
+
+    const totalFee = Number(
+      feeItems
+        .reduce((sum, f) => {
+          const v = Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0));
+          return sum + Math.max(0, v);
+        }, 0)
+        .toFixed(2)
+    );
+
+    if (totalFee <= 0) {
+      throw new BadRequestException('Suma liniilor de cost selectate trebuie să fie mai mare de 0 RON.');
+    }
+
+    const targetMeta = targetItems.map((t) => {
+      const oldTotal = Number(
+        (t.valoareFaraTVA && t.valoareFaraTVA > 0
+          ? t.valoareFaraTVA
+          : Number(t.pretUnitar || 0) * Number(t.cantitate || 0)
+        ).toFixed(2)
+      );
+      return { item: t, oldTotal };
+    });
+
+    const sumValues = targetMeta.reduce((s, m) => s + Math.max(0, m.oldTotal), 0);
+    const sumQty = targetMeta.reduce((s, m) => s + Math.max(0, Number(m.item.cantitate || 0)), 0);
+
+    const effectiveMod = mod === 'PROPORTIONAL_VALOARE' && sumValues <= 0 ? 'EGAL_LINIE' : mod;
+    const rawShares = targetMeta.map((m) => {
+      if (effectiveMod === 'EGAL_LINIE') {
+        return totalFee / targetMeta.length;
+      }
+      if (effectiveMod === 'EGAL_BUCATA') {
+        return totalFee * (Number(m.item.cantitate || 0) / (sumQty || 1));
+      }
+      return totalFee * (Math.max(0, m.oldTotal) / (sumValues || 1));
+    });
+
+    const roundedShares = rawShares.map((s) => Number(s.toFixed(2)));
+    const roundedSum = Number(roundedShares.reduce((a, b) => a + b, 0).toFixed(2));
+    const diffCents = Number((totalFee - roundedSum).toFixed(2));
+    if (Math.abs(diffCents) > 0 && roundedShares.length > 0) {
+      let maxIdx = 0;
+      for (let i = 1; i < roundedShares.length; i++) {
+        if (roundedShares[i] >= roundedShares[maxIdx]) maxIdx = i;
+      }
+      roundedShares[maxIdx] = Number((roundedShares[maxIdx] + diffCents).toFixed(2));
+    }
+
+    const methodLabel =
+      effectiveMod === 'PROPORTIONAL_VALOARE'
+        ? 'Proporțional după Valoare'
+        : effectiveMod === 'EGAL_LINIE'
+          ? 'Egal pe Linie'
+          : 'Egal pe Bucată';
+
+    const feeSummaryShort = feeItems
+      .map((f) => f.descrierePiesa.trim())
+      .join(' + ')
+      .slice(0, 70);
+
+    await this.prisma.$transaction(async (tx) => {
+      for (let i = 0; i < targetMeta.length; i++) {
+        const { item: t, oldTotal } = targetMeta[i];
+        const share = roundedShares[i] || 0;
+        const newTotal = Number((oldTotal + share).toFixed(2));
+        const newPretUnitar = Number((newTotal / t.cantitate).toFixed(4));
+        const addedPerUnit = Number((share / t.cantitate).toFixed(2));
+        const oldPret = Number(t.pretUnitar || 0);
+        const notaNoua = `Include ${feeItems.length === 1 ? feeSummaryShort : 'Transport/Taxe'} (+${addedPerUnit.toFixed(2)} RON/buc; inițial ${oldPret.toFixed(2)} RON)`;
+        const obsFinal = t.observatiiIntern ? `${t.observatiiIntern} • ${notaNoua}` : notaNoua;
+
+        await tx.eFacturaItem.update({
+          where: { id: t.id },
+          data: {
+            pretUnitar: newPretUnitar,
+            valoareFaraTVA: newTotal,
+            observatiiIntern: obsFinal,
+          },
+        });
+      }
+
+      for (const f of feeItems) {
+        await tx.eFacturaItem.update({
+          where: { id: f.id },
+          data: {
+            cantitateProcesata: f.cantitate,
+            stare: 'IMPORTAT',
+            observatiiIntern: `Repartizat pe ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'} (${methodLabel})`,
+          },
+        });
+      }
+    });
+
+    await this.recalculeazaStareFactura(facturaId);
+
+    const [updatedArticole, updatedFactura] = await Promise.all([
+      this.prisma.eFacturaItem.findMany({
+        where: { facturaId },
+        orderBy: { numarLinie: 'asc' },
+      }),
+      this.prisma.eFacturaFactura.findUnique({
+        where: { id: facturaId },
+        select: { id: true, stare: true },
+      }),
+    ]);
+
+    return {
+      mesaj: `Cost suplimentar de ${totalFee.toFixed(2)} RON repartizat (${methodLabel}) pe ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'}!`,
+      articole: updatedArticole,
+      facturaStare: updatedFactura?.stare,
     };
   }
 
@@ -1862,6 +2126,7 @@ export class EFacturaService implements OnModuleInit {
     categorie?: string;
     subcategorie?: string;
     observatiiIntern?: string;
+    includeFeeItemIds?: string[];
   }) {
     const item = await this.prisma.eFacturaItem.findUnique({
       where: { id: itemId },
@@ -1877,7 +2142,7 @@ export class EFacturaService implements OnModuleInit {
       throw new BadRequestException('Acest articol a fost deja alocat integral.');
     }
 
-    const isTire = /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(item.descrierePiesa || '');
+    const isTire = isTireDescription(item.descrierePiesa, item.codArticolFurnizor, data.categorie);
     if (isTire) {
       throw new BadRequestException(
         'Anvelopele nu pot fi montate direct pe Comandă de Lucru! Recepționați anvelopele în depozit / stoc, iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția de axă corespunzătoare.'
@@ -1890,7 +2155,43 @@ export class EFacturaService implements OnModuleInit {
       throw new BadRequestException(`Cantitatea solicitată (${cantitateMontata}) depășește cantitatea rămasă nealocată pe linie (${cantitateRamasa}).`);
     }
 
-    const pretUnitarPiesa = Number(data.pretUnitar !== undefined && data.pretUnitar >= 0 ? data.pretUnitar : item.pretUnitar);
+    // Costuri suplimentare opționale (Transport / Curier / Taxe) incluse pe piesa alocată direct
+    let extraFeeTotalApplied = 0;
+    let extraFeePerUnit = 0;
+    const feeConsumptions: Array<{ feeItem: any; takeQty: number }> = [];
+    const isFreeCustomPrice = typeof data.pretUnitar === 'number' && data.pretUnitar === 0;
+
+    if (!isFreeCustomPrice && Array.isArray(data.includeFeeItemIds) && data.includeFeeItemIds.length > 0) {
+      const requestedFeeSet = new Set(data.includeFeeItemIds.filter((id) => id && id !== itemId));
+      if (requestedFeeSet.size > 0) {
+        const ratioOfRemaining = cantitateRamasa > 0 ? Math.min(1, cantitateMontata / cantitateRamasa) : 1;
+        const candidateFees = await this.prisma.eFacturaItem.findMany({
+          where: {
+            facturaId: factura.id,
+            id: { in: Array.from(requestedFeeSet) },
+            stare: 'NEPROCESAT',
+          },
+        });
+        for (const fee of candidateFees) {
+          const feeRemQty = Math.max(0, Number((fee.cantitate - Number(fee.cantitateProcesata || 0)).toFixed(4)));
+          if (feeRemQty <= 0) continue;
+          const takeQty = Math.min(feeRemQty, Number((feeRemQty * ratioOfRemaining).toFixed(4)));
+          const feeLineTotal = Number(fee.valoareFaraTVA > 0 ? fee.valoareFaraTVA : (fee.pretUnitar || 0) * fee.cantitate);
+          const feeUnitEffective = fee.cantitate > 0 ? feeLineTotal / fee.cantitate : 0;
+          extraFeeTotalApplied += takeQty * feeUnitEffective;
+          feeConsumptions.push({ feeItem: fee, takeQty });
+        }
+        if (cantitateMontata > 0 && extraFeeTotalApplied > 0) {
+          extraFeePerUnit = Number((extraFeeTotalApplied / cantitateMontata).toFixed(4));
+        }
+      }
+    }
+
+    const pretUnitarPiesa = Number(
+      data.pretUnitar !== undefined && data.pretUnitar >= 0
+        ? data.pretUnitar
+        : Number((Number(item.pretUnitar || 0) + extraFeePerUnit).toFixed(2))
+    );
     const costTotalPiesa = Number((cantitateMontata * pretUnitarPiesa).toFixed(2));
     const furnizorNume = factura.numeVanzator || 'Furnizor Factură';
     const numarFactura = factura.numarFactura || 'Fără Număr';
@@ -2143,8 +2444,39 @@ export class EFacturaService implements OnModuleInit {
       },
     });
 
+    // Închidere / consum costuri suplimentare incluse pe piesa alocată direct
+    if (feeConsumptions.length > 0 && pretUnitarPiesa > 0) {
+      for (const { feeItem, takeQty } of feeConsumptions) {
+        const prevProc = Number(feeItem.cantitateProcesata || 0);
+        const newProc = Math.min(feeItem.cantitate, Number((prevProc + takeQty).toFixed(4)));
+        const feeComplete = newProc >= feeItem.cantitate - 0.0001;
+        await this.prisma.eFacturaItem.update({
+          where: { id: feeItem.id },
+          data: {
+            cantitateProcesata: newProc,
+            stare: feeComplete ? 'IMPORTAT' : 'NEPROCESAT',
+            comandaLucruId: targetComandaId,
+            observatiiIntern: feeComplete
+              ? `Inclus în piesa "${item.descrierePiesa}" (${numarComandaLucru})`
+              : `Inclus parțial în "${item.descrierePiesa}" (${newProc}/${feeItem.cantitate})`,
+          },
+        });
+      }
+    }
+
     // Actualizăm starea facturii mamă
     await this.recalculeazaStareFactura(factura.id);
+
+    const [updatedArticole, updatedFactura] = await Promise.all([
+      this.prisma.eFacturaItem.findMany({
+        where: { facturaId: factura.id },
+        orderBy: { numarLinie: 'asc' },
+      }),
+      this.prisma.eFacturaFactura.findUnique({
+        where: { id: factura.id },
+        select: { id: true, stare: true },
+      }),
+    ]);
 
     const cantRamasaDupa = Math.max(0, Number((item.cantitate - nouaCantitateProcesata).toFixed(2)));
     const mesajSucces = esteComplet
@@ -2156,6 +2488,8 @@ export class EFacturaService implements OnModuleInit {
       mesaj: mesajSucces,
       comandaLucruId: targetComandaId,
       numarComanda: numarComandaLucru,
+      articole: updatedArticole,
+      facturaStare: updatedFactura?.stare,
     };
   }
 }
