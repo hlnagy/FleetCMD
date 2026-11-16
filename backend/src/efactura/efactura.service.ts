@@ -1266,6 +1266,7 @@ export class EFacturaService implements OnModuleInit {
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'Alte';
+    await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume);
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
     const esteAnvelopa =
       data.esteAnvelopa === true ||
@@ -2233,6 +2234,8 @@ export class EFacturaService implements OnModuleInit {
       );
     }
 
+    await this.ensureCategoryAndSubcategoryInDb(data.categorie || 'Alte', data.subcategorie);
+
     const factura = item.factura;
     const cantitateMontata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : cantitateRamasa);
     if (cantitateMontata > cantitateRamasa + 0.0001) {
@@ -2880,5 +2883,48 @@ export class EFacturaService implements OnModuleInit {
       articole: updatedArticole,
       facturaStare: updatedFactura?.stare,
     };
+  }
+
+  /**
+   * Ensure the chosen category and optional subcategory exist in CategorieStoc / SubcategorieStoc.
+   */
+  private async ensureCategoryAndSubcategoryInDb(categorieNume?: string, subcategorieNume?: string) {
+    const cleanCat = String(categorieNume || '').trim();
+    if (!cleanCat) return;
+    try {
+      let cat = await this.prisma.categorieStoc.findFirst({
+        where: { nume: { equals: cleanCat, mode: 'insensitive' } },
+      });
+      if (!cat) {
+        const isFluid = /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(cleanCat);
+        cat = await this.prisma.categorieStoc.create({
+          data: {
+            nume: cleanCat,
+            esteFluid: isFluid,
+            stocMinimImplicit: isFluid ? 20 : 5,
+          },
+        });
+      }
+
+      const cleanSub = String(subcategorieNume || '').trim();
+      if (cleanSub) {
+        const subExists = await this.prisma.subcategorieStoc.findFirst({
+          where: {
+            categorieStocId: cat.id,
+            nume: { equals: cleanSub, mode: 'insensitive' },
+          },
+        });
+        if (!subExists) {
+          await this.prisma.subcategorieStoc.create({
+            data: {
+              nume: cleanSub,
+              categorieStocId: cat.id,
+            },
+          });
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`ensureCategoryAndSubcategoryInDb warning: ${err?.message || err}`);
+    }
   }
 }

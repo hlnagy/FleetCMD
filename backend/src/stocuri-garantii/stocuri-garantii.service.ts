@@ -263,10 +263,20 @@ export class StocuriGarantiiService {
   }
 
   async createCategorie(data: { nume: string; descriere?: string; stocMinimImplicit?: number; esteFluid?: boolean }) {
-    if (!data.nume) throw new BadRequestException('Numele categoriei este obligatoriu.');
-    const isFluid = data.esteFluid !== undefined 
-      ? Boolean(data.esteFluid) 
-      : /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(data.nume);
+    const cleanName = String(data.nume || '').trim();
+    if (!cleanName) throw new BadRequestException('Numele categoriei este obligatoriu.');
+
+    const existing = await this.prisma.categorieStoc.findFirst({
+      where: { nume: { equals: cleanName, mode: 'insensitive' } },
+      include: { subcategorii: true },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    const isFluid = data.esteFluid !== undefined
+      ? Boolean(data.esteFluid)
+      : /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(cleanName);
 
     if (data.stocMinimImplicit !== undefined && Number(data.stocMinimImplicit) < 0) {
       throw new BadRequestException('Pragul de stoc minim nu poate fi negativ.');
@@ -277,7 +287,7 @@ export class StocuriGarantiiService {
 
     return this.prisma.categorieStoc.create({
       data: {
-        nume: data.nume.trim(),
+        nume: cleanName,
         descriere: data.descriere?.trim() || null,
         stocMinimImplicit,
         esteFluid: isFluid,
@@ -351,20 +361,34 @@ export class StocuriGarantiiService {
   }
 
   async createSubcategorie(data: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string }) {
-    if (!data.nume) throw new BadRequestException('Numele subcategoriei este obligatoriu.');
-    
+    const cleanSubName = String(data.nume || '').trim();
+    if (!cleanSubName) throw new BadRequestException('Numele subcategoriei este obligatoriu.');
+
     let catId = data.categorieStocId;
-    if (!catId && data.categorieNume) {
-      let cat = await this.prisma.categorieStoc.findUnique({ where: { nume: data.categorieNume } });
+    const cleanCatName = String(data.categorieNume || '').trim();
+    if (!catId && cleanCatName) {
+      let cat = await this.prisma.categorieStoc.findFirst({
+        where: { nume: { equals: cleanCatName, mode: 'insensitive' } },
+      });
       if (!cat) {
-        cat = await this.prisma.categorieStoc.create({ data: { nume: data.categorieNume } });
+        cat = await this.prisma.categorieStoc.create({ data: { nume: cleanCatName } });
       }
       catId = cat.id;
     }
 
+    const existingSub = await this.prisma.subcategorieStoc.findFirst({
+      where: {
+        categorieStocId: catId || null,
+        nume: { equals: cleanSubName, mode: 'insensitive' },
+      },
+    });
+    if (existingSub) {
+      return existingSub;
+    }
+
     return this.prisma.subcategorieStoc.create({
       data: {
-        nume: data.nume.trim(),
+        nume: cleanSubName,
         descriere: data.descriere?.trim() || null,
         categorieStocId: catId || null,
       },

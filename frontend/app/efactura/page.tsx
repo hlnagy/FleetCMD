@@ -1729,64 +1729,319 @@ function EFacturaContent() {
     });
   }, [targetCategorie, targetDepozitId, importingItem, codArticolCalculat, stocuriFlota]);
 
-  // QUICK CREATE CATEGORY HANDLER
-  const handleQuickCreateCategory = async () => {
-    if (!newCatNume.trim()) return;
+  // QUICK CREATE CATEGORY HANDLER (shared between Depozit & Direct pe Mașină)
+  const handleQuickCreateCategory = async (mode: 'DEPOZIT' | 'DIRECT' = 'DEPOZIT') => {
+    const cleanName = newCatNume.trim();
+    if (!cleanName) return;
     setSavingNewCat(true);
     try {
       const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nume: newCatNume.trim() }),
+        body: JSON.stringify({ nume: cleanName }),
       });
       if (res.ok) {
         const created = await res.json();
-        const newName = created.nume || newCatNume.trim();
-        setTargetCategorie(newName);
-        setTargetSubcategorie('');
+        const newName = created.nume || cleanName;
+        setCategoriiStoc((prev) => {
+          const exists = prev.some((c: any) => String(c.nume || '').toLowerCase() === newName.toLowerCase());
+          if (exists) return prev;
+          return [...prev, { ...created, nume: newName, subcategorii: created.subcategorii || [] }].sort((a, b) =>
+            String(a.nume || '').localeCompare(String(b.nume || '')),
+          );
+        });
+        if (mode === 'DIRECT') {
+          setTargetCategorieDirect(newName);
+          setTargetSubcategorieDirect('');
+        } else {
+          setTargetCategorie(newName);
+          setTargetSubcategorie('');
+        }
         setIsAddingNewCat(false);
         setNewCatNume('');
-        await fetchData();
+        showToast(`Categoria "${newName}" a fost salvată în baza de date!`, 'success', 2500);
+        void fetchData(true);
       } else {
         const errMsg = await extractApiErrorMessage(res, 'Verificați datele');
         alert(`Eroare la crearea categoriei: ${errMsg}`);
       }
-    } catch (e) {
+    } catch {
       alert('Eroare la salvarea noii categorii.');
     } finally {
       setSavingNewCat(false);
     }
   };
 
-  // QUICK CREATE SUBCATEGORY HANDLER
-  const handleQuickCreateSubcategory = async () => {
-    if (!newSubcatNume.trim()) return;
+  // QUICK CREATE SUBCATEGORY HANDLER (shared between Depozit & Direct pe Mașină)
+  const handleQuickCreateSubcategory = async (mode: 'DEPOZIT' | 'DIRECT' = 'DEPOZIT') => {
+    const cleanSubName = newSubcatNume.trim();
+    if (!cleanSubName) return;
+    const parentCatName = mode === 'DIRECT' ? targetCategorieDirect : targetCategorie;
+    if (!parentCatName) {
+      showToast('Selectați mai întâi o categorie principală.', 'warning');
+      return;
+    }
+    const parentCatObj = categoriiStoc.find(
+      (c: any) => String(c.nume || '').toLowerCase() === parentCatName.trim().toLowerCase(),
+    );
+
     setSavingNewSubcat(true);
     try {
       const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/subcategorii`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          categorieNume: targetCategorie,
-          nume: newSubcatNume.trim(),
+          categorieStocId: parentCatObj?.id,
+          categorieNume: parentCatName,
+          nume: cleanSubName,
         }),
       });
       if (res.ok) {
         const created = await res.json();
-        const newSubName = created.nume || newSubcatNume.trim();
-        setTargetSubcategorie(newSubName);
+        const newSubName = created.nume || cleanSubName;
+        setCategoriiStoc((prev) =>
+          prev.map((c: any) => {
+            if (String(c.nume || '').toLowerCase() !== parentCatName.trim().toLowerCase()) return c;
+            const subs = Array.isArray(c.subcategorii) ? c.subcategorii : [];
+            const exists = subs.some((s: any) => String(s.nume || '').toLowerCase() === newSubName.toLowerCase());
+            return exists ? c : { ...c, subcategorii: [...subs, { ...created, nume: newSubName }] };
+          }),
+        );
+        if (mode === 'DIRECT') {
+          setTargetSubcategorieDirect(newSubName);
+        } else {
+          setTargetSubcategorie(newSubName);
+        }
         setIsAddingNewSubcat(false);
         setNewSubcatNume('');
-        await fetchData();
+        showToast(`Subcategoria "${newSubName}" a fost salvată în baza de date!`, 'success', 2500);
+        void fetchData(true);
       } else {
         const errMsg = await extractApiErrorMessage(res, 'Verificați datele');
         alert(`Eroare la crearea subcategoriei: ${errMsg}`);
       }
-    } catch (e) {
+    } catch {
       alert('Eroare la salvarea noii subcategorii.');
     } finally {
       setSavingNewSubcat(false);
     }
+  };
+
+  const renderCategoryAndSubcategoryFields = (mode: 'DEPOZIT' | 'DIRECT') => {
+    const isDirect = mode === 'DIRECT';
+    const currentCat = isDirect ? targetCategorieDirect : targetCategorie;
+    const currentSubcat = isDirect ? targetSubcategorieDirect : targetSubcategorie;
+    const setCat = isDirect ? setTargetCategorieDirect : setTargetCategorie;
+    const setSubcat = isDirect ? setTargetSubcategorieDirect : setTargetSubcategorie;
+
+    const currentCatObj = categoriiStoc.find(
+      (c: any) => c.nume === currentCat || c.id === currentCat,
+    );
+    const availableSubcats = [...(currentCatObj?.subcategorii || [])];
+    if (
+      currentCat.trim().toLowerCase() === 'alte' &&
+      !availableSubcats.some((s: any) => (s.nume || '').trim().toLowerCase() === 'alte piese')
+    ) {
+      availableSubcats.unshift({ id: `alte-piese-opt-${mode}`, nume: 'Alte piese' });
+    }
+
+    return (
+      <div className={isDirect ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-morning-200' : 'space-y-3'}>
+        {/* CATEGORIE */}
+        <div>
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <div className="flex items-center space-x-2 min-w-0">
+              <label className="text-sage-700 font-bold text-xs">
+                {isDirect ? 'Categorie Piesă: *' : 'Categorie Stoc: *'}
+              </label>
+              {!isDirect && sugestieDetectata && currentCat === sugestieDetectata.categorie && (
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Detectat automat
+                </span>
+              )}
+            </div>
+            <div className="flex items-center space-x-2 shrink-0">
+              {!isDirect && sugestieDetectata && currentCat !== sugestieDetectata.categorie && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCat(sugestieDetectata.categorie);
+                    setSubcat(sugestieDetectata.subcategorie);
+                  }}
+                  className="text-sapphire-600 hover:text-sapphire-800 font-semibold text-[11px] underline cursor-pointer"
+                >
+                  Resetare la sugestie ({sugestieDetectata.categorie})
+                </button>
+              )}
+              {!isAddingNewCat && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingNewCat(true);
+                    setIsAddingNewSubcat(false);
+                    setNewCatNume('');
+                  }}
+                  className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-0.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Categorie Nouă</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isAddingNewCat ? (
+            <div className="p-2.5 bg-emerald-50/70 border border-emerald-300 rounded-xl space-y-2">
+              <input
+                type="text"
+                autoFocus
+                value={newCatNume}
+                onChange={(e) => setNewCatNume(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleQuickCreateCategory(mode);
+                  } else if (e.key === 'Escape') {
+                    setIsAddingNewCat(false);
+                  }
+                }}
+                placeholder="Nume categorie nouă (ex: Scule & Utilaje)..."
+                className="w-full bg-white border border-emerald-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewCat(false)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickCreateCategory(mode)}
+                  disabled={savingNewCat || !newCatNume.trim()}
+                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {savingNewCat ? 'Se salvează...' : 'Salvează Categoria'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <select
+              value={currentCat}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCat(val);
+                const catObj = categoriiStoc.find((c: any) => c.nume === val || c.id === val);
+                if (val.trim().toLowerCase() === 'alte') {
+                  const alteSub =
+                    catObj?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume ||
+                    'Alte piese';
+                  setSubcat(alteSub);
+                } else {
+                  setSubcat('');
+                }
+              }}
+              className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
+                isDirect
+                  ? 'bg-white border border-morning-300'
+                  : 'bg-morning-100 border border-morning-200'
+              }`}
+            >
+              {categoriiStoc.length > 0 ? (
+                categoriiStoc.map((c) => (
+                  <option key={c.id || c.nume} value={c.nume}>
+                    {c.nume}
+                  </option>
+                ))
+              ) : (
+                <option value="">Se încarcă categoriile din sistem...</option>
+              )}
+            </select>
+          )}
+        </div>
+
+        {/* SUBCATEGORIE */}
+        <div>
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <label className="text-sage-700 font-bold text-xs">
+              {isDirect ? 'Subcategorie Piesă (Opțional):' : 'Subcategorie Stoc (Opțional):'}
+            </label>
+            {!isAddingNewSubcat && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingNewSubcat(true);
+                  setIsAddingNewCat(false);
+                  setNewSubcatNume('');
+                }}
+                className="text-sapphire-700 hover:text-sapphire-800 font-bold text-[11px] flex items-center space-x-0.5 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Subcategorie Nouă</span>
+              </button>
+            )}
+          </div>
+
+          {isAddingNewSubcat ? (
+            <div className="p-2.5 bg-sapphire-50/70 border border-sapphire-300 rounded-xl space-y-2">
+              <input
+                type="text"
+                autoFocus
+                value={newSubcatNume}
+                onChange={(e) => setNewSubcatNume(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleQuickCreateSubcategory(mode);
+                  } else if (e.key === 'Escape') {
+                    setIsAddingNewSubcat(false);
+                  }
+                }}
+                placeholder={`Subcategorie pentru "${currentCat}"...`}
+                className="w-full bg-white border border-sapphire-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewSubcat(false)}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickCreateSubcategory(mode)}
+                  disabled={savingNewSubcat || !newSubcatNume.trim()}
+                  className="px-3 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {savingNewSubcat ? 'Se salvează...' : 'Salvează Subcategoria'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <select
+              value={currentSubcat}
+              onChange={(e) => setSubcat(e.target.value)}
+              className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
+                isDirect
+                  ? 'bg-white border border-morning-300'
+                  : 'bg-morning-100 border border-morning-200'
+              }`}
+            >
+              <option value="">
+                {isDirect ? '-- Fără Subcategorie --' : '-- Fără Subcategorie (Doar Categoria Principală) --'}
+              </option>
+              {availableSubcats.map((sub: any) => (
+                <option key={sub.id || sub.nume} value={sub.nume}>
+                  {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // EXECUTE DIRECT VEHICLE / WORK ORDER IMPORT (DIRECT PE MAȘINĂ)
@@ -4189,7 +4444,11 @@ function EFacturaContent() {
                 <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setTipDestinatieImport('DEPOZIT')}
+                    onClick={() => {
+                      setIsAddingNewCat(false);
+                      setIsAddingNewSubcat(false);
+                      setTipDestinatieImport('DEPOZIT');
+                    }}
                     className={`flex-1 py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center space-x-1.5 transition cursor-pointer ${
                       tipDestinatieImport === 'DEPOZIT'
                         ? 'bg-emerald-600 text-white shadow-xs'
@@ -4213,6 +4472,8 @@ function EFacturaContent() {
                         );
                         return;
                       }
+                      setIsAddingNewCat(false);
+                      setIsAddingNewSubcat(false);
                       setTipDestinatieImport('DIRECT_MASINA');
                       if (comenziDeschiseFlota.length === 0) fetchComenziDeschise();
                     }}
@@ -4392,164 +4653,8 @@ function EFacturaContent() {
                     </select>
                   </div>
 
-              {/* CATEGORIE STOC CU BUTON CREARE NOUĂ */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center space-x-2">
-                    <label className="text-sage-700 font-bold">Categorie Stoc: *</label>
-                    {sugestieDetectata && targetCategorie === sugestieDetectata.categorie && (
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Detectat automat
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {sugestieDetectata && targetCategorie !== sugestieDetectata.categorie && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetCategorie(sugestieDetectata.categorie);
-                          setTargetSubcategorie(sugestieDetectata.subcategorie);
-                        }}
-                        className="text-sapphire-600 hover:text-sapphire-800 font-semibold text-[11px] underline cursor-pointer"
-                      >
-                        Resetare la sugestie ({sugestieDetectata.categorie})
-                      </button>
-                    )}
-                    {!isAddingNewCat && (
-                      <button
-                        type="button"
-                        onClick={() => { setIsAddingNewCat(true); setNewCatNume(''); }}
-                        className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>+ Categorie Nouă</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {isAddingNewCat ? (
-                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-300 rounded-xl space-y-2">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={newCatNume}
-                      onChange={(e) => setNewCatNume(e.target.value)}
-                      placeholder="Nume categorie nouă (ex: Scule & Utilaje)..."
-                      className="w-full bg-white border border-emerald-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddingNewCat(false)}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold"
-                      >
-                        Anulează
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleQuickCreateCategory}
-                        disabled={savingNewCat || !newCatNume.trim()}
-                        className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50"
-                      >
-                        {savingNewCat ? 'Se salvează...' : 'Salvează Categoria'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <select
-                    value={targetCategorie}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setTargetCategorie(val);
-                      const catObj = categoriiStoc.find((c: any) => c.nume === val || c.id === val);
-                      if (val.trim().toLowerCase() === 'alte') {
-                        const alteSub = catObj?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume || 'Alte piese';
-                        setTargetSubcategorie(alteSub);
-                      } else {
-                        setTargetSubcategorie('');
-                      }
-                    }}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    {categoriiStoc.length > 0 ? (
-                      categoriiStoc.map((c) => (
-                        <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
-                      ))
-                    ) : (
-                      <option value="">Se încarcă categoriile din sistem...</option>
-                    )}
-                  </select>
-                )}
-              </div>
-
-              {/* SUBCATEGORIE STOC CU BUTON CREARE NOUĂ */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-sage-700 font-bold">Subcategorie Stoc (Opțional):</label>
-                  {!isAddingNewSubcat && (
-                    <button
-                      type="button"
-                      onClick={() => { setIsAddingNewSubcat(true); setNewSubcatNume(''); }}
-                      className="text-sapphire-700 hover:text-sapphire-800 font-bold text-[11px] flex items-center space-x-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>+ Subcategorie Nouă</span>
-                    </button>
-                  )}
-                </div>
-
-                {isAddingNewSubcat ? (
-                  <div className="p-2.5 bg-sapphire-50/70 border border-sapphire-300 rounded-xl space-y-2">
-                    <input
-                      type="text"
-                      autoFocus
-                      value={newSubcatNume}
-                      onChange={(e) => setNewSubcatNume(e.target.value)}
-                      placeholder={`Subcategorie pentru "${targetCategorie}" (ex: Benzi transportoare)...`}
-                      className="w-full bg-white border border-sapphire-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
-                    />
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddingNewSubcat(false)}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold"
-                      >
-                        Anulează
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleQuickCreateSubcategory}
-                        disabled={savingNewSubcat || !newSubcatNume.trim()}
-                        className="px-3 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50"
-                      >
-                        {savingNewSubcat ? 'Se salvează...' : 'Salvează Subcategoria'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <select
-                    value={targetSubcategorie}
-                    onChange={(e) => setTargetSubcategorie(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    <option value="">-- Fără Subcategorie (Doar Categoria Principală) --</option>
-                    {(() => {
-                      const currentCatObj = categoriiStoc.find((c: any) => c.nume === targetCategorie || c.id === targetCategorie);
-                      let availableSubcats = [...(currentCatObj?.subcategorii || [])];
-                      if (targetCategorie.trim().toLowerCase() === 'alte' && !availableSubcats.some((s: any) => (s.nume || '').trim().toLowerCase() === 'alte piese')) {
-                        availableSubcats.unshift({ id: 'alte-piese-opt', nume: 'Alte piese' });
-                      }
-                      return availableSubcats.map((sub: any) => (
-                        <option key={sub.id || sub.nume} value={sub.nume}>
-                           {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
-                        </option>
-                      ));
-                    })()}
-                  </select>
-                )}
-              </div>
+              {/* CATEGORIE & SUBCATEGORIE STOC CU CREARE RAPIDĂ */}
+              {renderCategoryAndSubcategoryFields('DEPOZIT')}
 
               {/* SECȚIUNE CONVERSIE AMBALAJ ÎN LITRI / KG (PENTRU ULEIURI, ANTIGEL, LUBRIFIANȚI) */}
               {(/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) || detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura).detectedVolume !== null) && (
@@ -5191,54 +5296,8 @@ function EFacturaContent() {
                   </div>
                 </div>
 
-                {/* CATEGORIE & SUBCATEGORIE DIRECT PE MAȘINĂ */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-morning-200">
-                  <div>
-                    <label className="text-sage-700 block mb-1 font-bold text-xs">Categorie Piesă: *</label>
-                    <select
-                      value={targetCategorieDirect}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setTargetCategorieDirect(val);
-                        const catObj = categoriiStoc.find((c: any) => c.nume === val || c.id === val);
-                        if (val.trim().toLowerCase() === 'alte') {
-                          const alteSub = catObj?.subcategorii?.find((s: any) => /alte\s*piese/i.test(s.nume || ''))?.nume || 'Alte piese';
-                          setTargetSubcategorieDirect(alteSub);
-                        } else {
-                          setTargetSubcategorieDirect('');
-                        }
-                      }}
-                      className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs"
-                    >
-                      {categoriiStoc.map((c) => (
-                        <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sage-700 block mb-1 font-bold text-xs">Subcategorie Piesă (Opțional):</label>
-                    <select
-                      value={targetSubcategorieDirect}
-                      onChange={(e) => setTargetSubcategorieDirect(e.target.value)}
-                      className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs"
-                    >
-                      <option value="">-- Fără Subcategorie --</option>
-                      {(() => {
-                        const currentCatObj = categoriiStoc.find((c: any) => c.nume === targetCategorieDirect || c.id === targetCategorieDirect);
-                        let availableSubcats = [...(currentCatObj?.subcategorii || [])];
-                        if (targetCategorieDirect.trim().toLowerCase() === 'alte' && !availableSubcats.some((s: any) => (s.nume || '').trim().toLowerCase() === 'alte piese')) {
-                          availableSubcats.unshift({ id: 'alte-piese-opt-dir', nume: 'Alte piese' });
-                        }
-                        return availableSubcats.map((sub: any) => (
-                          <option key={sub.id || sub.nume} value={sub.nume}>
-                            {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
-                          </option>
-                        ));
-                      })()}
-                    </select>
-                  </div>
-                </div>
+                {/* CATEGORIE & SUBCATEGORIE DIRECT PE MAȘINĂ (CU CREARE RAPIDĂ ÎN BAZA DE DATE) */}
+                {renderCategoryAndSubcategoryFields('DIRECT')}
               </div>
 
               {/* PASUL 3: CANTITATE, PREȚ & NOTE */}
