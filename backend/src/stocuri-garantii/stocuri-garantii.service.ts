@@ -1,6 +1,25 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Normalizes text for case- and diacritic-insensitive search matching. */
+function normalizeSearchText(value?: string | null): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Returns true when every whitespace-separated search token appears across the given fields. */
+function matchesSearchTokens(fields: Array<string | null | undefined>, query?: string): boolean {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const haystack = fields.map((f) => normalizeSearchText(f)).join(' ');
+  return tokens.every((token) => haystack.includes(token));
+}
+
 @Injectable()
 export class StocuriGarantiiService {
   constructor(private prisma: PrismaService) {}
@@ -570,52 +589,44 @@ export class StocuriGarantiiService {
     statusStoc?: string; // "CRITIC" | "IN_STOC" | "TOATE"
     cautare?: string;
   }) {
-    const where: any = {};
+    const andConditions: any[] = [];
 
-    if (filters?.categorie) {
+    if (filters?.categorie?.trim()) {
       const catVal = filters.categorie.trim();
       const firstWord = catVal.split(' ')[0];
-      where.OR = [
-        { categorie: { equals: catVal } },
-        { categorie: { contains: catVal } },
-        { categorie: { contains: firstWord } },
-      ];
+      andConditions.push({
+        OR: [
+          { categorie: { equals: catVal, mode: 'insensitive' } },
+          { categorie: { contains: catVal, mode: 'insensitive' } },
+          { categorie: { contains: firstWord, mode: 'insensitive' } },
+        ],
+      });
     }
 
-    if (filters?.subcategorie) {
-      where.subcategorie = filters.subcategorie;
+    if (filters?.subcategorie?.trim()) {
+      andConditions.push({
+        subcategorie: { equals: filters.subcategorie.trim(), mode: 'insensitive' },
+      });
     }
 
     if (filters?.depozitId) {
       const depozite = await this.getDepozite();
       const mainDepozitId = depozite[0]?.id;
       if (mainDepozitId && filters.depozitId === mainDepozitId) {
-        where.AND = [
-          ...(where.AND || []),
-          {
-            OR: [
-              { depozitId: filters.depozitId },
-              { depozitId: null },
-            ],
-          },
-        ];
+        andConditions.push({
+          OR: [
+            { depozitId: filters.depozitId },
+            { depozitId: null },
+          ],
+        });
       } else {
-        where.depozitId = filters.depozitId;
+        andConditions.push({ depozitId: filters.depozitId });
       }
     }
 
-    if (filters?.cautare) {
-      const q = filters.cautare.toLowerCase();
-      where.OR = [
-        { codArticol: { contains: q } },
-        { denumire: { contains: q } },
-        { marcaUlei: { contains: q } },
-        { categorie: { contains: q } },
-        { subcategorie: { contains: q } },
-      ];
-    }
+    const where: any = andConditions.length > 0 ? { AND: andConditions } : {};
 
-    const articole = await this.prisma.articolStoc.findMany({
+    let articole = await this.prisma.articolStoc.findMany({
       where,
       include: {
         depozit: true,
@@ -625,6 +636,32 @@ export class StocuriGarantiiService {
       },
       orderBy: { denumire: 'asc' },
     });
+
+    if (filters?.cautare?.trim()) {
+      articole = articole.filter((a) =>
+        matchesSearchTokens(
+          [
+            a.codArticol,
+            a.denumire,
+            a.marcaUlei,
+            a.categorie,
+            a.subcategorie,
+            a.observatiiIntern,
+            a.depozit?.nume,
+            ...(Array.isArray(a.intrariStoc)
+              ? a.intrariStoc.flatMap((i) => [
+                  i.furnizor,
+                  i.numarFactura,
+                  i.observatii,
+                  i.marcaUlei,
+                  i.tipLichid,
+                ])
+              : []),
+          ],
+          filters.cautare,
+        ),
+      );
+    }
 
     if (filters?.statusStoc === 'CRITIC') {
       return articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
@@ -991,16 +1028,22 @@ export class StocuriGarantiiService {
   }
 
   async getIstoricIntrari(cautare?: string) {
-    const where: any = {};
-    if (cautare) {
-      const q = cautare.toLowerCase();
-      where.OR = [
-        { furnizor: { contains: q } },
-        { numarFactura: { contains: q } },
-        { articolStoc: { denumire: { contains: q } } },
-        { articolStoc: { codArticol: { contains: q } } },
-      ];
-    }
+    const tokens = (cautare || '').trim().split(/\s+/).filter(Boolean);
+    const where: any =
+      tokens.length > 0
+        ? {
+            AND: tokens.map((token) => ({
+              OR: [
+                { furnizor: { contains: token, mode: 'insensitive' } },
+                { numarFactura: { contains: token, mode: 'insensitive' } },
+                { observatii: { contains: token, mode: 'insensitive' } },
+                { marcaUlei: { contains: token, mode: 'insensitive' } },
+                { articolStoc: { denumire: { contains: token, mode: 'insensitive' } } },
+                { articolStoc: { codArticol: { contains: token, mode: 'insensitive' } } },
+              ],
+            })),
+          }
+        : {};
 
     return this.prisma.intrareStoc.findMany({
       where,

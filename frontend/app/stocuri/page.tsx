@@ -2,7 +2,7 @@
 
 import { API_BASE_URL } from '@/lib/api';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -12,6 +12,24 @@ import {
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
+
+/** Normalizes text for case- and diacritic-insensitive search matching. */
+const normalizeSearchText = (value?: string | null): string =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
+/** Returns true when every whitespace-separated search token appears across the given fields. */
+const matchesSearchTokens = (fields: Array<string | null | undefined>, query?: string): boolean => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const haystack = fields.map((f) => normalizeSearchText(f)).join(' ');
+  return tokens.every((token) => haystack.includes(token));
+};
 
 function StocuriGarantiiContent() {
   const { openTab } = useTabWorkspace();
@@ -143,89 +161,128 @@ function StocuriGarantiiContent() {
   const [motivDemontare, setMotivDemontare] = useState('');
   const [popupGarantie, setPopupGarantie] = useState<any>(null);
 
-  const fetchData = async () => {
+  const stocRequestSeqRef = useRef(0);
+
+  const fetchMetadata = async () => {
     try {
-      // Fetch Depozite
-      const resDep = await fetch(`${API_BASE_URL}/stocuri-garantii/depozite`);
-      if (resDep.ok) {
-        const depData = await resDep.json();
-        setDepozite(depData);
-        if (depData.length > 0 && !depozitId) setDepozitId(depData[0].id);
-        if (depData.length > 0 && !bevDepozitId) setBevDepozitId(depData[0].id);
-        if (depData.length > 1 && !transferDepozitDestinatieId) setTransferDepozitDestinatieId(depData[1].id);
-      }
+      const fetchJsonSafe = async (url: string) => {
+        const res = await fetch(url);
+        return res.ok ? res.json() : null;
+      };
 
-      // Fetch Categorii cu retry pentru a rezista trezirii la rece pe serverul cloud
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
-          if (resCat.ok) {
-            const catData = await resCat.json();
-            const allCats = [
-              ...(Array.isArray(catData.categoriiImplicite) ? catData.categoriiImplicite : []),
-              ...(Array.isArray(catData.categoriiCustom) ? catData.categoriiCustom : []),
-            ];
-            if (allCats.length > 0) {
-              setCategorii(allCats);
-              break;
+      const fetchCategoriiWithRetry = async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
+            if (resCat.ok) {
+              const catData = await resCat.json();
+              const allCats = [
+                ...(Array.isArray(catData.categoriiImplicite) ? catData.categoriiImplicite : []),
+                ...(Array.isArray(catData.categoriiCustom) ? catData.categoriiCustom : []),
+              ];
+              if (allCats.length > 0) return allCats;
             }
+          } catch (err) {
+            console.warn(`Tentativă ${attempt + 1} la încărcare categorii stoc:`, err);
           }
-        } catch (err) {
-          console.warn(`Tentativă ${attempt + 1} la încărcare categorii stoc:`, err);
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
         }
-        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1000));
+        return null;
+      };
+
+      const [depRes, catRes, critRes, intrariRes, transRes, compRes, mecaniciRes, anvStocRes] =
+        await Promise.allSettled([
+          fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/depozite`),
+          fetchCategoriiWithRetry(),
+          fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/stocuri-critice`),
+          fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`),
+          fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/istoric-transferuri`),
+          fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/componente-serializate`),
+          fetchJsonSafe(`${API_BASE_URL}/mentenanta/mecanici`),
+          fetchJsonSafe(`${API_BASE_URL}/anvelope/depozit-stoc`),
+        ]);
+
+      if (depRes.status === 'fulfilled' && Array.isArray(depRes.value)) {
+        const depData = depRes.value;
+        setDepozite(depData);
+        if (depData.length > 0) {
+          setDepozitId((prev) => prev || depData[0].id);
+          setBevDepozitId((prev) => prev || depData[0].id);
+        }
+        if (depData.length > 1) {
+          setTransferDepozitDestinatieId((prev) => prev || depData[1].id);
+        }
       }
 
-      // Fetch Stocuri Critice
-      const resCrit = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri-critice`);
-      if (resCrit.ok) {
-        const critData = await resCrit.json();
-        setStocuriCritice(critData.articoleCritice || []);
+      if (catRes.status === 'fulfilled' && catRes.value) {
+        setCategorii(catRes.value);
       }
 
-      // Fetch Stocuri cu Filtre Multi-Criteriu
-      let queryParams = new URLSearchParams();
-      if (selectedCategorieFilter) queryParams.append('categorie', selectedCategorieFilter);
-      if (selectedSubcategorieFilter) queryParams.append('subcategorie', selectedSubcategorieFilter);
-      if (selectedDepozitFilter) queryParams.append('depozitId', selectedDepozitFilter);
-      if (selectedStatusFilter !== 'TOATE') queryParams.append('statusStoc', selectedStatusFilter);
-      if (searchQuery) queryParams.append('cautare', searchQuery);
-
-      const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri?${queryParams.toString()}`);
-      if (resStoc.ok) setStocuri(await resStoc.json());
-
-      // Fetch Istoric Intrări (Facturi)
-      const resIntrari = await fetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`);
-      if (resIntrari.ok) setIntrariHistory(await resIntrari.json());
-
-      // Fetch Istoric Transferuri
-      const resTrans = await fetch(`${API_BASE_URL}/stocuri-garantii/istoric-transferuri`);
-      if (resTrans.ok) setTransferuriHistory(await resTrans.json());
-
-      // Fetch Componente Serializate în Garanție
-      const resComp = await fetch(`${API_BASE_URL}/stocuri-garantii/componente-serializate`);
-      if (resComp.ok) setComponente(await resComp.json());
-
-      // Fetch Mecanici Atelier
-      const resMecanici = await fetch(`${API_BASE_URL}/mentenanta/mecanici`);
-      if (resMecanici.ok) {
-        const mecData = await resMecanici.json();
-        setMecanici(mecData);
+      if (critRes.status === 'fulfilled' && critRes.value) {
+        setStocuriCritice(critRes.value.articoleCritice || []);
       }
 
-      // Fetch Magazie Anvelope Serializate din Depozite
-      const resAnvStoc = await fetch(`${API_BASE_URL}/anvelope/depozit-stoc`);
-      if (resAnvStoc.ok) {
-        setAnvelopeStocList(await resAnvStoc.json());
+      if (intrariRes.status === 'fulfilled' && intrariRes.value) {
+        setIntrariHistory(intrariRes.value);
+      }
+
+      if (transRes.status === 'fulfilled' && transRes.value) {
+        setTransferuriHistory(transRes.value);
+      }
+
+      if (compRes.status === 'fulfilled' && compRes.value) {
+        setComponente(compRes.value);
+      }
+
+      if (mecaniciRes.status === 'fulfilled' && mecaniciRes.value) {
+        setMecanici(mecaniciRes.value);
+      }
+
+      if (anvStocRes.status === 'fulfilled' && anvStocRes.value) {
+        setAnvelopeStocList(anvStocRes.value);
       }
     } catch (e) {
       console.log('Error fetching stock data', e);
     }
   };
 
+  const fetchStocuri = async (signal?: AbortSignal) => {
+    const seq = ++stocRequestSeqRef.current;
+    try {
+      const queryParams = new URLSearchParams();
+      if (selectedCategorieFilter) queryParams.append('categorie', selectedCategorieFilter);
+      if (selectedSubcategorieFilter) queryParams.append('subcategorie', selectedSubcategorieFilter);
+      if (selectedDepozitFilter) queryParams.append('depozitId', selectedDepozitFilter);
+      if (selectedStatusFilter !== 'TOATE') queryParams.append('statusStoc', selectedStatusFilter);
+
+      const queryString = queryParams.toString();
+      const resStoc = await fetch(
+        `${API_BASE_URL}/stocuri-garantii/stocuri${queryString ? `?${queryString}` : ''}`,
+        { signal },
+      );
+      if (resStoc.ok && seq === stocRequestSeqRef.current) {
+        setStocuri(await resStoc.json());
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        console.log('Error fetching stock list', e);
+      }
+    }
+  };
+
+  const fetchData = async () => {
+    await Promise.all([fetchMetadata(), fetchStocuri()]);
+  };
+
   useEffect(() => {
-    fetchData();
-  }, [selectedCategorieFilter, selectedSubcategorieFilter, selectedDepozitFilter, selectedStatusFilter, searchQuery]);
+    fetchMetadata();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStocuri(controller.signal);
+    return () => controller.abort();
+  }, [selectedCategorieFilter, selectedSubcategorieFilter, selectedDepozitFilter, selectedStatusFilter]);
 
   const getSubcategoriiPentruCategorie = (catNume: string) => {
     const foundCat = categorii.find((c: any) => c.nume?.toLowerCase() === catNume?.toLowerCase());
@@ -637,9 +694,26 @@ function StocuriGarantiiContent() {
 
   const pretUnitarKiszamolva = (bevPretTotal / Math.max(1, bevCantitate)).toFixed(2);
 
-  // Filtrare stocuri disponibile vs stoc 0
-  const countZeroStock = stocuri.filter((s) => (s.stocCurent || 0) <= 0).length;
-  const stocuriAfisate = stocuri.filter((s) => {
+  // Filtrare activă client-side (case & diacritic-insensitive, multi-cuvânt) + stoc 0
+  const stocuriCautate = stocuri.filter((s) =>
+    matchesSearchTokens(
+      [
+        s.codArticol,
+        s.denumire,
+        s.marcaUlei,
+        s.categorie,
+        s.subcategorie,
+        s.observatiiIntern,
+        s.depozit?.nume,
+        ...(Array.isArray(s.intrariStoc)
+          ? s.intrariStoc.flatMap((i: any) => [i.furnizor, i.numarFactura, i.observatii, i.marcaUlei, i.tipLichid])
+          : []),
+      ],
+      searchQuery,
+    ),
+  );
+  const countZeroStock = stocuriCautate.filter((s) => (s.stocCurent || 0) <= 0).length;
+  const stocuriAfisate = stocuriCautate.filter((s) => {
     if (hideZeroStock && (s.stocCurent || 0) <= 0) return false;
     return true;
   });
@@ -650,18 +724,10 @@ function StocuriGarantiiContent() {
     if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
     if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
     if (anvelopeStocDepozitFilter && a.depozitId !== anvelopeStocDepozitFilter) return false;
-    if (anvelopeStocSearch.trim()) {
-      const q = anvelopeStocSearch.toLowerCase();
-      const match =
-        (a.serieAnvelopa || '').toLowerCase().includes(q) ||
-        (a.marca || '').toLowerCase().includes(q) ||
-        (a.model || '').toLowerCase().includes(q) ||
-        (a.dimensiune || '').toLowerCase().includes(q) ||
-        (a.codDot || '').toLowerCase().includes(q) ||
-        (a.depozit?.nume || '').toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    return true;
+    return matchesSearchTokens(
+      [a.serieAnvelopa, a.marca, a.model, a.dimensiune, a.codDot, a.depozit?.nume],
+      anvelopeStocSearch,
+    );
   });
 
   const totalValoareAnvelopeStoc = anvelopeStocList.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
@@ -770,9 +836,20 @@ function StocuriGarantiiContent() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Căutare rapidă după denumire, cod articol, marcă ulei..."
-                  className="w-full bg-white border border-morning-200 rounded-xl pl-9 pr-4 py-2 text-xs text-sapphire-900 font-bold focus:border-sapphire-500 focus:outline-none"
+                  placeholder="Căutare rapidă după denumire, cod articol, furnizor, factură, marcă..."
+                  className="w-full bg-white border border-morning-200 rounded-xl pl-9 pr-9 py-2 text-xs text-sapphire-900 font-bold focus:border-sapphire-500 focus:outline-none"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition"
+                    title="Șterge căutarea"
+                    aria-label="Șterge căutarea"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center space-x-2 text-xs flex-wrap">
@@ -904,6 +981,11 @@ function StocuriGarantiiContent() {
                       <td className="p-3 font-bold text-sapphire-900">
                         {s.denumire}
                         {s.marcaUlei && <span className="text-[10px] text-sage-600 font-medium block">Marcă: {s.marcaUlei}</span>}
+                        {s.observatiiIntern && (
+                          <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-medium inline-block mt-1">
+                            Notă: {s.observatiiIntern}
+                          </span>
+                        )}
                         {s.intrariStoc && s.intrariStoc.length > 0 && (
                           <div className="mt-1 flex items-center space-x-1.5 flex-wrap gap-1 text-[11px] font-normal">
                             <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-medium">
@@ -1019,6 +1101,59 @@ function StocuriGarantiiContent() {
                     </tr>
                   );
                 })}
+                {stocuriAfisate.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center">
+                      <div className="max-w-md mx-auto space-y-2">
+                        <Search className="w-8 h-8 text-sage-300 mx-auto" />
+                        <p className="text-sm font-bold text-sapphire-900">
+                          {searchQuery.trim()
+                            ? `Niciun articol găsit pentru „${searchQuery.trim()}”`
+                            : 'Niciun articol nu corespunde filtrelor selectate'}
+                        </p>
+                        {hideZeroStock && countZeroStock > 0 && (
+                          <p className="text-xs text-amber-700 font-medium">
+                            Există {countZeroStock} {countZeroStock === 1 ? 'articol potrivit cu stoc zero' : 'articole potrivite cu stoc zero'} ascunse momentan.
+                          </p>
+                        )}
+                        <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                          {searchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setSearchQuery('')}
+                              className="px-3 py-1.5 rounded-lg bg-morning-200 hover:bg-morning-300 text-sapphire-900 font-bold text-xs transition"
+                            >
+                              Șterge căutarea
+                            </button>
+                          )}
+                          {hideZeroStock && countZeroStock > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setHideZeroStock(false)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition"
+                            >
+                              Afișează și articolele cu stoc 0 ({countZeroStock})
+                            </button>
+                          )}
+                          {(selectedCategorieFilter || selectedSubcategorieFilter || selectedDepozitFilter || selectedStatusFilter !== 'TOATE') && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategorieFilter('');
+                                setSelectedSubcategorieFilter('');
+                                setSelectedDepozitFilter('');
+                                setSelectedStatusFilter('TOATE');
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 border border-sapphire-200 font-bold text-xs transition"
+                            >
+                              Resetează filtrele
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1089,8 +1224,19 @@ function StocuriGarantiiContent() {
                   value={anvelopeStocSearch}
                   onChange={(e) => setAnvelopeStocSearch(e.target.value)}
                   placeholder="Caută anvelopă după Serie (SN), Marcă, Model, Dimensiune, DOT, Depozit..."
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-4 py-2.5 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-9 py-2.5 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
                 />
+                {anvelopeStocSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-sage-500 hover:text-sapphire-900 hover:bg-morning-200 transition"
+                    title="Șterge căutarea"
+                    aria-label="Șterge căutarea"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center space-x-2 text-xs flex-wrap">
