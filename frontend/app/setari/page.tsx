@@ -12,12 +12,20 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Shield, Key, Eye, EyeOff, Lock, History, Filter, UserX, Check,
   Sun, Moon, Monitor, Palette, Droplets, ArrowUpRight, Sparkles, Type, Maximize2, Minimize2,
   Sliders, LayoutList, LayoutGrid, Receipt, ExternalLink, HelpCircle, BookOpen, RefreshCw, Zap,
-  Database, Download, HardDrive, CheckCircle,
+  Database, Download, HardDrive, CheckCircle, FolderOpen,
   Paperclip, UploadCloud
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import { useTheme } from '@/lib/ThemeContext';
 import { getCategoryColor } from '@/lib/categoryColors';
+import {
+  clearSavedBackupDirectory,
+  downloadDailyBackupArchive,
+  formatBackupBytes,
+  getSavedBackupDirectoryHandle,
+  isDirectoryPickerSupported,
+  pickAndSaveBackupDirectory,
+} from '@/lib/localBackupStorage';
 
 function SetariContent() {
   const searchParams = useSearchParams();
@@ -1688,23 +1696,94 @@ function SetariContent() {
   // 12. STATE & METODE COPIE DE SIGURANȚĂ (BACKUP & RESTORE)
   // ==========================================
   const [backupStats, setBackupStats] = useState<any>(null);
+  const [dailyBackupStatus, setDailyBackupStatus] = useState<any>(null);
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupDownloading, setBackupDownloading] = useState(false);
+  const [dailyBackupRunning, setDailyBackupRunning] = useState(false);
+  const [dailyArchiveDownloading, setDailyArchiveDownloading] = useState<string | null>(null);
+  const [savedBackupFolder, setSavedBackupFolder] = useState<string | null>(null);
   const [backupSuccessMessage, setBackupSuccessMessage] = useState<string | null>(null);
 
   const fetchBackupStats = async () => {
     setBackupLoading(true);
     try {
-      const res = await authFetch(`${API_BASE_URL}/backup/stats`);
-      if (res.ok) {
-        const data = await res.json();
+      const [statsRes, dailyRes, dirHandle] = await Promise.all([
+        authFetch(`${API_BASE_URL}/backup/stats`),
+        authFetch(`${API_BASE_URL}/backup/daily-status`),
+        isDirectoryPickerSupported() ? getSavedBackupDirectoryHandle() : Promise.resolve(null),
+      ]);
+      if (statsRes.ok) {
+        const data = await statsRes.json();
         setBackupStats(data);
       }
+      if (dailyRes.ok) {
+        const dailyData = await dailyRes.json();
+        setDailyBackupStatus(dailyData);
+      }
+      setSavedBackupFolder(dirHandle?.name || null);
     } catch (e) {
       console.error('Eroare la încărcarea statisticilor bazei de date', e);
     } finally {
       setBackupLoading(false);
     }
+  };
+
+  const handleRunDailyBackupNow = async () => {
+    setDailyBackupRunning(true);
+    setBackupSuccessMessage(null);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/backup/daily-run`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error('Serverul a returnat o eroare la generarea backup-ului zilnic.');
+      }
+      setBackupSuccessMessage('Pachetul de backup zilnic a fost generat și verificat cu succes pe server!');
+      await fetchBackupStats();
+    } catch (e: any) {
+      alert(`Eroare la generarea backup-ului zilnic: ${e.message}`);
+    } finally {
+      setDailyBackupRunning(false);
+    }
+  };
+
+  const handleDownloadDailyArchive = async (date?: string) => {
+    const key = date || 'today';
+    setDailyArchiveDownloading(key);
+    setBackupSuccessMessage(null);
+    try {
+      const result = await downloadDailyBackupArchive(authFetch, API_BASE_URL, date);
+      const target =
+        result.savedVia === 'directory'
+          ? `folderul "${result.directoryName}" (${result.filename})`
+          : `calculatorul dumneavoastră (${result.filename})`;
+      setBackupSuccessMessage(
+        `Copie de siguranță salvată cu succes în ${target}!${result.sha256 ? ` SHA-256: ${result.sha256.slice(0, 12)}...` : ''}`,
+      );
+      setTimeout(() => setBackupSuccessMessage(null), 9000);
+      await fetchBackupStats();
+    } catch (e: any) {
+      alert(`Eroare la descărcarea pachetului de backup: ${e.message}`);
+    } finally {
+      setDailyArchiveDownloading(null);
+    }
+  };
+
+  const handlePickLocalBackupFolder = async () => {
+    try {
+      const res = await pickAndSaveBackupDirectory();
+      if (res) {
+        setSavedBackupFolder(res.name);
+        setBackupSuccessMessage(`Folder local fix configurat: "${res.name}". Descărcările zilnice se vor salva direct aici.`);
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        alert(`Nu s-a putut selecta folderul local: ${e.message}`);
+      }
+    }
+  };
+
+  const handleClearLocalBackupFolder = async () => {
+    await clearSavedBackupDirectory();
+    setSavedBackupFolder(null);
   };
 
   const handleDownloadBackup = async () => {
@@ -1725,7 +1804,7 @@ function SetariContent() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      setBackupSuccessMessage('Copie de siguranță descărcată cu succes pe calculatorul dumneavoastră!');
+      setBackupSuccessMessage('Exportul JSON complet (37 tabele, date sensibile mascate) a fost descărcat cu succes!');
       setTimeout(() => setBackupSuccessMessage(null), 8000);
     } catch (e: any) {
       alert(`Eroare la descărcarea copiei de siguranță: ${e.message}`);
@@ -5373,11 +5452,11 @@ function SetariContent() {
                     </h3>
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black tracking-wider uppercase flex items-center space-x-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                      <span>ONLINE & ACTIV</span>
+                      <span>{backupStats?.status || 'ONLINE'}</span>
                     </span>
                   </div>
                   <p className="text-xs text-sage-600 mt-0.5">
-                    Găzduit în cloud de înaltă disponibilitate cu stocare securizată și trafic lunar nelimitat (10 TB).
+                    Backup automat nocturn (02:00) cu snapshot tranzacțional RepeatableRead + notificare zilnică pentru salvare locală.
                   </p>
                 </div>
               </div>
@@ -5396,65 +5475,143 @@ function SetariContent() {
             {/* METRICS GRID */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-4">
               <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
-                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Furnizor Cloud</span>
-                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">Oracle Cloud Infrastructure</span>
-                <span className="text-[10px] text-emerald-600 font-bold font-mono">Frankfurt (eu-central-1)</span>
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Server Găzduire</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">
+                  {backupStats?.provider || 'Contabo Cloud VPS (NVMe)'}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-bold font-mono">
+                  {backupStats?.host || 'Localhost'}
+                </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
                 <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Motor Bază de Date</span>
-                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">PostgreSQL 17</span>
-                <span className="text-[10px] text-sage-500 font-mono font-bold">Port standard 5432</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">
+                  {backupStats?.engine || 'PostgreSQL'}
+                </span>
+                <span className="text-[10px] text-sage-500 font-mono font-bold">
+                  DB: {backupStats?.database || 'cmms_flota'}
+                </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
-                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Trafic Rețea Alocat</span>
-                <span className="font-black text-sm text-sapphire-900 font-mono mt-0.5 block">10.000 GB / lună</span>
-                <span className="text-[10px] text-emerald-600 font-bold">10 TB (Always Free)</span>
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Protecție & Criptare</span>
+                <span className={`font-extrabold text-xs mt-1 block ${backupStats?.encryptionConfigured ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {backupStats?.encryptionConfigured ? 'AES-256-GCM Activ' : 'Mod Fără Cheie (Mascat)'}
+                </span>
+                <span className="text-[10px] text-sage-500 font-mono font-bold">
+                  {backupStats?.encryptionConfigured ? 'Arhivă .fleetbak completă' : 'Setează BACKUP_ENCRYPTION_KEY'}
+                </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-morning-100/60 border border-morning-200">
-                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Securitate & Backup</span>
-                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">Izolare Contênerizată</span>
-                <span className="text-[10px] text-sage-500 font-mono font-bold">Docker Engine 29</span>
+                <span className="text-[10px] font-extrabold text-sage-600 uppercase tracking-wider block">Backup Automat Zilnic</span>
+                <span className="font-extrabold text-xs text-sapphire-900 mt-1 block">
+                  {dailyBackupStatus?.todayBackup?.status === 'SUCCESS'
+                    ? 'Pregătit Azi'
+                    : dailyBackupStatus?.isRunning
+                    ? 'În curs de generare...'
+                    : 'Programat 02:00'}
+                </span>
+                <span className="text-[10px] text-sage-500 font-mono font-bold">
+                  {dailyBackupStatus?.todayBackup?.downloadedToLocalAt
+                    ? 'Salvat local azi ✓'
+                    : 'Așteaptă salvare locală'}
+                </span>
               </div>
             </div>
           </div>
 
           {/* CARD 2: DESCĂRCARE COPIE DE SIGURANȚĂ (ACTION HERO) */}
           <div className="pleasant-card bg-gradient-to-br from-sapphire-900 to-slate-900 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="space-y-2 max-w-xl">
                 <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-black uppercase tracking-wider">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Siguranța Datelor Flotei Garantată</span>
+                  <span>Backup Automat Nocturn + Copie Locală Admin</span>
                 </div>
                 <h3 className="text-xl font-black">
-                  Descarcă o Copie de Siguranță Completă pe Calculator
+                  Descarcă Arhiva Zilnică Completă pe Calculator
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Puteți descărca oricând un fișier complet de rezervă care conține toate utilajele, actele, comenzile de lucru, anvelopele, stocurile, facturile ANAF și utilizatorii. Salvați acest fișier pe un stick USB, disc local sau arhivă externă.
+                  Include toate cele {backupStats?.totalTables ?? 37} tabele (inclusiv fișierele atașate și jurnalul de audit complet), plus dump PostgreSQL și fișierele din <code className="font-mono">uploads/</code> când criptarea AES-256-GCM este activă.
                 </p>
+
+                {isDirectoryPickerSupported() && (
+                  <div className="pt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="text-slate-300 flex items-center space-x-1.5">
+                      <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>
+                        {savedBackupFolder
+                          ? `Folder local configurat: ${savedBackupFolder}`
+                          : 'Niciun folder fix selectat (descărcare standard browser)'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handlePickLocalBackupFolder}
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition"
+                    >
+                      {savedBackupFolder ? 'Schimbă folder' : 'Alege folder fix pe PC'}
+                    </button>
+                    {savedBackupFolder && (
+                      <button
+                        type="button"
+                        onClick={handleClearLocalBackupFolder}
+                        className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 font-bold transition"
+                      >
+                        Resetează
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={handleDownloadBackup}
-                disabled={backupDownloading}
-                className="px-6 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm shadow-xl hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center space-x-2.5 shrink-0 disabled:opacity-50 cursor-pointer"
-              >
-                {backupDownloading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Se generează copia de siguranță...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-5 h-5" />
-                    <span>Descarcă Backup Imediat (.json)</span>
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadDailyArchive()}
+                  disabled={Boolean(dailyArchiveDownloading)}
+                  className="px-6 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm shadow-xl hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-center space-x-2.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {dailyArchiveDownloading === 'today' ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Se descarcă arhiva...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      <span>
+                        Descarcă Arhiva Zilnică ({backupStats?.encryptionConfigured ? '.fleetbak' : '.zip'})
+                      </span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRunDailyBackupNow}
+                    disabled={dailyBackupRunning}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${dailyBackupRunning ? 'animate-spin' : ''}`} />
+                    <span>{dailyBackupRunning ? 'Se generează...' : 'Generează Acum pe Server'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadBackup}
+                    disabled={backupDownloading}
+                    className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 font-bold text-xs transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                    title="Export JSON necriptat cu parolele și tokenurile ANAF mascate"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{backupDownloading ? '...' : 'Export .json'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -5467,7 +5624,9 @@ function SetariContent() {
                   Entități și Tabele Incluse în Salvare
                 </h4>
               </div>
-              <span className="text-[11px] font-mono text-sage-500 font-bold">36 tabele relaționale</span>
+              <span className="text-[11px] font-mono text-sage-500 font-bold">
+                {backupStats?.totalTables ?? 37} tabele relaționale (RepeatableRead)
+              </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -5487,14 +5646,14 @@ function SetariContent() {
 
               <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
                 <span className="text-xl font-black text-amber-700 font-mono block">
-                  {backupStats?.counts?.articoleStoc ?? 33}
+                  {backupStats?.counts?.articoleStoc ?? 0}
                 </span>
                 <span className="text-[11px] font-bold text-sage-600">Piese în Stoc</span>
               </div>
 
               <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 text-center">
                 <span className="text-xl font-black text-periwinkle-700 font-mono block">
-                  {backupStats?.counts?.comenziLucru ?? 11}
+                  {backupStats?.counts?.comenziLucru ?? 0}
                 </span>
                 <span className="text-[11px] font-bold text-sage-600">Comenzi de Lucru</span>
               </div>
@@ -5517,9 +5676,103 @@ function SetariContent() {
             <div className="pt-2 text-[11px] text-sage-500 flex items-center space-x-1.5">
               <Shield className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
               <span>
-                Fiecare salvare include metadate criptografice, data și ora exactă, precum și identitatea administratorului care a declanșat operațiunea de salvare în Jurnalul de Audit.
+                Fiecare salvare este verificată prin amprentă SHA-256 și înregistrată în Jurnalul de Audit. Pentru decriptarea fișierelor <code className="font-mono">.fleetbak</code>: <code className="font-mono">node backend/scripts/decrypt-backup.js &lt;fisier.fleetbak&gt;</code>.
               </span>
             </div>
+          </div>
+
+          {/* CARD 4: JURNAL BACKUP ZILNIC (ULTIMELE 14 ZILE) */}
+          <div className="pleasant-card bg-white p-6 rounded-3xl border border-morning-200 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2">
+                <History className="w-4 h-4 text-sapphire-600" />
+                <h4 className="font-extrabold text-sm text-sapphire-900">
+                  Jurnal Backup Automat & Descărcări Locale (Ultimele 14 zile)
+                </h4>
+              </div>
+              <span className="text-[11px] text-sage-500 font-bold">Programare server: 02:00 (Europe/Bucharest)</span>
+            </div>
+
+            {!dailyBackupStatus?.recentBackups?.length ? (
+              <p className="text-sage-700 py-4 text-center">
+                Nu există încă înregistrări de backup zilnic. Apasă „Generează Acum pe Server” pentru primul pachet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-morning-200 text-[10px] uppercase tracking-wider text-sage-700">
+                      <th className="py-2 pr-3">Data</th>
+                      <th className="py-2 pr-3">Status Server</th>
+                      <th className="py-2 pr-3">Motor / Tip</th>
+                      <th className="py-2 pr-3">Mărime</th>
+                      <th className="py-2 pr-3">Protecție</th>
+                      <th className="py-2 pr-3">Salvare Locală Admin</th>
+                      <th className="py-2 text-right">Acțiune</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-100">
+                    {dailyBackupStatus.recentBackups.map((item: any) => (
+                      <tr key={item.id} className="hover:bg-morning-100/40">
+                        <td className="py-2.5 pr-3 font-mono font-bold text-sapphire-900">
+                          {item.backupDate}
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              item.status === 'SUCCESS'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : item.status === 'RUNNING'
+                                ? 'bg-sapphire-100 text-sapphire-700'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-3 font-mono text-[11px] text-sage-700">
+                          {item.engine} ({item.triggerType})
+                        </td>
+                        <td className="py-2.5 pr-3 font-mono font-bold text-sapphire-900">
+                          {formatBackupBytes(item.sizeBytes)}
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          {item.encrypted ? (
+                            <span className="text-emerald-700 font-bold flex items-center space-x-1">
+                              <Lock className="w-3 h-3" />
+                              <span>AES-256</span>
+                            </span>
+                          ) : (
+                            <span className="text-amber-700 font-bold">ZIP Mascat</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-3 text-[11px]">
+                          {item.downloadedToLocalAt ? (
+                            <span className="text-emerald-700 font-bold">
+                              ✓ {item.downloadedByName || 'Admin'} ({new Date(item.downloadedToLocalAt).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })})
+                            </span>
+                          ) : (
+                            <span className="text-amber-700 font-bold">Ne-descărcat local</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          {item.status === 'SUCCESS' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadDailyArchive(item.backupDate)}
+                              disabled={Boolean(dailyArchiveDownloading)}
+                              className="px-2.5 py-1 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-[11px] border border-sapphire-300 transition disabled:opacity-50"
+                            >
+                              {dailyArchiveDownloading === item.backupDate ? '...' : 'Descarcă'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

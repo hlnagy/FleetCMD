@@ -9,6 +9,7 @@ import { TabWorkspaceProvider } from '@/lib/TabWorkspaceContext';
 import { ShieldCheck } from 'lucide-react';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
 import FleetAIAssistant from '@/components/ai/FleetAIAssistant';
+import DailyBackupModal from '@/components/DailyBackupModal';
 import { API_BASE_URL } from '@/lib/api';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -103,6 +104,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <div className="print:hidden">
         <FleetAIAssistant />
+        <DailyBackupModal />
       </div>
     </TabWorkspaceProvider>
   );

@@ -777,3 +777,33 @@ model AiMemory {
   @@index([createdAt])
 }
 
+// ==========================================
+// JURNAL BACKUP ZILNIC & DESCARCARE LOCALA
+// ==========================================
+
+model BackupLog {
+  id                  String    @id @default(uuid())
+  backupDate          String    @unique // YYYY-MM-DD (Europe/Bucharest)
+  triggerType         String    @default("AUTO_NIGHTLY") // "AUTO_NIGHTLY" | "AUTO_CATCHUP" | "MANUAL" | "CRON"
+  status              String    @default("SUCCESS") // "SUCCESS" | "FAILED" | "RUNNING"
+  engine              String    @default("prisma-repeatable-read") // "pg_dump+prisma" | "prisma-repeatable-read"
+  encrypted           Boolean   @default(false)
+  filename            String?
+  filePath            String?
+  sizeBytes           Int       @default(0)
+  sha256              String?
+  tableCount          Int       @default(0)
+  recordCount         Int       @default(0)
+  errorMessage        String?
+  downloadedToLocalAt DateTime?
+  downloadedByUserId  String?
+  downloadedByName    String?
+  downloadedCount     Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([backupDate])
+  @@index([status])
+  @@index([createdAt])
+}
+

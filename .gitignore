@@ -26,3 +26,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Automated daily backups (never commit live backups)
+backups/daily/
+backend/backups/
+*.fleetbak
+*.dump
