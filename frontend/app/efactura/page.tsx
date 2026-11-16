@@ -16,6 +16,7 @@ import { API_BASE_URL } from '@/lib/api';
 import { showConfirm, showToast } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
 import { useAuth } from '@/lib/AuthContext';
+import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
 
 function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
   isPackagedFluid: boolean;
@@ -475,7 +476,6 @@ function EFacturaContent() {
   const [reducereArticolStocId, setReducereArticolStocId] = useState<string>('');
   const [reducereStocMode, setReducereStocMode] = useState<'AJUSTARE_VALOARE' | 'RETUR_FIZIC'>('AJUSTARE_VALOARE');
   const [reducereCantitateRetur, setReducereCantitateRetur] = useState<number>(1);
-  const [reducereStocSearch, setReducereStocSearch] = useState<string>('');
   const [reducereObservatii, setReducereObservatii] = useState<string>('');
   const [savingReducere, setSavingReducere] = useState<boolean>(false);
   const [isGarantieGratuita, setIsGarantieGratuita] = useState<boolean>(false);
@@ -499,7 +499,6 @@ function EFacturaContent() {
   const [loadingComenziDeschise, setLoadingComenziDeschise] = useState(false);
   const [selectedComandaLucruId, setSelectedComandaLucruId] = useState('');
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
-  const [searchVehiculDirect, setSearchVehiculDirect] = useState('');
   const [dataComandaDirect, setDataComandaDirect] = useState(new Date().toISOString().slice(0, 10));
   const [selectedMecaniciList, setSelectedMecaniciList] = useState<string[]>([]);
   const [valoareContorDirectText, setValoareContorDirectText] = useState<string>('');
@@ -1370,7 +1369,6 @@ function EFacturaContent() {
   const openReducereModal = (item: any) => {
     setReducereModalItem(item);
     setReducereObservatii('');
-    setReducereStocSearch('');
     void fetchComenziDeschise();
 
     const descLow = String(item?.descrierePiesa || '').toLowerCase();
@@ -1590,7 +1588,6 @@ function EFacturaContent() {
 
     // Inițializare parametri Alocare Directă pe Mașină / Comandă de Lucru
     setTipDestinatieImport(startAsDirectMasina ? 'DIRECT_MASINA' : 'DEPOZIT');
-    setSearchVehiculDirect('');
     setDataComandaDirect(new Date().toISOString().slice(0, 10));
     setValoareContorDirectText('');
     setSelectedMecaniciList(mecaniciFlota.length > 0 ? [mecaniciFlota[0].nume] : ['Ion Popescu (Atelier)']);
@@ -1612,18 +1609,63 @@ function EFacturaContent() {
     });
   }, [importingItem, codArticolCalculat, stocuriFlota]);
 
-  // Filtrare Vehicule Flotă în timp real pentru Alocare Directă pe Mașină
-  const filteredVehiculeDirect = useMemo(() => {
-    if (!searchVehiculDirect.trim()) return vehiculeFlota;
-    const q = searchVehiculDirect.toLowerCase().trim();
-    return vehiculeFlota.filter((v) =>
-      (v.numarIntern || '').toLowerCase().includes(q) ||
-      (v.numarInmatriculare || '').toLowerCase().includes(q) ||
-      (v.marca || '').toLowerCase().includes(q) ||
-      (v.model || '').toLowerCase().includes(q) ||
-      (v.categorieEnum || '').toLowerCase().includes(q)
-    );
-  }, [vehiculeFlota, searchVehiculDirect]);
+  // Opțiuni unificate pentru Combobox-ul de Vehicule (cu comenzile deschise prioritizate sus)
+  const vehiculComboboxOptions: ComboboxOption[] = useMemo(() => {
+    const openSet = new Set(comenziDeschiseFlota.map((c) => c.vehiculId));
+    const sorted = [...vehiculeFlota].sort((a, b) => {
+      const aOpen = openSet.has(a.id) ? 0 : 1;
+      const bOpen = openSet.has(b.id) ? 0 : 1;
+      if (aOpen !== bOpen) return aOpen - bOpen;
+      return String(a.numarInmatriculare || a.numarIntern || '').localeCompare(
+        String(b.numarInmatriculare || b.numarIntern || ''),
+      );
+    });
+    return sorted.map((v) => {
+      const hasOpen = openSet.has(v.id);
+      const nrInm = v.numarInmatriculare || '';
+      const nrInt = v.numarIntern || '';
+      const label = nrInm && nrInt && nrInm !== nrInt ? `${nrInm} • ${nrInt}` : nrInm || nrInt || 'Vehicul';
+      return {
+        value: v.id,
+        label,
+        sublabel: `${v.marca || ''} ${v.model || ''} (${v.categorieEnum || 'UTILAJ'})`.trim(),
+        badge: hasOpen ? 'Comandă deschisă' : v.categorieEnum || undefined,
+        badgeTone: hasOpen ? 'emerald' : 'slate',
+        pinned: hasOpen,
+        keywords: `${v.numarIntern || ''} ${v.numarInmatriculare || ''} ${v.marca || ''} ${v.model || ''} ${v.categorieEnum || ''}`,
+      };
+    });
+  }, [vehiculeFlota, comenziDeschiseFlota]);
+
+  const stocComboboxOptions: ComboboxOption[] = useMemo(() => {
+    return stocuriFlota.map((s: any) => ({
+      value: s.id,
+      label: s.denumire || 'Articol',
+      sublabel: `Cod: ${s.codArticol || s.codPiesa || '-'} • Preț: ${Number(s.pretUnitar || 0).toFixed(2)} RON`,
+      badge: `Stoc: ${s.stocCurent} ${s.unitateMasura || 'buc'}`,
+      badgeTone: Number(s.stocCurent || 0) > 0 ? 'emerald' : 'slate',
+      pinned: Number(s.stocCurent || 0) > 0,
+      keywords: `${s.denumire || ''} ${s.codArticol || ''} ${s.codPiesa || ''} ${s.categorie || ''}`,
+    }));
+  }, [stocuriFlota]);
+
+  const handleSelectVehiculDirect = (vId: string) => {
+    setSelectedVehiculId(vId);
+    const v = vehiculeFlota.find((veh) => veh.id === vId);
+    if (v) {
+      setValoareContorDirectText(v.valoareContorCurent ? String(v.valoareContorCurent) : '');
+    } else {
+      setValoareContorDirectText('');
+    }
+    const openOrders = comenziDeschiseFlota.filter((c) => c.vehiculId === vId);
+    if (openOrders.length > 0) {
+      setSelectedComandaLucruId(openOrders[0].id);
+      setModAlocareMasina('EXISTENTA');
+    } else {
+      setSelectedComandaLucruId('');
+      setModAlocareMasina('NOUA');
+    }
+  };
 
   // Listă unică de mecanici disponibili pentru selecție multiplă
   const optiuniMecanici = useMemo(() => {
@@ -4938,64 +4980,27 @@ function EFacturaContent() {
                 </div>
               </div>
 
-              {/* PASUL 1: SELECTARE UTILAJ / VEHICUL FIRST */}
-              <div className="p-3.5 bg-gradient-to-br from-sapphire-50/70 to-morning-50 border border-sapphire-200 rounded-2xl space-y-3">
+              {/* PASUL 1: SELECTARE UTILAJ / VEHICUL FIRST (COMBOBOX UNIC CU FILTRU ACTIV) */}
+              <div className="p-3.5 bg-gradient-to-br from-sapphire-50/70 to-morning-50 border border-sapphire-200 rounded-2xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-sapphire-950 uppercase tracking-wider flex items-center space-x-1.5">
                     <Truck className="w-4 h-4 text-sapphire-600" />
                     <span>Pasul 1: Selectează Utilajul / Vehiculul din Flotă *</span>
                   </span>
                   <span className="text-[11px] text-sage-600 font-bold">
-                    {filteredVehiculeDirect.length} utilaje în listă
+                    {vehiculeFlota.length} utilaje în listă
                   </span>
                 </div>
 
-                {/* Filtru căutare activă */}
-                <div className="relative">
-                  <Search className="w-4 h-4 text-sage-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchVehiculDirect}
-                    onChange={(e) => setSearchVehiculDirect(e.target.value)}
-                    placeholder="Filtru rapid: caută nr. intern, nr. înmatriculare, marcă, model..."
-                    className="w-full pl-9 pr-3 py-2 bg-white border border-morning-300 rounded-xl text-sapphire-900 text-xs font-semibold focus:ring-2 focus:ring-sapphire-500/20"
-                  />
-                </div>
-
-                {/* Dropdown selectare vehicul */}
-                <div>
-                  <select
-                    required
-                    value={selectedVehiculId}
-                    onChange={(e) => {
-                      const vId = e.target.value;
-                      setSelectedVehiculId(vId);
-                      const v = vehiculeFlota.find((veh) => veh.id === vId);
-                      if (v) {
-                        setValoareContorDirectText(v.valoareContorCurent ? String(v.valoareContorCurent) : '');
-                      }
-                      const openOrders = comenziDeschiseFlota.filter((c) => c.vehiculId === vId);
-                      if (openOrders.length > 0) {
-                        setSelectedComandaLucruId(openOrders[0].id);
-                        setModAlocareMasina('EXISTENTA');
-                      } else {
-                        setSelectedComandaLucruId('');
-                        setModAlocareMasina('NOUA');
-                      }
-                    }}
-                    className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:ring-2 focus:ring-sapphire-500/20"
-                  >
-                    <option value="">-- Alege Utilajul / Vehiculul din Flotă ({filteredVehiculeDirect.length}) --</option>
-                    {filteredVehiculeDirect.map((v) => {
-                      const hasOpen = comenziDeschiseFlota.some((c) => c.vehiculId === v.id);
-                      return (
-                        <option key={v.id} value={v.id}>
-                          {hasOpen ? '🟢 [COMANDĂ DESCHISĂ] ' : ''}{v.numarIntern} • {v.numarInmatriculare} — {v.marca} {v.model} ({v.categorieEnum})
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                <SearchableCombobox
+                  options={vehiculComboboxOptions}
+                  value={selectedVehiculId}
+                  onChange={handleSelectVehiculDirect}
+                  placeholder="Scrie nr. înmatriculare, nr. intern, marcă sau categorie (ex. CV06, Volvo, Excavator)..."
+                  emptyText="Niciun utilaj nu corespunde filtrului."
+                  pinnedFilterLabel="Comandă deschisă"
+                  required
+                />
               </div>
 
               {/* DETECȚIE AUTOMATĂ COMANDĂ DESCHISĂ PE VEHICULUL SELECTAT */}
@@ -5807,10 +5812,10 @@ function EFacturaContent() {
       {/* MODAL SIMPLU PROCESARE REDUCERE / STORNO (GESTIUNE CORECTĂ)           */}
       {/* ===================================================================== */}
       {reducereModalItem && (
-        <div className="fixed inset-0 z-[10050] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-morning-200 overflow-hidden">
+        <div className="fixed inset-0 z-[10050] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="pleasant-card bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-morning-200 flex flex-col max-h-[92vh] overflow-hidden">
             {/* Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-purple-700 to-sapphire-900 text-white flex items-center justify-between gap-3">
+            <div className="px-5 py-4 bg-gradient-to-r from-purple-700 to-sapphire-900 text-white flex items-center justify-between gap-3 shrink-0">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-purple-200 block">
                   Gestiune Reducere / Factură Negativă / Storno
@@ -5828,7 +5833,7 @@ function EFacturaContent() {
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs text-sapphire-900">
+            <div className="p-5 space-y-4 text-xs text-sapphire-900 overflow-y-auto flex-1">
               {/* Sumar sumă */}
               <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between">
                 <div>
@@ -5915,18 +5920,15 @@ function EFacturaContent() {
                   <label className="text-[11px] font-extrabold text-sapphire-900 block">
                     Alege Mașina / Utilajul:
                   </label>
-                  <select
+                  <SearchableCombobox
+                    options={vehiculComboboxOptions}
                     value={reducereVehiculId}
-                    onChange={(e) => setReducereVehiculId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-morning-300 bg-white text-xs font-bold text-sapphire-900"
-                  >
-                    <option value="">-- Selectează vehiculul --</option>
-                    {vehiculeFlota.map((v: any) => (
-                      <option key={v.id} value={v.id}>
-                        {v.numarInmatriculare} ({v.numarIntern}) • {v.marca} {v.model}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setReducereVehiculId}
+                    placeholder="Caută după nr. înmatriculare, nr. intern, marcă..."
+                    emptyText="Niciun vehicul găsit."
+                    pinnedFilterLabel="Comandă deschisă"
+                    dropUp
+                  />
                 </div>
               )}
 
@@ -5936,34 +5938,15 @@ function EFacturaContent() {
                     <label className="text-[11px] font-extrabold text-sapphire-900 block mb-1">
                       Caută și alege piesa din depozit:
                     </label>
-                    <input
-                      type="text"
-                      value={reducereStocSearch}
-                      onChange={(e) => setReducereStocSearch(e.target.value)}
-                      placeholder="Filtrează după nume sau cod piesă..."
-                      className="w-full px-3 py-1.5 mb-1.5 rounded-lg border border-morning-300 bg-white text-xs"
-                    />
-                    <select
+                    <SearchableCombobox
+                      options={stocComboboxOptions}
                       value={reducereArticolStocId}
-                      onChange={(e) => setReducereArticolStocId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-morning-300 bg-white text-xs font-bold text-sapphire-900"
-                    >
-                      <option value="">-- Selectează articolul din stoc --</option>
-                      {stocuriFlota
-                        .filter((s: any) => {
-                          const q = reducereStocSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            String(s.denumire || '').toLowerCase().includes(q) ||
-                            String(s.codArticol || '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((s: any) => (
-                          <option key={s.id} value={s.id}>
-                            {s.denumire} [{s.codArticol}] — Stoc: {s.stocCurent} {s.unitateMasura} ({Number(s.pretUnitar || 0).toFixed(2)} RON)
-                          </option>
-                        ))}
-                    </select>
+                      onChange={setReducereArticolStocId}
+                      placeholder="Caută după nume sau cod piesă..."
+                      emptyText="Niciun articol găsit în stoc."
+                      pinnedFilterLabel="În stoc (>0)"
+                      dropUp
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
