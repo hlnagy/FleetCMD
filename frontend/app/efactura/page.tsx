@@ -467,6 +467,17 @@ function EFacturaContent() {
   const [repTargetItemIds, setRepTargetItemIds] = useState<string[]>([]);
   const [repMod, setRepMod] = useState<'PROPORTIONAL_VALOARE' | 'EGAL_LINIE' | 'EGAL_BUCATA'>('PROPORTIONAL_VALOARE');
   const [savingRepartizare, setSavingRepartizare] = useState<boolean>(false);
+
+  // REDUCERE / STORNO MODAL STATE
+  const [reducereModalItem, setReducereModalItem] = useState<any>(null);
+  const [reducereTip, setReducereTip] = useState<'VEHICUL' | 'DEPOZIT' | 'FURNIZOR'>('VEHICUL');
+  const [reducereVehiculId, setReducereVehiculId] = useState<string>('');
+  const [reducereArticolStocId, setReducereArticolStocId] = useState<string>('');
+  const [reducereStocMode, setReducereStocMode] = useState<'AJUSTARE_VALOARE' | 'RETUR_FIZIC'>('AJUSTARE_VALOARE');
+  const [reducereCantitateRetur, setReducereCantitateRetur] = useState<number>(1);
+  const [reducereStocSearch, setReducereStocSearch] = useState<string>('');
+  const [reducereObservatii, setReducereObservatii] = useState<string>('');
+  const [savingReducere, setSavingReducere] = useState<boolean>(false);
   const [isGarantieGratuita, setIsGarantieGratuita] = useState<boolean>(false);
   const [areGarantieProducator, setAreGarantieProducator] = useState<boolean>(false);
   const [durataGarantieLuni, setDurataGarantieLuni] = useState<number>(24);
@@ -1192,21 +1203,38 @@ function EFacturaContent() {
     return { feeItems, feeTotal, feePerInvoiceUnit };
   };
 
-  const openRepartizareCosturiPanel = (factura: any) => {
+  const getSignedLineValHelper = (f: any): number => {
+    const v = Number(f?.valoareFaraTVA || 0);
+    if (v !== 0) return v;
+    return Number(((Number(f?.pretUnitar || 0)) * (Number(f?.cantitate || 0))).toFixed(2));
+  };
+
+  const openRepartizareCosturiPanel = (factura: any, preferMode: 'ALL' | 'DISCOUNT' = 'ALL') => {
     const cleanItems = (factura?.articole || []).filter(
-      (a: any) => a.stare === 'NEPROCESAT' && Number(a.cantitateProcesata || 0) <= 0.0001 && Number(a.cantitate || 0) > 0
+      (a: any) => a.stare === 'NEPROCESAT' && Math.abs(Number(a.cantitateProcesata || 0)) <= 0.0001
     );
     const detectedFees = cleanItems.filter((a: any) =>
       isCostSuplimentarCandidateHelper(a, factura?.articole || [])
     );
-    const detectedSet = new Set(detectedFees.map((f: any) => f.id));
+    const detectedDiscounts = cleanItems.filter(
+      (a: any) => isReducereSauFinanciar(a) && getSignedLineValHelper(a) < 0
+    );
+    const initialSelected =
+      preferMode === 'DISCOUNT'
+        ? detectedDiscounts
+        : detectedFees.length > 0
+          ? detectedFees
+          : detectedDiscounts;
+    const detectedSet = new Set(initialSelected.map((f: any) => f.id));
     const targets = cleanItems.filter(
       (a: any) =>
+        Number(a.cantitate || 0) > 0 &&
         !detectedSet.has(a.id) &&
         !isEcoValoareItemHelper(a, factura?.articole || []) &&
-        !isReducereSauFinanciar(a)
+        !isReducereSauFinanciar(a) &&
+        !isCostSuplimentarCandidateHelper(a, factura?.articole || [])
     );
-    setRepFeeItemIds(detectedFees.map((f: any) => f.id));
+    setRepFeeItemIds(initialSelected.map((f: any) => f.id));
     setRepTargetItemIds(targets.map((t: any) => t.id));
     setRepMod('PROPORTIONAL_VALOARE');
     setShowRepartizarePanel(true);
@@ -1222,7 +1250,7 @@ function EFacturaContent() {
     const targetIds = overrideTargetIds || repTargetItemIds;
     const mod = overrideMod || repMod;
     if (feeIds.length === 0 || targetIds.length === 0) {
-      showToast('Selectați cel puțin un cost suplimentar și cel puțin un articol destinație.', 'warning');
+      showToast('Selectați cel puțin o linie de cost/reducere și cel puțin un articol destinație.', 'warning');
       return;
     }
 
@@ -1239,7 +1267,7 @@ function EFacturaContent() {
       });
       if (res.ok) {
         const data = await res.json();
-        showToast(data.mesaj || 'Costurile au fost repartizate cu succes pe articole!', 'success');
+        showToast(data.mesaj || 'Ajustarea a fost aplicată cu succes pe articole!', 'success');
         setShowRepartizarePanel(false);
 
         const newArticole = Array.isArray(data.articole) ? data.articole : selectedFactura.articole;
@@ -1259,18 +1287,18 @@ function EFacturaContent() {
         });
         fetchData(true);
       } else {
-        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut aplica repartizarea costurilor.');
+        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut aplica repartizarea.');
         showToast(`Eroare: ${errMsg}`, 'error', 5000);
       }
     } catch {
-      showToast('Eroare la repartizarea costurilor suplimentare.', 'error', 4000);
+      showToast('Eroare la aplicarea ajustării pe articole.', 'error', 4000);
     } finally {
       setSavingRepartizare(false);
     }
   };
 
   const repPreviewData = useMemo(() => {
-    if (!selectedFactura || !showRepartizarePanel) return { totalFee: 0, rows: [] as any[] };
+    if (!selectedFactura || !showRepartizarePanel) return { totalFee: 0, rows: [] as any[], hasNegativeTarget: false };
     const articole = selectedFactura.articole || [];
     const feeSet = new Set(repFeeItemIds);
     const targetSet = new Set(repTargetItemIds);
@@ -1279,15 +1307,12 @@ function EFacturaContent() {
 
     const totalFee = Number(
       feeItems
-        .reduce((sum: number, f: any) => {
-          const v = Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0));
-          return sum + Math.max(0, v);
-        }, 0)
+        .reduce((sum: number, f: any) => sum + getSignedLineValHelper(f), 0)
         .toFixed(2)
     );
 
-    if (totalFee <= 0 || targetItems.length === 0) {
-      return { totalFee, rows: [] as any[] };
+    if (Math.abs(totalFee) < 0.01 || targetItems.length === 0) {
+      return { totalFee, rows: [] as any[], hasNegativeTarget: false };
     }
 
     const meta = targetItems.map((t: any) => {
@@ -1313,15 +1338,17 @@ function EFacturaContent() {
     if (Math.abs(diff) > 0 && shares.length > 0) {
       let maxIdx = 0;
       for (let i = 1; i < shares.length; i++) {
-        if (shares[i] >= shares[maxIdx]) maxIdx = i;
+        if (Math.abs(shares[i]) >= Math.abs(shares[maxIdx])) maxIdx = i;
       }
       shares[maxIdx] = Number((shares[maxIdx] + diff).toFixed(2));
     }
 
+    let hasNegativeTarget = false;
     const rows = meta.map((m: any, idx: number) => {
       const share = shares[idx] || 0;
       const qty = Number(m.item.cantitate || 1);
       const newTotal = Number((m.oldTotal + share).toFixed(2));
+      if (newTotal < 0) hasNegativeTarget = true;
       const newUnitPret = Number((newTotal / qty).toFixed(4));
       const addPerUnit = Number((share / qty).toFixed(2));
       return {
@@ -1337,8 +1364,107 @@ function EFacturaContent() {
       };
     });
 
-    return { totalFee, rows };
+    return { totalFee, rows, hasNegativeTarget };
   }, [selectedFactura, showRepartizarePanel, repFeeItemIds, repTargetItemIds, repMod]);
+
+  const openReducereModal = (item: any) => {
+    setReducereModalItem(item);
+    setReducereObservatii('');
+    setReducereStocSearch('');
+    void fetchComenziDeschise();
+
+    const descLow = String(item?.descrierePiesa || '').toLowerCase();
+    const isDiscountText =
+      descLow.includes('reducere') ||
+      descLow.includes('discount') ||
+      descLow.includes('discont') ||
+      descLow.includes('rabat') ||
+      descLow.includes('remiza') ||
+      descLow.includes('bonificatie');
+    const isPhysicalReturnGuess = Number(item?.cantitate || 0) < 0 && !isDiscountText;
+
+    // Căutăm o potrivire în stoc după cod sau denumire
+    const code = String(item?.codArticolFurnizor || '').trim().toLowerCase();
+    const matchedStock = stocuriFlota.find(
+      (s: any) =>
+        (code && String(s.codArticol || '').trim().toLowerCase() === code) ||
+        (s.denumire && descLow.includes(String(s.denumire).trim().toLowerCase()))
+    );
+
+    if (isPhysicalReturnGuess && matchedStock && matchedStock.stocCurent > 0) {
+      setReducereTip('DEPOZIT');
+      setReducereStocMode('RETUR_FIZIC');
+      setReducereArticolStocId(matchedStock.id);
+      setReducereCantitateRetur(Math.abs(Number(item?.cantitate || 1)) || 1);
+    } else if (isDiscountText && matchedStock && matchedStock.stocCurent > 0) {
+      setReducereTip('DEPOZIT');
+      setReducereStocMode('AJUSTARE_VALOARE');
+      setReducereArticolStocId(matchedStock.id);
+      setReducereCantitateRetur(1);
+    } else {
+      setReducereTip('VEHICUL');
+      setReducereStocMode(isPhysicalReturnGuess ? 'RETUR_FIZIC' : 'AJUSTARE_VALOARE');
+      setReducereArticolStocId(matchedStock?.id || (stocuriFlota[0]?.id || ''));
+      setReducereCantitateRetur(Math.abs(Number(item?.cantitate || 1)) || 1);
+    }
+    setReducereVehiculId(vehiculeFlota[0]?.id || '');
+  };
+
+  const handleSubmitReducere = async () => {
+    if (!reducereModalItem || !selectedFactura) return;
+    let tipOperatiune: 'REDUCERE_VEHICUL' | 'STOC_AJUSTARE_VALOARE' | 'STOC_RETUR_FIZIC' | 'REDUCERE_FURNIZOR' = 'REDUCERE_FURNIZOR';
+    if (reducereTip === 'VEHICUL') {
+      if (!reducereVehiculId) {
+        showToast('Selectați mașina pe care se aplică reducerea.', 'warning');
+        return;
+      }
+      tipOperatiune = 'REDUCERE_VEHICUL';
+    } else if (reducereTip === 'DEPOZIT') {
+      if (!reducereArticolStocId) {
+        showToast('Selectați articolul din depozit.', 'warning');
+        return;
+      }
+      tipOperatiune = reducereStocMode === 'RETUR_FIZIC' ? 'STOC_RETUR_FIZIC' : 'STOC_AJUSTARE_VALOARE';
+    }
+
+    setSavingReducere(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/efactura/items/${reducereModalItem.id}/proceseaza-reducere`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipOperatiune,
+          vehiculId: reducereTip === 'VEHICUL' ? reducereVehiculId : undefined,
+          articolStocId: reducereTip === 'DEPOZIT' ? reducereArticolStocId : undefined,
+          cantitateRetur: reducereTip === 'DEPOZIT' && reducereStocMode === 'RETUR_FIZIC' ? reducereCantitateRetur : undefined,
+          observatii: reducereObservatii,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(data.mesaj || 'Reducerea a fost procesată cu succes!', 'success', 4500);
+        setReducereModalItem(null);
+        const newArticole = Array.isArray(data.articole) ? data.articole : selectedFactura.articole;
+        const newStare = data.facturaStare || selectedFactura.stare;
+        setSelectedFactura({ ...selectedFactura, stare: newStare, articole: newArticole });
+        setFacturi((prev) => {
+          const updated = prev.map((f) =>
+            f.id === selectedFactura.id ? { ...f, stare: newStare, articole: newArticole } : f
+          );
+          efacturaCache.facturi = updated;
+          return updated;
+        });
+        fetchData(true);
+      } else {
+        const errMsg = await extractApiErrorMessage(res, 'Nu s-a putut procesa reducerea.');
+        showToast(`Eroare: ${errMsg}`, 'error', 5000);
+      }
+    } catch {
+      showToast('Eroare de conexiune la procesarea reducerii.', 'error', 4000);
+    } finally {
+      setSavingReducere(false);
+    }
+  };
 
   // OPEN IMPORT MODAL FOR A SINGLE ITEM
   const openImportItemModal = (item: any, isSerializat = false, startAsDirectMasina = false) => {
@@ -1405,7 +1531,7 @@ function EFacturaContent() {
     setNewCatNume('');
     setNewSubcatNume('');
 
-    const isZeroFactura = (selectedFactura?.valoareTotala || 0) === 0 || (selectedFactura?.articole || []).some((a: any) => isReducereSauFinanciar(a));
+    const isZeroFactura = Math.abs(Number(selectedFactura?.valoareTotala || 0)) < 0.05;
     setIsGarantieGratuita(isZeroFactura);
     setAreGarantieProducator(isZeroFactura || isSerializat);
     setDurataGarantieLuni(24);
@@ -2982,14 +3108,14 @@ function EFacturaContent() {
                   Linii Factură / Articole extrase din UBL 2.1:
                 </span>
                 <div className="flex items-center space-x-3">
-                  {(selectedFactura.articole || []).filter((a: any) => a.stare === 'NEPROCESAT' && Number(a.cantitateProcesata || 0) <= 0.0001).length >= 2 && (
+                  {(selectedFactura.articole || []).filter((a: any) => a.stare === 'NEPROCESAT' && Math.abs(Number(a.cantitateProcesata || 0)) <= 0.0001).length >= 2 && (
                     <button
                       type="button"
                       onClick={() => showRepartizarePanel ? setShowRepartizarePanel(false) : openRepartizareCosturiPanel(selectedFactura)}
                       className="px-2.5 py-1 rounded-lg bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 font-bold text-[11px] transition cursor-pointer"
-                      title="Include transportul, curieratul sau alte taxe în prețul articolelor din factură"
+                      title="Include transportul, taxele sau reducerile în prețul articolelor din factură"
                     >
-                      {showRepartizarePanel ? 'Ascunde Repartizarea Costurilor' : '⚖️ Repartizează Transport / Taxe'}
+                      {showRepartizarePanel ? 'Ascunde Repartizarea' : '⚖️ Repartizează Transport / Reduceri'}
                     </button>
                   )}
                   {eligibleItems.length > 1 && (
@@ -3082,28 +3208,104 @@ function EFacturaContent() {
                 );
               })()}
 
-              {/* PANEL REPARTIZARE COSTURI SUPLIMENTARE PE ARTICOLE */}
+              {/* DETECȚIE INTELIGENTĂ REDUCERI COMERCIALE PE ACEEAȘI FACTURĂ */}
+              {!showRepartizarePanel && (() => {
+                const artList = selectedFactura.articole || [];
+                const cleanUnproc = artList.filter(
+                  (a: any) => a.stare === 'NEPROCESAT' && Math.abs(Number(a.cantitateProcesata || 0)) <= 0.0001
+                );
+                const detectedDiscounts = cleanUnproc.filter(
+                  (a: any) => isReducereSauFinanciar(a) && getSignedLineValHelper(a) < 0
+                );
+                const targets = cleanUnproc.filter(
+                  (a: any) =>
+                    Number(a.cantitate || 0) > 0 &&
+                    !isCostSuplimentarCandidateHelper(a, artList) &&
+                    !isEcoValoareItemHelper(a, artList) &&
+                    !isReducereSauFinanciar(a)
+                );
+                if (detectedDiscounts.length === 0 || targets.length === 0) return null;
+
+                const discSum = Number(
+                  detectedDiscounts.reduce((s: number, d: any) => s + getSignedLineValHelper(d), 0).toFixed(2)
+                );
+                if (discSum >= 0) return null;
+                const discNames = detectedDiscounts.map((d: any) => d.descrierePiesa).join(' + ');
+
+                if (targets.length === 1) {
+                  const singleTarget = targets[0];
+                  const targetTotal = getSignedLineValHelper(singleTarget);
+                  if (targetTotal + discSum < 0) return null;
+                  const subPerUnit = singleTarget.cantitate > 0 ? Number((Math.abs(discSum) / singleTarget.cantitate).toFixed(2)) : Math.abs(discSum);
+                  return (
+                    <div className="p-3 bg-purple-50/90 border border-purple-300 rounded-xl flex items-center justify-between gap-3 flex-wrap animate-fade-in">
+                      <div className="text-xs text-purple-950">
+                        <span className="font-extrabold">
+                          Reducere detectată pe factură: {discSum.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                        </span>
+                        <span className="text-purple-800 ml-1.5">({discNames})</span>
+                        <div className="text-[11px] text-purple-900 mt-0.5">
+                          O poți scădea automat din prețul piesei (<b>{singleTarget.descrierePiesa}</b>: <b>-{subPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{singleTarget.unitateMasura || 'buc'}</b>) înainte de import.
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={savingRepartizare}
+                          onClick={() => handleApplyRepartizareCosturi(detectedDiscounts.map((d: any) => d.id), [singleTarget.id], 'EGAL_LINIE')}
+                          className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                        >
+                          {savingRepartizare ? 'Se aplică...' : `Scade din Piesă (-${subPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc)`}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-3 bg-purple-50/90 border border-purple-300 rounded-xl flex items-center justify-between gap-3 flex-wrap animate-fade-in">
+                    <div className="text-xs text-purple-950">
+                      <span className="font-extrabold">
+                        Reducere detectată pe factură: {discSum.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                      </span>
+                      <span className="text-purple-800 ml-1.5">({discNames})</span>
+                      <div className="text-[11px] text-purple-900 mt-0.5">
+                        Există <b>{targets.length} articole</b> pe factură — o poți distribui proporțional pe piese înainte de import.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openRepartizareCosturiPanel(selectedFactura, 'DISCOUNT')}
+                      className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer shrink-0"
+                    >
+                      Aplică Reducerea pe Piese ({targets.length})
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* PANEL REPARTIZARE COSTURI SUPLIMENTARE / REDUCERI PE ARTICOLE */}
               {showRepartizarePanel && (() => {
                 const cleanUnproc = (selectedFactura.articole || []).filter(
                   (a: any) =>
                     a.stare === 'NEPROCESAT' &&
-                    Number(a.cantitateProcesata || 0) <= 0.0001 &&
-                    Number(a.cantitate || 0) > 0 &&
-                    !isEcoValoareItemHelper(a, selectedFactura.articole || []) &&
-                    !isReducereSauFinanciar(a)
+                    Math.abs(Number(a.cantitateProcesata || 0)) <= 0.0001 &&
+                    !isEcoValoareItemHelper(a, selectedFactura.articole || [])
                 );
                 const feeIdSet = new Set(repFeeItemIds);
-                const availableTargets = cleanUnproc.filter((a: any) => !feeIdSet.has(a.id));
+                const availableTargets = cleanUnproc.filter(
+                  (a: any) => !feeIdSet.has(a.id) && Number(a.cantitate || 0) > 0 && !isReducereSauFinanciar(a)
+                );
 
                 return (
                   <div className="p-4 bg-gradient-to-br from-cyan-50/90 to-sapphire-50/60 border-2 border-cyan-400 rounded-2xl space-y-3 shadow-sm animate-fade-in">
                     <div className="flex items-center justify-between border-b border-cyan-200 pb-2">
                       <div>
                         <h4 className="text-xs font-black text-cyan-950 uppercase tracking-wider">
-                          Repartizare Costuri Suplimentare (Transport / Curierat / Taxe) pe Piese
+                          Repartizare Costuri Suplimentare (Transport / Taxe) sau Reduceri pe Piese
                         </h4>
                         <p className="text-[11px] text-cyan-900">
-                          Alege liniile de cost și modul în care se distribuie valoarea lor pe articolele din factură.
+                          Alege liniile de ajustare (+ cost sau - reducere) și articolele din factură pe care se aplică.
                         </p>
                       </div>
                       <button
@@ -3116,20 +3318,20 @@ function EFacturaContent() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                      {/* 1. Linii de cost (Taxe / Transport) */}
+                      {/* 1. Linii de cost / reducere */}
                       <div className="bg-white border border-cyan-200 rounded-xl p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-extrabold text-cyan-950 uppercase">
-                            1. Liniile de Cost / Taxă de Repartizat
+                            1. Linii de Ajustare (+ Cost / - Reducere)
                           </span>
-                          <span className="text-xs font-mono font-black text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded">
+                          <span className={`text-xs font-mono font-black px-2 py-0.5 rounded ${repPreviewData.totalFee < 0 ? 'bg-purple-100 text-purple-800' : 'bg-cyan-100 text-cyan-800'}`}>
                             Total: {repPreviewData.totalFee.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                           </span>
                         </div>
                         <div className="max-h-40 overflow-y-auto divide-y divide-morning-100">
                           {cleanUnproc.map((a: any) => {
                             const checked = feeIdSet.has(a.id);
-                            const lineVal = Number(a.valoareFaraTVA > 0 ? a.valoareFaraTVA : (a.pretUnitar || 0) * (a.cantitate || 0));
+                            const lineVal = getSignedLineValHelper(a);
                             return (
                               <label key={a.id} className="flex items-center justify-between py-1.5 px-1 hover:bg-cyan-50/60 rounded cursor-pointer text-xs">
                                 <span className="flex items-center space-x-2 min-w-0 pr-2">
@@ -3150,7 +3352,7 @@ function EFacturaContent() {
                                     {a.descrierePiesa}
                                   </span>
                                 </span>
-                                <span className="font-mono font-bold text-slate-800 shrink-0">
+                                <span className={`font-mono font-bold shrink-0 ${lineVal < 0 ? 'text-purple-700' : 'text-slate-800'}`}>
                                   {lineVal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                                 </span>
                               </label>
@@ -3226,7 +3428,7 @@ function EFacturaContent() {
                               <th className="p-2">Articol Destinație</th>
                               <th className="p-2">Cant.</th>
                               <th className="p-2">Preț Inițial/buc</th>
-                              <th className="p-2">+Adaos Cost/buc</th>
+                              <th className="p-2">Ajustare / buc</th>
                               <th className="p-2">Preț Nou Intrare/buc</th>
                               <th className="p-2 text-right">Total Nou Articol</th>
                             </tr>
@@ -3237,13 +3439,21 @@ function EFacturaContent() {
                                 <td className="p-2 font-bold text-sapphire-900">{r.descrierePiesa}</td>
                                 <td className="p-2 font-mono">{r.cantitate} {r.unitateMasura}</td>
                                 <td className="p-2 font-mono text-sage-700">{r.oldUnitPret.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
-                                <td className="p-2 font-mono font-bold text-cyan-700">+{r.addPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON ({r.share.toFixed(2)} tot)</td>
+                                <td className={`p-2 font-mono font-bold ${r.share < 0 ? 'text-purple-700' : 'text-cyan-700'}`}>
+                                  {r.addPerUnit >= 0 ? '+' : ''}{r.addPerUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON ({r.share.toFixed(2)} tot)
+                                </td>
                                 <td className="p-2 font-mono font-extrabold text-emerald-700">{r.newUnitPret.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} RON</td>
-                                <td className="p-2 font-mono font-extrabold text-right text-sapphire-950">{r.newTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
+                                <td className={`p-2 font-mono font-extrabold text-right ${r.newTotal < 0 ? 'text-rose-700' : 'text-sapphire-950'}`}>{r.newTotal.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    )}
+
+                    {repPreviewData.hasNegativeTarget && (
+                      <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold">
+                        Reducerea depășește valoarea uneia dintre piese. Alege o altă piesă sau folosește „Procesează Reducere / Storno” pe linia respectivă.
                       </div>
                     )}
 
@@ -3257,13 +3467,13 @@ function EFacturaContent() {
                       </button>
                       <button
                         type="button"
-                        disabled={savingRepartizare || repPreviewData.totalFee <= 0 || repPreviewData.rows.length === 0}
+                        disabled={savingRepartizare || Math.abs(repPreviewData.totalFee) < 0.01 || repPreviewData.rows.length === 0 || repPreviewData.hasNegativeTarget}
                         onClick={() => handleApplyRepartizareCosturi()}
-                        className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-extrabold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
+                        className={`px-4 py-1.5 rounded-xl text-white font-extrabold text-xs shadow-xs transition cursor-pointer disabled:opacity-50 ${repPreviewData.totalFee < 0 ? 'bg-purple-600 hover:bg-purple-700' : 'bg-cyan-600 hover:bg-cyan-700'}`}
                       >
                         {savingRepartizare
                           ? 'Se aplică repartizarea...'
-                          : `Aplică Repartizarea (${repPreviewData.totalFee.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON)`}
+                          : `Aplică (${repPreviewData.totalFee.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON)`}
                       </button>
                     </div>
                   </div>
@@ -3438,7 +3648,11 @@ function EFacturaContent() {
                                 title="Deschide modulul Comenzi de Lucru"
                               >
                                 <Truck className="w-3 h-3 text-sapphire-600" />
-                                <span>Montat pe Mașină</span>
+                                <span>
+                                  {(art.observatiiIntern || '').startsWith('Reducere aplicată pe ')
+                                    ? 'Reducere pe Mașină'
+                                    : 'Montat pe Mașină'}
+                                </span>
                               </Link>
                             ) : (
                               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-fit">
@@ -3446,11 +3660,19 @@ function EFacturaContent() {
                                 <span>
                                   {isEcoValoareItemHelper(art, selectedFactura?.articole || [])
                                     ? 'Inclus în Anvelope'
-                                    : (isCostSuplimentarCandidateHelper(art, selectedFactura?.articole || []) ||
-                                       (art.observatiiIntern || '').startsWith('Repartizat pe ') ||
-                                       (art.observatiiIntern || '').startsWith('Inclus automat în costul'))
-                                      ? 'Repartizat pe Piese'
-                                      : 'Importat în Stoc'}
+                                    : (art.observatiiIntern || '').startsWith('Reducere aplicată pe ')
+                                      ? 'Reducere repartizată'
+                                      : (art.observatiiIntern || '').startsWith('Reducere comercială furnizor')
+                                        ? 'Reducere Furnizor'
+                                        : (art.observatiiIntern || '').startsWith('Retur fizic')
+                                          ? 'Retur din Stoc'
+                                          : (art.observatiiIntern || '').startsWith('Reducere preț stoc')
+                                            ? 'Ajustare Preț Stoc'
+                                            : (isCostSuplimentarCandidateHelper(art, selectedFactura?.articole || []) ||
+                                               (art.observatiiIntern || '').startsWith('Repartizat pe ') ||
+                                               (art.observatiiIntern || '').startsWith('Inclus automat în costul'))
+                                              ? 'Repartizat pe Piese'
+                                              : 'Importat în Stoc'}
                                 </span>
                               </span>
                             )
@@ -3462,13 +3684,24 @@ function EFacturaContent() {
                         <td className="p-2.5 text-right min-w-[340px] pr-4">
                           {isReducereSauFinanciar(art) ? (
                             art.stare === 'NEPROCESAT' && (
-                              <button
-                                onClick={() => handleEliminaItem(art.id, art.descrierePiesa)}
-                                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition inline-flex items-center space-x-1 cursor-pointer whitespace-nowrap"
-                                title="Exclude această linie financiară / reducere comercială"
-                              >
-                                <span>Exclude (Reducere)</span>
-                              </button>
+                              <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => openReducereModal(art)}
+                                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition inline-flex items-center space-x-1 cursor-pointer"
+                                  title="Scade reducerea din costul unei mașini, din stoc, sau din totalul furnizorului"
+                                >
+                                  <span>Procesează Reducere / Storno</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminaItem(art.id, art.descrierePiesa)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition cursor-pointer"
+                                  title="Ignoră această linie (nu afectează rapoartele sau stocul)"
+                                >
+                                  <span>Exclude</span>
+                                </button>
+                              </div>
                             )
                           ) : (
                             <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap">
@@ -5565,6 +5798,252 @@ function EFacturaContent() {
               >
                 Gata / Închide Fereastra
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL SIMPLU PROCESARE REDUCERE / STORNO (GESTIUNE CORECTĂ)           */}
+      {/* ===================================================================== */}
+      {reducereModalItem && (
+        <div className="fixed inset-0 z-[10050] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-morning-200 overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-purple-700 to-sapphire-900 text-white flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-purple-200 block">
+                  Gestiune Reducere / Factură Negativă / Storno
+                </span>
+                <h3 className="text-sm font-black truncate max-w-md">
+                  {reducereModalItem.descrierePiesa}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReducereModalItem(null)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-purple-100 hover:text-white transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs text-sapphire-900">
+              {/* Sumar sumă */}
+              <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-purple-700 uppercase block">Valoare fără TVA de aplicat</span>
+                  <span className="font-mono font-black text-base text-purple-900">
+                    -{Math.abs(getSignedLineValHelper(reducereModalItem)).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                  </span>
+                </div>
+                <div className="text-right text-[11px] text-purple-800">
+                  <div>Cantitate factură: <b>{reducereModalItem.cantitate} {reducereModalItem.unitateMasura || 'buc'}</b></div>
+                  <div>Furnizor: <b>{selectedFactura?.numeVanzator}</b></div>
+                </div>
+              </div>
+
+              {/* 3 opțiuni clare */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-extrabold text-sage-700 uppercase block">
+                  Unde se aplică această reducere / stornare?
+                </label>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {/* Opțiunea 1: Pe o Mașină */}
+                  <button
+                    type="button"
+                    onClick={() => setReducereTip('VEHICUL')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                      reducereTip === 'VEHICUL'
+                        ? 'bg-sapphire-50 border-sapphire-600 ring-1 ring-sapphire-600'
+                        : 'bg-white border-morning-200 hover:bg-morning-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-sapphire-900">1. Aplică pe o Mașină / Utilaj</span>
+                      <Truck className="w-4 h-4 text-sapphire-600" />
+                    </div>
+                    <p className="text-[11px] text-sage-700 mt-0.5">
+                      Piesa a fost deja montată pe mașină — scade costul din rapoartele mașinii (fără să modifice stocul).
+                    </p>
+                  </button>
+
+                  {/* Opțiunea 2: Pe Depozit (Stoc) */}
+                  <button
+                    type="button"
+                    onClick={() => setReducereTip('DEPOZIT')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                      reducereTip === 'DEPOZIT'
+                        ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600'
+                        : 'bg-white border-morning-200 hover:bg-morning-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-sapphire-900">2. Aplică pe Depozit (Piesă din Stoc)</span>
+                      <Database className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <p className="text-[11px] text-sage-700 mt-0.5">
+                      Fie scade doar prețul piesei din magazie (reducere comercială), fie scade și bucățile (retur fizic la furnizor).
+                    </p>
+                  </button>
+
+                  {/* Opțiunea 3: Reducere Generală Furnizor */}
+                  <button
+                    type="button"
+                    onClick={() => setReducereTip('FURNIZOR')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                      reducereTip === 'FURNIZOR'
+                        ? 'bg-purple-50 border-purple-600 ring-1 ring-purple-600'
+                        : 'bg-white border-morning-200 hover:bg-morning-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-sapphire-900">3. Reducere Generală Furnizor (Doar Rapoarte)</span>
+                      <FileText className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <p className="text-[11px] text-sage-700 mt-0.5">
+                      Discount general sau bonus comercial — scade totalul cumpărat de la furnizor fără să atingă stocul sau mașinile.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Detaliu dinamic simplu pentru opțiunea aleasă */}
+              {reducereTip === 'VEHICUL' && (
+                <div className="p-3 rounded-xl bg-sapphire-50/60 border border-sapphire-200 space-y-2">
+                  <label className="text-[11px] font-extrabold text-sapphire-900 block">
+                    Alege Mașina / Utilajul:
+                  </label>
+                  <select
+                    value={reducereVehiculId}
+                    onChange={(e) => setReducereVehiculId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-morning-300 bg-white text-xs font-bold text-sapphire-900"
+                  >
+                    <option value="">-- Selectează vehiculul --</option>
+                    {vehiculeFlota.map((v: any) => (
+                      <option key={v.id} value={v.id}>
+                        {v.numarInmatriculare} ({v.numarIntern}) • {v.marca} {v.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {reducereTip === 'DEPOZIT' && (
+                <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2.5">
+                  <div>
+                    <label className="text-[11px] font-extrabold text-sapphire-900 block mb-1">
+                      Caută și alege piesa din depozit:
+                    </label>
+                    <input
+                      type="text"
+                      value={reducereStocSearch}
+                      onChange={(e) => setReducereStocSearch(e.target.value)}
+                      placeholder="Filtrează după nume sau cod piesă..."
+                      className="w-full px-3 py-1.5 mb-1.5 rounded-lg border border-morning-300 bg-white text-xs"
+                    />
+                    <select
+                      value={reducereArticolStocId}
+                      onChange={(e) => setReducereArticolStocId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-morning-300 bg-white text-xs font-bold text-sapphire-900"
+                    >
+                      <option value="">-- Selectează articolul din stoc --</option>
+                      {stocuriFlota
+                        .filter((s: any) => {
+                          const q = reducereStocSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            String(s.denumire || '').toLowerCase().includes(q) ||
+                            String(s.codArticol || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((s: any) => (
+                          <option key={s.id} value={s.id}>
+                            {s.denumire} [{s.codArticol}] — Stoc: {s.stocCurent} {s.unitateMasura} ({Number(s.pretUnitar || 0).toFixed(2)} RON)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReducereStocMode('AJUSTARE_VALOARE')}
+                      className={`p-2 rounded-lg border text-left text-[11px] transition cursor-pointer ${
+                        reducereStocMode === 'AJUSTARE_VALOARE'
+                          ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold'
+                          : 'bg-white text-slate-700 border-morning-300 font-semibold'
+                      }`}
+                    >
+                      <div>Doar scad prețul</div>
+                      <div className={`text-[10px] ${reducereStocMode === 'AJUSTARE_VALOARE' ? 'text-emerald-100' : 'text-sage-600'}`}>
+                        Bucățile rămân în depozit
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReducereStocMode('RETUR_FIZIC')}
+                      className={`p-2 rounded-lg border text-left text-[11px] transition cursor-pointer ${
+                        reducereStocMode === 'RETUR_FIZIC'
+                          ? 'bg-amber-600 text-white border-amber-700 font-extrabold'
+                          : 'bg-white text-slate-700 border-morning-300 font-semibold'
+                      }`}
+                    >
+                      <div>Scad și bucățile (Retur)</div>
+                      <div className={`text-[10px] ${reducereStocMode === 'RETUR_FIZIC' ? 'text-amber-100' : 'text-sage-600'}`}>
+                        Piesa s-a trimis înapoi
+                      </div>
+                    </button>
+                  </div>
+
+                  {reducereStocMode === 'RETUR_FIZIC' && (
+                    <div className="flex items-center space-x-2">
+                      <label className="text-[11px] font-bold text-sapphire-900">Cantitate returnată:</label>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="any"
+                        value={reducereCantitateRetur}
+                        onChange={(e) => setReducereCantitateRetur(Number(e.target.value))}
+                        className="w-24 px-2.5 py-1 rounded-lg border border-morning-300 bg-white font-mono font-bold text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                  Observație internă (opțional):
+                </label>
+                <input
+                  type="text"
+                  value={reducereObservatii}
+                  onChange={(e) => setReducereObservatii(e.target.value)}
+                  placeholder="Ex: Reducere comercială / Piesă returnată"
+                  className="w-full px-3 py-1.5 rounded-lg border border-morning-300 bg-white text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setReducereModalItem(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-slate-700 font-bold text-xs transition"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="button"
+                  disabled={savingReducere}
+                  onClick={handleSubmitReducere}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-md transition disabled:opacity-50 cursor-pointer"
+                >
+                  {savingReducere ? 'Se procesează...' : 'Aplică Reducerea / Storno'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

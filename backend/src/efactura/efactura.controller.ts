@@ -167,6 +167,23 @@ export class EFacturaController {
     return this.efacturaService.alocaItemDirectPeMasina(itemId, body);
   }
 
+  // PROCESARE REDUCERI COMERCIALE / FACTURI NEGATIVE / STORNO
+  @Post('items/:itemId/proceseaza-reducere')
+  async proceseazaReducereSauStorno(
+    @Param('itemId') itemId: string,
+    @Body()
+    body: {
+      tipOperatiune: 'REDUCERE_VEHICUL' | 'STOC_AJUSTARE_VALOARE' | 'STOC_RETUR_FIZIC' | 'REDUCERE_FURNIZOR';
+      vehiculId?: string;
+      comandaLucruId?: string;
+      articolStocId?: string;
+      cantitateRetur?: number;
+      observatii?: string;
+    },
+  ) {
+    return this.efacturaService.proceseazaReducereSauStorno(itemId, body);
+  }
+
   // ELVET TÉTEL (REZSI / SERVICII)
   @Post('items/:itemId/elimina')
   async eliminaItem(@Param('itemId') itemId: string) {

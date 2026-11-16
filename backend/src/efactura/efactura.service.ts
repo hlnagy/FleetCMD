@@ -867,14 +867,33 @@ export class EFacturaService implements OnModuleInit {
       const codArticolFurnizor = sellersId || standardId || (classificationId && classificationId.length > 3 ? classificationId : generatedDefaultCode);
 
       const qtyNode = line.InvoicedQuantity || line.CreditedQuantity || { '#text': 1 };
-      const cantitate = Number(qtyNode['#text'] ?? qtyNode ?? 1);
+      const rawCant = Number(qtyNode['#text'] ?? qtyNode ?? 1);
+      const cantitate = isNaN(rawCant) ? 1 : rawCant;
       const unitateMasura = normalizeUnitateMasura(qtyNode['@_unitCode'] || 'buc');
 
       const lineAmountNode = line.LineExtensionAmount || {};
-      const valoareFaraTVA = Number((Number(lineAmountNode['#text'] ?? lineAmountNode ?? 0)).toFixed(2));
+      const rawLineVal = Number(lineAmountNode['#text'] ?? lineAmountNode ?? 0);
+      const valoareFaraTVA = Number((isNaN(rawLineVal) ? 0 : rawLineVal).toFixed(2));
 
       const priceNode = line.Price?.PriceAmount || {};
-      const pretUnitar = Number((Number(priceNode['#text'] ?? priceNode ?? (cantitate > 0 ? valoareFaraTVA / cantitate : 0))).toFixed(2));
+      const rawPriceAttr = priceNode['#text'] ?? priceNode;
+      const hasExplicitPrice =
+        rawPriceAttr !== undefined &&
+        rawPriceAttr !== null &&
+        typeof rawPriceAttr !== 'object' &&
+        String(rawPriceAttr).trim() !== '';
+
+      let pretUnitar = 0;
+      if (hasExplicitPrice) {
+        const parsedPrice = Number(rawPriceAttr);
+        if (!isNaN(parsedPrice)) {
+          // Dacă totalul liniei e negativ și cantitatea pozitivă (ex. -50 RON reducere pe 1 buc), aliniem semnul prețului
+          pretUnitar = valoareFaraTVA < 0 && cantitate > 0 && parsedPrice > 0 ? -parsedPrice : parsedPrice;
+        }
+      } else {
+        pretUnitar = cantitate !== 0 ? valoareFaraTVA / cantitate : valoareFaraTVA;
+      }
+      pretUnitar = Number((isNaN(pretUnitar) ? 0 : pretUnitar).toFixed(2));
 
       const taxCategory = itemNode.ClassifiedTaxCategory || line.TaxTotal?.TaxSubtotal?.TaxCategory || {};
       const cotaTVA = Number(taxCategory.Percent ?? 19);
@@ -883,24 +902,67 @@ export class EFacturaService implements OnModuleInit {
       items.push({
         descrierePiesa: String(descrierePiesa),
         codArticolFurnizor: codArticolFurnizor ? String(codArticolFurnizor) : undefined,
-        cantitate: isNaN(cantitate) ? 1 : cantitate,
+        cantitate,
         unitateMasura: String(unitateMasura),
-        pretUnitar: isNaN(pretUnitar) ? 0 : pretUnitar,
-        valoareFaraTVA: isNaN(valoareFaraTVA) ? 0 : valoareFaraTVA,
+        pretUnitar,
+        valoareFaraTVA,
         valoareTVA,
-        cotaTVA,
+        cotaTVA: isNaN(cotaTVA) ? 19 : cotaTVA,
       });
     });
+
+    // Suport reduceri comerciale globale la nivel de document UBL (<AllowanceCharge> cu ChargeIndicator = false)
+    const rawAllowanceCharges = invoice.AllowanceCharge
+      ? Array.isArray(invoice.AllowanceCharge)
+        ? invoice.AllowanceCharge
+        : [invoice.AllowanceCharge]
+      : [];
+    const taxExclusiveTotal = Number(
+      monetaryTotal.TaxExclusiveAmount?.['#text'] ?? monetaryTotal.TaxExclusiveAmount ?? NaN
+    );
+    const itemsNetSum = Number(items.reduce((acc, it) => acc + it.valoareFaraTVA, 0).toFixed(2));
+    if (
+      rawAllowanceCharges.length > 0 &&
+      !isNaN(taxExclusiveTotal) &&
+      itemsNetSum - taxExclusiveTotal > 0.05
+    ) {
+      rawAllowanceCharges.forEach((ac: any, acIdx: number) => {
+        const indicator = String(ac?.ChargeIndicator ?? '').trim().toLowerCase();
+        if (indicator === 'false' || indicator === '0') {
+          const acAmount = Number(ac?.Amount?.['#text'] ?? ac?.Amount ?? 0);
+          if (!isNaN(acAmount) && acAmount > 0.01) {
+            const acCotaTva = Number(ac?.TaxCategory?.Percent ?? 19);
+            const acValFara = Number((-acAmount).toFixed(2));
+            const acValTva = Number((acValFara * ((isNaN(acCotaTva) ? 19 : acCotaTva) / 100)).toFixed(2));
+            const acReason =
+              extractText(ac?.AllowanceChargeReason) || `Reducere comercială factură #${acIdx + 1}`;
+            items.push({
+              descrierePiesa: acReason,
+              codArticolFurnizor: `RED-${acIdx + 1}`,
+              cantitate: 1,
+              unitateMasura: 'buc',
+              pretUnitar: acValFara,
+              valoareFaraTVA: acValFara,
+              valoareTVA: acValTva,
+              cotaTVA: isNaN(acCotaTva) ? 19 : acCotaTva,
+            });
+          }
+        }
+      });
+    }
 
     // Dacă valoareTotala a rezultat 0 (de ex. la facturi cu plată integrală pe loc / bon / card), calculăm din liniile facturii
     if ((isNaN(valoareTotala) || valoareTotala === 0) && items.length > 0) {
       const sumLinii = items.reduce((acc, it) => acc + (it.valoareFaraTVA + it.valoareTVA), 0);
-      if (sumLinii > 0) {
+      if (sumLinii !== 0) {
         valoareTotala = Number(sumLinii.toFixed(2));
       }
     } else {
       valoareTotala = Number(valoareTotala.toFixed(2));
     }
+
+    const typeCode = extractText(invoice.InvoiceTypeCode || invoice.CreditNoteTypeCode);
+    const isStorno = Boolean(parsed.CreditNote) || typeCode === '381' || valoareTotala < 0;
 
     return {
       numarFactura: String(numarFactura),
@@ -910,7 +972,7 @@ export class EFacturaService implements OnModuleInit {
       cifCumparator: String(cifCumparator),
       valoareTotala: isNaN(valoareTotala) ? 0 : valoareTotala,
       moneda: String(moneda),
-      tipFactura: invoice.CreditNote ? 'STORNO' : 'FACTURA',
+      tipFactura: isStorno ? 'STORNO' : 'FACTURA',
       items,
     };
   }
@@ -1691,7 +1753,7 @@ export class EFacturaService implements OnModuleInit {
     };
   }
 
-  // REPARTIZARE COSTURI SUPLIMENTARE (TRANSPORT, CURIERAT, TAXE) PE ARTICOLELE NEPROCESATE DIN FACTURĂ
+  // REPARTIZARE COSTURI SUPLIMENTARE (TRANSPORT, TAXE) SAU REDUCERI COMERCIALE PE ARTICOLELE DIN FACTURĂ
   async repartizeazaCosturiPePiese(
     facturaId: string,
     data: {
@@ -1705,15 +1767,15 @@ export class EFacturaService implements OnModuleInit {
     const mod = data?.modRepartizare || 'PROPORTIONAL_VALOARE';
 
     if (feeIds.length === 0) {
-      throw new BadRequestException('Selectați cel puțin o linie de cost suplimentar (transport, curier, taxă).');
+      throw new BadRequestException('Selectați cel puțin o linie de cost suplimentar sau reducere.');
     }
     if (targetIds.length === 0) {
-      throw new BadRequestException('Selectați cel puțin un articol destinație pe care să se repartizeze costul.');
+      throw new BadRequestException('Selectați cel puțin un articol destinație pe care să se aplice ajustarea.');
     }
 
     const feeSet = new Set(feeIds);
     if (targetIds.some((id) => feeSet.has(id))) {
-      throw new BadRequestException('Aceeași linie nu poate fi simultan cost suplimentar și articol destinație.');
+      throw new BadRequestException('Aceeași linie nu poate fi simultan ajustare și articol destinație.');
     }
 
     const factura = await this.prisma.eFacturaFactura.findUnique({
@@ -1726,10 +1788,10 @@ export class EFacturaService implements OnModuleInit {
 
     const feeItems = factura.articole.filter((a) => feeSet.has(a.id));
     if (feeItems.length !== feeIds.length) {
-      throw new BadRequestException('Unele linii de cost selectate nu aparțin acestei facturi.');
+      throw new BadRequestException('Unele linii selectate nu aparțin acestei facturi.');
     }
     for (const f of feeItems) {
-      if (f.stare !== 'NEPROCESAT' || Number(f.cantitateProcesata || 0) > 0.0001) {
+      if (f.stare !== 'NEPROCESAT' || Math.abs(Number(f.cantitateProcesata || 0)) > 0.0001) {
         throw new BadRequestException(`Linia "${f.descrierePiesa}" este deja procesată și nu mai poate fi repartizată.`);
       }
     }
@@ -1740,7 +1802,7 @@ export class EFacturaService implements OnModuleInit {
       throw new BadRequestException('Unele articole destinație nu aparțin acestei facturi.');
     }
     for (const t of targetItems) {
-      if (t.stare !== 'NEPROCESAT' || Number(t.cantitateProcesata || 0) > 0.0001) {
+      if (t.stare !== 'NEPROCESAT' || Math.abs(Number(t.cantitateProcesata || 0)) > 0.0001) {
         throw new BadRequestException(`Articolul "${t.descrierePiesa}" este deja procesat/importat parțial.`);
       }
       if (!t.cantitate || t.cantitate <= 0) {
@@ -1748,18 +1810,21 @@ export class EFacturaService implements OnModuleInit {
       }
     }
 
+    const signedLineValue = (f: any): number => {
+      const v = Number(f.valoareFaraTVA || 0);
+      if (v !== 0) return v;
+      return Number(((Number(f.pretUnitar || 0)) * (Number(f.cantitate || 0))).toFixed(2));
+    };
+
     const totalFee = Number(
-      feeItems
-        .reduce((sum, f) => {
-          const v = Number(f.valoareFaraTVA > 0 ? f.valoareFaraTVA : (f.pretUnitar || 0) * (f.cantitate || 0));
-          return sum + Math.max(0, v);
-        }, 0)
-        .toFixed(2)
+      feeItems.reduce((sum, f) => sum + signedLineValue(f), 0).toFixed(2)
     );
 
-    if (totalFee <= 0) {
-      throw new BadRequestException('Suma liniilor de cost selectate trebuie să fie mai mare de 0 RON.');
+    if (Math.abs(totalFee) < 0.01) {
+      throw new BadRequestException('Suma liniilor selectate pentru repartizare este 0 RON.');
     }
+
+    const isDiscount = totalFee < 0;
 
     const targetMeta = targetItems.map((t) => {
       const oldTotal = Number(
@@ -1791,9 +1856,18 @@ export class EFacturaService implements OnModuleInit {
     if (Math.abs(diffCents) > 0 && roundedShares.length > 0) {
       let maxIdx = 0;
       for (let i = 1; i < roundedShares.length; i++) {
-        if (roundedShares[i] >= roundedShares[maxIdx]) maxIdx = i;
+        if (Math.abs(roundedShares[i]) >= Math.abs(roundedShares[maxIdx])) maxIdx = i;
       }
       roundedShares[maxIdx] = Number((roundedShares[maxIdx] + diffCents).toFixed(2));
+    }
+
+    for (let i = 0; i < targetMeta.length; i++) {
+      const newTotalCheck = Number((targetMeta[i].oldTotal + (roundedShares[i] || 0)).toFixed(2));
+      if (newTotalCheck < 0) {
+        throw new BadRequestException(
+          `Reducerea (${Math.abs(roundedShares[i] || 0).toFixed(2)} RON) depășește valoarea articolului "${targetMeta[i].item.descrierePiesa}" (${targetMeta[i].oldTotal.toFixed(2)} RON).`,
+        );
+      }
     }
 
     const methodLabel =
@@ -1814,9 +1888,14 @@ export class EFacturaService implements OnModuleInit {
         const share = roundedShares[i] || 0;
         const newTotal = Number((oldTotal + share).toFixed(2));
         const newPretUnitar = Number((newTotal / t.cantitate).toFixed(4));
-        const addedPerUnit = Number((share / t.cantitate).toFixed(2));
+        const newTva = Number((newTotal * ((Number(t.cotaTVA ?? 19)) / 100)).toFixed(2));
+        const deltaPerUnit = Number((share / t.cantitate).toFixed(2));
+        const sign = deltaPerUnit >= 0 ? '+' : '';
         const oldPret = Number(t.pretUnitar || 0);
-        const notaNoua = `Include ${feeItems.length === 1 ? feeSummaryShort : 'Transport/Taxe'} (+${addedPerUnit.toFixed(2)} RON/buc; inițial ${oldPret.toFixed(2)} RON)`;
+        const label = isDiscount
+          ? (feeItems.length === 1 ? feeSummaryShort : 'Reducere')
+          : (feeItems.length === 1 ? feeSummaryShort : 'Transport/Taxe');
+        const notaNoua = `${isDiscount ? 'Include reducere' : 'Include'} ${label} (${sign}${deltaPerUnit.toFixed(2)} RON/buc; inițial ${oldPret.toFixed(2)} RON)`;
         const obsFinal = t.observatiiIntern ? `${t.observatiiIntern} • ${notaNoua}` : notaNoua;
 
         await tx.eFacturaItem.update({
@@ -1824,18 +1903,21 @@ export class EFacturaService implements OnModuleInit {
           data: {
             pretUnitar: newPretUnitar,
             valoareFaraTVA: newTotal,
+            valoareTVA: newTva,
             observatiiIntern: obsFinal,
           },
         });
       }
 
       for (const f of feeItems) {
+        const fVal = signedLineValue(f);
+        const prefix = fVal < 0 ? 'Reducere aplicată pe' : 'Repartizat pe';
         await tx.eFacturaItem.update({
           where: { id: f.id },
           data: {
             cantitateProcesata: f.cantitate,
             stare: 'IMPORTAT',
-            observatiiIntern: `Repartizat pe ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'} (${methodLabel})`,
+            observatiiIntern: `${prefix} ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'} (${methodLabel})`,
           },
         });
       }
@@ -1855,7 +1937,9 @@ export class EFacturaService implements OnModuleInit {
     ]);
 
     return {
-      mesaj: `Cost suplimentar de ${totalFee.toFixed(2)} RON repartizat (${methodLabel}) pe ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'}!`,
+      mesaj: isDiscount
+        ? `Reducere de ${Math.abs(totalFee).toFixed(2)} RON scăzută (${methodLabel}) din ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'}!`
+        : `Cost suplimentar de ${totalFee.toFixed(2)} RON repartizat (${methodLabel}) pe ${targetItems.length} ${targetItems.length === 1 ? 'articol' : 'articole'}!`,
       articole: updatedArticole,
       facturaStare: updatedFactura?.stare,
     };
@@ -1920,7 +2004,7 @@ export class EFacturaService implements OnModuleInit {
     const importate = articole.filter((a) => a.stare === 'IMPORTAT').length;
     const eliminate = articole.filter((a) => a.stare === 'ELIMINAT').length;
     const total = articole.length;
-    const arePartiale = articole.some((a) => (a.cantitateProcesata || 0) > 0 && a.stare === 'NEPROCESAT');
+    const arePartiale = articole.some((a) => Math.abs(a.cantitateProcesata || 0) > 0 && a.stare === 'NEPROCESAT');
 
     let stareFinala = 'NEPROCESAT';
     if (total === 0) {
@@ -2488,6 +2572,311 @@ export class EFacturaService implements OnModuleInit {
       mesaj: mesajSucces,
       comandaLucruId: targetComandaId,
       numarComanda: numarComandaLucru,
+      articole: updatedArticole,
+      facturaStare: updatedFactura?.stare,
+    };
+  }
+
+  // =========================================================================
+  // PROCESARE REDUCERI COMERCIALE / FACTURI NEGATIVE / STORNO
+  // =========================================================================
+  async proceseazaReducereSauStorno(
+    itemId: string,
+    data: {
+      tipOperatiune: 'REDUCERE_VEHICUL' | 'STOC_AJUSTARE_VALOARE' | 'STOC_RETUR_FIZIC' | 'REDUCERE_FURNIZOR';
+      vehiculId?: string;
+      comandaLucruId?: string;
+      articolStocId?: string;
+      cantitateRetur?: number;
+      observatii?: string;
+    },
+  ) {
+    const item = await this.prisma.eFacturaItem.findUnique({
+      where: { id: itemId },
+      include: { factura: true },
+    });
+
+    if (!item) throw new NotFoundException('Linia din factură nu a fost găsită.');
+    if (item.stare === 'IMPORTAT') {
+      throw new BadRequestException('Această linie de reducere / storno a fost deja procesată.');
+    }
+
+    const factura = item.factura;
+    const rawValFara = Number(item.valoareFaraTVA || 0);
+    const fallbackVal = Number((Number(item.pretUnitar || 0) * Number(item.cantitate || 1)).toFixed(2));
+    const absValFaraTVA = Number(Math.abs(rawValFara !== 0 ? rawValFara : fallbackVal).toFixed(2));
+
+    if (absValFaraTVA <= 0) {
+      throw new BadRequestException('Linia selectată nu are o valoare financiară validă (> 0 RON).');
+    }
+
+    const tip = data.tipOperatiune;
+    const userNote = data.observatii?.trim();
+    let mesajSucces = '';
+
+    await this.prisma.$transaction(async (tx) => {
+      if (tip === 'REDUCERE_VEHICUL') {
+        let targetComandaId = data.comandaLucruId || '';
+        let targetVehiculId = data.vehiculId || '';
+        let numarComanda = '';
+        let vehiculLabel = '';
+
+        if (targetComandaId) {
+          const cmd = await tx.comandaLucru.findUnique({
+            where: { id: targetComandaId },
+            include: { vehicul: true },
+          });
+          if (!cmd) throw new NotFoundException('Comanda de lucru selectată nu există.');
+          targetComandaId = cmd.id;
+          targetVehiculId = cmd.vehiculId;
+          numarComanda = cmd.numarComanda;
+          vehiculLabel = cmd.vehicul?.numarInmatriculare || cmd.vehicul?.numarIntern || '';
+        } else {
+          if (!targetVehiculId) {
+            throw new BadRequestException('Selectați mașina / utilajul pe care se aplică reducerea.');
+          }
+          const vehicul = await tx.vehicul.findUnique({ where: { id: targetVehiculId } });
+          if (!vehicul) throw new NotFoundException('Vehiculul selectat nu există.');
+          vehiculLabel = vehicul.numarInmatriculare || vehicul.numarIntern;
+
+          // Căutăm o comandă deschisă pe vehicul; dacă nu există, creăm o comandă de corecție financiară finalizată
+          const openCmd = await tx.comandaLucru.findFirst({
+            where: { vehiculId: targetVehiculId, stare: { in: ['IN_LUCRU', 'DEVALIDAT'] } },
+            orderBy: { dataDeschidere: 'desc' },
+          });
+
+          if (openCmd) {
+            targetComandaId = openCmd.id;
+            numarComanda = openCmd.numarComanda;
+          } else {
+            const allCmds = await tx.comandaLucru.findMany({ select: { numarComanda: true } });
+            let maxNum = 0;
+            for (const c of allCmds) {
+              const m = c.numarComanda?.match(/CL-(\d+)/i);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > maxNum) maxNum = n;
+              }
+            }
+            let nextNum = maxNum + 1;
+            let genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
+            while (await tx.comandaLucru.findUnique({ where: { numarComanda: genNumar } })) {
+              nextNum++;
+              genNumar = `CL-${nextNum.toString().padStart(5, '0')}`;
+            }
+            numarComanda = genNumar;
+
+            const createdCmd = await tx.comandaLucru.create({
+              data: {
+                numarComanda: genNumar,
+                vehiculId: targetVehiculId,
+                mecanicResponsabil: 'Contabilitate / Gestiune',
+                observatii: `Reducere / Storno Factură ${factura.numarFactura} (${factura.numeVanzator}) - ${item.descrierePiesa}`,
+                valoareContorLaExecutie: vehicul.valoareContorCurent || 0,
+                stare: 'FINALIZAT',
+                dataDeschidere: factura.dataFactura || new Date(),
+                dataFinalizare: new Date(),
+              },
+            });
+            targetComandaId = createdCmd.id;
+          }
+        }
+
+        await tx.elementComandaLucru.create({
+          data: {
+            comandaLucruId: targetComandaId,
+            pilonCost: 'PIESA_DIRECTA',
+            descriere: `[REDUCERE] ${item.descrierePiesa}`,
+            cantitate: 1,
+            pretUnitar: -absValFaraTVA,
+            costTotal: -absValFaraTVA,
+            provenienta: `Reducere / Storno Factură ${factura.numarFactura} (${factura.numeVanzator})`,
+            furnizor: factura.numeVanzator,
+            numarFactura: factura.numarFactura,
+            categorie: 'Reduceri / Storno',
+            observatiiIntern: userNote || 'Reducere aplicată pe costul mașinii (fără mișcare stoc)',
+          },
+        });
+
+        await tx.eFacturaItem.update({
+          where: { id: itemId },
+          data: {
+            stare: 'IMPORTAT',
+            cantitateProcesata: item.cantitate,
+            comandaLucruId: targetComandaId,
+            observatiiIntern: `Reducere aplicată pe ${vehiculLabel} (${numarComanda}): -${absValFaraTVA.toFixed(2)} RON${userNote ? ` • ${userNote}` : ''}`,
+          },
+        });
+
+        mesajSucces = `Reducerea de -${absValFaraTVA.toFixed(2)} RON a fost aplicată pe ${vehiculLabel} (Comanda ${numarComanda})!`;
+      } else if (tip === 'STOC_AJUSTARE_VALOARE') {
+        if (!data.articolStocId) {
+          throw new BadRequestException('Selectați articolul din depozit al cărui preț trebuie redus.');
+        }
+        const articol = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
+        if (!articol) throw new NotFoundException('Articolul selectat din depozit nu există.');
+        if (articol.stocCurent <= 0) {
+          throw new BadRequestException(
+            `Articolul "${articol.denumire}" are stoc 0 în depozit (piesa a fost deja consumată). Alegeți „Aplică pe o Mașină” sau „Reducere Generală Furnizor”.`,
+          );
+        }
+
+        // Reducem valoarea loturilor FIFO rămase proporțional, fără să scădem cantitatea fizică
+        const activeLots = await tx.intrareStoc.findMany({
+          where: { articolStocId: articol.id, cantitateRamasa: { gt: 0 } },
+          orderBy: { dataFactura: 'desc' },
+        });
+
+        let leftToReduce = absValFaraTVA;
+        if (activeLots.length > 0) {
+          for (const lot of activeLots) {
+            if (leftToReduce <= 0.005) break;
+            const lotQtyRem = Number(lot.cantitateRamasa || 0);
+            const lotRemainingVal = Number((lotQtyRem * Math.max(0, lot.pretUnitar)).toFixed(2));
+            if (lotRemainingVal <= 0 || lotQtyRem <= 0) continue;
+            const reduceFromLot = Math.min(lotRemainingVal, leftToReduce);
+            const newLotVal = Math.max(0, Number((lotRemainingVal - reduceFromLot).toFixed(2)));
+            const newLotPretUnitar = Number((newLotVal / lotQtyRem).toFixed(4));
+            const updatedLotTotal = Number(Math.max(0, (lot.pretTotal || lotRemainingVal) - reduceFromLot).toFixed(2));
+            await tx.intrareStoc.update({
+              where: { id: lot.id },
+              data: {
+                pretUnitar: newLotPretUnitar,
+                pretTotal: updatedLotTotal,
+                observatii: `${lot.observatii ? `${lot.observatii} • ` : ''}Reducere factură ${factura.numarFactura}: -${reduceFromLot.toFixed(2)} RON`,
+              },
+            });
+            leftToReduce = Number((leftToReduce - reduceFromLot).toFixed(2));
+          }
+        }
+
+        const unitReduction = absValFaraTVA / articol.stocCurent;
+        const newArticolPret = Math.max(0, Number((articol.pretUnitar - unitReduction).toFixed(2)));
+        await tx.articolStoc.update({
+          where: { id: articol.id },
+          data: { pretUnitar: newArticolPret },
+        });
+
+        await tx.eFacturaItem.update({
+          where: { id: itemId },
+          data: {
+            stare: 'IMPORTAT',
+            cantitateProcesata: item.cantitate,
+            articolStocId: articol.id,
+            observatiiIntern: `Reducere preț stoc "${articol.denumire}" (-${absValFaraTVA.toFixed(2)} RON, stoc neschimbat)${userNote ? ` • ${userNote}` : ''}`,
+          },
+        });
+
+        mesajSucces = `Prețul articolului "${articol.denumire}" din depozit a fost redus cu -${absValFaraTVA.toFixed(2)} RON (cantitatea în stoc a rămas neschimbată: ${articol.stocCurent} ${articol.unitateMasura}).`;
+      } else if (tip === 'STOC_RETUR_FIZIC') {
+        if (!data.articolStocId) {
+          throw new BadRequestException('Selectați articolul din depozit pentru returul fizic.');
+        }
+        const articol = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
+        if (!articol) throw new NotFoundException('Articolul selectat din depozit nu există.');
+
+        const qtyReturn = Number(
+          data.cantitateRetur && data.cantitateRetur > 0
+            ? data.cantitateRetur
+            : Math.abs(Number(item.cantitate || 1)) || 1,
+        );
+
+        if (articol.stocCurent < qtyReturn - 0.0001) {
+          throw new BadRequestException(
+            `Stoc insuficient în depozit pentru "${articol.denumire}" (disponibil: ${articol.stocCurent} ${articol.unitateMasura}, retur cerut: ${qtyReturn}).`,
+          );
+        }
+
+        const newStoc = Math.max(0, Number((articol.stocCurent - qtyReturn).toFixed(4)));
+        await tx.articolStoc.update({
+          where: { id: articol.id },
+          data: { stocCurent: newStoc },
+        });
+
+        // Scădem cantitatea din loturile active (prioritar cele de la același furnizor)
+        const lots = await tx.intrareStoc.findMany({
+          where: { articolStocId: articol.id, cantitateRamasa: { gt: 0 } },
+          orderBy: { dataFactura: 'desc' },
+        });
+        const sortedLots = [...lots].sort((a, b) => {
+          const aMatch = (a.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
+          const bMatch = (b.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
+          return aMatch - bMatch;
+        });
+
+        let qtyLeft = qtyReturn;
+        for (const lot of sortedLots) {
+          if (qtyLeft <= 0.0001) break;
+          const lotRem = Number(lot.cantitateRamasa || 0);
+          const take = Math.min(lotRem, qtyLeft);
+          await tx.intrareStoc.update({
+            where: { id: lot.id },
+            data: {
+              cantitateRamasa: Math.max(0, Number((lotRem - take).toFixed(4))),
+            },
+          });
+          qtyLeft = Number((qtyLeft - take).toFixed(4));
+        }
+
+        // Înregistrare mișcare de stornare în istoricul intrărilor pentru trasabilitate completă
+        await tx.intrareStoc.create({
+          data: {
+            articolStocId: articol.id,
+            depozitId: articol.depozitId,
+            furnizor: factura.numeVanzator,
+            numarFactura: factura.numarFactura,
+            dataFactura: factura.dataFactura,
+            cantitateIntrata: -qtyReturn,
+            cantitateRamasa: 0,
+            pretUnitar: -Number((absValFaraTVA / qtyReturn).toFixed(2)),
+            pretTotal: -absValFaraTVA,
+            observatii: `Storno / Retur fizic e-Factura ${factura.numarFactura}${userNote ? ` • ${userNote}` : ''}`,
+          },
+        });
+
+        await tx.eFacturaItem.update({
+          where: { id: itemId },
+          data: {
+            stare: 'IMPORTAT',
+            cantitateProcesata: item.cantitate,
+            articolStocId: articol.id,
+            observatiiIntern: `Retur fizic din depozit (-${qtyReturn} ${articol.unitateMasura}, -${absValFaraTVA.toFixed(2)} RON)${userNote ? ` • ${userNote}` : ''}`,
+          },
+        });
+
+        mesajSucces = `Retur fizic înregistrat: -${qtyReturn} ${articol.unitateMasura} din "${articol.denumire}" (stoc rămas: ${newStoc} ${articol.unitateMasura}).`;
+      } else if (tip === 'REDUCERE_FURNIZOR') {
+        await tx.eFacturaItem.update({
+          where: { id: itemId },
+          data: {
+            stare: 'IMPORTAT',
+            cantitateProcesata: item.cantitate,
+            observatiiIntern: `Reducere comercială furnizor (-${absValFaraTVA.toFixed(2)} RON, inclusă în Rapoarte Achiziții)${userNote ? ` • ${userNote}` : ''}`,
+          },
+        });
+
+        mesajSucces = `Reducerea de -${absValFaraTVA.toFixed(2)} RON de la ${factura.numeVanzator} a fost înregistrată în Rapoartele de Achiziții!`;
+      } else {
+        throw new BadRequestException('Tip operațiune necunoscut pentru procesarea reducerii.');
+      }
+    });
+
+    await this.recalculeazaStareFactura(factura.id);
+
+    const [updatedArticole, updatedFactura] = await Promise.all([
+      this.prisma.eFacturaItem.findMany({
+        where: { facturaId: factura.id },
+        orderBy: { numarLinie: 'asc' },
+      }),
+      this.prisma.eFacturaFactura.findUnique({
+        where: { id: factura.id },
+        select: { id: true, stare: true },
+      }),
+    ]);
+
+    return {
+      success: true,
+      mesaj: mesajSucces,
       articole: updatedArticole,
       facturaStare: updatedFactura?.stare,
     };
