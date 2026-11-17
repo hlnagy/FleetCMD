@@ -99,6 +99,7 @@ export default function FisaTehnicaPage() {
 
   // BASELINES / VALORI DE BAZĂ ALERTE PER VEHICUL
   const [baselinesList, setBaselinesList] = useState<any[]>([]);
+  const [statusSchimburiFluide, setStatusSchimburiFluide] = useState<any[]>([]);
   const [showBaselineModal, setShowBaselineModal] = useState<any>(null);
   const [baselineContor, setBaselineContor] = useState<number>(0);
   const [baselineData, setBaselineData] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -230,9 +231,15 @@ export default function FisaTehnicaPage() {
   const fetchBaselines = async (vehId: string) => {
     if (!vehId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/baselines-vehicul/${vehId}`);
-      if (res.ok) {
-        setBaselinesList(await res.json());
+      const [resBase, resFluide] = await Promise.all([
+        fetch(`${API_BASE_URL}/anomalii/baselines-vehicul/${vehId}`),
+        fetch(`${API_BASE_URL}/anomalii/status-schimburi/${vehId}`),
+      ]);
+      if (resBase.ok) {
+        setBaselinesList(await resBase.json());
+      }
+      if (resFluide.ok) {
+        setStatusSchimburiFluide(await resFluide.json());
       }
     } catch (e) {
       console.log('Error fetching baselines', e);
@@ -1513,20 +1520,113 @@ export default function FisaTehnicaPage() {
 
           {/* TAB 5: LICHIDE & SCURGERI */}
           {activeTab === 'lichide' && (
-            <div className="pleasant-card rounded-2xl p-6 space-y-4">
-              <h3 className="text-base font-bold text-sapphire-900">Jurnal Completări Ulei & Detector Anomalii Scurgeri</h3>
-              <div className="space-y-2">
-                {vehicul?.completariLichid?.map((lic: any) => (
-                  <div key={lic.id} className="p-3 rounded-xl bg-morning-50 border border-morning-200 text-xs flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-sapphire-900">{lic.tipLichid?.replace(/_/g, ' ')} ({lic.tipOperatiune})</p>
-                      <p className="text-[10px] text-sage-600 font-mono">Dată: {new Date(lic.dataCompletare).toLocaleDateString('ro-RO')} | Mecanic: {lic.mecanic}</p>
-                    </div>
-                    <div className="font-mono text-right font-bold text-sapphire-900">
-                      {lic.cantitateLitri} Litri
-                    </div>
+            <div className="space-y-6">
+              {/* STARE NORME SCHIMB FLUIDE */}
+              <div className="pleasant-card rounded-2xl p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold text-sapphire-900">Stare Intervale &amp; Norme Fluide</h3>
+                    <p className="text-xs text-sage-600">Monitorizare km / mTH și luni de la ultimul schimb configurat pe categorie sau vehicul</p>
                   </div>
-                ))}
+                  <Link
+                    href="/fluide?tab=flota"
+                    className="px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold flex items-center space-x-1.5 transition"
+                  >
+                    <Droplets className="w-3.5 h-3.5" />
+                    <span>Gestionează în Uleiuri &amp; Fluide</span>
+                  </Link>
+                </div>
+
+                {statusSchimburiFluide.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-morning-100 border border-morning-200 text-xs text-sage-700">
+                    Nu există norme de fluide configurate pentru categoria acestui vehicul.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {statusSchimburiFluide.map((st: any) => {
+                      const pct = Math.min(100, Math.max(4, Number(st.procentConsum || 0)));
+                      const unit = st.unitateMasura || 'KM';
+                      return (
+                        <div
+                          key={st.id || st.tipLichid}
+                          className={`p-4 rounded-xl border space-y-2 text-xs ${
+                            st.esteDepasit
+                              ? 'bg-roseash-50 border-roseash-300'
+                              : st.esteInPragAvertizare
+                              ? 'bg-amber-50 border-amber-200'
+                              : 'bg-morning-50 border-morning-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold text-sapphire-900">
+                              {st.tipLichid?.replace(/_/g, ' ')}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                              st.esteDepasit
+                                ? 'bg-terracotta-600 text-white'
+                                : st.esteInPragAvertizare
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                              {st.esteDepasit ? 'DEPĂȘIT' : st.esteInPragAvertizare ? 'AVERTIZARE' : 'OPTIM'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-[11px] text-sapphire-900 font-bold">
+                            {Number(st.rulajEfectiv || 0).toLocaleString('ro-RO')}
+                            {st.intervalPrincipal ? ` / ${Number(st.intervalPrincipal).toLocaleString('ro-RO')} ${unit}` : ` ${unit}`}
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-morning-200 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                st.esteDepasit ? 'bg-terracotta-600' : st.esteInPragAvertizare ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="text-[10px] text-sage-600 font-mono">
+                            Ultimul schimb: {Number(st.ultimulSchimbContor || 0).toLocaleString('ro-RO')} {unit} · {new Date(st.ultimulSchimbData).toLocaleDateString('ro-RO')}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="pleasant-card rounded-2xl p-6 space-y-4">
+                <h3 className="text-base font-bold text-sapphire-900">Jurnal Completări &amp; Schimburi Fluide</h3>
+                {(!vehicul?.completariLichid || vehicul.completariLichid.length === 0) ? (
+                  <div className="p-6 text-center rounded-xl bg-morning-100 border border-morning-200 text-xs text-sage-600">
+                    Nu există încă schimburi sau completări de fluide înregistrate pe acest vehicul.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {vehicul.completariLichid.map((lic: any) => {
+                      const isSchimb = String(lic.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+                      return (
+                        <div key={lic.id} className="p-3 rounded-xl bg-morning-50 border border-morning-200 text-xs flex flex-wrap justify-between items-center gap-2">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                isSchimb ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'
+                              }`}>
+                                {isSchimb ? 'SCHIMB' : 'COMPLETARE'}
+                              </span>
+                              <p className="font-bold text-sapphire-900">{lic.tipLichid?.replace(/_/g, ' ')} — {lic.marcaUlei || 'Standard'}</p>
+                            </div>
+                            <p className="text-[10px] text-sage-600 font-mono">
+                              Dată: {new Date(lic.dataCompletare).toLocaleDateString('ro-RO')} · Contor: {Number(lic.valoareContor || 0).toLocaleString('ro-RO')} {vehicul?.tipMasurare || 'KM'} · Mecanic: {lic.mecanic}
+                            </p>
+                          </div>
+                          <div className="font-mono text-right">
+                            <p className="font-black text-sapphire-900">{lic.cantitateLitri} L</p>
+                            <p className="text-[10px] text-sage-600">{Number(lic.costTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -1,6 +1,14 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
+import {
+  isActualFluidItem,
+  mapFluidCategoryReport,
+  computeElementFluidLiters,
+  detectTipLichidFromText,
+  syncFluidCompletariForComanda,
+  removeFluidCompletariForComanda,
+} from '../common/fluid.utils';
 
 @Injectable()
 export class MentenantaService {
@@ -725,13 +733,16 @@ export class MentenantaService {
       }
     }
 
-    return this.prisma.comandaLucru.update({
+    const updatedComanda = await this.prisma.comandaLucru.update({
       where: { id: comandaId },
       data: {
         stare: 'FINALIZAT',
         dataFinalizare: new Date(),
       },
     });
+
+    await syncFluidCompletariForComanda(this.prisma, comandaId);
+    return updatedComanda;
   }
 
   async anuleazaSauStergeComanda(comandaId: string) {
@@ -756,6 +767,7 @@ export class MentenantaService {
       }
     }
 
+    await removeFluidCompletariForComanda(this.prisma, comandaId);
     return this.prisma.comandaLucru.update({
       where: { id: comandaId },
       data: { stare: 'ANULAT' },
@@ -802,6 +814,7 @@ export class MentenantaService {
       }
     }
 
+    await removeFluidCompletariForComanda(this.prisma, comandaId);
     return this.prisma.comandaLucru.delete({ where: { id: comandaId } });
   }
 
@@ -827,6 +840,8 @@ export class MentenantaService {
         }
       }
     }
+
+    await removeFluidCompletariForComanda(this.prisma, comandaId);
 
     return this.prisma.comandaLucru.update({
       where: { id: comandaId },
@@ -1187,6 +1202,11 @@ export class MentenantaService {
       });
 
       await tx.eFacturaItem.updateMany({
+        where: { comandaLucruId: { in: uniqueSourceIds } },
+        data: { comandaLucruId: targetId },
+      });
+
+      await tx.completareLichid.updateMany({
         where: { comandaLucruId: { in: uniqueSourceIds } },
         data: { comandaLucruId: targetId },
       });
@@ -1569,29 +1589,13 @@ export class MentenantaService {
     const comenziDirecteMap = new Map<string, (typeof comenziLucruDirecte)[0]>();
     comenziLucruDirecte.forEach((cl) => comenziDirecteMap.set(cl.id, cl));
 
-    // Helper mapare categorie fluid
+    // Helper mapare categorie fluid (reutilizat din fluid.utils)
     const mapFluidCategory = (desc: string, tipRaw?: string): { key: string; label: string } => {
-      const t = (tipRaw || '').toUpperCase();
-      const d = (desc || '').toLowerCase();
-      if (t.includes('MOTOR') || /motor|10w40|15w40|5w30|5w40/i.test(d)) {
-        return { key: 'ULEI_MOTOR', label: 'Ulei Motor' };
-      }
-      if (t.includes('HIDRAUL') || /hidraul/i.test(d)) {
-        return { key: 'ULEI_HIDRAULIC', label: 'Ulei Hidraulic' };
-      }
-      if (t.includes('TRANSMIS') || /transmis|cutie|punte|80w90|75w90|atf/i.test(d)) {
-        return { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie' };
-      }
-      if (t.includes('ANTIGEL') || /antigel|g11|g12|racire/i.test(d)) {
-        return { key: 'ANTIGEL', label: 'Antigel / Lichid Răcire' };
-      }
-      if (t.includes('VASELIN') || /vaselin|unsoare|grease/i.test(d)) {
-        return { key: 'VASELINA', label: 'Vaselină / Unsoare' };
-      }
-      if (t.includes('ADBLUE') || /adblue|uree/i.test(d)) {
-        return { key: 'ADBLUE', label: 'AdBlue' };
-      }
-      return { key: 'ALTE', label: 'Alte Fluide' };
+      const mapped = mapFluidCategoryReport(desc, tipRaw);
+      if (mapped.key === 'MOTOR') return { key: 'ULEI_MOTOR', label: 'Ulei Motor' };
+      if (mapped.key === 'HIDRAULIC') return { key: 'ULEI_HIDRAULIC', label: 'Ulei Hidraulic' };
+      if (mapped.key === 'TRANSMISIE') return { key: 'ULEI_TRANSMISIE', label: 'Ulei Transmisie / Cutie' };
+      return mapped;
     };
 
     // Helper mapare Főkategória & Alkategória pentru articole facturate
@@ -1639,8 +1643,19 @@ export class MentenantaService {
         return { categorie: 'Sistem Frânare', subcategorie: 'Componente Frânare', unitateMasura: 'buc' };
       }
 
-      // 5. Uleiuri & Lubrifianți
-      if (/ulei|oil|lubrifiant|unsoare|vaselin|10w40|15w40|5w30|5w40|hlp|tellus|rimula|spirax/i.test(d)) {
+      // 5. Filtre (evaluat înaintea fluidelor ca "Filtru ulei" / "Filtru hidraulic" să meargă la Filtre!)
+      if (/filtr|cartus\s*filtr/i.test(d)) {
+        if (/ulei/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Ulei Motor', unitateMasura: 'buc' };
+        if (/aer/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Aer', unitateMasura: 'buc' };
+        if (/combustibil|motorina|carburant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Combustibil', unitateMasura: 'buc' };
+        if (/hidraul/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Hidraulic', unitateMasura: 'buc' };
+        if (/uscator|desiccant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Uscător Aer', unitateMasura: 'buc' };
+        if (/habitaclu|polen/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Habitaclu', unitateMasura: 'buc' };
+        return { categorie: 'Filtre', subcategorie: 'Filtre Diverse', unitateMasura: 'buc' };
+      }
+
+      // 6. Uleiuri & Lubrifianți (strict fluide reale, excluzând senzori/vase/furtunuri/pompe)
+      if (isActualFluidItem(descriere) && /ulei|oil|lubrifiant|unsoare|vaselin|10w40|15w40|5w30|5w40|hlp|tellus|rimula|spirax/i.test(d)) {
         if (/motor|10w40|15w40|5w30|5w40|rimula|ck-4/i.test(d)) {
           return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Ulei Motor', unitateMasura: 'L' };
         }
@@ -1656,8 +1671,8 @@ export class MentenantaService {
         return { categorie: 'Uleiuri & Lubrifianți', subcategorie: 'Alte Lubrifianți', unitateMasura: 'L' };
       }
 
-      // 6. Antigel & Răcire
-      if (/antigel|coolant|racire|g11|g12|g13|demineraliz/i.test(d)) {
+      // 7. Antigel & Răcire
+      if (isActualFluidItem(descriere) && /antigel|coolant|racire|g11|g12|g13|demineraliz/i.test(d)) {
         if (/g12|roz|organic/i.test(d)) {
           return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel G12+ (Roz)', unitateMasura: 'L' };
         }
@@ -1670,8 +1685,8 @@ export class MentenantaService {
         return { categorie: 'Antigel & Răcire', subcategorie: 'Antigel Concentrat / Mixt', unitateMasura: 'L' };
       }
 
-      // 7. AdBlue & Fluide Speciale (Exclusiv fluide chimice)
-      if (/adblue|uree|lichid.*frana|dot\s*[345]|parbriz|spalare/i.test(d)) {
+      // 8. AdBlue & Fluide Speciale (Exclusiv fluide chimice)
+      if (isActualFluidItem(descriere) && /adblue|uree|lichid.*frana|dot\s*[345]|parbriz|spalare/i.test(d)) {
         if (/adblue|uree/i.test(d)) {
           return { categorie: 'AdBlue & Chimice', subcategorie: 'AdBlue (Soluție Uree)', unitateMasura: 'L' };
         }
@@ -1682,17 +1697,6 @@ export class MentenantaService {
           return { categorie: 'AdBlue & Chimice', subcategorie: 'Lichid Spălare Parbriz', unitateMasura: 'L' };
         }
         return { categorie: 'AdBlue & Chimice', subcategorie: 'Fluide Speciale', unitateMasura: 'L' };
-      }
-
-      // 8. Filtre
-      if (/filtr|cartus\s*filtr/i.test(d)) {
-        if (/ulei/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Ulei Motor', unitateMasura: 'buc' };
-        if (/aer/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Aer', unitateMasura: 'buc' };
-        if (/combustibil|motorina|carburant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Combustibil', unitateMasura: 'buc' };
-        if (/hidraul/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Hidraulic', unitateMasura: 'buc' };
-        if (/uscator|desiccant/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Uscător Aer', unitateMasura: 'buc' };
-        if (/habitaclu|polen/i.test(d)) return { categorie: 'Filtre', subcategorie: 'Filtru Habitaclu', unitateMasura: 'buc' };
-        return { categorie: 'Filtre', subcategorie: 'Filtre Diverse', unitateMasura: 'buc' };
       }
 
       // 9. Piese Motor & Injecție
@@ -1882,7 +1886,11 @@ export class MentenantaService {
         const cant = Number(el.cantitate || 1);
         const isManopera = el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA';
         const isAnvelopa = /\b(\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?|anvelop|cauciuc|pneu)\b/i.test(el.descriere);
-        const isFluid = /\b(ulei|oil|antigel|adblue|vaselin|lichid|atf)\b/i.test(el.descriere);
+        const isFluid = isActualFluidItem(
+          el.descriere,
+          el.categorie || el.articolStoc?.categorie,
+          el.subcategorie,
+        );
 
         if (isManopera) {
           cmdManopera += cost;
@@ -1922,23 +1930,29 @@ export class MentenantaService {
             provenienta: `Comandă Lucru ${c.numarComanda}`,
           });
         } else if (isFluid) {
-          // Ulei / Fluid consumat pe comanda de lucru = Csere (Schimb Revizie)
+          // Ulei / Fluid consumat pe comanda de lucru (volum real în litri)
+          const fluidLiters = cost >= 0 ? computeElementFluidLiters(el) : 0;
+          const isTopUpCmd = /completare|top[- ]?up/i.test(`${el.descriere || ''} ${el.observatiiIntern || ''}`) && !/schimb|revizie/i.test(`${el.descriere || ''} ${el.observatiiIntern || ''}`);
           cmdFluide += cost;
           totalFluide += cost;
           if (cost >= 0) {
-            totalVolumFluideLitri += cant;
-            totalFluideCsereLitri += cant;
+            totalVolumFluideLitri += fluidLiters;
+            if (isTopUpCmd) totalFluidePotlasLitri += fluidLiters;
+            else totalFluideCsereLitri += fluidLiters;
           }
-          totalFluideCsereCost += cost;
+          if (isTopUpCmd) totalFluidePotlasCost += cost;
+          else totalFluideCsereCost += cost;
 
-          const catInfo = mapFluidCategory(el.descriere);
+          const catInfo = mapFluidCategory(el.descriere, detectTipLichidFromText(el.descriere, el.categorie || el.articolStoc?.categorie, el.subcategorie));
           if (fluideTipuriMap[catInfo.key]) {
             if (cost >= 0) {
-              fluideTipuriMap[catInfo.key].totalLitri += cant;
-              fluideTipuriMap[catInfo.key].csereLitri += cant;
+              fluideTipuriMap[catInfo.key].totalLitri += fluidLiters;
+              if (isTopUpCmd) fluideTipuriMap[catInfo.key].potlasLitri += fluidLiters;
+              else fluideTipuriMap[catInfo.key].csereLitri += fluidLiters;
             }
             fluideTipuriMap[catInfo.key].totalCost += cost;
-            fluideTipuriMap[catInfo.key].csereCost += cost;
+            if (isTopUpCmd) fluideTipuriMap[catInfo.key].potlasCost += cost;
+            else fluideTipuriMap[catInfo.key].csereCost += cost;
           }
 
           evolutieMap[lKey].fluide += cost;
@@ -1946,10 +1960,12 @@ export class MentenantaService {
 
           if (vehiculeMap[c.vehiculId]) {
             vehiculeMap[c.vehiculId].costFluide += cost;
-            vehiculeMap[c.vehiculId].costFluideCsere += cost;
+            if (isTopUpCmd) vehiculeMap[c.vehiculId].costFluidePotlas += cost;
+            else vehiculeMap[c.vehiculId].costFluideCsere += cost;
             if (cost >= 0) {
-              vehiculeMap[c.vehiculId].volumFluideLitri += cant;
-              vehiculeMap[c.vehiculId].volumCsereLitri += cant;
+              vehiculeMap[c.vehiculId].volumFluideLitri += fluidLiters;
+              if (isTopUpCmd) vehiculeMap[c.vehiculId].volumPotlasLitri += fluidLiters;
+              else vehiculeMap[c.vehiculId].volumCsereLitri += fluidLiters;
             }
             vehiculeMap[c.vehiculId].totalCost += cost;
           }
@@ -1959,10 +1975,10 @@ export class MentenantaService {
             vehiculId: c.vehiculId,
             vehicul: c.vehicul,
             tipLichid: catInfo.key,
-            tipOperatiune: 'SCHIMB_ULEI',
+            tipOperatiune: isTopUpCmd ? 'COMPLETARE_ULEI' : 'SCHIMB_ULEI',
             marcaUlei: el.descriere,
-            cantitateLitri: cant,
-            pretPerLitru: Number(el.pretUnitar || 0),
+            cantitateLitri: fluidLiters,
+            pretPerLitru: fluidLiters > 0 ? Number((cost / fluidLiters).toFixed(2)) : Number(el.pretUnitar || 0),
             costTotal: Number(cost.toFixed(2)),
             valoareContor: c.valoareContorLaExecutie,
             dataCompletare: c.dataDeschidere,
@@ -2028,8 +2044,9 @@ export class MentenantaService {
       });
     });
 
-    // C. Prelucrare Completări / Schimburi Fluide directe
+    // C. Prelucrare Completări / Schimburi Fluide directe (excludem intrările deja numărate din ComenziLucru!)
     completari.forEach((f) => {
+      if (f.comandaLucruId) return;
       const cost = Number(f.costTotal || (f.cantitateLitri * f.pretPerLitru) || 0);
       const litri = Number(f.cantitateLitri || 0);
       const isCsere = f.tipOperatiune && f.tipOperatiune.toUpperCase().includes('SCHIMB');

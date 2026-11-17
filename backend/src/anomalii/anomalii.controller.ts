@@ -78,6 +78,11 @@ export class AnomaliiController {
     return this.anomaliiService.adaugaIesireUlei(body);
   }
 
+  @Delete('iesire-ulei/:id')
+  stergeIesireUlei(@Param('id') id: string) {
+    return this.anomaliiService.stergeCompletareLichid(id);
+  }
+
   @Get('configurare-ulei/categorii')
   getConfigurariUleiCategorii() {
     return this.anomaliiService.getConfigurariUleiCategorii();

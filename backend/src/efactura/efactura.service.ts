@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { syncFluidCompletariForComanda } from '../common/fluid.utils';
 import { XMLParser } from 'fast-xml-parser';
 import * as AdmZip from 'adm-zip';
 import axios from 'axios';
@@ -2287,6 +2288,8 @@ export class EFacturaService implements OnModuleInit {
     subcategorie?: string;
     observatiiIntern?: string;
     includeFeeItemIds?: string[];
+    tipOperatiuneFluid?: string;
+    cantitateLitriReala?: number;
   }) {
     const item = await this.prisma.eFacturaItem.findUnique({
       where: { id: itemId },
@@ -2358,8 +2361,19 @@ export class EFacturaService implements OnModuleInit {
     const furnizorNume = factura.numeVanzator || 'Furnizor Factură';
     const numarFactura = factura.numarFactura || 'Fără Număr';
 
-    const descriereElementFinal = data.observatiiIntern 
-      ? `${item.descrierePiesa} [${data.observatiiIntern}]` 
+    const fluidVolTag =
+      data.cantitateLitriReala && data.cantitateLitriReala > 0
+        ? `[VOL:${Number(data.cantitateLitriReala)}L]`
+        : '';
+    const fluidOpTag =
+      data.tipOperatiuneFluid && String(data.tipOperatiuneFluid).toUpperCase().includes('COMPLETARE')
+        ? '[COMPLETARE]'
+        : '';
+    const extraFluidTags = [fluidVolTag, fluidOpTag].filter(Boolean).join(' ');
+    const mergedObsIntern = [data.observatiiIntern?.trim(), extraFluidTags].filter(Boolean).join(' ').trim() || undefined;
+
+    const descriereElementFinal = data.observatiiIntern?.trim()
+      ? `${item.descrierePiesa} [${data.observatiiIntern.trim()}]`
       : item.descrierePiesa;
 
     let targetComandaId = '';
@@ -2400,7 +2414,7 @@ export class EFacturaService implements OnModuleInit {
           serieUnicaPiesa: data.serieUnica?.trim() || null,
           categorie: data.categorie || 'Alte',
           subcategorie: data.subcategorie || null,
-          observatiiIntern: data.observatiiIntern || null,
+          observatiiIntern: mergedObsIntern || null,
         },
       });
 
@@ -2447,7 +2461,7 @@ export class EFacturaService implements OnModuleInit {
               serieUnicaPiesa: data.serieUnica?.trim() || null,
               categorie: data.categorie || 'Alte',
               subcategorie: data.subcategorie || null,
-              observatiiIntern: data.observatiiIntern || null,
+              observatiiIntern: mergedObsIntern || null,
             },
           });
         }
@@ -2531,7 +2545,7 @@ export class EFacturaService implements OnModuleInit {
                   serieUnicaPiesa: data.serieUnica?.trim() || null,
                   categorie: data.categorie || 'Alte',
                   subcategorie: data.subcategorie || null,
-                  observatiiIntern: data.observatiiIntern || null,
+                  observatiiIntern: mergedObsIntern || null,
                 },
               ],
             },
@@ -2628,6 +2642,14 @@ export class EFacturaService implements OnModuleInit {
 
     // Actualizăm starea facturii mamă
     await this.recalculeazaStareFactura(factura.id);
+
+    // Sincronizare automată în Uleiuri & Fluide dacă comanda a fost finalizată direct
+    if (targetComandaId) {
+      await syncFluidCompletariForComanda(this.prisma, targetComandaId, {
+        tipOperatiuneFluid: data.tipOperatiuneFluid,
+        cantitateLitriReala: data.cantitateLitriReala,
+      });
+    }
 
     const [updatedArticole, updatedFactura] = await Promise.all([
       this.prisma.eFacturaItem.findMany({

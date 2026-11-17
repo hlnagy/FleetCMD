@@ -333,11 +333,15 @@ model CompletareLichid {
   stareAlerta         String      @default("NOUA") // NOUA, REZOLVATA
   solutieRezolvare    String?
   dataRezolvare       DateTime?
+  comandaLucruId      String?
+  elementComandaId    String?
 
   @@index([vehiculId])
   @@index([dataCompletare])
   @@index([tipLichid])
   @@index([articolStocId])
+  @@index([comandaLucruId])
+  @@index([elementComandaId])
 }
 
 // ==========================================

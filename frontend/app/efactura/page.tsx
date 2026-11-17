@@ -511,6 +511,7 @@ function EFacturaContent() {
   const [autoFinalizeComanda, setAutoFinalizeComanda] = useState(false);
   const [forceNewComanda, setForceNewComanda] = useState(false);
   const [cantitateAlocata, setCantitateAlocata] = useState<number>(1);
+  const [tipOperatiuneFluidDirect, setTipOperatiuneFluidDirect] = useState<'SCHIMB_ULEI' | 'COMPLETARE_ULEI'>('SCHIMB_ULEI');
   const [savingAlocareDirecta, setSavingAlocareDirecta] = useState(false);
 
   // SMART CATEGORY DETECTED SUGGESTION
@@ -1557,6 +1558,7 @@ function EFacturaContent() {
     const initVol = pkg.detectedVolume || (catIsFluid ? 20 : 1);
     setVolumAmbalaj(initVol);
     setUmConversie(pkg.detectedUnit || 'L');
+    setTipOperatiuneFluidDirect(/completare|top[- ]?up/i.test(item.descrierePiesa || '') ? 'COMPLETARE_ULEI' : 'SCHIMB_ULEI');
 
     // Detecție și adăugare automată ECOVALOARE pentru anvelope + costuri suplimentare (dacă este piesă unică)
     const ecoInfo = (isAnvelopaText && !isZeroFactura && !enableConversion)
@@ -2087,6 +2089,20 @@ function EFacturaContent() {
     const esteComplet = (cantitateProcesataVeche + cantitateAlocataNum) >= (importingItem.cantitate - 0.0001);
     const newStareItem = esteComplet ? 'IMPORTAT' : 'NEPROCESAT';
 
+    const directPkg = detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura);
+    const isDirectNonFluid = /\b(filtru|filter|senzor|vas\s+expansiune|furtun|pompa|bec|vopsea|spray|spuma|degresant|sapun|taxa)\b/i.test(importingItem.descrierePiesa || '');
+    const isDirectFluid = !isDirectNonFluid && (
+      /lubrifian|ulei|antigel|adblue|racire|vaselin/i.test(targetCategorieDirect || '') ||
+      /\b(ulei|antigel|adblue|hlp|10w40|15w40|5w30|5w40|80w90|75w90|atf)\b/i.test(importingItem.descrierePiesa || '')
+    );
+    const realLitersDirect = isDirectFluid
+      ? (esteConversieVolum && Number(volumAmbalaj) > 0
+          ? Number((cantitateAlocataNum * Number(volumAmbalaj)).toFixed(2))
+          : directPkg.detectedVolume && directPkg.detectedVolume > 0
+          ? Number((cantitateAlocataNum * directPkg.detectedVolume).toFixed(2))
+          : cantitateAlocataNum)
+      : undefined;
+
     setSavingAlocareDirecta(true);
     try {
       const res = await authFetch(`${API_BASE_URL}/efactura/items/${importingItem.id}/aloca-direct-masina`, {
@@ -2108,6 +2124,8 @@ function EFacturaContent() {
           categorie: targetCategorieDirect || 'Alte',
           subcategorie: targetSubcategorieDirect || undefined,
           observatiiIntern: observatiiInternPiesa.trim() || undefined,
+          tipOperatiuneFluid: isDirectFluid ? tipOperatiuneFluidDirect : undefined,
+          cantitateLitriReala: realLitersDirect,
           areGarantie: areGarantieProducator || isImportSerializat,
           luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
           kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
@@ -5443,6 +5461,60 @@ function EFacturaContent() {
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 text-xs font-medium focus:bg-white transition"
                   />
                 </div>
+
+                {/* SINCRONIZARE AUTOMATĂ ULEIURI & FLUIDE (CÂND ARTICOLUL ESTE LUBRIFIANT / ANTIGEL / ADBLUE) */}
+                {(() => {
+                  const isNonF = /\b(filtru|filter|senzor|vas\s+expansiune|furtun|pompa|bec|vopsea|spray|spuma|degresant|sapun|taxa)\b/i.test(importingItem?.descrierePiesa || '');
+                  const isF = !isNonF && (
+                    /lubrifian|ulei|antigel|adblue|racire|vaselin/i.test(targetCategorieDirect || '') ||
+                    /\b(ulei|antigel|adblue|hlp|10w40|15w40|5w30|5w40|80w90|75w90|atf)\b/i.test(importingItem?.descrierePiesa || '')
+                  );
+                  if (!isF) return null;
+                  const pkg = detectFluidPackaging(importingItem?.descrierePiesa, importingItem?.unitateMasura);
+                  const realVol = esteConversieVolum && Number(volumAmbalaj) > 0
+                    ? Number((Number(cantitateAlocata || 0) * Number(volumAmbalaj)).toFixed(2))
+                    : pkg.detectedVolume && pkg.detectedVolume > 0
+                    ? Number((Number(cantitateAlocata || 0) * pkg.detectedVolume).toFixed(2))
+                    : Number(cantitateAlocata || 0);
+
+                  return (
+                    <div className="p-3 bg-sapphire-50 border border-sapphire-200 rounded-xl space-y-2 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-extrabold text-sapphire-900 flex items-center space-x-1.5">
+                          <Droplets className="w-4 h-4 text-sapphire-600" />
+                          <span>Sincronizare Uleiuri &amp; Fluide ({realVol} {pkg.detectedUnit || 'L'} echivalent real)</span>
+                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setTipOperatiuneFluidDirect('SCHIMB_ULEI')}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                              tipOperatiuneFluidDirect === 'SCHIMB_ULEI'
+                                ? 'bg-sapphire-600 text-white border-sapphire-700'
+                                : 'bg-white text-sapphire-900 border-morning-300'
+                            }`}
+                          >
+                            Schimb Complet (resetează normă)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTipOperatiuneFluidDirect('COMPLETARE_ULEI')}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                              tipOperatiuneFluidDirect === 'COMPLETARE_ULEI'
+                                ? 'bg-amber-600 text-white border-amber-700'
+                                : 'bg-white text-sapphire-900 border-morning-300'
+                            }`}
+                          >
+                            Completare (Top-up)
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-sage-700">
+                        La finalizarea comenzii, consumul de <strong>{realVol} {pkg.detectedUnit || 'L'}</strong> se înregistrează automat în registrul <strong>Uleiuri &amp; Fluide</strong> și actualizează contorul utilajului.
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 {/* FINALIZARE IMEDIATĂ */}
                 <label className="flex items-center space-x-2.5 p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-50 transition">
