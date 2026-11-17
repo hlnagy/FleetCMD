@@ -66,14 +66,14 @@ export default function Sidebar() {
       href: '/stocuri',
       icon: PackageCheck,
       subItems: [
-        { name: 'Depozite & Transferuri', href: '/stocuri?tab=depozite', tabKey: 'depozite', icon: Building2 },
-        { name: 'Piese & Consumabile', href: '/stocuri?tab=stoc', tabKey: 'stoc', icon: PackageCheck },
+        { name: 'Depozite', href: '/stocuri?tab=depozite', tabKey: 'depozite', icon: Building2 },
+        { name: 'Piese', href: '/stocuri?tab=stoc', tabKey: 'stoc', icon: PackageCheck },
         { name: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', tabKey: 'anvelope_stoc', icon: CircleDot },
         { name: 'Garanții Componente', href: '/stocuri?tab=componente', tabKey: 'componente', icon: ShieldCheck },
       ],
     },
     { name: 'Anvelope', href: '/anvelope', icon: CircleDot },
-    { name: 'Uleiuri & Fluide', href: '/fluide', icon: Droplets },
+    { name: 'Uleiuri', href: '/fluide', icon: Droplets },
     { name: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
     { name: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
   ];

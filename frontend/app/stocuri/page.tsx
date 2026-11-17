@@ -1245,7 +1245,7 @@ function StocuriGarantiiContent() {
           }`}
         >
           <Building2 className="w-4 h-4" />
-          <span>Depozite &amp; Transferuri</span>
+          <span>Depozite</span>
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'depozite' ? 'bg-white/20 text-white' : 'bg-morning-200 dark:bg-slate-700 text-sage-700 dark:text-slate-200'}`}>
             {depozite.length}
           </span>
@@ -1261,7 +1261,7 @@ function StocuriGarantiiContent() {
           }`}
         >
           <PackageCheck className="w-4 h-4" />
-          <span>Piese &amp; Consumabile</span>
+          <span>Piese</span>
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'stoc' ? 'bg-white/20 text-white' : 'bg-morning-200 dark:bg-slate-700 text-sage-700 dark:text-slate-200'}`}>
             {stocuriAfisate.length}
           </span>

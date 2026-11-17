@@ -128,8 +128,8 @@ export default function TabBar() {
 
                 <div className="pt-1 space-y-1">
                   {[
-                    { title: 'Depozite & Transferuri', href: '/stocuri?tab=depozite', icon: Building2 },
-                    { title: 'Piese & Consumabile', href: '/stocuri?tab=stoc', icon: PackageCheck },
+                    { title: 'Depozite', href: '/stocuri?tab=depozite', icon: Building2 },
+                    { title: 'Piese', href: '/stocuri?tab=stoc', icon: PackageCheck },
                     { title: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot },
                     { title: 'Garanții Componente', href: '/stocuri?tab=componente', icon: ShieldCheck },
                     { title: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
@@ -139,7 +139,7 @@ export default function TabBar() {
                     { title: 'Actualizare KM', href: '/import-km', icon: Gauge },
                     { title: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
                     { title: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
-                    { title: 'Uleiuri & Fluide', href: '/fluide', icon: Droplets },
+                    { title: 'Uleiuri', href: '/fluide', icon: Droplets },
                     { title: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
                     { title: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
                     { title: 'Setări', href: '/setari', icon: Settings },

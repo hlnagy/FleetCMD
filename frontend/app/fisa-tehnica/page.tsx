@@ -1091,7 +1091,7 @@ export default function FisaTehnicaPage() {
               }`}
             >
               <Droplets className="w-4 h-4" />
-              <span>Uleiuri & Fluide ({vehicul.completariLichid?.length || 0})</span>
+              <span>Uleiuri ({vehicul.completariLichid?.length || 0})</span>
             </button>
           </div>
 

@@ -2170,7 +2170,7 @@ function SetariContent() {
           }`}
         >
           <Truck className="w-4 h-4 text-sapphire-500" />
-          <span>Flotă & Vehicule ({vehicule.length})</span>
+          <span>Vehicule ({vehicule.length})</span>
         </button>
 
         <button
@@ -2194,7 +2194,7 @@ function SetariContent() {
           }`}
         >
           <Building2 className="w-4 h-4 text-sapphire-500" />
-          <span>Depozite Flotă ({depozite.length})</span>
+          <span>Depozite ({depozite.length})</span>
         </button>
 
         <button
@@ -2242,7 +2242,7 @@ function SetariContent() {
           }`}
         >
           <ShieldAlert className="w-4 h-4 text-terracotta-500" />
-          <span>Licențe & Alerte Firmă ({alertePersonalizate.length})</span>
+          <span>Alerte Firmă ({alertePersonalizate.length})</span>
         </button>
 
         <button
@@ -2254,7 +2254,7 @@ function SetariContent() {
           }`}
         >
           <Palette className="w-4 h-4 text-sapphire-500" />
-          <span>Aspect & Temă Vizuală</span>
+          <span>Temă</span>
         </button>
 
         {isAdmin && (
@@ -2307,7 +2307,7 @@ function SetariContent() {
               }`}
             >
               <Database className="w-4 h-4 text-emerald-600" />
-              <span>Copie de Siguranță & Bază de Date</span>
+              <span>Bază de Date</span>
               <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 text-[9px] font-black uppercase">Admin</span>
             </button>
           </>
