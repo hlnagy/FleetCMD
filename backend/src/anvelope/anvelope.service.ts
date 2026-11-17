@@ -10,12 +10,15 @@ function parseDimensiune(denumire: string): string {
 
 function parseMarca(denumire: string): string {
   if (!denumire) return 'BENCHMARK';
+  const upper = denumire.toUpperCase();
+  if (upper.includes('TBBTIRES') || /\bTBB\b/i.test(upper)) return 'TBBTIRES';
   const brands = [
     'MICHELIN', 'BRIDGESTONE', 'CONTINENTAL', 'GOODYEAR', 'PIRELLI', 'HANKOOK',
     'BENCHMARK', 'INFINITY', 'KORMORAN', 'SAVA', 'MATADOR', 'CORDIANT', 'DOUBLE COIN',
-    'LINGLONG', 'TRIANGLE', 'AEOLUS', 'WESTLAKE', 'OTANI', 'SAILUN', 'KAMA', 'BARUM', 'FULDA'
+    'LINGLONG', 'TRIANGLE', 'AEOLUS', 'WESTLAKE', 'OTANI', 'SAILUN', 'KAMA', 'BARUM', 'FULDA',
+    'FIRESTONE', 'DUNLOP', 'NOKIAN', 'FALKEN', 'SEMPERIT', 'KLEBER', 'DEBICA', 'TAURUS',
+    'UNIROYAL', 'TOYO', 'YOKOHAMA', 'KUMHO', 'NEXEN', 'PETLAS', 'LASSA', 'MAXXIS', 'GITI'
   ];
-  const upper = denumire.toUpperCase();
   for (const b of brands) {
     if (upper.includes(b)) return b;
   }

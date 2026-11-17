@@ -126,28 +126,93 @@ export function parseAnafDataCreare(raw: string | number | undefined): Date {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
+const NON_TIRE_PRODUCT_REGEX =
+  /\b(?:vopsea|t\*vop|kober|diluant|grund|email|amorsa|chit|adeziv|silicon|spray|ulei|lubrifiant|antigel|adblue|vaselina|surub|piulita|saiba|tabla|teava|tevi|profil|electrod|bec|proiector)\b/i;
+
+export function hasExplicitTireDimension(desc: string): boolean {
+  return /\b\d{2,3}(?:\/\d{2,3})?\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(String(desc || ''));
+}
+
 export function parseDimensiune(desc: string): string {
-  const match = desc.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
+  const match = desc.match(/\b\d{2,3}(?:\/\d{2,3})?\s*R\s*\d{2}(?:\.\d+)?C?\b/i);
   return match ? match[0].replace(/\s+/g, '') : '315/80R22.5';
 }
 
 export function parseMarca(desc: string): string {
-  const d = desc.toUpperCase();
-  if (d.includes('MICHELIN')) return 'MICHELIN';
-  if (d.includes('BRIDGESTONE')) return 'BRIDGESTONE';
-  if (d.includes('CONTINENTAL')) return 'CONTINENTAL';
-  if (d.includes('GOODYEAR')) return 'GOODYEAR';
-  if (d.includes('PIRELLI')) return 'PIRELLI';
-  if (d.includes('BENCHMARK')) return 'BENCHMARK';
-  if (d.includes('INFINITY')) return 'INFINITY';
-  if (d.includes('HANKOOK')) return 'HANKOOK';
-  if (d.includes('SAVA')) return 'SAVA';
-  if (d.includes('KORMORAN')) return 'KORMORAN';
-  if (d.includes('BARUM')) return 'BARUM';
-  if (d.includes('MATADOR')) return 'MATADOR';
-  if (d.includes('TRIANGLE')) return 'TRIANGLE';
-  if (d.includes('WESTLAKE')) return 'WESTLAKE';
-  return 'GENERICĂ';
+  const d = String(desc || '').toUpperCase();
+  const brandAliases: Array<[string, string]> = [
+    ['MICHELIN', 'MICHELIN'],
+    ['BRIDGESTONE', 'BRIDGESTONE'],
+    ['CONTINENTAL', 'CONTINENTAL'],
+    ['GOODYEAR', 'GOODYEAR'],
+    ['PIRELLI', 'PIRELLI'],
+    ['BENCHMARK', 'BENCHMARK'],
+    ['INFINITY', 'INFINITY'],
+    ['TBBTIRES', 'TBBTIRES'],
+    ['TBB', 'TBBTIRES'],
+    ['HANKOOK', 'HANKOOK'],
+    ['SAVA', 'SAVA'],
+    ['KORMORAN', 'KORMORAN'],
+    ['BARUM', 'BARUM'],
+    ['MATADOR', 'MATADOR'],
+    ['TRIANGLE', 'TRIANGLE'],
+    ['WESTLAKE', 'WESTLAKE'],
+    ['SAILUN', 'SAILUN'],
+    ['LINGLONG', 'LINGLONG'],
+    ['AEOLUS', 'AEOLUS'],
+    ['DOUBLE COIN', 'DOUBLE COIN'],
+    ['CORDIANT', 'CORDIANT'],
+    ['OTANI', 'OTANI'],
+    ['KAMA', 'KAMA'],
+    ['FULDA', 'FULDA'],
+    ['FIRESTONE', 'FIRESTONE'],
+    ['DUNLOP', 'DUNLOP'],
+    ['NOKIAN', 'NOKIAN'],
+    ['FALKEN', 'FALKEN'],
+    ['SEMPERIT', 'SEMPERIT'],
+    ['KLEBER', 'KLEBER'],
+    ['DEBICA', 'DEBICA'],
+    ['TAURUS', 'TAURUS'],
+    ['ORIUM', 'ORIUM'],
+    ['RIKEN', 'RIKEN'],
+    ['TIGAR', 'TIGAR'],
+    ['UNIROYAL', 'UNIROYAL'],
+    ['TOYO', 'TOYO'],
+    ['YOKOHAMA', 'YOKOHAMA'],
+    ['KUMHO', 'KUMHO'],
+    ['NEXEN', 'NEXEN'],
+    ['GT RADIAL', 'GT RADIAL'],
+    ['PETLAS', 'PETLAS'],
+    ['LASSA', 'LASSA'],
+    ['GISLAVED', 'GISLAVED'],
+    ['VREDESTEIN', 'VREDESTEIN'],
+    ['BFGOODRICH', 'BFGOODRICH'],
+    ['KENDA', 'KENDA'],
+    ['MAXXIS', 'MAXXIS'],
+    ['GITI', 'GITI'],
+    ['DAYTON', 'DAYTON'],
+    ['LAUFENN', 'LAUFENN'],
+    ['COOPER', 'COOPER'],
+    ['APOLLO', 'APOLLO'],
+    ['OVATION', 'OVATION'],
+    ['SUNFULL', 'SUNFULL'],
+    ['HIFLY', 'HIFLY'],
+    ['WINDPOWER', 'WINDPOWER'],
+    ['LONGMARCH', 'LONGMARCH'],
+    ['ADVANCE', 'ADVANCE'],
+    ['BKT', 'BKT'],
+    ['ALLIANCE', 'ALLIANCE'],
+    ['MITAS', 'MITAS'],
+    ['TRELLEBORG', 'TRELLEBORG'],
+  ];
+  for (const [needle, label] of brandAliases) {
+    if (needle.length <= 3) {
+      if (new RegExp(`\\b${needle}\\b`, 'i').test(d)) return label;
+    } else if (d.includes(needle)) {
+      return label;
+    }
+  }
+  return 'Marcă Nespecificată';
 }
 
 export function parseModel(desc: string): string {
@@ -163,6 +228,11 @@ export function isTireDescription(descriere?: string, cod?: string, categorie?: 
   if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
   if (code === 'ECO' && /eco/i.test(desc)) return false;
   if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
+
+  const hasExplicitDim = hasExplicitTireDimension(desc);
+  if (NON_TIRE_PRODUCT_REGEX.test(desc) && !hasExplicitDim && !dLow.includes('anvelop') && !dLow.includes('cauciuc')) {
+    return false;
+  }
 
   return (
     /anvelop/i.test(String(categorie || '')) ||
@@ -1268,9 +1338,14 @@ export class EFacturaService implements OnModuleInit {
     const catName = data.categorieNume || 'Alte';
     await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume);
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
+    const isExplicitNonTire =
+      NON_TIRE_PRODUCT_REGEX.test(item.descrierePiesa || '') &&
+      !hasExplicitTireDimension(item.descrierePiesa || '') &&
+      !/anvelop|cauciuc/i.test(item.descrierePiesa || '');
     const esteAnvelopa =
-      data.esteAnvelopa === true ||
-      isTireDescription(item.descrierePiesa, codArticol, catName);
+      !isExplicitNonTire &&
+      (data.esteAnvelopa === true ||
+        isTireDescription(item.descrierePiesa, codArticol, catName));
 
     const isFluid =
       catName.toLowerCase().includes('ulei') ||

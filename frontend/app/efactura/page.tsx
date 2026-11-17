@@ -223,9 +223,10 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     else if (/perna|bucsa|bucse/i.test(desc)) matchedSub = subcats.find(s => /buc|pern/i.test(s.nume))?.nume || '';
     else matchedSub = subcats[0]?.nume || '';
   } else {
-    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE (excluzând categoria 'Alte' pentru a evita potriviri false)
+    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE (excluzând 'Alte' și 'Anvelope' pentru a evita potriviri false)
     for (const c of categorii) {
-      if ((c.nume || '').trim().toLowerCase() === 'alte') continue;
+      const cLow = (c.nume || '').trim().toLowerCase();
+      if (cLow === 'alte' || cLow.includes('anvelop')) continue;
       const cSubcats = c.subcategorii || [];
       const dynSub = findDynamicSubcat(desc, cSubcats);
       if (dynSub) {
@@ -1054,10 +1055,19 @@ function EFacturaContent() {
     if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
     if (code === 'ECO' && /eco/i.test(desc)) return false;
     if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
+    const hasDim = /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc);
+    if (
+      /\b(?:vopsea|t\*vop|kober|diluant|grund|email|amorsa|spray|ulei|lubrifiant|antigel|adblue|vaselina|surub|piulita|tabla|teava|tevi|profil|electrod)\b/i.test(desc) &&
+      !hasDim &&
+      !dLow.includes('anvelop') &&
+      !dLow.includes('cauciuc')
+    ) {
+      return false;
+    }
 
     return (
       /anvelop/i.test(String(categorieNume || '')) ||
-      /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) ||
+      hasDim ||
       dLow.includes('anvelop') ||
       dLow.includes('cauciuc') ||
       dLow.includes('r22.5') ||

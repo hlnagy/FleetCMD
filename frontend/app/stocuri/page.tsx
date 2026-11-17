@@ -35,6 +35,8 @@ function StocuriGarantiiContent() {
   const { openTab } = useTabWorkspace();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
+  const depozitIdParam = searchParams?.get('depozitId');
+  const serieParam = searchParams?.get('serie');
 
   const handleOpenFacturaInEfactura = (numarFactura?: string) => {
     if (!numarFactura || numarFactura === 'Fără Număr' || numarFactura === '-') return;
@@ -88,13 +90,40 @@ function StocuriGarantiiContent() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [activeTab, setActiveTab] = useState<'stoc' | 'anvelope_stoc' | 'depozite' | 'componente'>('stoc');
+  const [highlightedTireSerie, setHighlightedTireSerie] = useState<string | null>(null);
 
-  // Ascultăm schimbarea tab-ului din URL / Sidebar
+  // Ascultăm schimbarea tab-ului și a filtrelor de depozit / serie din URL
   useEffect(() => {
     if (tabParam && ['stoc', 'anvelope_stoc', 'depozite', 'componente'].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
-  }, [tabParam]);
+    if (tabParam === 'anvelope_stoc') {
+      if (depozitIdParam !== null || serieParam !== null) {
+        setAnvelopeStocDepozitFilter(depozitIdParam || '');
+        setAnvelopeStocFilterState('ALL');
+        setAnvelopeStocSearch('');
+      }
+      if (serieParam) {
+        setHighlightedTireSerie(serieParam);
+      }
+    } else if (depozitIdParam) {
+      setSelectedDepozitFilter(depozitIdParam);
+    }
+  }, [tabParam, depozitIdParam, serieParam]);
+
+  useEffect(() => {
+    if (!highlightedTireSerie || activeTab !== 'anvelope_stoc' || anvelopeStocList.length === 0) return;
+    const match = anvelopeStocList.find(
+      (a) => String(a.serieAnvelopa || '').trim().toLowerCase() === highlightedTireSerie.trim().toLowerCase(),
+    );
+    if (!match) return;
+    const el = document.getElementById(`tire-stock-card-${match.id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const timer = setTimeout(() => setHighlightedTireSerie(null), 5000);
+    return () => clearTimeout(timer);
+  }, [highlightedTireSerie, activeTab, anvelopeStocList]);
 
   // Modale
   const [showAddModal, setShowAddModal] = useState(false);
@@ -723,7 +752,13 @@ function StocuriGarantiiContent() {
     const isNoua = (a.adancimeCurentaMm || 16) >= 15;
     if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
     if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
-    if (anvelopeStocDepozitFilter && a.depozitId !== anvelopeStocDepozitFilter) return false;
+    if (anvelopeStocDepozitFilter) {
+      const mainDepId = depozite[0]?.id;
+      const matchesDep =
+        a.depozitId === anvelopeStocDepozitFilter ||
+        (!a.depozitId && mainDepId && anvelopeStocDepozitFilter === mainDepId);
+      if (!matchesDep) return false;
+    }
     return matchesSearchTokens(
       [a.serieAnvelopa, a.marca, a.model, a.dimensiune, a.codDot, a.depozit?.nume],
       anvelopeStocSearch,
@@ -1301,11 +1336,20 @@ function StocuriGarantiiContent() {
               {anvelopeStocFiltrate.map((a: any) => {
                 const isNoua = (a.adancimeCurentaMm || 16) >= 15;
                 const procentProfil = Math.min(100, Math.round(((a.adancimeCurentaMm || 16) / 16) * 100));
+                const isHighlighted = !!(
+                  highlightedTireSerie &&
+                  String(a.serieAnvelopa || '').trim().toLowerCase() === highlightedTireSerie.trim().toLowerCase()
+                );
 
                 return (
                   <div
                     key={a.id}
-                    className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 hover:border-sapphire-300 hover:shadow-md transition space-y-3 text-xs"
+                    id={`tire-stock-card-${a.id}`}
+                    className={`pleasant-card bg-white p-4 rounded-2xl border transition space-y-3 text-xs ${
+                      isHighlighted
+                        ? 'border-emerald-500 ring-4 ring-emerald-400/50 shadow-lg'
+                        : 'border-morning-200 hover:border-sapphire-300 hover:shadow-md'
+                    }`}
                   >
                     {/* Header Card */}
                     <div className="flex items-center justify-between border-b border-morning-100 pb-2.5">

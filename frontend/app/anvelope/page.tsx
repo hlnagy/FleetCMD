@@ -3,9 +3,11 @@
 import { API_BASE_URL } from '@/lib/api';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   CircleDot, AlertTriangle, RefreshCw, Ruler, BarChart2, Repeat, Layers, Search, Plus,
-  CheckCircle2, X, ArrowLeftRight, Wrench, ShieldAlert, History, Calendar, UserCheck, Trash2, Truck, ChevronDown, Check, Settings, PackageCheck
+  CheckCircle2, X, ArrowLeftRight, Wrench, ShieldAlert, History, Calendar, UserCheck, Trash2, Truck, ChevronDown, Check, Settings, PackageCheck,
+  ExternalLink, Building2
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { getLabelPozitie } from '@/lib/tirePositions';
@@ -22,6 +24,7 @@ export default function AnvelopePage() {
 
   const [activeTab, setActiveTab] = useState<'harta' | 'flota' | 'istoric' | 'tco'>('harta');
   const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedAnvelopaId, setHighlightedAnvelopaId] = useState<string | null>(null);
 
   // Modal State Configurare Axe
   const [showConfigAxeModal, setShowConfigAxeModal] = useState(false);
@@ -209,11 +212,44 @@ export default function AnvelopePage() {
     fetchTCO();
     fetchMecanici();
     fetchDepozite();
+
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const qVehiculId = sp.get('vehiculId');
+      const qTab = sp.get('tab');
+      const qAnvelopaId = sp.get('anvelopaId');
+      if (qVehiculId) setSelectedId(qVehiculId);
+      if (qAnvelopaId) setHighlightedAnvelopaId(qAnvelopaId);
+      if (qTab && ['harta', 'flota', 'istoric', 'tco'].includes(qTab)) {
+        setActiveTab(qTab as any);
+      }
+    }
   }, []);
 
   useEffect(() => {
     if (selectedId) fetchHartaAxe(selectedId);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!highlightedAnvelopaId || activeTab !== 'harta' || !hartaAxe?.pozitiiAxe) return;
+    const existsOnDiagram = hartaAxe.pozitiiAxe.some((p: any) => p.anvelopa?.id === highlightedAnvelopaId);
+    if (!existsOnDiagram) return;
+    const el = document.getElementById(`axle-tire-${highlightedAnvelopaId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const timer = setTimeout(() => setHighlightedAnvelopaId(null), 4000);
+    return () => clearTimeout(timer);
+  }, [highlightedAnvelopaId, activeTab, hartaAxe]);
+
+  const handleJumpToVehicleAxle = (anvelopa: any) => {
+    if (!anvelopa?.vehiculId) return;
+    setPozitieA(null);
+    setPozitieB(null);
+    setHighlightedAnvelopaId(anvelopa.id || null);
+    setSelectedId(anvelopa.vehiculId);
+    setActiveTab('harta');
+  };
 
   const openDemountModal = (poz: any) => {
     setDemountPozitie(poz);
@@ -682,6 +718,7 @@ export default function AnvelopePage() {
                       {stanga.map((poz: any) => {
                         const isSelectedA = pozitieA?.id === poz.id;
                         const isSelectedB = pozitieB?.id === poz.id;
+                        const isHighlighted = !!(highlightedAnvelopaId && poz.anvelopa?.id === highlightedAnvelopaId);
                         const posLbl = getLabelPozitie(poz, pozOnAx.length);
                         const kmCurenti = (poz.anvelopa && hartaAxe?.valoareContorCurent > (poz.anvelopa.kilometrajMontare || 0))
                           ? (hartaAxe.valoareContorCurent - poz.anvelopa.kilometrajMontare)
@@ -691,6 +728,7 @@ export default function AnvelopePage() {
                         return (
                           <div
                             key={poz.id}
+                            id={poz.anvelopa?.id ? `axle-tire-${poz.anvelopa.id}` : undefined}
                             onClick={() => {
                               if (!pozitieA) setPozitieA(poz);
                               else if (!pozitieB && pozitieA.id !== poz.id) setPozitieB(poz);
@@ -700,7 +738,11 @@ export default function AnvelopePage() {
                               }
                             }}
                             className={`p-3 rounded-2xl border-2 text-center cursor-pointer transition transform hover:scale-105 min-w-[120px] ${getStatusColor(poz.anvelopa)} ${
-                              isSelectedA || isSelectedB ? 'ring-4 ring-terracotta-500 font-extrabold scale-105' : ''
+                              isSelectedA || isSelectedB
+                                ? 'ring-4 ring-terracotta-500 font-extrabold scale-105'
+                                : isHighlighted
+                                  ? 'ring-4 ring-emerald-500 shadow-lg font-extrabold scale-105'
+                                  : ''
                             }`}
                           >
                             <p className="font-extrabold font-mono text-xs text-sapphire-900 tracking-tight">{posLbl.titlu}</p>
@@ -768,6 +810,7 @@ export default function AnvelopePage() {
                       {dreapta.map((poz: any) => {
                         const isSelectedA = pozitieA?.id === poz.id;
                         const isSelectedB = pozitieB?.id === poz.id;
+                        const isHighlighted = !!(highlightedAnvelopaId && poz.anvelopa?.id === highlightedAnvelopaId);
                         const posLbl = getLabelPozitie(poz, pozOnAx.length);
                         const kmCurenti = (poz.anvelopa && hartaAxe?.valoareContorCurent > (poz.anvelopa.kilometrajMontare || 0))
                           ? (hartaAxe.valoareContorCurent - poz.anvelopa.kilometrajMontare)
@@ -777,6 +820,7 @@ export default function AnvelopePage() {
                         return (
                           <div
                             key={poz.id}
+                            id={poz.anvelopa?.id ? `axle-tire-${poz.anvelopa.id}` : undefined}
                             onClick={() => {
                               if (!pozitieA) setPozitieA(poz);
                               else if (!pozitieB && pozitieA.id !== poz.id) setPozitieB(poz);
@@ -786,7 +830,11 @@ export default function AnvelopePage() {
                               }
                             }}
                             className={`p-3 rounded-2xl border-2 text-center cursor-pointer transition transform hover:scale-105 min-w-[120px] ${getStatusColor(poz.anvelopa)} ${
-                              isSelectedA || isSelectedB ? 'ring-4 ring-terracotta-500 font-extrabold scale-105' : ''
+                              isSelectedA || isSelectedB
+                                ? 'ring-4 ring-terracotta-500 font-extrabold scale-105'
+                                : isHighlighted
+                                  ? 'ring-4 ring-emerald-500 shadow-lg font-extrabold scale-105'
+                                  : ''
                             }`}
                           >
                             <p className="font-extrabold font-mono text-xs text-sapphire-900 tracking-tight">{posLbl.titlu}</p>
@@ -886,15 +934,54 @@ export default function AnvelopePage() {
                       <td className="p-3 font-bold text-slate-800">{a.marca} {a.model}</td>
                       <td className="p-3 font-mono text-sage-700 font-semibold">{a.dimensiune}</td>
                       <td className="p-3">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                          a.stare === 'MONTATA' 
-                            ? 'bg-sapphire-50 text-sapphire-700 border border-sapphire-200' 
-                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                        }`}>
-                          {a.stare === 'MONTATA' 
-                            ? `MONTATĂ (${a.vehicul?.numarIntern || ''} ${a.pozitieAx ? `• ${getLabelPozitie(a.pozitieAx).titlu}` : ''})` 
-                            : ` ÎN STOC (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                            a.stare === 'MONTATA'
+                              ? 'bg-sapphire-50 text-sapphire-700 border border-sapphire-200'
+                              : a.stare === 'CASATA'
+                                ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
+                                : a.stare === 'RESAPATA'
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {a.stare === 'MONTATA'
+                              ? `MONTATĂ (${a.vehicul?.numarIntern || ''} ${a.pozitieAx ? `• ${getLabelPozitie(a.pozitieAx).titlu}` : ''})`
+                              : a.stare === 'CASATA'
+                                ? 'CASATĂ / DEȘEU'
+                                : a.stare === 'RESAPATA'
+                                  ? 'ÎN REȘAPARE'
+                                  : `ÎN STOC (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
+                          </span>
+
+                          {a.stare === 'MONTATA' && a.vehiculId && (
+                            <button
+                              type="button"
+                              onClick={() => handleJumpToVehicleAxle(a)}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 hover:text-sapphire-900 border border-sapphire-200 text-[11px] font-bold hover:underline transition cursor-pointer"
+                              title={`Deschide Șasiu & Axe Vizuale pentru ${a.vehicul?.numarIntern || 'vehicul'}`}
+                            >
+                              <CircleDot className="w-3 h-3 text-sapphire-600" />
+                              <span>Șasiu & Axe</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          {a.stare === 'IN_STOC' && (
+                            <Link
+                              href={
+                                a.depozitId
+                                  ? `/stocuri?tab=anvelope_stoc&depozitId=${encodeURIComponent(a.depozitId)}&serie=${encodeURIComponent(a.serieAnvelopa || '')}`
+                                  : `/stocuri?tab=anvelope_stoc&serie=${encodeURIComponent(a.serieAnvelopa || '')}`
+                              }
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-950 border border-emerald-200 text-[11px] font-bold hover:underline transition"
+                              title={`Deschide depozitul ${a.depozit?.nume || a.depozitNume || 'Depozit Central'}`}
+                            >
+                              <Building2 className="w-3 h-3 text-emerald-600" />
+                              <span>{a.depozit?.nume || a.depozitNume || 'Depozit Central'}</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-900">
                         {Math.round(totalKm).toLocaleString('ro-RO')} KM
