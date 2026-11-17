@@ -100,6 +100,11 @@ export class MentenantaController {
     return this.mentenantaService.devalideazaComandaLucru(id);
   }
 
+  @Post('comanda-lucru/merge')
+  mergeComenziLucru(@Body() body: { targetId: string; sourceIds: string[]; observatii?: string }) {
+    return this.mentenantaService.mergeComenziLucru(body);
+  }
+
   @Patch('comanda-lucru/:id/update')
   updateComandaLucru(@Param('id') id: string, @Body() body: any) {
     return this.mentenantaService.updateComandaLucru(id, body);

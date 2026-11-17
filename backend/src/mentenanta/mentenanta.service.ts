@@ -1012,6 +1012,234 @@ export class MentenantaService {
   }
 
   // ==========================================
+  // UNIRE / COMASARE COMENZI DE LUCRU (ACELAȘI VEHICUL)
+  // ==========================================
+  async mergeComenziLucru(data: {
+    targetId: string;
+    sourceIds: string[];
+    observatii?: string;
+  }) {
+    const targetId = String(data?.targetId || '').trim();
+    const rawSourceIds = Array.isArray(data?.sourceIds) ? data.sourceIds : [];
+    const uniqueSourceIds = Array.from(
+      new Set(
+        rawSourceIds
+          .map((id) => String(id || '').trim())
+          .filter((id) => id && id !== targetId)
+      )
+    );
+
+    if (!targetId || uniqueSourceIds.length === 0) {
+      throw new BadRequestException('Selectați cel puțin două comenzi de lucru diferite pentru unire.');
+    }
+
+    const allIds = [targetId, ...uniqueSourceIds];
+
+    const initialOrders = await this.prisma.comandaLucru.findMany({
+      where: { id: { in: allIds } },
+      include: {
+        elementeComanda: true,
+        vehicul: true,
+      },
+    });
+
+    if (initialOrders.length !== allIds.length) {
+      throw new NotFoundException('Una sau mai multe comenzi de lucru selectate nu mai există.');
+    }
+
+    const targetOrder = initialOrders.find((o) => o.id === targetId);
+    if (!targetOrder) {
+      throw new NotFoundException('Comanda de destinație nu a fost găsită.');
+    }
+    const sourceOrders = initialOrders.filter((o) => o.id !== targetId);
+
+    const canceled = initialOrders.find((o) => o.stare === 'ANULAT');
+    if (canceled) {
+      throw new BadRequestException(
+        `Comanda ${canceled.numarComanda} este ANULATĂ și nu poate fi unită. Reactivați-o sau excludeți-o din selecție.`
+      );
+    }
+
+    const mismatchVehicul = initialOrders.find((o) => o.vehiculId !== targetOrder.vehiculId);
+    if (mismatchVehicul) {
+      throw new BadRequestException(
+        `Unirea este permisă exclusiv pentru comenzi de pe ACELAȘI vehicul/utilaj (${mismatchVehicul.numarComanda} aparține altui vehicul).`
+      );
+    }
+
+    const finalizedSources = sourceOrders.filter((o) => o.stare === 'FINALIZAT');
+    const openSources = sourceOrders.filter((o) => o.stare !== 'FINALIZAT');
+
+    // Gestiune FIFO guard: comenzile finalizate au stocul deja consumat din loturile FIFO.
+    if (targetOrder.stare !== 'FINALIZAT' && finalizedSources.length > 0) {
+      throw new BadRequestException(
+        'Comenzile finalizate nu pot fi absorbite într-o comandă deschisă/devalidată. Alegeți o comandă FINALIZATĂ ca destinație principală.'
+      );
+    }
+
+    // Dacă destinația este FINALIZATĂ și există surse ÎN LUCRU / DEVALIDATE, le finalizăm FIFO mai întâi.
+    if (targetOrder.stare === 'FINALIZAT' && openSources.length > 0) {
+      const stockNeeded = new Map<string, number>();
+      for (const src of openSources) {
+        for (const el of src.elementeComanda) {
+          if (el.pilonCost === 'PIESA_STOC' && el.articolStocId) {
+            stockNeeded.set(
+              el.articolStocId,
+              (stockNeeded.get(el.articolStocId) || 0) + Number(el.cantitate || 0)
+            );
+          }
+        }
+      }
+      if (stockNeeded.size > 0) {
+        const articole = await this.prisma.articolStoc.findMany({
+          where: { id: { in: Array.from(stockNeeded.keys()) } },
+          select: { id: true, denumire: true, stocCurent: true, unitateMasura: true },
+        });
+        for (const art of articole) {
+          const reqQty = stockNeeded.get(art.id) || 0;
+          if (Number(art.stocCurent || 0) < reqQty) {
+            throw new BadRequestException(
+              `Stoc insuficient pentru finalizarea combinată a articolului "${art.denumire}": solicitat ${reqQty}, disponibil ${art.stocCurent} ${art.unitateMasura || 'buc'}.`
+            );
+          }
+        }
+      }
+
+      for (const src of openSources) {
+        await this.finalizeazaComandaLucru(src.id);
+      }
+    }
+
+    // Re-fetch după eventuale finalizări FIFO pentru a avea costuri/date exacte
+    const freshOrders = await this.prisma.comandaLucru.findMany({
+      where: { id: { in: allIds } },
+      include: {
+        elementeComanda: true,
+        vehicul: true,
+      },
+    });
+
+    const freshTarget = freshOrders.find((o) => o.id === targetId);
+    if (!freshTarget) {
+      throw new NotFoundException('Comanda țintă nu a putut fi reîncărcată.');
+    }
+    const freshSources = freshOrders
+      .filter((o) => o.id !== targetId)
+      .sort((a, b) => a.numarComanda.localeCompare(b.numarComanda, undefined, { numeric: true }));
+
+    const orderedForMerge = [freshTarget, ...freshSources];
+
+    // Agregare mecanici unici
+    const mechanicMap = new Map<string, string>();
+    for (const o of orderedForMerge) {
+      for (const part of String(o.mecanicResponsabil || '').split(/[,;]+/)) {
+        const trimmed = part.trim();
+        if (trimmed && !mechanicMap.has(trimmed.toLowerCase())) {
+          mechanicMap.set(trimmed.toLowerCase(), trimmed);
+        }
+      }
+    }
+    const mergedMecanic = Array.from(mechanicMap.values()).join(', ') || freshTarget.mecanicResponsabil;
+
+    // Agregare date deschidere / finalizare & contor maxim
+    const minDeschidere = new Date(
+      Math.min(...orderedForMerge.map((o) => new Date(o.dataDeschidere).getTime()))
+    );
+
+    let mergedFinalizare: Date | null = null;
+    if (freshTarget.stare === 'FINALIZAT') {
+      const finTimes = orderedForMerge
+        .map((o) => (o.dataFinalizare ? new Date(o.dataFinalizare).getTime() : 0))
+        .filter((t) => t > 0);
+      mergedFinalizare = finTimes.length > 0 ? new Date(Math.max(...finTimes)) : new Date();
+    }
+
+    const maxContor = Math.max(
+      ...orderedForMerge.map((o) => Number(o.valoareContorLaExecutie || 0))
+    );
+
+    // Agregare observații unice + urmă audit numere unite
+    const mergedNumbersList = freshSources.map((o) => o.numarComanda).join(', ');
+    let mergedObservatii: string | null = null;
+    if (typeof data.observatii === 'string' && data.observatii.trim()) {
+      mergedObservatii = data.observatii.trim();
+    } else {
+      const obsLines: string[] = [];
+      const seenObs = new Set<string>();
+      for (const o of orderedForMerge) {
+        const raw = String(o.observatii || '').trim();
+        if (raw && !seenObs.has(raw.toLowerCase())) {
+          seenObs.add(raw.toLowerCase());
+          obsLines.push(raw);
+        }
+      }
+      const mergeTag = `[Comenzi unite în ${freshTarget.numarComanda}: ${mergedNumbersList}]`;
+      if (!obsLines.some((l) => l.includes(mergeTag))) {
+        obsLines.push(mergeTag);
+      }
+      mergedObservatii = obsLines.join(' | ');
+    }
+
+    const mergedComanda = await this.prisma.$transaction(async (tx) => {
+      await tx.elementComandaLucru.updateMany({
+        where: { comandaLucruId: { in: uniqueSourceIds } },
+        data: { comandaLucruId: targetId },
+      });
+
+      await tx.eFacturaItem.updateMany({
+        where: { comandaLucruId: { in: uniqueSourceIds } },
+        data: { comandaLucruId: targetId },
+      });
+
+      const updatedTarget = await tx.comandaLucru.update({
+        where: { id: targetId },
+        data: {
+          mecanicResponsabil: mergedMecanic,
+          observatii: mergedObservatii,
+          dataDeschidere: minDeschidere,
+          dataFinalizare: mergedFinalizare,
+          valoareContorLaExecutie: maxContor,
+        },
+        include: {
+          elementeComanda: {
+            include: { articolStoc: true },
+          },
+          vehicul: true,
+        },
+      });
+
+      await tx.comandaLucru.deleteMany({
+        where: { id: { in: uniqueSourceIds } },
+      });
+
+      const vehLabel =
+        freshTarget.vehicul?.numarInmatriculare ||
+        freshTarget.vehicul?.numarIntern ||
+        freshTarget.vehiculId;
+
+      await tx.auditLog.create({
+        data: {
+          userNume: 'Atelier / Sistem',
+          userRol: 'OPERATOR',
+          actiune: 'UNIRE_COMENZI_LUCRU',
+          modul: 'MENTENANTA',
+          entitateTip: 'ComandaLucru',
+          entitateId: targetId,
+          detalii: `Au fost unite ${freshSources.length} comenzi (${mergedNumbersList}) în comanda ${freshTarget.numarComanda} (${vehLabel}). Total poziții: ${updatedTarget.elementeComanda.length}.`,
+        },
+      });
+
+      return updatedTarget;
+    });
+
+    return {
+      mesaj: `Comenzile ${mergedNumbersList} au fost unite cu succes în ${freshTarget.numarComanda}!`,
+      comanda: mergedComanda,
+      numarComenziAbsorbite: freshSources.length,
+    };
+  }
+
+  // ==========================================
   // RAPORT CENTRALIZAT COSTURI, REPARAȚII & CONSUMABILE
   // ==========================================
   async getRaportCosturiSiActivitate(query: {

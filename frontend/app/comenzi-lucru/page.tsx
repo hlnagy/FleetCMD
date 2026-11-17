@@ -7,7 +7,7 @@ import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
   Unlock, RotateCcw, Calendar, Truck, Loader2, Package, Minus, AlertCircle, Info,
-  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2, Building2, ChevronDown, ChevronUp
+  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2, Building2, ChevronDown, ChevronUp, GitMerge
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import DraggableModal from '@/components/DraggableModal';
@@ -195,6 +195,14 @@ export default function ComenziLucruPage() {
   const [quickPretUnitar, setQuickPretUnitar] = useState<number>(0);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [isSavingAndFinalizing, setIsSavingAndFinalizing] = useState(false);
+
+  // Merge (Unire / Comasare Comenzi de Lucru pe același vehicul)
+  const [selectedMergeIds, setSelectedMergeIds] = useState<string[]>([]);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeModalVehiculId, setMergeModalVehiculId] = useState<string>('');
+  const [mergeTargetId, setMergeTargetId] = useState<string>('');
+  const [mergeObservatii, setMergeObservatii] = useState<string>('');
+  const [isMerging, setIsMerging] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -697,6 +705,205 @@ export default function ComenziLucruPage() {
       }
     } catch (e) {
       alert('Eroare la devalidarea comandei.');
+    }
+  };
+
+  // ─── LOGICĂ UNIRE / COMASARE COMENZI DE LUCRU (ACELAȘI VEHICUL) ───
+  const comenziById = new Map(comenzi.map((c: any) => [c.id, c]));
+  const activeSelectedMergeIds = selectedMergeIds.filter((id) => {
+    const c = comenziById.get(id);
+    return c && c.stare !== 'ANULAT';
+  });
+  const activeMergeVehiculId =
+    activeSelectedMergeIds.length > 0
+      ? comenziById.get(activeSelectedMergeIds[0])?.vehiculId || ''
+      : '';
+
+  const mergeableVehicleGroups = (() => {
+    const groups = new Map<
+      string,
+      { vehiculId: string; code: string; plate: string; orders: any[] }
+    >();
+    for (const c of comenzi) {
+      if (!c?.vehiculId || c.stare === 'ANULAT') continue;
+      if (!groups.has(c.vehiculId)) {
+        groups.set(c.vehiculId, {
+          vehiculId: c.vehiculId,
+          code: c.vehiculNumarIntern || c.vehiculInmatriculare || 'Utilaj',
+          plate: c.vehiculInmatriculare || '',
+          orders: [],
+        });
+      }
+      groups.get(c.vehiculId)!.orders.push(c);
+    }
+    return Array.from(groups.values())
+      .filter((g) => g.orders.length >= 2)
+      .sort((a, b) => {
+        if (b.orders.length !== a.orders.length) return b.orders.length - a.orders.length;
+        return a.code.localeCompare(b.code, undefined, { numeric: true });
+      });
+  })();
+
+  const getEligibleMergeTargets = (ordersList: any[]) => {
+    const hasFinalized = ordersList.some((o) => o.stare === 'FINALIZAT');
+    return hasFinalized ? ordersList.filter((o) => o.stare === 'FINALIZAT') : ordersList;
+  };
+
+  const resolveDefaultMergeTargetId = (ordersList: any[], preferredId?: string) => {
+    const eligible = getEligibleMergeTargets(ordersList);
+    if (eligible.length === 0) return '';
+    if (preferredId && eligible.some((o) => o.id === preferredId)) return preferredId;
+    const sorted = [...eligible].sort((a, b) => {
+      const lenDiff = (b.elementeComanda?.length || 0) - (a.elementeComanda?.length || 0);
+      if (lenDiff !== 0) return lenDiff;
+      return String(a.numarComanda || '').localeCompare(String(b.numarComanda || ''), undefined, { numeric: true });
+    });
+    return sorted[0]?.id || '';
+  };
+
+  const buildDefaultMergeObservatii = (ordersList: any[], targetId: string) => {
+    const target = ordersList.find((o) => o.id === targetId);
+    const sources = ordersList
+      .filter((o) => o.id !== targetId)
+      .sort((a, b) => String(a.numarComanda || '').localeCompare(String(b.numarComanda || ''), undefined, { numeric: true }));
+    if (!target || sources.length === 0) return '';
+    const ordered = [target, ...sources];
+    const seen = new Set<string>();
+    const parts: string[] = [];
+    for (const o of ordered) {
+      const txt = String(o.observatii || '').trim();
+      if (txt && !seen.has(txt.toLowerCase())) {
+        seen.add(txt.toLowerCase());
+        parts.push(txt);
+      }
+    }
+    const tag = `[Comenzi unite în ${target.numarComanda}: ${sources.map((s) => s.numarComanda).join(', ')}]`;
+    if (!parts.some((p) => p.includes(tag))) parts.push(tag);
+    return parts.join(' | ');
+  };
+
+  const toggleMergeRowSelection = (cl: any) => {
+    if (!cl || cl.stare === 'ANULAT') return;
+    if (activeMergeVehiculId && cl.vehiculId !== activeMergeVehiculId) return;
+    setSelectedMergeIds((prev) => {
+      const validPrev = prev.filter((id) => {
+        const item = comenziById.get(id);
+        return item && item.stare !== 'ANULAT' && item.vehiculId === cl.vehiculId;
+      });
+      if (validPrev.includes(cl.id)) {
+        return validPrev.filter((id) => id !== cl.id);
+      }
+      return [...validPrev, cl.id];
+    });
+  };
+
+  const selectGroupForMergeModal = (vehId: string, preselectedIds?: string[]) => {
+    const vehOrders = comenzi
+      .filter((c: any) => c.vehiculId === vehId && c.stare !== 'ANULAT')
+      .sort((a: any, b: any) => String(a.numarComanda || '').localeCompare(String(b.numarComanda || ''), undefined, { numeric: true }));
+    const nextIds =
+      preselectedIds && preselectedIds.length > 0
+        ? vehOrders.filter((o: any) => preselectedIds.includes(o.id)).map((o: any) => o.id)
+        : vehOrders.map((o: any) => o.id);
+    const selectedObjs = vehOrders.filter((o: any) => nextIds.includes(o.id));
+    const nextTarget = resolveDefaultMergeTargetId(selectedObjs);
+    setMergeModalVehiculId(vehId);
+    setSelectedMergeIds(nextIds);
+    setMergeTargetId(nextTarget);
+    setMergeObservatii(buildDefaultMergeObservatii(selectedObjs, nextTarget));
+  };
+
+  const openMergeModal = () => {
+    if (activeSelectedMergeIds.length >= 2 && activeMergeVehiculId) {
+      selectGroupForMergeModal(activeMergeVehiculId, activeSelectedMergeIds);
+      setShowMergeModal(true);
+      return;
+    }
+    if (activeSelectedMergeIds.length === 1 && activeMergeVehiculId) {
+      selectGroupForMergeModal(activeMergeVehiculId, activeSelectedMergeIds);
+      setShowMergeModal(true);
+      return;
+    }
+    const candidateVehId =
+      vehiculFilter !== 'TOATE' && mergeableVehicleGroups.some((g) => g.vehiculId === vehiculFilter)
+        ? vehiculFilter
+        : mergeableVehicleGroups[0]?.vehiculId || '';
+    if (candidateVehId) {
+      selectGroupForMergeModal(candidateVehId);
+    } else {
+      setMergeModalVehiculId('');
+      setMergeTargetId('');
+      setMergeObservatii('');
+    }
+    setShowMergeModal(true);
+  };
+
+  const handleConfirmMergeComenzi = async () => {
+    const vehOrders = activeSelectedMergeIds
+      .map((id) => comenziById.get(id))
+      .filter((c: any) => Boolean(c) && c.stare !== 'ANULAT');
+    if (vehOrders.length < 2) {
+      alert('Selectați cel puțin 2 comenzi de lucru ale aceluiași vehicul pentru unire.');
+      return;
+    }
+    const baseVehId = vehOrders[0].vehiculId;
+    if (vehOrders.some((o: any) => o.vehiculId !== baseVehId)) {
+      alert('Eroare: Toate comenzile selectate trebuie să aparțină aceluiași vehicul!');
+      return;
+    }
+
+    const effectiveTargetId = resolveDefaultMergeTargetId(vehOrders, mergeTargetId);
+    const targetOrder = vehOrders.find((o: any) => o.id === effectiveTargetId);
+    const sourceOrders = vehOrders.filter((o: any) => o.id !== effectiveTargetId);
+    if (!targetOrder || sourceOrders.length === 0) return;
+
+    const hasMixedOpenAndFinalized =
+      targetOrder.stare === 'FINALIZAT' && sourceOrders.some((o: any) => o.stare !== 'FINALIZAT');
+    const sourceNums = sourceOrders.map((o: any) => o.numarComanda).join(', ');
+    const vehLabel = targetOrder.vehiculNumarIntern || targetOrder.vehiculInmatriculare || 'Vehicul';
+
+    const confirmed = await showConfirm(
+      `Unire ${vehOrders.length} Comenzi de Lucru (${vehLabel})`,
+      `Se vor comasa comenzile ${sourceNums} în comanda principală ${targetOrder.numarComanda}.\n\n` +
+        `• Toate pozițiile, piesele, facturile e-Factura asociate și mecanicii vor fi mutați pe ${targetOrder.numarComanda}.\n` +
+        `• Comenzile absorbite (${sourceNums}) vor fi eliminate ca duplicat.\n` +
+        (hasMixedOpenAndFinalized
+          ? `• ATENȚIE FIFO: Comenzile deschise/devalidate vor fi finalizate FIFO automat înainte de comasare.\n`
+          : '') +
+        `\nContinuați unirea?`,
+      `Da, unește în ${targetOrder.numarComanda}`,
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    setIsMerging(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetId: effectiveTargetId,
+          sourceIds: sourceOrders.map((o: any) => o.id),
+          observatii: mergeObservatii.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShowMergeModal(false);
+        setSelectedMergeIds([]);
+        setMergeModalVehiculId('');
+        setMergeTargetId('');
+        setMergeObservatii('');
+        await fetchData();
+        alert(data.mesaj || `Comenzile au fost unite cu succes în ${targetOrder.numarComanda}!`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Nu s-a putut efectua unirea: ${err.message || 'Verificați datele.'}`);
+      }
+    } catch (e: any) {
+      alert(`Eroare la unirea comenzilor: ${e.message || e}`);
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -1253,19 +1460,40 @@ export default function ComenziLucruPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setValoareContorExecutie('0');
-            setShowAddModal(true);
-            setVehiculSearchQuery('');
-            setVehiculCategoryFilter('TOATE');
-            setIsVehiculSearchOpen(false);
-          }}
-          className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Deschide Comandă de Lucru Nouă</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => openMergeModal()}
+            title="Unește mai multe comenzi de lucru ale aceluiași vehicul într-o singură comandă"
+            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-xl bg-white hover:bg-morning-100 border border-morning-300 text-sapphire-900 text-xs font-bold shadow-xs transition"
+          >
+            <GitMerge className="w-4 h-4 text-sapphire-600" />
+            <span>
+              {activeSelectedMergeIds.length >= 2
+                ? `Unește Selectate (${activeSelectedMergeIds.length})`
+                : 'Unește Comenzi'}
+            </span>
+            {activeSelectedMergeIds.length === 0 && mergeableVehicleGroups.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-sapphire-100 text-sapphire-700 text-[10px] font-extrabold font-mono">
+                {mergeableVehicleGroups.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              setValoareContorExecutie('0');
+              setShowAddModal(true);
+              setVehiculSearchQuery('');
+              setVehiculCategoryFilter('TOATE');
+              setIsVehiculSearchOpen(false);
+            }}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Deschide Comandă de Lucru Nouă</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI STATUS COMENZI */}
@@ -1453,73 +1681,191 @@ export default function ComenziLucruPage() {
           );
         })()}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 min-w-[1100px]">
-            <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
-              <tr>
-                <th className="p-3">Număr Comandă</th>
-                <th className="p-3">Utilaj Greu</th>
-                <th className="p-3">Mecanici Responsabili</th>
-                <th className="p-3">Dată Deschidere / Finalizare</th>
-                <th className="p-3">Elemente & Piese Consumate</th>
-                <th className="p-3">Stare Comandă</th>
-                <th className="p-3 font-mono text-right">Valoare Totală</th>
-                <th className="p-3 text-right whitespace-nowrap min-w-[280px]">Acțiuni Management</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-morning-200">
-              {filteredComenzi.map((cl) => {
-                const totalCost = cl.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0;
-                const esteInLucru = cl.stare === 'IN_LUCRU' || cl.stare === 'DEVALIDAT';
-                const esteFinalizat = cl.stare === 'FINALIZAT';
-                const vehiculMarcaModel = [cl.vehiculMarca, cl.vehiculModel]
-                  .filter((v) => v && !/^[-–—\s]+$/.test(String(v).trim()) && String(v).trim().toUpperCase() !== 'N/A')
-                  .join(' ');
+        {(() => {
+          const headerTargetVehId =
+            activeMergeVehiculId || (vehiculFilter !== 'TOATE' ? vehiculFilter : '');
+          const headerCandidateOrders = headerTargetVehId
+            ? filteredComenzi.filter(
+                (cl: any) => cl.vehiculId === headerTargetVehId && cl.stare !== 'ANULAT'
+              )
+            : [];
+          const areAllHeaderSelected =
+            headerCandidateOrders.length > 0 &&
+            headerCandidateOrders.every((cl: any) => activeSelectedMergeIds.includes(cl.id));
 
-                const elements: any[] = cl.elementeComanda || [];
-                const canCollapse = elements.length > COLLAPSE_ELEMENTS_THRESHOLD;
-                const isExpanded = !canCollapse || expandedOrderIds.includes(cl.id);
+          const activeVehOrdersAll = activeMergeVehiculId
+            ? comenzi.filter((c: any) => c.vehiculId === activeMergeVehiculId && c.stare !== 'ANULAT')
+            : [];
+          const activeVehObj = activeSelectedMergeIds.length > 0 ? comenziById.get(activeSelectedMergeIds[0]) : null;
+          const activeVehDisplay = activeVehObj
+            ? activeVehObj.vehiculNumarIntern || activeVehObj.vehiculInmatriculare || 'Vehicul'
+            : '';
+          const selectedNumsLabel = activeSelectedMergeIds
+            .map((id) => comenziById.get(id)?.numarComanda)
+            .filter(Boolean)
+            .join(', ');
 
-                const activeSearch = searchQuery.trim().toLowerCase();
-                let visibleElements = elements;
-                let searchMatchesInHidden = 0;
+          return (
+            <>
+              {activeSelectedMergeIds.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-sapphire-50 border border-sapphire-200 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-sapphire-600 text-white font-bold">
+                      <GitMerge className="w-3.5 h-3.5" />
+                      <span>{activeSelectedMergeIds.length} selectate</span>
+                    </span>
+                    <span className="font-bold text-sapphire-900">
+                      Utilaj: {activeVehDisplay}
+                    </span>
+                    <span className="text-sage-700 font-mono text-[11px] truncate max-w-md" title={selectedNumsLabel}>
+                      ({selectedNumsLabel})
+                    </span>
+                    {activeVehOrdersAll.length > activeSelectedMergeIds.length && (
+                      <button
+                        type="button"
+                        onClick={() => selectGroupForMergeModal(activeMergeVehiculId)}
+                        className="px-2 py-0.5 rounded-lg bg-white hover:bg-morning-100 border border-sapphire-200 text-sapphire-700 text-[11px] font-bold transition"
+                      >
+                        + Selectează toate pentru {activeVehDisplay} ({activeVehOrdersAll.length})
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      disabled={activeSelectedMergeIds.length < 2}
+                      onClick={() => openMergeModal()}
+                      className="px-3.5 py-1.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 disabled:opacity-45 disabled:cursor-not-allowed text-white font-bold flex items-center space-x-1.5 shadow-xs transition"
+                    >
+                      <GitMerge className="w-3.5 h-3.5" />
+                      <span>
+                        {activeSelectedMergeIds.length >= 2
+                          ? `Unește (${activeSelectedMergeIds.length})`
+                          : 'Bifați minim 2'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMergeIds([])}
+                      className="px-2.5 py-1.5 rounded-xl bg-morning-200 hover:bg-morning-300 text-slate-700 font-semibold flex items-center space-x-1 transition"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Anulează</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                if (canCollapse && !isExpanded) {
-                  if (activeSearch) {
-                    const matched = elements.filter((el: any) => {
-                      const furn = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor || '';
-                      const fact = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura || '';
-                      return (
-                        (el.descriere || '').toLowerCase().includes(activeSearch) ||
-                        furn.toLowerCase().includes(activeSearch) ||
-                        fact.toLowerCase().includes(activeSearch)
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-700 min-w-[1140px]">
+                  <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
+                    <tr>
+                      <th className="p-3 w-10 text-center" title={headerTargetVehId ? 'Selectează toate comenzile acestui utilaj din tabel' : 'Bifați prima comandă sau filtrați un utilaj'}>
+                        <input
+                          type="checkbox"
+                          checked={areAllHeaderSelected}
+                          disabled={headerCandidateOrders.length === 0}
+                          onChange={() => {
+                            if (headerCandidateOrders.length === 0) return;
+                            if (areAllHeaderSelected) {
+                              const idsToRemove = new Set(headerCandidateOrders.map((c: any) => c.id));
+                              setSelectedMergeIds((prev) => prev.filter((id) => !idsToRemove.has(id)));
+                            } else {
+                              setSelectedMergeIds(headerCandidateOrders.map((c: any) => c.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded accent-sapphire-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                      </th>
+                      <th className="p-3">Număr Comandă</th>
+                      <th className="p-3">Utilaj Greu</th>
+                      <th className="p-3">Mecanici Responsabili</th>
+                      <th className="p-3">Dată Deschidere / Finalizare</th>
+                      <th className="p-3">Elemente & Piese Consumate</th>
+                      <th className="p-3">Stare Comandă</th>
+                      <th className="p-3 font-mono text-right">Valoare Totală</th>
+                      <th className="p-3 text-right whitespace-nowrap min-w-[280px]">Acțiuni Management</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200">
+                    {filteredComenzi.map((cl) => {
+                      const isMergeCanceled = cl.stare === 'ANULAT';
+                      const isMergeLockedOtherVehicle = Boolean(
+                        activeMergeVehiculId && cl.vehiculId !== activeMergeVehiculId
                       );
-                    });
-                    if (matched.length > 0) {
-                      const nonMatched = elements.filter((el: any) => !matched.includes(el));
-                      visibleElements = [...matched, ...nonMatched].slice(0, COLLAPSED_PREVIEW_COUNT);
-                      searchMatchesInHidden = Math.max(0, matched.length - COLLAPSED_PREVIEW_COUNT);
-                    } else {
-                      visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
-                    }
-                  } else {
-                    visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
-                  }
-                }
+                      const isMergeSelected = activeSelectedMergeIds.includes(cl.id);
+                      const mergeCheckboxDisabled = isMergeCanceled || isMergeLockedOtherVehicle;
+                      const mergeTooltip = isMergeCanceled
+                        ? 'Comenzile anulate nu pot fi unite'
+                        : isMergeLockedOtherVehicle
+                        ? 'Puteți uni doar comenzi ale aceluiași vehicul'
+                        : 'Selectează pentru unirea comenzilor aceluiași vehicul';
+                      const totalCost = cl.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0;
+                      const esteInLucru = cl.stare === 'IN_LUCRU' || cl.stare === 'DEVALIDAT';
+                      const esteFinalizat = cl.stare === 'FINALIZAT';
+                      const vehiculMarcaModel = [cl.vehiculMarca, cl.vehiculModel]
+                        .filter((v) => v && !/^[-–—\s]+$/.test(String(v).trim()) && String(v).trim().toUpperCase() !== 'N/A')
+                        .join(' ');
 
-                const hiddenCount = elements.length - visibleElements.length;
+                      const elements: any[] = cl.elementeComanda || [];
+                      const canCollapse = elements.length > COLLAPSE_ELEMENTS_THRESHOLD;
+                      const isExpanded = !canCollapse || expandedOrderIds.includes(cl.id);
 
-                return (
-                  <tr
-                    key={cl.id}
-                    className={`[&>td]:align-top hover:bg-morning-50 transition ${
-                      cl.stare === 'DEVALIDAT' ? 'bg-roseash-50/40' : esteInLucru ? 'bg-periwinkle-50/50' : ''
-                    }`}
-                  >
-                    <td className="p-3 font-extrabold text-sapphire-900 font-mono">
-                      {cl.numarComanda}
-                      {cl.observatii && <div className="text-[10px] text-sage-600 font-normal truncate max-w-xs mt-0.5">{cl.observatii}</div>}
-                    </td>
+                      const activeSearch = searchQuery.trim().toLowerCase();
+                      let visibleElements = elements;
+                      let searchMatchesInHidden = 0;
+
+                      if (canCollapse && !isExpanded) {
+                        if (activeSearch) {
+                          const matched = elements.filter((el: any) => {
+                            const furn = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor || '';
+                            const fact = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura || '';
+                            return (
+                              (el.descriere || '').toLowerCase().includes(activeSearch) ||
+                              furn.toLowerCase().includes(activeSearch) ||
+                              fact.toLowerCase().includes(activeSearch)
+                            );
+                          });
+                          if (matched.length > 0) {
+                            const nonMatched = elements.filter((el: any) => !matched.includes(el));
+                            visibleElements = [...matched, ...nonMatched].slice(0, COLLAPSED_PREVIEW_COUNT);
+                            searchMatchesInHidden = Math.max(0, matched.length - COLLAPSED_PREVIEW_COUNT);
+                          } else {
+                            visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
+                          }
+                        } else {
+                          visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
+                        }
+                      }
+
+                      const hiddenCount = elements.length - visibleElements.length;
+
+                      return (
+                        <tr
+                          key={cl.id}
+                          className={`[&>td]:align-top hover:bg-morning-50 transition ${
+                            isMergeSelected
+                              ? 'bg-sapphire-50'
+                              : cl.stare === 'DEVALIDAT'
+                              ? 'bg-roseash-50/40'
+                              : esteInLucru
+                              ? 'bg-periwinkle-50/50'
+                              : ''
+                          }`}
+                        >
+                          <td className="p-3 text-center pt-3.5" title={mergeTooltip}>
+                            <input
+                              type="checkbox"
+                              checked={isMergeSelected}
+                              disabled={mergeCheckboxDisabled}
+                              onChange={() => toggleMergeRowSelection(cl)}
+                              className="w-4 h-4 rounded accent-sapphire-600 cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                            />
+                          </td>
+                          <td className="p-3 font-extrabold text-sapphire-900 font-mono">
+                            {cl.numarComanda}
+                            {cl.observatii && <div className="text-[10px] text-sage-600 font-normal truncate max-w-xs mt-0.5">{cl.observatii}</div>}
+                          </td>
 
                     <td className="p-3 font-bold text-sapphire-700">
                       {cl.vehiculNumarIntern}
@@ -1768,6 +2114,9 @@ export default function ComenziLucruPage() {
             </tbody>
           </table>
         </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* ─── MODAL EDITARE COMANDĂ DE LUCRU (MODERN WORKSHOP DEVIZ EDITOR) ─── */}
@@ -3256,6 +3605,393 @@ export default function ComenziLucruPage() {
               <button type="submit" className="px-4 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Mecanic</button>
             </div>
           </form>
+        </DraggableModal>
+      )}
+
+      {/* ─── MODAL UNIRE / COMASARE COMENZI DE LUCRU ─── */}
+      {showMergeModal && (
+        <DraggableModal
+          isOpen={showMergeModal}
+          onClose={() => {
+            if (!isMerging) setShowMergeModal(false);
+          }}
+          defaultWidth={900}
+          defaultHeight={720}
+          minWidth={520}
+          minHeight={420}
+          title="Unire (Comasare) Comenzi de Lucru"
+          icon={<GitMerge className="w-5 h-5 text-sapphire-600" />}
+          bodyClassName="p-5 overflow-y-auto"
+        >
+          {(() => {
+            const modalVehOrders = mergeModalVehiculId
+              ? comenzi
+                  .filter((c: any) => c.vehiculId === mergeModalVehiculId && c.stare !== 'ANULAT')
+                  .sort((a: any, b: any) =>
+                    String(a.numarComanda || '').localeCompare(String(b.numarComanda || ''), undefined, {
+                      numeric: true,
+                    })
+                  )
+              : [];
+
+            const modalSelectedOrders = modalVehOrders.filter((o: any) =>
+              activeSelectedMergeIds.includes(o.id)
+            );
+            const effectiveTargetId = resolveDefaultMergeTargetId(modalSelectedOrders, mergeTargetId);
+            const effectiveTargetObj = modalSelectedOrders.find((o: any) => o.id === effectiveTargetId);
+            const hasFinalizedInSelection = modalSelectedOrders.some((o: any) => o.stare === 'FINALIZAT');
+            const hasOpenInSelection = modalSelectedOrders.some((o: any) => o.stare !== 'FINALIZAT');
+            const isMixedSelection = hasFinalizedInSelection && hasOpenInSelection;
+
+            const mergedItemsCount = modalSelectedOrders.reduce(
+              (acc: number, o: any) => acc + (o.elementeComanda?.length || 0),
+              0
+            );
+            const mergedTotalValue = modalSelectedOrders.reduce(
+              (acc: number, o: any) =>
+                acc +
+                (o.elementeComanda?.reduce((s: number, el: any) => s + Number(el.costTotal || 0), 0) || 0),
+              0
+            );
+            const mergedMecSet = new Map<string, string>();
+            modalSelectedOrders.forEach((o: any) => {
+              String(o.mecanicResponsabil || '')
+                .split(/[,;]+/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .forEach((m) => {
+                  if (!mergedMecSet.has(m.toLowerCase())) mergedMecSet.set(m.toLowerCase(), m);
+                });
+            });
+            const mergedMechanicsText = Array.from(mergedMecSet.values()).join(', ') || '—';
+
+            const activeGroupVehInfo = modalVehOrders[0];
+            const activeVehTitle = activeGroupVehInfo
+              ? `${activeGroupVehInfo.vehiculNumarIntern || activeGroupVehInfo.vehiculInmatriculare}${
+                  activeGroupVehInfo.vehiculInmatriculare &&
+                  activeGroupVehInfo.vehiculNumarIntern !== activeGroupVehInfo.vehiculInmatriculare
+                    ? ` (${activeGroupVehInfo.vehiculInmatriculare})`
+                    : ''
+                }`
+              : '';
+
+            const toggleModalOrderCheck = (orderId: string) => {
+              const nextIds = activeSelectedMergeIds.includes(orderId)
+                ? activeSelectedMergeIds.filter((id) => id !== orderId)
+                : [...activeSelectedMergeIds.filter((id) => modalVehOrders.some((vo: any) => vo.id === id)), orderId];
+              const nextObjs = modalVehOrders.filter((o: any) => nextIds.includes(o.id));
+              const nextTarget = resolveDefaultMergeTargetId(nextObjs, mergeTargetId);
+              setSelectedMergeIds(nextIds);
+              setMergeTargetId(nextTarget);
+              setMergeObservatii(buildDefaultMergeObservatii(nextObjs, nextTarget));
+            };
+
+            return (
+              <div className="space-y-4 text-xs">
+                {/* REGULĂ DOMENIU */}
+                <div className="rounded-xl bg-morning-100 border border-morning-200 p-3 flex items-start space-x-2.5 text-slate-700">
+                  <Info className="w-4 h-4 text-sapphire-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-sapphire-900">
+                      Comasare comenzi multiple pentru același vehicul
+                    </p>
+                    <p className="text-[11px] text-sage-700">
+                      Se pot uni doar comenzi aparținând <strong>aceluiași vehicul / utilaj</strong> (neanulate). Toate piesele, manopera, facturile e-Factura și mecanicii se mută pe comanda principală aleasă.
+                    </p>
+                  </div>
+                </div>
+
+                {/* SELECTOR RAPID VEHICULE CU COMENZI MULTIPLE */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] uppercase tracking-wider font-extrabold text-sage-700">
+                      Vehicule cu comenzi multiple ({mergeableVehicleGroups.length})
+                    </label>
+                    {modalVehOrders.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => selectGroupForMergeModal(mergeModalVehiculId)}
+                        className="text-[11px] font-bold text-sapphire-600 hover:underline"
+                      >
+                        Selectează toate ({modalVehOrders.length}) pentru {activeVehTitle}
+                      </button>
+                    )}
+                  </div>
+
+                  {mergeableVehicleGroups.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1">
+                      {mergeableVehicleGroups.map((g) => {
+                        const isActiveGroup = g.vehiculId === mergeModalVehiculId;
+                        return (
+                          <button
+                            key={g.vehiculId}
+                            type="button"
+                            onClick={() => selectGroupForMergeModal(g.vehiculId)}
+                            className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-bold flex items-center space-x-1.5 transition ${
+                              isActiveGroup
+                                ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-xs'
+                                : 'bg-white hover:bg-morning-100 text-sapphire-900 border-morning-300'
+                            }`}
+                          >
+                            <Truck className="w-3.5 h-3.5 opacity-80" />
+                            <span>{g.code}</span>
+                            {g.plate && g.plate !== g.code && (
+                              <span className="opacity-75 font-normal">({g.plate})</span>
+                            )}
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
+                                isActiveGroup
+                                  ? 'bg-black/25 text-white'
+                                  : 'bg-sapphire-100 text-sapphire-700'
+                              }`}
+                            >
+                              {g.orders.length}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-morning-200 bg-morning-50 p-4 text-center text-sage-700">
+                      Nu există niciun vehicul cu cel puțin 2 comenzi de lucru active/finalizate disponibile pentru unire.
+                    </div>
+                  )}
+                </div>
+
+                {/* AVERTIZARE STARE MIXTĂ (FIFO) */}
+                {isMixedSelection && (
+                  <div className="rounded-xl bg-periwinkle-100 border border-periwinkle-300 p-3 flex items-start space-x-2 text-periwinkle-700 text-[11px]">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-extrabold">Selecție mixtă (Finalizate + Deschise):</span> Comenzile deschise vor fi finalizate automat (scădere stoc FIFO) înainte de absorbția în comanda <strong>FINALIZATĂ</strong> aleasă ca destinație. Comenzile nefinalizate nu pot absorbi comenzi deja finalizate.
+                    </div>
+                  </div>
+                )}
+
+                {mergeModalVehiculId && modalVehOrders.length < 2 && (
+                  <div className="rounded-xl border border-morning-200 bg-morning-50 p-4 text-center text-sage-700">
+                    Vehiculul <strong>{activeVehTitle || 'selectat'}</strong> are o singură comandă activă/finalizată. Alegeți un vehicul cu cel puțin 2 comenzi din lista de mai sus.
+                  </div>
+                )}
+
+                {/* LISTA COMENZI DE UNIT + ALEGERE DESTINAȚIE PRINCIPALĂ */}
+                {modalVehOrders.length >= 2 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase tracking-wider font-extrabold text-sage-700">
+                        Comenzi pentru {activeVehTitle} — bifați comenzile de unit și alegeți comanda principală
+                      </span>
+                      <span className="text-[11px] font-bold text-sapphire-700">
+                        {modalSelectedOrders.length} / {modalVehOrders.length} incluse
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {modalVehOrders.map((o: any) => {
+                        const isChecked = activeSelectedMergeIds.includes(o.id);
+                        const isTarget = isChecked && effectiveTargetId === o.id;
+                        const targetEligible =
+                          isChecked && (!hasFinalizedInSelection || o.stare === 'FINALIZAT');
+                        const orderTotal =
+                          o.elementeComanda?.reduce((s: number, el: any) => s + Number(el.costTotal || 0), 0) || 0;
+                        const elemPreview = (o.elementeComanda || [])
+                          .slice(0, 3)
+                          .map((el: any) => el.descriere)
+                          .filter(Boolean)
+                          .join(', ');
+                        const extraElems = Math.max(0, (o.elementeComanda?.length || 0) - 3);
+
+                        return (
+                          <div
+                            key={o.id}
+                            className={`rounded-xl border p-3 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              isTarget
+                                ? 'bg-sapphire-50 border-sapphire-400 ring-1 ring-sapphire-300'
+                                : isChecked
+                                ? 'bg-white border-morning-300'
+                                : 'bg-morning-50/70 border-morning-200 opacity-65'
+                            }`}
+                          >
+                            <div className="flex items-start space-x-3 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleModalOrderCheck(o.id)}
+                                className="w-4 h-4 mt-0.5 rounded accent-sapphire-600 cursor-pointer shrink-0"
+                              />
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono font-black text-sapphire-900">
+                                    {o.numarComanda}
+                                  </span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      o.stare === 'FINALIZAT'
+                                        ? 'bg-sapphire-50 text-sapphire-700 border-sapphire-200'
+                                        : o.stare === 'DEVALIDAT'
+                                        ? 'bg-roseash-100 text-terracotta-700 border-roseash-300'
+                                        : 'bg-periwinkle-100 text-periwinkle-700 border-periwinkle-300'
+                                    }`}
+                                  >
+                                    {o.stare === 'IN_LUCRU' ? 'ÎN LUCRU' : o.stare}
+                                  </span>
+                                  <span className="text-[11px] text-sage-600">
+                                    {new Date(o.dataDeschidere).toLocaleDateString('ro-RO')}
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-slate-700">
+                                    • {o.mecanicResponsabil || '—'}
+                                  </span>
+                                  <span className="text-[11px] font-mono font-bold text-sapphire-900">
+                                    • {o.elementeComanda?.length || 0} poz. ·{' '}
+                                    {orderTotal.toLocaleString('ro-RO', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}{' '}
+                                    RON
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-sage-700 truncate max-w-xl">
+                                  {elemPreview || o.observatii || 'Fără poziții în deviz'}
+                                  {extraElems > 0 ? ` (+${extraElems} altele)` : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            <label
+                              className={`shrink-0 inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition ${
+                                !isChecked
+                                  ? 'opacity-40 border-morning-200 text-sage-500 cursor-not-allowed'
+                                  : !targetEligible
+                                  ? 'opacity-50 border-morning-300 bg-morning-100 text-sage-600 cursor-not-allowed'
+                                  : isTarget
+                                  ? 'bg-sapphire-600 text-white border-sapphire-700 cursor-pointer'
+                                  : 'bg-morning-100 hover:bg-morning-200 text-sapphire-900 border-morning-300 cursor-pointer'
+                              }`}
+                              title={
+                                !isChecked
+                                  ? 'Bifați mai întâi comanda'
+                                  : !targetEligible
+                                  ? 'O comandă deschisă nu poate absorbi comenzi finalizate'
+                                  : 'Păstrează acest număr CL ca destinație principală'
+                              }
+                            >
+                              <input
+                                type="radio"
+                                name="mergeTargetOrder"
+                                checked={isTarget}
+                                disabled={!targetEligible}
+                                onChange={() => {
+                                  setMergeTargetId(o.id);
+                                  setMergeObservatii(buildDefaultMergeObservatii(modalSelectedOrders, o.id));
+                                }}
+                                className="accent-white cursor-pointer disabled:cursor-not-allowed"
+                              />
+                              <span>{isTarget ? 'Destinație (se păstrează)' : 'Principală'}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* PREVIEW REZULTAT COMASARE */}
+                {modalSelectedOrders.length >= 2 && effectiveTargetObj && (
+                  <div className="rounded-xl bg-sapphire-50 border border-sapphire-200 p-3.5 space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-sage-600">Comandă Păstrată</p>
+                        <p className="font-mono font-black text-sapphire-900 text-sm">
+                          {effectiveTargetObj.numarComanda}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-sage-600">Poziții Deviz Unite</p>
+                        <p className="font-mono font-black text-sapphire-900 text-sm">
+                          {mergedItemsCount} elemente
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-sage-600">Mecanici Reuniți</p>
+                        <p className="font-bold text-sapphire-900 text-xs truncate" title={mergedMechanicsText}>
+                          {mergedMechanicsText}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-sage-600">Valoare Totală</p>
+                        <p className="font-mono font-black text-sapphire-900 text-sm">
+                          {mergedTotalValue.toLocaleString('ro-RO', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{' '}
+                          RON
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-sapphire-900">
+                          Descriere / Observații Comasate:
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMergeObservatii(
+                              buildDefaultMergeObservatii(modalSelectedOrders, effectiveTargetObj.id)
+                            )
+                          }
+                          className="text-[10px] font-bold text-sapphire-700 hover:underline"
+                        >
+                          Regenerează automat
+                        </button>
+                      </div>
+                      <textarea
+                        rows={2}
+                        value={mergeObservatii}
+                        onChange={(e) => setMergeObservatii(e.target.value)}
+                        placeholder="Observații pentru comanda rezultată..."
+                        className="w-full bg-white border border-morning-300 rounded-xl p-2 text-xs text-sapphire-900"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end items-center space-x-3 pt-2 border-t border-morning-200">
+                  <button
+                    type="button"
+                    disabled={isMerging}
+                    onClick={() => setShowMergeModal(false)}
+                    className="px-4 py-2 rounded-xl bg-morning-200 hover:bg-morning-300 text-slate-700 font-semibold transition"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isMerging || modalSelectedOrders.length < 2 || !effectiveTargetObj}
+                    onClick={handleConfirmMergeComenzi}
+                    className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 disabled:opacity-45 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-sapphire-600/20 flex items-center space-x-2 transition"
+                  >
+                    {isMerging ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Se unesc comenzile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <GitMerge className="w-4 h-4" />
+                        <span>
+                          {modalSelectedOrders.length >= 2 && effectiveTargetObj
+                            ? `Unește ${modalSelectedOrders.length} Comenzi în ${effectiveTargetObj.numarComanda}`
+                            : 'Selectați minim 2 comenzi'}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </DraggableModal>
       )}
     </div>
