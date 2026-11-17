@@ -73,7 +73,7 @@ export default function TabBar() {
               className={`group flex items-center space-x-2 px-3 py-1.5 rounded-t-xl text-xs font-bold transition-all cursor-pointer shrink-0 border border-b-0 ${
                 isActive
                   ? 'bg-white dark:bg-slate-800 text-sapphire-900 dark:text-white border-morning-300 dark:border-slate-700 shadow-xs font-black relative top-[1px]'
-                  : 'bg-morning-100/70 dark:bg-slate-950/50 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white/80 dark:hover:bg-slate-800/80 hover:text-slate-900'
+                  : 'bg-morning-100/70 dark:bg-slate-950/50 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white/80 dark:hover:bg-slate-800/80 hover:text-sapphire-900 dark:hover:text-white'
               }`}
               title={isDashboard ? 'Dashboard (Panou Principal Permanent)' : `${tab.title} (Clic mijloc pentru închidere)`}
             >

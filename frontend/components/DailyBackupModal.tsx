@@ -296,7 +296,7 @@ export default function DailyBackupModal() {
                 </span>
               </div>
 
-              <p className="text-emerald-900/80 leading-relaxed">
+              <p className="text-emerald-900 opacity-85 leading-relaxed">
                 Pentru siguranță maximă (copie externă pe calculatorul administratorului), salvează copia de astăzi pe PC-ul tău.
               </p>
 

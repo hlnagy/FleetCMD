@@ -307,7 +307,7 @@ export default function DraggableModal({
             onMouseDown={handleDragStart}
             onTouchStart={handleTouchStart}
             onDoubleClick={allowMaximize ? toggleMaximize : undefined}
-            className={`flex-shrink-0 px-5 py-3.5 bg-gradient-to-r from-morning-50 via-white to-morning-50 border-b border-morning-200 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing select-none ${headerClassName}`}
+            className={`flex-shrink-0 px-5 py-3.5 bg-gradient-to-r from-morning-50 via-morning-50 to-morning-100 border-b border-morning-200 flex items-center justify-between gap-3 cursor-grab active:cursor-grabbing select-none ${headerClassName}`}
             title="Trage de bară pentru a muta fereastra (Dublu-click pentru mărire)"
           >
             {/* Title & Icon & Badge */}

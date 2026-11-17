@@ -397,7 +397,7 @@ export default function TopNavigation() {
                     </div>
                     <button
                       onClick={() => setIsNotificationsOpen(false)}
-                      className="text-sage-400 hover:text-slate-900 text-xs"
+                      className="text-sage-400 hover:text-sapphire-900 dark:hover:text-white text-xs"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>

@@ -686,7 +686,7 @@ export default function MasterDashboardPage() {
       {/* 4. SMART ALERTS RADAR: CRITICAL WARNINGS & ACTIONS */}
       {/* ========================================================================= */}
       {widgetConfig.showAlertsCenter && alerteCentralizate.length > 0 && (
-        <div className="pleasant-card p-5 rounded-3xl border-2 border-roseash-300/80 bg-gradient-to-br from-roseash-50/50 to-white space-y-3">
+        <div className="pleasant-card p-5 rounded-3xl border-2 border-roseash-300/80 bg-gradient-to-br from-roseash-50/50 to-morning-50 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-terracotta-500 text-white flex items-center justify-center shadow-sm">

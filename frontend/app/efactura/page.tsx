@@ -4668,7 +4668,7 @@ function EFacturaContent() {
 
               {/* SECȚIUNE CONVERSIE AMBALAJ ÎN LITRI / KG (PENTRU ULEIURI, ANTIGEL, LUBRIFIANȚI) */}
               {(/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) || detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura).detectedVolume !== null) && (
-                <div className="p-3.5 bg-gradient-to-br from-amber-500/10 via-emerald-500/5 to-white border-2 border-amber-300 rounded-2xl space-y-3 shadow-xs">
+                <div className="p-3.5 bg-gradient-to-br from-amber-500/10 via-emerald-500/5 to-morning-50 border-2 border-amber-300 rounded-2xl space-y-3 shadow-xs">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center space-x-2">
                       <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
@@ -4842,7 +4842,7 @@ function EFacturaContent() {
 
               {/* SECȚIUNE SERII INDIVIDUALE DACĂ ESTE ACTIVAT IMPORTUL SERIALIZAT */}
               {isImportSerializat ? (
-                <div className="p-3.5 bg-gradient-to-br from-sapphire-50/90 via-morning-50 to-white border border-sapphire-300 rounded-2xl space-y-3">
+                <div className="p-3.5 bg-gradient-to-br from-sapphire-50/90 via-morning-50 to-morning-50 border border-sapphire-300 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Tag className="w-4 h-4 text-sapphire-600" />

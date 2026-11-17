@@ -4102,7 +4102,7 @@ function SetariContent() {
           {auditViewMode === 'table' ? (
             <div className="space-y-2">
               {/* GLISOR ORIZONTAL PENTRU TABEL */}
-              <div className="p-3 bg-gradient-to-r from-sapphire-50 via-white to-sapphire-50 rounded-2xl border border-sapphire-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="p-3 bg-gradient-to-r from-sapphire-50 via-morning-50 to-sapphire-50 rounded-2xl border border-sapphire-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center space-x-2 text-xs text-sapphire-900 font-extrabold shrink-0">
                   <Sliders className="w-4 h-4 text-sapphire-600 shrink-0" />
                   <span>Glisor Orizontal (Derulare tabel):</span>
@@ -4460,9 +4460,9 @@ function SetariContent() {
                 </div>
 
                 {/* Previzualizare miniatură */}
-                <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200 space-y-1.5 pointer-events-none">
+                <div className="p-2.5 rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] space-y-1.5 pointer-events-none">
                   <div className="h-1.5 w-16 bg-slate-300 rounded" />
-                  <div className="h-3.5 w-full bg-white rounded shadow-2xs border border-slate-200" />
+                  <div className="h-3.5 w-full bg-[#FFFFFF] rounded shadow-2xs border border-[#E2E8F0]" />
                 </div>
               </div>
 
@@ -4633,7 +4633,7 @@ function SetariContent() {
                 </div>
 
                 {/* Previzualizare miniatură split */}
-                <div className="p-2.5 rounded-xl bg-gradient-to-r from-slate-200 to-[#0B131B] border border-slate-300 space-y-1.5 pointer-events-none">
+                <div className="p-2.5 rounded-xl bg-gradient-to-r from-slate-200 to-[#0B131B] border border-slate-300 space-y-1.5 pointer-events-none theme-preview-swatch">
                   <div className="h-1.5 w-16 bg-slate-400 rounded" />
                   <div className="h-3.5 w-full bg-gradient-to-r from-white to-[#111D28] rounded border border-slate-300" />
                 </div>
