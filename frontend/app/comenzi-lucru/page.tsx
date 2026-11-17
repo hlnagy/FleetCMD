@@ -675,6 +675,39 @@ export default function ComenziLucruPage() {
     }
   };
 
+  // Helper: cantitate deja alocată pe ciorna curentă a comenzii (nescăzută încă din DB)
+  const getDraftStockAllocation = (excludeIdx?: number): Map<string, number> => {
+    const map = new Map<string, number>();
+    editElemente.forEach((el, idx) => {
+      if (excludeIdx !== undefined && idx === excludeIdx) return;
+      if (el.pilonCost === 'PIESA_STOC' && el.articolStocId) {
+        map.set(el.articolStocId, (map.get(el.articolStocId) || 0) + (Number(el.cantitate) || 0));
+      }
+    });
+    return map;
+  };
+
+  const getRemainingStockForItem = (
+    item: any,
+    allocationMap: Map<string, number> = getDraftStockAllocation()
+  ): number => {
+    if (!item) return 0;
+    const allocated = allocationMap.get(item.id) || 0;
+    return Math.max(0, Number(item.stocCurent || 0) - allocated);
+  };
+
+  const selectQuickStockItem = (st: any) => {
+    const remaining = getRemainingStockForItem(st);
+    setQuickSelectedArticol(st);
+    setQuickDescriere(st.denumire);
+    setQuickPretUnitar(st.pretUnitar || 0);
+    setQuickSearchQuery(`${st.codArticol} — ${st.denumire}`);
+    if (remaining > 0 && Number(quickCantitate) > remaining) {
+      setQuickCantitate(remaining);
+    }
+    setIsSearchDropdownOpen(false);
+  };
+
   // Add Quick Element in Edit Modal
   const handleAddQuickElement = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -699,8 +732,12 @@ export default function ComenziLucruPage() {
         alert('Cantitatea trebuie să fie de minim 1!');
         return;
       }
-      if (Number(quickCantitate) > Number(quickSelectedArticol.stocCurent || 0)) {
-        alert(`Stoc Insuficient!\n\nArticolul "${quickSelectedArticol.denumire}" are doar ${quickSelectedArticol.stocCurent} ${quickSelectedArticol.unitateMasura || 'buc'} disponibile în stoc.`);
+      const remainingAvailable = getRemainingStockForItem(quickSelectedArticol);
+      if (Number(quickCantitate) > remainingAvailable) {
+        const allocatedInDraft = Number(quickSelectedArticol.stocCurent || 0) - remainingAvailable;
+        alert(
+          `Stoc Insuficient!\n\nArticolul "${quickSelectedArticol.denumire}" mai are doar ${remainingAvailable} ${quickSelectedArticol.unitateMasura || 'buc'} disponibile (${allocatedInDraft > 0 ? `stoc total ${quickSelectedArticol.stocCurent}, deja pe comandă ${allocatedInDraft}` : `stoc disponibil ${quickSelectedArticol.stocCurent}`}).`
+        );
         return;
       }
       setEditElemente([
@@ -781,19 +818,36 @@ export default function ComenziLucruPage() {
   };
 
   // Inline table updates
-  const handleUpdateEditElementQty = (idx: number, delta: number) => {
+  const setEditElementQty = (idx: number, nextQty: number, alertOnExceed = true) => {
     const updated = [...editElemente];
-    const current = Number(updated[idx].cantitate) || 1;
-    const next = Math.max(1, current + delta);
-    if (updated[idx].pilonCost === 'PIESA_STOC' && updated[idx].articolStocId) {
-      const item = stocuri.find((s) => s.id === updated[idx].articolStocId);
-      if (item && next > item.stocCurent) {
-        alert(`Atenție: Stocul maxim disponibil pentru "${item.denumire}" este ${item.stocCurent} ${item.unitateMasura || 'buc'}`);
-        return;
+    const row = updated[idx];
+    if (!row) return;
+    const current = Number(row.cantitate) || 0;
+    const next = Math.max(1, nextQty);
+    if (row.pilonCost === 'PIESA_STOC' && row.articolStocId && next > current) {
+      const item = stocuri.find((s) => s.id === row.articolStocId);
+      if (item) {
+        const maxForRow = getRemainingStockForItem(item, getDraftStockAllocation(idx));
+        if (next > maxForRow) {
+          if (alertOnExceed) {
+            alert(
+              `Atenție: Stocul maxim disponibil pentru "${item.denumire}" este ${item.stocCurent} ${item.unitateMasura || 'buc'} (disponibil pentru acest rând: ${maxForRow}).`
+            );
+            return;
+          }
+          updated[idx].cantitate = maxForRow > 0 ? maxForRow : current;
+          setEditElemente(updated);
+          return;
+        }
       }
     }
     updated[idx].cantitate = next;
     setEditElemente(updated);
+  };
+
+  const handleUpdateEditElementQty = (idx: number, delta: number) => {
+    const current = Number(editElemente[idx]?.cantitate) || 1;
+    setEditElementQty(idx, current + delta, true);
   };
 
   const handleUpdateEditElementPrice = (idx: number, price: number) => {
@@ -817,15 +871,14 @@ export default function ComenziLucruPage() {
   const handleSaveAndFinalize = async () => {
     if (!showEditModal) return;
 
-    for (const el of editElemente) {
-      if (el.pilonCost === 'PIESA_STOC' && el.articolStocId) {
-        const item = stocuri.find((s) => s.id === el.articolStocId);
-        if (item && Number(el.cantitate) > item.stocCurent) {
-          alert(
-            `Nu se poate finaliza comanda!\n\nPiesa "${item.denumire}" depășește stocul disponibil: solicitat ${el.cantitate}, disponibil în magazie ${item.stocCurent} ${item.unitateMasura || 'buc'}.`
-          );
-          return;
-        }
+    const draftAllocation = getDraftStockAllocation();
+    for (const [articolId, totalSolicitat] of Array.from(draftAllocation.entries())) {
+      const item = stocuri.find((s) => s.id === articolId);
+      if (item && totalSolicitat > Number(item.stocCurent || 0)) {
+        alert(
+          `Nu se poate finaliza comanda!\n\nPiesa "${item.denumire}" depășește stocul disponibil: solicitat cumulat ${totalSolicitat}, disponibil în magazie ${item.stocCurent} ${item.unitateMasura || 'buc'}.`
+        );
+        return;
       }
     }
 
@@ -935,29 +988,35 @@ export default function ComenziLucruPage() {
   const comenziInLucruCount = comenzi.filter((c) => c.stare === 'IN_LUCRU' || c.stare === 'DEVALIDAT').length;
   const comenziFinalizateCount = comenzi.filter((c) => c.stare === 'FINALIZAT').length;
 
-  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor (FĂRĂ ANVELOPE și doar cu stoc disponibil > 0)
+  // Calcul Categorii Magazie & Listă Piese Filtrate pentru Editor (FĂRĂ ANVELOPE și scăzând piesele deja adăugate pe ciornă)
+  const draftStockAllocation = getDraftStockAllocation();
+
   const availableStockCategories = [
     'TOATE',
     ...Array.from(
       new Set(
         stocuri
-          .filter((s: any) => Number(s.stocCurent || 0) > 0 && !isTireItem(s))
+          .filter((s: any) => getRemainingStockForItem(s, draftStockAllocation) > 0 && !isTireItem(s))
           .map((s: any) => s.categorie)
           .filter(Boolean)
       )
     ).filter((cat: any) => !isTireCategory(cat)),
   ];
 
+  const effectiveStockCategory = availableStockCategories.includes(quickSelectedCategory)
+    ? quickSelectedCategory
+    : 'TOATE';
+
   const filteredStockList = stocuri
     .filter((item: any) => {
       // Excludem complet anvelopele din lista pieselor de schimb în atelier
       if (isTireItem(item)) return false;
 
-      // Excludem complet articolele cu stoc epuizat (stoc <= 0)
-      if (Number(item.stocCurent || 0) <= 0) return false;
+      // Excludem articolele al căror stoc disponibil rămas (după scăderea ciornei curente) este <= 0
+      if (getRemainingStockForItem(item, draftStockAllocation) <= 0) return false;
 
-      if (quickSelectedCategory !== 'TOATE') {
-        if ((item.categorie || '').toLowerCase() !== quickSelectedCategory.toLowerCase()) {
+      if (effectiveStockCategory !== 'TOATE') {
+        if ((item.categorie || '').toLowerCase() !== effectiveStockCategory.toLowerCase()) {
           return false;
         }
       }
@@ -1609,25 +1668,6 @@ export default function ComenziLucruPage() {
                 </span>
               </div>
 
-              {/* Notificare Anvelope: Montarea se realizează exclusiv din Anvelope/Axe */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] bg-amber-50/90 border border-amber-200/90 rounded-xl px-3 py-1.5 text-amber-950 gap-1.5">
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-sm">🛞</span>
-                  <span>
-                    <strong>Gestiune Anvelope:</strong> Anvelopele <u>nu</u> se adaugă pe comanda de lucru, ci se montează exclusiv din meniul <strong>Anvelope / Axe</strong> (pe poziție exactă de axă, contor și adâncime profil).
-                  </span>
-                </div>
-                <a
-                  href="/anvelope"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-amber-800 hover:text-amber-950 hover:underline flex items-center space-x-1 whitespace-nowrap self-end sm:self-auto"
-                >
-                  <span>Harta Axe Anvelope</span>
-                  <span>↗</span>
-                </a>
-              </div>
-
               {/* TABS SURSĂ / PILON COST */}
               <div className="flex flex-wrap gap-1.5">
                 <button
@@ -1724,7 +1764,7 @@ export default function ComenziLucruPage() {
                         type="button"
                         onClick={() => setQuickSelectedCategory(cat)}
                         className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition ${
-                          quickSelectedCategory === cat
+                          effectiveStockCategory === cat
                             ? 'bg-sapphire-600 text-white shadow-2xs'
                             : 'bg-white text-slate-600 border border-morning-200 hover:bg-morning-200'
                         }`}
@@ -1762,12 +1802,7 @@ export default function ComenziLucruPage() {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 if (filteredStockList.length > 0) {
-                                  const topItem = filteredStockList[0];
-                                  setQuickSelectedArticol(topItem);
-                                  setQuickDescriere(topItem.denumire);
-                                  setQuickPretUnitar(topItem.pretUnitar || 0);
-                                  setQuickSearchQuery(`${topItem.codArticol} — ${topItem.denumire}`);
-                                  setIsSearchDropdownOpen(false);
+                                  selectQuickStockItem(filteredStockList[0]);
                                 }
                               }
                             }}
@@ -1798,18 +1833,13 @@ export default function ComenziLucruPage() {
                             <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-morning-200 rounded-2xl shadow-2xl max-h-72 overflow-y-auto divide-y divide-morning-100">
                               {filteredStockList.length > 0 ? (
                                 filteredStockList.slice(0, 30).map((st) => {
-                                  const inStock = Number(st.stocCurent || 0) > 0;
+                                  const remainingStock = getRemainingStockForItem(st, draftStockAllocation);
+                                  const inStock = remainingStock > 0;
                                   const isSelected = quickSelectedArticol?.id === st.id;
                                   return (
                                     <div
                                       key={st.id}
-                                      onClick={() => {
-                                        setQuickSelectedArticol(st);
-                                        setQuickDescriere(st.denumire);
-                                        setQuickPretUnitar(st.pretUnitar || 0);
-                                        setQuickSearchQuery(`${st.codArticol} — ${st.denumire}`);
-                                        setIsSearchDropdownOpen(false);
-                                      }}
+                                      onClick={() => selectQuickStockItem(st)}
                                       className={`p-2.5 cursor-pointer transition flex items-center justify-between hover:bg-sapphire-50/70 ${
                                         isSelected ? 'bg-sapphire-50 border-l-4 border-sapphire-500' : ''
                                       }`}
@@ -1840,7 +1870,7 @@ export default function ComenziLucruPage() {
                                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                               : 'bg-rose-50 text-rose-700 border border-rose-200'
                                           }`}>
-                                            {inStock ? `🟢 ${st.stocCurent} ${st.unitateMasura || 'buc'}` : '🔴 Epuizat (0)'}
+                                            {inStock ? `🟢 ${remainingStock} ${st.unitateMasura || 'buc'}` : '🔴 Epuizat (0)'}
                                           </span>
                                         </div>
                                         <div className="text-[11px] font-mono font-bold text-slate-700">
@@ -2070,11 +2100,7 @@ export default function ComenziLucruPage() {
                                     type="number"
                                     min="1"
                                     value={el.cantitate}
-                                    onChange={(e) => {
-                                      const updated = [...editElemente];
-                                      updated[idx].cantitate = Math.max(1, Number(e.target.value));
-                                      setEditElemente(updated);
-                                    }}
+                                    onChange={(e) => setEditElementQty(idx, Number(e.target.value), false)}
                                     className="w-12 text-center py-1 font-mono font-bold text-xs text-sapphire-900 focus:outline-none"
                                   />
                                   <button
