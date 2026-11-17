@@ -969,12 +969,12 @@ export default function AnvelopePage() {
                           {a.stare === 'IN_STOC' && (
                             <Link
                               href={
-                                a.depozitId
-                                  ? `/stocuri?tab=anvelope_stoc&depozitId=${encodeURIComponent(a.depozitId)}&serie=${encodeURIComponent(a.serieAnvelopa || '')}`
-                                  : `/stocuri?tab=anvelope_stoc&serie=${encodeURIComponent(a.serieAnvelopa || '')}`
+                                a.serieAnvelopa
+                                  ? `/stocuri?tab=anvelope_stoc&serie=${encodeURIComponent(a.serieAnvelopa)}`
+                                  : '/stocuri?tab=anvelope_stoc'
                               }
                               className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-950 border border-emerald-200 text-[11px] font-bold hover:underline transition"
-                              title={`Deschide depozitul ${a.depozit?.nume || a.depozitNume || 'Depozit Central'}`}
+                              title={`Deschide în Magazie Anvelope (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
                             >
                               <Building2 className="w-3 h-3 text-emerald-600" />
                               <span>{a.depozit?.nume || a.depozitNume || 'Depozit Central'}</span>

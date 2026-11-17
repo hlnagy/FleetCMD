@@ -120,8 +120,9 @@ function StocuriGarantiiContent() {
       setActiveTab(tabParam as any);
     }
     if (tabParam === 'anvelope_stoc') {
+      // Păstrăm filtrul implicit pe "Toate Depozitele" chiar dacă venim cu parametru din altă pagină
+      setAnvelopeStocDepozitFilter('');
       if (depozitIdParam !== null || serieParam !== null) {
-        setAnvelopeStocDepozitFilter(depozitIdParam || '');
         setAnvelopeStocFilterState('ALL');
         setAnvelopeStocSearch('');
       }
