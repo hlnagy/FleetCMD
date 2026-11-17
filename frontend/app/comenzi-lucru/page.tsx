@@ -72,7 +72,7 @@ export default function ComenziLucruPage() {
 
   // Form State Comandă Lucru Nouă
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
-  const [valoareContorExecutie, setValoareContorExecutie] = useState<number>(0);
+  const [valoareContorExecutie, setValoareContorExecutie] = useState<string>('0');
   const [selectedMecanici, setSelectedMecanici] = useState<string[]>([]);
   const [observatii, setObservatii] = useState('');
   const [autoFinalize, setAutoFinalize] = useState(false);
@@ -128,7 +128,6 @@ export default function ComenziLucruPage() {
         setVehicule(data);
         if (data.length > 0 && !selectedVehiculId) {
           setSelectedVehiculId(data[0].id);
-          setValoareContorExecutie(data[0].valoareContorCurent || 0);
         }
 
         const allCL = data.flatMap((v: any) =>
@@ -261,21 +260,7 @@ export default function ComenziLucruPage() {
 
   const handleSelectVehicul = (vId: string) => {
     setSelectedVehiculId(vId);
-    const sel = vehicule.find((v) => v.id === vId);
-    if (sel) {
-      const isTrailer = sel.categorieEnum === 'REMORCA' || sel.categorieEnum === 'SEMIREMORCA' || sel.categorieEnum?.includes('REMORCA');
-      if (isTrailer) {
-        const coupled = sel.cuplariSemiremorca?.[0]?.capTractor;
-        if (coupled) {
-          setValoareContorExecutie(coupled.valoareContorCurent || 0);
-        } else {
-          const firstTractor = vehicule.find((v) => v.categorieEnum === 'CAP_TRACTOR');
-          setValoareContorExecutie(firstTractor ? firstTractor.valoareContorCurent : 0);
-        }
-      } else {
-        setValoareContorExecutie(sel.valoareContorCurent || 0);
-      }
-    }
+    setValoareContorExecutie('0');
   };
 
   const handleSelectArticolStoc = (articolId: string) => {
@@ -368,16 +353,12 @@ export default function ComenziLucruPage() {
 
     const selV = vehicule.find((v) => v.id === selectedVehiculId);
     const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
+    const contorNum = Math.max(0, Number(valoareContorExecutie || 0) || 0);
 
-    if (isTrailer && (!valoareContorExecutie || Number(valoareContorExecutie) <= 0)) {
-      alert('Index KM Obligatoriu pentru Semiremorci!\n\nSemiremorcile nu au contor propriu. Vă rugăm să introduceți indexul kilometrajului al capului tractor care tractează semiremorca!');
-      return;
-    }
-
-    if (selV && !isTrailer && Number(valoareContorExecutie) > 0 && Number(valoareContorExecutie) < selV.valoareContorCurent) {
+    if (selV && !isTrailer && contorNum > 0 && contorNum < selV.valoareContorCurent) {
       const confirmed = await showConfirm(
         'Atenție Index Contor',
-        `Valoarea introdusă (${valoareContorExecutie} ${selV.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat pe vehicul (${selV.valoareContorCurent} ${selV.tipMasurare}).\n\nSunteți sigur că este o corecție manuală / schimbare de bord?`,
+        `Valoarea introdusă (${contorNum} ${selV.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat pe vehicul (${selV.valoareContorCurent} ${selV.tipMasurare}).\n\nSunteți sigur că este o corecție manuală / schimbare de bord?`,
         'Da, confirmă valoarea',
         'Anulează'
       );
@@ -400,7 +381,7 @@ export default function ComenziLucruPage() {
         body: JSON.stringify({
           vehiculId: selectedVehiculId,
           mecanicResponsabil: mecanicFinal,
-          valoareContorLaExecutie: Number(valoareContorExecutie),
+          valoareContorLaExecutie: contorNum,
           observatii,
           elemente,
         }),
@@ -1086,6 +1067,7 @@ export default function ComenziLucruPage() {
 
         <button
           onClick={() => {
+            setValoareContorExecutie('0');
             setShowAddModal(true);
             setVehiculSearchQuery('');
             setVehiculCategoryFilter('TOATE');
@@ -2313,7 +2295,12 @@ export default function ComenziLucruPage() {
               <div>
                 <p className="font-bold text-slate-900 uppercase text-[10px] tracking-wider mb-1">Date Tehnice Execuție</p>
                 <p><strong>Serie Șasiu / VIN:</strong> {showViewModal.vehiculSerieSasiu}</p>
-                <p><strong>Contor la Execuție:</strong> {showViewModal.valoareContorLaExecutie} {showViewModal.vehiculTipMasurare}</p>
+                <p>
+                  <strong>Contor la Execuție:</strong>{' '}
+                  {Number(showViewModal.valoareContorLaExecutie || 0) > 0
+                    ? `${Number(showViewModal.valoareContorLaExecutie).toLocaleString('ro-RO')} ${showViewModal.vehiculTipMasurare}`
+                    : 'Nespecificat (neînregistrat)'}
+                </p>
                 <p><strong>Dată Finalizare:</strong> {showViewModal.dataFinalizare ? new Date(showViewModal.dataFinalizare).toLocaleDateString('ro-RO') : 'În Desfășurare'}</p>
               </div>
             </div>
@@ -2724,14 +2711,15 @@ export default function ComenziLucruPage() {
                 );
               })()}
 
-              {/* INDEX KM / ORE FUNCȚIONARE CÂMP OBLIGATORIU (CU SUPORT DEDICAT SEMIREMORCI) */}
+              {/* INDEX KM / ORE FUNCȚIONARE (OPȚIONAL — 0 NU ÎNREGISTREAZĂ KM) */}
               {(() => {
                 const selV = vehicule.find((v) => v.id === selectedVehiculId);
                 const isTrailer = selV?.categorieEnum === 'REMORCA' || selV?.categorieEnum === 'SEMIREMORCA' || selV?.categorieEnum?.includes('REMORCA');
                 const coupledTractor = selV?.cuplariSemiremorca?.[0]?.capTractor;
                 const currentContor = selV?.valoareContorCurent || 0;
                 const selVDate = getVehiculContorDate(selV);
-                const isLower = selV && !isTrailer && valoareContorExecutie > 0 && Number(valoareContorExecutie) < currentContor;
+                const parsedContorVal = Number(valoareContorExecutie || 0) || 0;
+                const isLower = selV && !isTrailer && parsedContorVal > 0 && parsedContorVal < currentContor;
 
                 return (
                   <div className="space-y-2">
@@ -2752,7 +2740,7 @@ export default function ComenziLucruPage() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => setValoareContorExecutie(coupledTractor.valoareContorCurent || 0)}
+                              onClick={() => setValoareContorExecutie(String(coupledTractor.valoareContorCurent || 0))}
                               className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-bold shadow-xs transition flex items-center space-x-1"
                             >
                               <span>Preia KM: {Number(coupledTractor.valoareContorCurent || 0).toLocaleString('ro-RO')} KM</span>
@@ -2763,18 +2751,18 @@ export default function ComenziLucruPage() {
                           </div>
                         ) : (
                           <p className="text-[11px] text-amber-800 font-medium">
-                            Semiremorca nu este cuplată momentan. Selectați capul tractor care o tractează pentru preluarea kilometrajului:
+                            Semiremorca nu este cuplată momentan. Opțional, puteți selecta un cap tractor pentru preluarea kilometrajului:
                           </p>
                         )}
 
                         <div>
                           <label className="text-[10px] text-sage-700 font-bold block mb-1">
-                            Alege Cap Tractor din flotă care tractează semiremorca:
+                            Alege Cap Tractor din flotă (opțional):
                           </label>
                           <select
                             onChange={(e) => {
                               const tr = vehicule.find((v) => v.id === e.target.value);
-                              if (tr) setValoareContorExecutie(tr.valoareContorCurent || 0);
+                              if (tr) setValoareContorExecutie(String(tr.valoareContorCurent || 0));
                             }}
                             className="w-full bg-white border border-amber-300 rounded-xl p-2 font-bold text-sapphire-900 text-xs"
                           >
@@ -2798,24 +2786,34 @@ export default function ComenziLucruPage() {
                     )}
 
                     <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl space-y-1">
-                      <label className="text-sapphire-900 font-extrabold block text-xs">
-                        {isTrailer ? 'Index KM Cap Tractor la Execuție (Obligatoriu): *' : 'Index Contor (KM / mTH) la Execuție: *'}
-                      </label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-sapphire-900 font-extrabold block text-xs">
+                          {isTrailer ? 'Index KM Cap Tractor la Execuție (Opțional):' : 'Index Contor (KM / mTH) la Execuție (Opțional):'}
+                        </label>
+                        {!isTrailer && currentContor > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setValoareContorExecutie(String(currentContor))}
+                            className="px-2 py-0.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 border border-sapphire-200 text-[10px] font-bold text-sapphire-700 transition cursor-pointer"
+                          >
+                            Preia contor ({Number(currentContor).toLocaleString('ro-RO')})
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="number"
-                        required
-                        min="1"
+                        min="0"
                         value={valoareContorExecutie}
-                        onChange={(e) => setValoareContorExecutie(Number(e.target.value))}
-                        placeholder={isTrailer ? 'Introduceți KM cap tractor...' : 'ex: 125000'}
+                        onChange={(e) => setValoareContorExecutie(e.target.value)}
+                        placeholder="0 (lăsați 0 sau gol pentru a nu înregistra KM)"
                         className={`w-full border rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm ${
                           isLower ? 'bg-amber-50 border-amber-400 text-amber-900' : 'bg-white border-morning-200'
                         }`}
                       />
                       <p className="text-[10px] text-sage-600 font-medium">
                         {isTrailer
-                          ? '• Pentru semiremorci este obligatoriu indexul kilometrajului capului tractor la momentul intervenției.'
-                          : '• Valoarea contorului curent înregistrată pe utilaj: '}
+                          ? '• Opțional: dacă lăsați 0, comanda se deschide fără înregistrare de kilometraj.'
+                          : '• Dacă lăsați 0 (sau gol), nu se înregistrează index KM. Ultimul contor înregistrat: '}
                         {!isTrailer && (
                           <span className="font-extrabold text-sapphire-700">
                             {Number(currentContor || 0).toLocaleString('ro-RO')} {selV?.tipMasurare || 'KM/mTH'}
@@ -2825,7 +2823,7 @@ export default function ComenziLucruPage() {
                       </p>
                       {isLower && (
                         <div className="mt-1.5 p-2 bg-amber-100 border border-amber-300 rounded-xl text-amber-900 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
-                          <span>ATENȚIE: Valoarea introdusă ({valoareContorExecutie} {selV?.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({currentContor} {selV?.tipMasurare})! Se va salva ca o corecție manuală.</span>
+                          <span>ATENȚIE: Valoarea introdusă ({parsedContorVal} {selV?.tipMasurare}) este MAI MICĂ decât ultimul contor înregistrat ({currentContor} {selV?.tipMasurare})! Se va salva ca o corecție manuală.</span>
                         </div>
                       )}
                     </div>

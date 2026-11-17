@@ -111,6 +111,7 @@ export class MentenantaService {
     const servicii: any[] = [];
 
     comenzi.forEach(c => {
+      const hasContor = Number(c.valoareContorLaExecutie || 0) > 0;
       servicii.push({
         id: `CL-${c.id}`,
         tip: 'COMANDA_LUCRU',
@@ -119,7 +120,7 @@ export class MentenantaService {
         vehicul: c.vehicul ? `${c.vehicul.numarIntern} (${c.vehicul.numarInmatriculare})` : '-',
         data: c.dataDeschidere,
         stare: c.stare,
-        detalii: `${c.elementeComanda.length} elemente piese/manoperă. Contor: ${c.valoareContorLaExecutie}`,
+        detalii: `${c.elementeComanda.length} elemente piese/manoperă.${hasContor ? ` Contor: ${c.valoareContorLaExecutie}` : ''}`,
         costTotal: c.elementeComanda.reduce((sum, e) => sum + e.costTotal, 0),
       });
     });
@@ -401,9 +402,14 @@ export class MentenantaService {
     const vehicul = await this.prisma.vehicul.findUnique({ where: { id: data.vehiculId } });
     if (!vehicul) throw new NotFoundException('Vehicul negăsit');
 
-    const contorVal = Number(data.valoareContorLaExecutie ?? data.valoareContor ?? vehicul.valoareContorCurent);
+    const rawContorInput = data.valoareContorLaExecutie ?? data.valoareContor;
+    const parsedContor =
+      rawContorInput !== undefined && rawContorInput !== null && String(rawContorInput).trim() !== ''
+        ? Number(rawContorInput)
+        : 0;
+    const contorVal = !isNaN(parsedContor) && parsedContor > 0 ? parsedContor : 0;
 
-    // Update vehicle's current odometer if new value is provided and valid
+    // Înregistrăm KM / mTH pe vehicul și în istoric EXCLUSIV dacă utilizatorul a introdus o valoare > 0
     if (contorVal > 0) {
       await this.prisma.vehicul.update({
         where: { id: data.vehiculId },
@@ -632,6 +638,8 @@ export class MentenantaService {
     if (!comanda) throw new NotFoundException('Comanda de lucru nu există.');
     if (comanda.stare === 'FINALIZAT') throw new BadRequestException('Comanda de lucru este deja finalizată.');
 
+    const comandaContor = Number(comanda.valoareContorLaExecutie || 0);
+
     for (const elem of comanda.elementeComanda) {
       if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
         const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
@@ -664,19 +672,19 @@ export class MentenantaService {
         }
       }
 
-      if (elem.sarcinaMentenanta) {
+      if (elem.sarcinaMentenanta && comandaContor > 0) {
         const sarcina = elem.sarcinaMentenanta;
 
         await this.prisma.sarcinaMentenanta.update({
           where: { id: sarcina.id },
-          data: { ultimulRulajExecutie: comanda.valoareContorLaExecutie },
+          data: { ultimulRulajExecutie: comandaContor },
         });
 
         if (sarcina.tipSarcina === 'SCHIMB_PIESA' && sarcina.sarciniSubordonate.length > 0) {
           for (const subordonata of sarcina.sarciniSubordonate) {
             await this.prisma.sarcinaMentenanta.update({
               where: { id: subordonata.id },
-              data: { ultimulRulajExecutie: comanda.valoareContorLaExecutie },
+              data: { ultimulRulajExecutie: comandaContor },
             });
           }
         }
@@ -692,6 +700,7 @@ export class MentenantaService {
           descLower.includes(reg.denumireOperatiune.toLowerCase()) ||
           reg.denumireOperatiune.toLowerCase().includes(descLower)
         ) {
+          const fallbackContor = comandaContor > 0 ? comandaContor : (comanda.vehicul?.valoareContorCurent || 0);
           await this.prisma.executieRegulaVehicul.upsert({
             where: {
               vehiculId_regulaAlertaId: {
@@ -700,14 +709,14 @@ export class MentenantaService {
               },
             },
             update: {
-              ultimulSchimbContor: comanda.valoareContorLaExecutie,
+              ...(comandaContor > 0 ? { ultimulSchimbContor: comandaContor } : {}),
               ultimulSchimbData: new Date(),
               observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
             },
             create: {
               vehiculId: comanda.vehiculId,
               regulaAlertaId: reg.id,
-              ultimulSchimbContor: comanda.valoareContorLaExecutie,
+              ultimulSchimbContor: fallbackContor,
               ultimulSchimbData: new Date(),
               observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
             },
