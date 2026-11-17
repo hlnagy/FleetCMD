@@ -771,17 +771,30 @@ export default function ComenziLucruPage() {
     setQuickDescriere(st.denumire);
     setQuickPretUnitar(st.pretUnitar || 0);
     setQuickSearchQuery(`${st.codArticol} — ${st.denumire}`);
-    if (remaining > 0 && Number(quickCantitate) > remaining) {
-      setQuickCantitate(remaining);
-    }
+    setQuickCantitate(remaining > 0 ? remaining : 1);
     setIsSearchDropdownOpen(false);
+  };
+
+  const clearQuickStockSelection = (keepSearchText = false) => {
+    setQuickSelectedArticol(null);
+    setQuickCantitate(1);
+    setQuickPretUnitar(0);
+    if (!keepSearchText) {
+      setQuickSearchQuery('');
+    }
+  };
+
+  const getMinQuickQty = (): number => {
+    if (quickPilonCost === 'PIESA_STOC' && quickSelectedArticol) {
+      const rem = getRemainingStockForItem(quickSelectedArticol, draftStockAllocation);
+      if (rem > 0 && rem < 1) return rem;
+    }
+    return 1;
   };
 
   const resetStockFilterSelection = () => {
     if (quickSelectedArticol) {
-      setQuickSelectedArticol(null);
-      setQuickSearchQuery('');
-      setQuickPretUnitar(0);
+      clearQuickStockSelection(false);
     }
   };
 
@@ -1126,8 +1139,9 @@ export default function ComenziLucruPage() {
           return false;
         }
       }
-      if (quickSearchQuery.trim()) {
-        const q = quickSearchQuery.toLowerCase().trim();
+      const activeSearchQuery = quickSelectedArticol ? '' : quickSearchQuery.trim();
+      if (activeSearchQuery) {
+        const q = activeSearchQuery.toLowerCase();
         const mCod = (item.codArticol || '').toLowerCase().includes(q);
         const mDen = (item.denumire || '').toLowerCase().includes(q);
         const mCat = (item.categorie || '').toLowerCase().includes(q);
@@ -1648,11 +1662,14 @@ export default function ComenziLucruPage() {
                   {showEditModal.vehiculInmatriculare && showEditModal.vehiculNumarIntern && showEditModal.vehiculInmatriculare !== showEditModal.vehiculNumarIntern && (
                     <span className="text-slate-500 font-mono">{showEditModal.vehiculInmatriculare}</span>
                   )}
-                  {(showEditModal.vehiculMarca || showEditModal.vehiculModel) && (
-                    <span className="text-slate-700 font-semibold">
-                      {[showEditModal.vehiculMarca, showEditModal.vehiculModel].filter(Boolean).join(' ')}
-                    </span>
-                  )}
+                  {(() => {
+                    const marcaModel = [showEditModal.vehiculMarca, showEditModal.vehiculModel]
+                      .filter((v) => v && !/^[-–—\s]+$/.test(String(v).trim()) && String(v).trim().toUpperCase() !== 'N/A')
+                      .join(' ');
+                    return marcaModel ? (
+                      <span className="text-slate-700 font-semibold">{marcaModel}</span>
+                    ) : null;
+                  })()}
                   {showEditModal.valoareContorLaExecutie > 0 && (
                     <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-mono font-bold border border-emerald-200">
                       Contor: {showEditModal.valoareContorLaExecutie.toLocaleString('ro-RO')} {showEditModal.vehiculTipMasurare || 'KM'}
@@ -1726,7 +1743,7 @@ export default function ComenziLucruPage() {
                     <span>Mecanic nou</span>
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto pr-1">
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
                   {mecaniciList.map((m) => {
                     const isSelected = editMecanici.includes(m.nume);
                     return (
@@ -1885,9 +1902,7 @@ export default function ComenziLucruPage() {
                         onClick={() => {
                           setQuickSelectedWarehouse('TOATE');
                           setQuickSelectedCategory('TOATE');
-                          setQuickSearchQuery('');
-                          setQuickSelectedArticol(null);
-                          setQuickPretUnitar(0);
+                          clearQuickStockSelection(false);
                         }}
                         className="text-[11px] font-bold text-terracotta-600 hover:underline flex items-center space-x-1"
                         title="Resetează filtrele de stoc"
@@ -1925,8 +1940,7 @@ export default function ComenziLucruPage() {
                           onChange={(e) => {
                             setQuickSearchQuery(e.target.value);
                             if (quickSelectedArticol) {
-                              setQuickSelectedArticol(null);
-                              setQuickPretUnitar(0);
+                              clearQuickStockSelection(true);
                             }
                             setIsSearchDropdownOpen(true);
                           }}
@@ -1946,9 +1960,7 @@ export default function ComenziLucruPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              setQuickSearchQuery('');
-                              setQuickSelectedArticol(null);
-                              setQuickPretUnitar(0);
+                              clearQuickStockSelection(false);
                               setIsSearchDropdownOpen(true);
                             }}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sage-400 hover:text-slate-700"
@@ -2063,16 +2075,17 @@ export default function ComenziLucruPage() {
                   <div className="flex items-center bg-white border border-morning-300 rounded-xl overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setQuickCantitate((prev) => Math.max(1, prev - 1))}
+                      onClick={() => setQuickCantitate((prev) => Math.max(getMinQuickQty(), prev - 1))}
                       className="px-2 py-2 text-slate-500 hover:bg-morning-200 hover:text-slate-800 transition"
                     >
                       <Minus className="w-3.5 h-3.5" />
                     </button>
                     <input
                       type="number"
-                      min="1"
+                      step="any"
+                      min={getMinQuickQty()}
                       value={quickCantitate}
-                      onChange={(e) => setQuickCantitate(Math.max(1, Number(e.target.value)))}
+                      onChange={(e) => setQuickCantitate(Math.max(getMinQuickQty(), Number(e.target.value)))}
                       className="w-full text-center py-1.5 font-mono font-extrabold text-xs text-sapphire-900 focus:outline-none"
                     />
                     <button
