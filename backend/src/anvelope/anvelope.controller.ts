@@ -45,6 +45,11 @@ export class AnvelopeController {
     return this.anvelopeService.deleteAnvelopa(id);
   }
 
+  @Post(':id/reclasifica-stoc')
+  reclasificaInArticolStoc(@Param('id') id: string, @Body() body: any) {
+    return this.anvelopeService.reclasificaInArticolStoc(id, body);
+  }
+
   @Post('masurare')
   inregistreazaMasurare(@Body() body: any) {
     return this.anvelopeService.inregistreazaMasurare(body);

@@ -735,23 +735,81 @@ export class StocuriGarantiiService {
     });
   }
 
+  private async ensureCategoryAndSubcategoryExist(categorieNume?: string, subcategorieNume?: string | null) {
+    const cleanCat = String(categorieNume || '').trim();
+    if (!cleanCat) return;
+
+    let cat = await this.prisma.categorieStoc.findFirst({
+      where: { nume: { equals: cleanCat, mode: 'insensitive' } },
+    });
+    if (!cat) {
+      const isFluid = /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(cleanCat);
+      cat = await this.prisma.categorieStoc.create({
+        data: {
+          nume: cleanCat,
+          stocMinimImplicit: isFluid ? 20 : 5,
+          esteFluid: isFluid,
+        },
+      });
+    }
+
+    const cleanSub = String(subcategorieNume || '').trim();
+    if (cleanSub) {
+      const existingSub = await this.prisma.subcategorieStoc.findFirst({
+        where: {
+          categorieStocId: cat.id,
+          nume: { equals: cleanSub, mode: 'insensitive' },
+        },
+      });
+      if (!existingSub) {
+        await this.prisma.subcategorieStoc.create({
+          data: {
+            categorieStocId: cat.id,
+            nume: cleanSub,
+          },
+        });
+      }
+    }
+  }
+
   async updateArticolStoc(id: string, data: any) {
     if (data.stocMinim !== undefined && Number(data.stocMinim) < 0) {
       throw new BadRequestException('Pragul de alertă stoc minim nu poate fi negativ.');
     }
+
+    const cleanCategorie = data.categorie !== undefined ? String(data.categorie || '').trim() : undefined;
+    const cleanSubcategorie =
+      data.subcategorie !== undefined
+        ? (String(data.subcategorie || '').trim() || null)
+        : undefined;
+
+    if (cleanCategorie) {
+      await this.ensureCategoryAndSubcategoryExist(cleanCategorie, cleanSubcategorie);
+    }
+
     return this.prisma.articolStoc.update({
       where: { id },
       data: {
-        codArticol: data.codArticol !== undefined ? data.codArticol : undefined,
-        denumire: data.denumire !== undefined ? data.denumire : undefined,
-        categorie: data.categorie !== undefined ? data.categorie : undefined,
-        subcategorie: data.subcategorie !== undefined ? data.subcategorie : undefined,
+        codArticol: data.codArticol !== undefined ? String(data.codArticol).trim() : undefined,
+        denumire: data.denumire !== undefined ? String(data.denumire).trim() : undefined,
+        categorie: cleanCategorie !== undefined ? cleanCategorie : undefined,
+        subcategorie: cleanSubcategorie,
         stocCurent: data.stocCurent !== undefined ? Number(data.stocCurent) : undefined,
         stocMinim: data.stocMinim !== undefined ? Math.max(0, Number(data.stocMinim)) : undefined,
         pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
         unitateMasura: data.unitateMasura !== undefined ? data.unitateMasura : undefined,
-        depozitId: data.depozitId !== undefined ? data.depozitId : undefined,
-        marcaUlei: data.marcaUlei !== undefined ? data.marcaUlei : undefined,
+        depozitId: data.depozitId !== undefined ? (data.depozitId || null) : undefined,
+        marcaUlei: data.marcaUlei !== undefined ? (String(data.marcaUlei || '').trim() || null) : undefined,
+        observatiiIntern:
+          data.observatiiIntern !== undefined
+            ? (String(data.observatiiIntern || '').trim() || null)
+            : undefined,
+      },
+      include: {
+        depozit: true,
+        intrariStoc: {
+          orderBy: { dataFactura: 'desc' },
+        },
       },
     });
   }

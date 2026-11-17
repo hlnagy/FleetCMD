@@ -8,10 +8,32 @@ import { useSearchParams } from 'next/navigation';
 import {
   PackageCheck, ShieldAlert, FileText, Wrench, AlertTriangle, CheckCircle, Plus,
   Filter, Edit3, X, ShoppingCart, History, Trash2, Search, Building2, Layers, AlertCircle,
-  ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2
+  ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2, Check
 } from 'lucide-react';
-import { showConfirm } from '@/lib/swal';
+import { showConfirm, showToast } from '@/lib/swal';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
+
+/** Matches an existing option name case-insensitively so HTML <select> reflects stored DB values. */
+const resolveCanonicalOption = (options: Array<{ nume?: string }>, raw?: string | null): string => {
+  const clean = String(raw || '').trim();
+  if (!clean) return '';
+  const match = options.find((o) => String(o.nume || '').trim().toLowerCase() === clean.toLowerCase());
+  return match?.nume || clean;
+};
+
+/** Flags serialized tire entries that appear to be non-tire items imported by mistake (e.g. paint). */
+const looksLikeNonTireEntry = (anv: any): boolean => {
+  const mrc = String(anv?.marca || '');
+  const mdl = String(anv?.model || '');
+  const hasExplicitDim = /\b\d{2,3}(?:\/\d{2,3})?\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(`${mrc} ${mdl}`);
+  if (hasExplicitDim) return false;
+  return (
+    /generic|nespecificat/i.test(mrc) ||
+    /\b(?:vopsea|t\*vop|kober|diluant|grund|email|spray|ulei|antigel|vaselina|surub|piulita|tabla|teava|tevi|profil|electrod)\b/i.test(
+      `${mrc} ${mdl}`,
+    )
+  );
+};
 
 /** Normalizes text for case- and diacritic-insensitive search matching. */
 const normalizeSearchText = (value?: string | null): string =>
@@ -184,8 +206,34 @@ function StocuriGarantiiContent() {
   const [bevDurataGarantieLuni, setBevDurataGarantieLuni] = useState(24);
   const [bevDurataGarantieRulaj, setBevDurataGarantieRulaj] = useState(2000);
 
-  // Editare & Demontare Modale
+  // Editare & Demontare Modale + Schimbare Categorie/Subcategorie Inline
   const [editingArticol, setEditingArticol] = useState<any>(null);
+  const [inlineCatEdit, setInlineCatEdit] = useState<{
+    id: string;
+    categorie: string;
+    subcategorie: string;
+    addingCat?: boolean;
+    newCat?: string;
+    addingSubcat?: boolean;
+    newSubcat?: string;
+    saving?: boolean;
+  } | null>(null);
+  const [quickCatTarget, setQuickCatTarget] = useState<'EDIT_MODAL' | 'RECLASSIFY' | null>(null);
+  const [quickCatDraft, setQuickCatDraft] = useState('');
+  const [quickSubcatTarget, setQuickSubcatTarget] = useState<'EDIT_MODAL' | 'RECLASSIFY' | null>(null);
+  const [quickSubcatDraft, setQuickSubcatDraft] = useState('');
+  const [savingQuickTaxonomy, setSavingQuickTaxonomy] = useState(false);
+
+  // Reclasificare Articol din Magazie Anvelope -> Gestiune Piese
+  const [reclassifyMode, setReclassifyMode] = useState(false);
+  const [reclassifyData, setReclassifyData] = useState({
+    denumire: '',
+    categorie: 'Alte',
+    subcategorie: 'Alte piese',
+    depozitId: '',
+  });
+  const [reclassifying, setReclassifying] = useState(false);
+
   const [selectedComp, setSelectedComp] = useState<any>(null);
   const [motivDemontare, setMotivDemontare] = useState('');
   const [popupGarantie, setPopupGarantie] = useState<any>(null);
@@ -574,12 +622,155 @@ function StocuriGarantiiContent() {
     }
   };
 
+  const quickCreateCategoryAndSelect = async (rawName: string, onSelect: (canonicalCat: string) => void) => {
+    const cleanName = rawName.trim();
+    if (!cleanName) return;
+    setSavingQuickTaxonomy(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nume: cleanName }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        const canonicalName = created.nume || cleanName;
+        setCategorii((prev) => {
+          const exists = prev.some((c: any) => String(c.nume || '').trim().toLowerCase() === canonicalName.toLowerCase());
+          if (exists) return prev;
+          return [...prev, { ...created, nume: canonicalName, subcategorii: created.subcategorii || [] }].sort((a, b) =>
+            String(a.nume || '').localeCompare(String(b.nume || '')),
+          );
+        });
+        onSelect(canonicalName);
+        showToast(`Categoria „${canonicalName}” a fost creată!`, 'success', 2500);
+        void fetchMetadata();
+      } else {
+        showToast('Nu s-a putut crea categoria.', 'error', 3500);
+      }
+    } catch {
+      showToast('Eroare de conexiune la crearea categoriei.', 'error', 3500);
+    } finally {
+      setSavingQuickTaxonomy(false);
+    }
+  };
+
+  const quickCreateSubcategoryAndSelect = async (
+    catName: string,
+    rawSubName: string,
+    onSelect: (canonicalSub: string) => void,
+  ) => {
+    const cleanCat = catName.trim();
+    const cleanSub = rawSubName.trim();
+    if (!cleanCat || !cleanSub) return;
+    setSavingQuickTaxonomy(true);
+    try {
+      const parentObj = categorii.find((c: any) => String(c.nume || '').trim().toLowerCase() === cleanCat.toLowerCase());
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/subcategorii`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categorieStocId: parentObj?.id,
+          categorieNume: parentObj?.nume || cleanCat,
+          nume: cleanSub,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        const canonicalSub = created.nume || cleanSub;
+        setCategorii((prev) => {
+          const hasParent = prev.some((c: any) => String(c.nume || '').trim().toLowerCase() === cleanCat.toLowerCase());
+          if (!hasParent) {
+            return [...prev, { nume: cleanCat, subcategorii: [{ ...created, nume: canonicalSub }] }];
+          }
+          return prev.map((c: any) => {
+            if (String(c.nume || '').trim().toLowerCase() !== cleanCat.toLowerCase()) return c;
+            const subs = Array.isArray(c.subcategorii) ? c.subcategorii : [];
+            const existsSub = subs.some((sub: any) => String(sub.nume || '').trim().toLowerCase() === canonicalSub.toLowerCase());
+            if (existsSub) return c;
+            return { ...c, subcategorii: [...subs, { ...created, nume: canonicalSub }] };
+          });
+        });
+        onSelect(canonicalSub);
+        showToast(`Subcategoria „${canonicalSub}” a fost creată!`, 'success', 2500);
+        void fetchMetadata();
+      } else {
+        showToast('Nu s-a putut crea subcategoria.', 'error', 3500);
+      }
+    } catch {
+      showToast('Eroare de conexiune la crearea subcategoriei.', 'error', 3500);
+    } finally {
+      setSavingQuickTaxonomy(false);
+    }
+  };
+
+  const openEditArticolModal = (s: any) => {
+    const canonCat = resolveCanonicalOption(categorii, s.categorie);
+    const canonSub = resolveCanonicalOption(getSubcategoriiPentruCategorie(canonCat), s.subcategorie);
+    setQuickCatTarget(null);
+    setQuickSubcatTarget(null);
+    setEditingArticol({
+      ...s,
+      categorie: canonCat,
+      subcategorie: canonSub,
+      pretUnitar: Number(Number(s.pretUnitar || 0).toFixed(2)),
+      stocCurent: Number(Number(s.stocCurent || 0).toFixed(2)),
+      stocMinim: Number(Number(s.stocMinim || 0).toFixed(2)),
+    });
+  };
+
+  const openInlineCatEdit = (s: any) => {
+    const canonCat = resolveCanonicalOption(categorii, s.categorie);
+    const canonSub = resolveCanonicalOption(getSubcategoriiPentruCategorie(canonCat), s.subcategorie);
+    setInlineCatEdit({
+      id: s.id,
+      categorie: canonCat,
+      subcategorie: canonSub,
+    });
+  };
+
+  const handleSaveInlineCategory = async () => {
+    if (!inlineCatEdit || !inlineCatEdit.categorie.trim()) return;
+    setInlineCatEdit((prev) => (prev ? { ...prev, saving: true } : prev));
+    try {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${inlineCatEdit.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categorie: inlineCatEdit.categorie.trim(),
+          subcategorie: inlineCatEdit.subcategorie.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setStocuri((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        setInlineCatEdit(null);
+        showToast(
+          `Categorie actualizată: ${updated.categorie}${updated.subcategorie ? ` › ${updated.subcategorie}` : ''}`,
+          'success',
+          2500,
+        );
+        void fetchStocuri();
+        void fetchMetadata();
+      } else {
+        setInlineCatEdit((prev) => (prev ? { ...prev, saving: false } : prev));
+        showToast('Nu s-a putut actualiza categoria articolului.', 'error', 3500);
+      }
+    } catch {
+      setInlineCatEdit((prev) => (prev ? { ...prev, saving: false } : prev));
+      showToast('Eroare de conexiune la salvarea categoriei.', 'error', 3500);
+    }
+  };
+
   const handleUpdateArticol = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingArticol) return;
     try {
       const payload = {
         ...editingArticol,
+        categorie: editingArticol.categorie?.trim(),
+        subcategorie: editingArticol.subcategorie?.trim() || null,
+        observatiiIntern: editingArticol.observatiiIntern?.trim() || null,
         pretUnitar: Number(Number(editingArticol.pretUnitar || 0).toFixed(2)),
         stocCurent: Number(Number(editingArticol.stocCurent || 0).toFixed(2)),
         stocMinim: Math.max(0, Number(Number(editingArticol.stocMinim || 0).toFixed(2))),
@@ -591,13 +782,262 @@ function StocuriGarantiiContent() {
       });
 
       if (res.ok) {
+        const updated = await res.json();
+        setStocuri((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
         setEditingArticol(null);
-        fetchData();
-        alert('Datele articolului au fost actualizate!');
+        setQuickCatTarget(null);
+        setQuickSubcatTarget(null);
+        showToast('Datele articolului au fost actualizate!', 'success', 2500);
+        void fetchStocuri();
+        void fetchMetadata();
+      } else {
+        showToast('Eroare la salvarea modificărilor.', 'error', 3500);
       }
     } catch (e) {
-      alert('Eroare la salvarea modificărilor.');
+      showToast('Eroare la salvarea modificărilor.', 'error', 3500);
     }
+  };
+
+  const openAnvelopaEditModal = (a: any, startReclassify = false) => {
+    const cleanModel = String(a.model || '').trim();
+    const cleanMarca = /generic|nespecificat/i.test(String(a.marca || '')) ? '' : String(a.marca || '').trim();
+    const cleanName = [cleanMarca, cleanModel].filter(Boolean).join(' ').trim() || a.serieAnvelopa || '';
+    const defaultCat = resolveCanonicalOption(categorii, 'Alte') || categorii[0]?.nume || 'Alte';
+    const defaultSub =
+      defaultCat.toLowerCase() === 'alte'
+        ? resolveCanonicalOption(getSubcategoriiPentruCategorie(defaultCat), 'Alte piese') || 'Alte piese'
+        : '';
+
+    setQuickCatTarget(null);
+    setQuickSubcatTarget(null);
+    setReclassifyMode(startReclassify || looksLikeNonTireEntry(a));
+    setReclassifyData({
+      denumire: cleanName,
+      categorie: defaultCat,
+      subcategorie: defaultSub,
+      depozitId: a.depozitId || depozite[0]?.id || '',
+    });
+    setEditingAnvelopaStoc({
+      ...a,
+      pretAchizitie: Number(Number(a.pretAchizitie || 0).toFixed(2)),
+    });
+  };
+
+  const handleReclassifyAnvelopaToStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAnvelopaStoc || !reclassifyData.categorie.trim()) return;
+    setReclassifying(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/anvelope/${editingAnvelopaStoc.id}/reclasifica-stoc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          denumire: reclassifyData.denumire.trim(),
+          categorie: reclassifyData.categorie.trim(),
+          subcategorie: reclassifyData.subcategorie.trim() || null,
+          depozitId: reclassifyData.depozitId || editingAnvelopaStoc.depozitId,
+        }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setEditingAnvelopaStoc(null);
+        setReclassifyMode(false);
+        showToast(result.mesaj || 'Articolul a fost mutat în Gestiune Piese!', 'success', 4000);
+        await fetchData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err?.message || 'Nu s-a putut reclasifica articolul.', 'error', 4000);
+      }
+    } catch {
+      showToast('Eroare de conexiune la reclasificare.', 'error', 4000);
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
+  const renderCategorySubcategoryPicker = (opts: {
+    scope: 'EDIT_MODAL' | 'RECLASSIFY';
+    categorieVal: string;
+    subcategorieVal: string;
+    onChangeCat: (newCat: string) => void;
+    onChangeSubcat: (newSub: string) => void;
+  }) => {
+    const { scope, categorieVal, subcategorieVal, onChangeCat, onChangeSubcat } = opts;
+    const canonCat = resolveCanonicalOption(categorii, categorieVal);
+    const availableSubcats = getSubcategoriiPentruCategorie(canonCat);
+    const canonSub = resolveCanonicalOption(availableSubcats, subcategorieVal);
+    const hasCustomCat = Boolean(canonCat) && !categorii.some((c: any) => c.nume === canonCat);
+    const hasCustomSub = Boolean(canonSub) && !availableSubcats.some((s: any) => s.nume === canonSub);
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <label className="text-sage-700 font-bold">Categorie Stoc: *</label>
+            {quickCatTarget !== scope && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickCatTarget(scope);
+                  setQuickSubcatTarget(null);
+                  setQuickCatDraft('');
+                }}
+                className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-0.5 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Categorie Nouă</span>
+              </button>
+            )}
+          </div>
+
+          {quickCatTarget === scope ? (
+            <div className="p-2.5 bg-emerald-50/80 border border-emerald-300 rounded-xl space-y-2">
+              <input
+                type="text"
+                autoFocus
+                value={quickCatDraft}
+                onChange={(e) => setQuickCatDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    quickCreateCategoryAndSelect(quickCatDraft, (newCatName) => {
+                      onChangeCat(newCatName);
+                      onChangeSubcat('');
+                      setQuickCatTarget(null);
+                    });
+                  } else if (e.key === 'Escape') {
+                    setQuickCatTarget(null);
+                  }
+                }}
+                placeholder="ex: Vopsele & Chimicale..."
+                className="w-full bg-white border border-emerald-300 rounded-lg p-1.5 text-sapphire-900 font-bold text-xs"
+              />
+              <div className="flex justify-end space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQuickCatTarget(null)}
+                  className="px-2 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="button"
+                  disabled={savingQuickTaxonomy || !quickCatDraft.trim()}
+                  onClick={() =>
+                    quickCreateCategoryAndSelect(quickCatDraft, (newCatName) => {
+                      onChangeCat(newCatName);
+                      onChangeSubcat('');
+                      setQuickCatTarget(null);
+                    })
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] disabled:opacity-50"
+                >
+                  {savingQuickTaxonomy ? 'Se salvează...' : 'Salvează'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <select
+              required
+              value={canonCat}
+              onChange={(e) => {
+                onChangeCat(e.target.value);
+                onChangeSubcat('');
+              }}
+              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+            >
+              <option value="">-- Alege Categorie --</option>
+              {hasCustomCat && <option value={canonCat}>{canonCat}</option>}
+              {categorii.map((c, idx) => (
+                <option key={c.id || c.nume || idx} value={c.nume}>
+                  {c.nume}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <label className="text-sage-700 font-bold">Subcategorie Stoc:</label>
+            {canonCat && quickSubcatTarget !== scope && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickSubcatTarget(scope);
+                  setQuickCatTarget(null);
+                  setQuickSubcatDraft('');
+                }}
+                className="text-sapphire-700 hover:text-sapphire-800 font-bold text-[11px] flex items-center space-x-0.5 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Subcategorie Nouă</span>
+              </button>
+            )}
+          </div>
+
+          {quickSubcatTarget === scope ? (
+            <div className="p-2.5 bg-sapphire-50/80 border border-sapphire-300 rounded-xl space-y-2">
+              <input
+                type="text"
+                autoFocus
+                value={quickSubcatDraft}
+                onChange={(e) => setQuickSubcatDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    quickCreateSubcategoryAndSelect(canonCat, quickSubcatDraft, (newSub) => {
+                      onChangeSubcat(newSub);
+                      setQuickSubcatTarget(null);
+                    });
+                  } else if (e.key === 'Escape') {
+                    setQuickSubcatTarget(null);
+                  }
+                }}
+                placeholder={`Subcategorie în ${canonCat}...`}
+                className="w-full bg-white border border-sapphire-300 rounded-lg p-1.5 text-sapphire-900 font-bold text-xs"
+              />
+              <div className="flex justify-end space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQuickSubcatTarget(null)}
+                  className="px-2 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="button"
+                  disabled={savingQuickTaxonomy || !quickSubcatDraft.trim()}
+                  onClick={() =>
+                    quickCreateSubcategoryAndSelect(canonCat, quickSubcatDraft, (newSub) => {
+                      onChangeSubcat(newSub);
+                      setQuickSubcatTarget(null);
+                    })
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] disabled:opacity-50"
+                >
+                  {savingQuickTaxonomy ? 'Se salvează...' : 'Salvează'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <select
+              value={canonSub}
+              onChange={(e) => onChangeSubcat(e.target.value)}
+              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+            >
+              <option value="">-- Fără Subcategorie --</option>
+              {hasCustomSub && <option value={canonSub}>{canonSub}</option>}
+              {availableSubcats.map((sub: any, idx: number) => (
+                <option key={sub.id || sub.nume || idx} value={sub.nume}>
+                  {sub.nume}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const handleDeleteArticol = async (id: string) => {
@@ -955,6 +1395,16 @@ function StocuriGarantiiContent() {
                 </button>
 
                 <button
+                  type="button"
+                  onClick={() => setShowAddCatModal(true)}
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-morning-200 text-sapphire-900 border border-morning-200 font-bold text-xs transition flex items-center space-x-1"
+                  title="Gestionează categoriile și subcategoriile din stoc"
+                >
+                  <Tag className="w-3.5 h-3.5 text-sapphire-600" />
+                  <span>Categorii</span>
+                </button>
+
+                <button
                   onClick={() => setShowAddModal(true)}
                   className="px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-xs transition"
                 >
@@ -1063,17 +1513,214 @@ function StocuriGarantiiContent() {
                           </div>
                         )}
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center space-x-1 flex-wrap gap-1">
-                          <span className="px-2.5 py-0.5 rounded bg-morning-200 text-slate-700 text-[10px] font-semibold">
-                            {s.categorie}
-                          </span>
-                          {s.subcategorie && (
-                            <span className="px-2.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-700 text-[10px] font-bold">
-                              ▸ {s.subcategorie}
+                      <td className="p-3 min-w-[210px]">
+                        {inlineCatEdit?.id === s.id ? (
+                          <div className="space-y-1.5 p-2 rounded-xl bg-sapphire-50/80 border border-sapphire-300 shadow-2xs">
+                            {inlineCatEdit.addingCat ? (
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={inlineCatEdit.newCat || ''}
+                                  onChange={(e) =>
+                                    setInlineCatEdit((prev) => (prev ? { ...prev, newCat: e.target.value } : prev))
+                                  }
+                                  placeholder="Categorie nouă..."
+                                  className="flex-1 min-w-0 bg-white border border-emerald-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={savingQuickTaxonomy || !(inlineCatEdit.newCat || '').trim()}
+                                  onClick={() =>
+                                    quickCreateCategoryAndSelect(inlineCatEdit.newCat || '', (canonCat) => {
+                                      setInlineCatEdit((prev) =>
+                                        prev
+                                          ? { ...prev, categorie: canonCat, subcategorie: '', addingCat: false, newCat: '' }
+                                          : prev,
+                                      );
+                                    })
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
+                                >
+                                  OK
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setInlineCatEdit((prev) => (prev ? { ...prev, addingCat: false, newCat: '' } : prev))
+                                  }
+                                  className="p-1 rounded-lg bg-white border border-morning-200 text-slate-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-1">
+                                <select
+                                  value={inlineCatEdit.categorie}
+                                  onChange={(e) =>
+                                    setInlineCatEdit((prev) =>
+                                      prev ? { ...prev, categorie: e.target.value, subcategorie: '' } : prev,
+                                    )
+                                  }
+                                  className="flex-1 min-w-0 bg-white border border-morning-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
+                                >
+                                  <option value="">-- Categorie --</option>
+                                  {inlineCatEdit.categorie &&
+                                    !categorii.some((c: any) => c.nume === inlineCatEdit.categorie) && (
+                                      <option value={inlineCatEdit.categorie}>{inlineCatEdit.categorie}</option>
+                                    )}
+                                  {categorii.map((c, idx) => (
+                                    <option key={c.id || c.nume || idx} value={c.nume}>
+                                      {c.nume}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setInlineCatEdit((prev) => (prev ? { ...prev, addingCat: true, newCat: '' } : prev))
+                                  }
+                                  className="p-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shrink-0"
+                                  title="Categorie nouă"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+
+                            {inlineCatEdit.addingSubcat ? (
+                              <div className="flex items-center space-x-1">
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={inlineCatEdit.newSubcat || ''}
+                                  onChange={(e) =>
+                                    setInlineCatEdit((prev) => (prev ? { ...prev, newSubcat: e.target.value } : prev))
+                                  }
+                                  placeholder="Subcategorie nouă..."
+                                  className="flex-1 min-w-0 bg-white border border-sapphire-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={
+                                    savingQuickTaxonomy ||
+                                    !inlineCatEdit.categorie ||
+                                    !(inlineCatEdit.newSubcat || '').trim()
+                                  }
+                                  onClick={() =>
+                                    quickCreateSubcategoryAndSelect(
+                                      inlineCatEdit.categorie,
+                                      inlineCatEdit.newSubcat || '',
+                                      (canonSub) => {
+                                        setInlineCatEdit((prev) =>
+                                          prev ? { ...prev, subcategorie: canonSub, addingSubcat: false, newSubcat: '' } : prev,
+                                        );
+                                      },
+                                    )
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-sapphire-600 text-white text-[10px] font-bold"
+                                >
+                                  OK
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setInlineCatEdit((prev) =>
+                                      prev ? { ...prev, addingSubcat: false, newSubcat: '' } : prev,
+                                    )
+                                  }
+                                  className="p-1 rounded-lg bg-white border border-morning-200 text-slate-600"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-1">
+                                <select
+                                  value={inlineCatEdit.subcategorie}
+                                  onChange={(e) =>
+                                    setInlineCatEdit((prev) =>
+                                      prev ? { ...prev, subcategorie: e.target.value } : prev,
+                                    )
+                                  }
+                                  className="flex-1 min-w-0 bg-white border border-morning-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
+                                >
+                                  <option value="">-- Fără subcategorie --</option>
+                                  {inlineCatEdit.subcategorie &&
+                                    !getSubcategoriiPentruCategorie(inlineCatEdit.categorie).some(
+                                      (sub: any) => sub.nume === inlineCatEdit.subcategorie,
+                                    ) && <option value={inlineCatEdit.subcategorie}>{inlineCatEdit.subcategorie}</option>}
+                                  {getSubcategoriiPentruCategorie(inlineCatEdit.categorie).map((sub: any, idx: number) => (
+                                    <option key={sub.id || sub.nume || idx} value={sub.nume}>
+                                      {sub.nume}
+                                    </option>
+                                  ))}
+                                </select>
+                                {inlineCatEdit.categorie && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setInlineCatEdit((prev) =>
+                                        prev ? { ...prev, addingSubcat: true, newSubcat: '' } : prev,
+                                      )
+                                    }
+                                    className="p-1 rounded-lg bg-sapphire-100 hover:bg-sapphire-200 text-sapphire-700 border border-sapphire-200 shrink-0"
+                                    title="Subcategorie nouă"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-end space-x-1 pt-0.5">
+                              <button
+                                type="button"
+                                disabled={inlineCatEdit.saving || !inlineCatEdit.categorie}
+                                onClick={handleSaveInlineCategory}
+                                className="px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold inline-flex items-center space-x-1 disabled:opacity-50"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>{inlineCatEdit.saving ? 'Salvez...' : 'Salvează'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInlineCatEdit(null)}
+                                className="px-2 py-0.5 rounded-md bg-white border border-morning-200 text-slate-600 hover:text-slate-900 text-[10px] font-semibold"
+                              >
+                                Anulează
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1 flex-wrap gap-1 group">
+                            <span
+                              onClick={() => openInlineCatEdit(s)}
+                              className="px-2.5 py-0.5 rounded bg-morning-200 text-slate-700 text-[10px] font-semibold cursor-pointer hover:bg-sapphire-100 hover:text-sapphire-900 transition"
+                              title="Click pentru a schimba categoria și subcategoria"
+                            >
+                              {s.categorie}
                             </span>
-                          )}
-                        </div>
+                            {s.subcategorie && (
+                              <span
+                                onClick={() => openInlineCatEdit(s)}
+                                className="px-2.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-700 text-[10px] font-bold cursor-pointer hover:bg-sapphire-100 transition"
+                                title="Click pentru a schimba categoria și subcategoria"
+                              >
+                                ▸ {s.subcategorie}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openInlineCatEdit(s)}
+                              className="p-1 rounded-md text-sage-500 hover:text-sapphire-700 hover:bg-sapphire-50 transition"
+                              title="Schimbă categoria și subcategoria"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 font-semibold text-slate-800">
                         <button
@@ -1122,12 +1769,7 @@ function StocuriGarantiiContent() {
                         </button>
 
                         <button
-                          onClick={() => setEditingArticol({
-                            ...s,
-                            pretUnitar: Number(Number(s.pretUnitar || 0).toFixed(2)),
-                            stocCurent: Number(Number(s.stocCurent || 0).toFixed(2)),
-                            stocMinim: Number(Number(s.stocMinim || 0).toFixed(2)),
-                          })}
+                          onClick={() => openEditArticolModal(s)}
                           className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-[11px] font-semibold border border-morning-200 transition"
                         >
                           Editează
@@ -1400,14 +2042,24 @@ function StocuriGarantiiContent() {
                       </p>
                     </div>
 
+                    {looksLikeNonTireEntry(a) && (
+                      <div className="p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 text-[10px]">
+                        <span className="text-amber-900 font-bold">Nu pare anvelopă / marcă necunoscută</span>
+                        <button
+                          type="button"
+                          onClick={() => openAnvelopaEditModal(a, true)}
+                          className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 transition"
+                        >
+                          Mută în Piese &amp; Categorie
+                        </button>
+                      </div>
+                    )}
+
                     {/* Butoane Acțiuni Rapide */}
                     <div className="flex items-center justify-between pt-1 border-t border-morning-100 gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setEditingAnvelopaStoc({
-                          ...a,
-                          pretAchizitie: Number(Number(a.pretAchizitie || 0).toFixed(2)),
-                        })}
+                        onClick={() => openAnvelopaEditModal(a, false)}
                         className="flex-1 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[11px] border border-morning-200 transition text-center"
                       >
                          Editează
@@ -2064,46 +2716,24 @@ function StocuriGarantiiContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc: *</label>
-                  <select
-                    required
-                    value={editingArticol.categorie || ''}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setEditingArticol({
-                        ...editingArticol,
-                        categorie: newCat,
-                        subcategorie: '',
-                      });
-                    }}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    <option value="">-- Alege Categorie --</option>
-                    {categorii.map((c, idx) => (
-                      <option key={c.id || c.nume || idx} value={c.nume}>
-                        {c.nume}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {renderCategorySubcategoryPicker({
+                scope: 'EDIT_MODAL',
+                categorieVal: editingArticol.categorie || '',
+                subcategorieVal: editingArticol.subcategorie || '',
+                onChangeCat: (newCat) =>
+                  setEditingArticol((prev: any) => (prev ? { ...prev, categorie: newCat, subcategorie: '' } : prev)),
+                onChangeSubcat: (newSub) =>
+                  setEditingArticol((prev: any) => (prev ? { ...prev, subcategorie: newSub } : prev)),
+              })}
 
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Subcategorie Stoc:</label>
-                  <select
-                    value={editingArticol.subcategorie || ''}
-                    onChange={(e) => setEditingArticol({ ...editingArticol, subcategorie: e.target.value })}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    <option value="">-- Fără Subcategorie --</option>
-                    {getSubcategoriiPentruCategorie(editingArticol.categorie || '').map((sub: any, idx: number) => (
-                      <option key={sub.id || sub.nume || idx} value={sub.nume}>
-                         {sub.nume}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Notă Internă / Observații (Opțional):</label>
+                <input
+                  value={editingArticol.observatiiIntern || ''}
+                  onChange={(e) => setEditingArticol({ ...editingArticol, observatiiIntern: e.target.value })}
+                  placeholder="ex: Vopsea gri antracit atelier, filtru aer secundar..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-medium text-xs focus:bg-white"
+                />
               </div>
 
               <div>
@@ -2174,7 +2804,7 @@ function StocuriGarantiiContent() {
         </div>
       )}
 
-      {/* MODAL EDITARE ANVELOPĂ SERIALIZATĂ DIN MAGAZIE */}
+      {/* MODAL EDITARE ANVELOPĂ SERIALIZATĂ DIN MAGAZIE (CU RECLASIFICARE ÎN GESTIUNE PIESE) */}
       {editingAnvelopaStoc && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[92vh] overflow-y-auto my-auto">
@@ -2182,7 +2812,9 @@ function StocuriGarantiiContent() {
               <div className="flex items-center space-x-2">
                 <CircleDot className="w-5 h-5 text-sapphire-500" />
                 <h3 className="text-base font-bold text-sapphire-900">
-                  Editare Anvelopă Serializată ({editingAnvelopaStoc.serieAnvelopa})
+                  {reclassifyMode
+                    ? `Mutare în Gestiune Piese (${editingAnvelopaStoc.serieAnvelopa})`
+                    : `Editare Anvelopă Serializată (${editingAnvelopaStoc.serieAnvelopa})`}
                 </h3>
               </div>
               <button onClick={() => setEditingAnvelopaStoc(null)} className="text-sage-500 hover:text-sapphire-900">
@@ -2190,6 +2822,86 @@ function StocuriGarantiiContent() {
               </button>
             </div>
 
+            <div className="flex items-center space-x-2 bg-morning-100 p-1 rounded-xl border border-morning-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setReclassifyMode(false)}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition ${
+                  !reclassifyMode ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:text-sapphire-900'
+                }`}
+              >
+                Editare Date Anvelopă
+              </button>
+              <button
+                type="button"
+                onClick={() => setReclassifyMode(true)}
+                className={`flex-1 py-1.5 rounded-lg font-bold transition ${
+                  reclassifyMode ? 'bg-amber-600 text-white shadow-xs' : 'text-amber-800 hover:bg-amber-50'
+                }`}
+              >
+                Mută în Piese &amp; Categorie
+              </button>
+            </div>
+
+            {reclassifyMode ? (
+              <form onSubmit={handleReclassifyAnvelopaToStock} className="space-y-3.5 text-xs">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 space-y-1">
+                  <p className="font-extrabold">Reclasificare din Magazie Anvelope → Gestiune Piese &amp; Consumabile</p>
+                  <p className="text-[11px] text-amber-800">
+                    Folosiți această opțiune pentru articole importate greșit ca anvelopă (ex: vopsea Kober, piese, consumabile). Articolul va fi mutat în stocul de piese cu categoria și subcategoria aleasă.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Denumire Articol în Stoc: *</label>
+                  <input
+                    required
+                    value={reclassifyData.denumire}
+                    onChange={(e) => setReclassifyData({ ...reclassifyData, denumire: e.target.value })}
+                    className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs"
+                  />
+                </div>
+
+                {renderCategorySubcategoryPicker({
+                  scope: 'RECLASSIFY',
+                  categorieVal: reclassifyData.categorie,
+                  subcategorieVal: reclassifyData.subcategorie,
+                  onChangeCat: (newCat) => setReclassifyData((prev) => ({ ...prev, categorie: newCat, subcategorie: '' })),
+                  onChangeSubcat: (newSub) => setReclassifyData((prev) => ({ ...prev, subcategorie: newSub })),
+                })}
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Depozit Stoc Target: *</label>
+                  <select
+                    required
+                    value={reclassifyData.depozitId}
+                    onChange={(e) => setReclassifyData({ ...reclassifyData, depozitId: e.target.value })}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    {depozite.map((d) => (
+                      <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAnvelopaStoc(null)}
+                    className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reclassifying || !reclassifyData.categorie.trim()}
+                    className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-md disabled:opacity-50"
+                  >
+                    {reclassifying ? 'Se mută...' : 'Mută în Gestiune Piese'}
+                  </button>
+                </div>
+              </form>
+            ) : (
             <form onSubmit={handleUpdateAnvelopaStoc} className="space-y-3.5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -2304,6 +3016,7 @@ function StocuriGarantiiContent() {
                 </div>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

@@ -1080,6 +1080,140 @@ export class AnvelopeService {
     });
   }
 
+  async reclasificaInArticolStoc(
+    id: string,
+    data: {
+      categorie: string;
+      subcategorie?: string;
+      denumire?: string;
+      depozitId?: string;
+      unitateMasura?: string;
+    },
+  ) {
+    const cleanCategorie = String(data.categorie || '').trim();
+    if (!cleanCategorie) {
+      throw new BadRequestException('Categoria este obligatorie pentru mutarea în gestiunea de piese.');
+    }
+    const cleanSubcategorie = String(data.subcategorie || '').trim() || null;
+
+    return this.prisma.$transaction(async (tx) => {
+      const anvelopa = await tx.anvelopa.findUnique({
+        where: { id },
+        include: { depozit: true },
+      });
+      if (!anvelopa) throw new NotFoundException('Articolul nu a fost găsit.');
+      if (anvelopa.stare === 'MONTATA' || anvelopa.vehiculId || anvelopa.pozitieAxId) {
+        throw new BadRequestException(
+          'Articolul este montat pe un vehicul. Demontați-l mai întâi înainte de reclasificare.',
+        );
+      }
+
+      // 1. Asigurăm existența categoriei și subcategoriei în DB
+      let cat = await tx.categorieStoc.findFirst({
+        where: { nume: { equals: cleanCategorie, mode: 'insensitive' } },
+      });
+      if (!cat) {
+        const isFluid = /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(cleanCategorie);
+        cat = await tx.categorieStoc.create({
+          data: {
+            nume: cleanCategorie,
+            stocMinimImplicit: isFluid ? 20 : 5,
+            esteFluid: isFluid,
+          },
+        });
+      }
+      const canonicalCatName = cat.nume;
+      let canonicalSubName = cleanSubcategorie;
+      if (cleanSubcategorie) {
+        let sub = await tx.subcategorieStoc.findFirst({
+          where: {
+            categorieStocId: cat.id,
+            nume: { equals: cleanSubcategorie, mode: 'insensitive' },
+          },
+        });
+        if (!sub) {
+          sub = await tx.subcategorieStoc.create({
+            data: { categorieStocId: cat.id, nume: cleanSubcategorie },
+          });
+        }
+        canonicalSubName = sub.nume;
+      }
+
+      // 2. Rezolvăm depozitul țintă
+      let targetDepozitId = data.depozitId || anvelopa.depozitId || null;
+      if (!targetDepozitId) {
+        const firstDep = await tx.depozit.findFirst();
+        targetDepozitId = firstDep?.id || null;
+      }
+
+      const rawNameFromTire = [anvelopa.marca, anvelopa.model]
+        .filter((v) => v && !/generic|nespecificat/i.test(String(v)))
+        .join(' ')
+        .trim();
+      const finalDenumire = String(data.denumire || '').trim() || rawNameFromTire || anvelopa.model || anvelopa.serieAnvelopa;
+
+      // 3. Căutăm dacă există deja ArticolStoc asociat în depozit (ex: creat odată cu importul e-Factura)
+      let articol = await tx.articolStoc.findFirst({
+        where: {
+          depozitId: targetDepozitId,
+          OR: [
+            { codArticol: anvelopa.serieAnvelopa },
+            { denumire: { equals: finalDenumire, mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (articol) {
+        articol = await tx.articolStoc.update({
+          where: { id: articol.id },
+          data: {
+            denumire: finalDenumire,
+            categorie: canonicalCatName,
+            subcategorie: canonicalSubName,
+            stocCurent: articol.stocCurent > 0 ? articol.stocCurent : 1,
+          },
+        });
+      } else {
+        articol = await tx.articolStoc.create({
+          data: {
+            codArticol: anvelopa.serieAnvelopa,
+            denumire: finalDenumire,
+            categorie: canonicalCatName,
+            subcategorie: canonicalSubName,
+            stocCurent: 1,
+            stocMinim: cat.stocMinimImplicit ?? 5,
+            pretUnitar: Number(anvelopa.pretAchizitie || 0),
+            unitateMasura: data.unitateMasura || 'buc',
+            depozitId: targetDepozitId,
+          },
+        });
+
+        await tx.intrareStoc.create({
+          data: {
+            articolStocId: articol.id,
+            depozitId: targetDepozitId,
+            furnizor: 'Reclasificat din Magazie Anvelope',
+            numarFactura: 'RECLASIFICARE',
+            dataFactura: new Date(),
+            cantitateIntrata: 1,
+            cantitateRamasa: 1,
+            pretUnitar: Number(anvelopa.pretAchizitie || 0),
+            pretTotal: Number(anvelopa.pretAchizitie || 0),
+            observatii: `Mutat automat din Magazie Anvelope (${anvelopa.marca} ${anvelopa.model}) în categoria ${canonicalCatName}`,
+          },
+        });
+      }
+
+      // 4. Eliminăm înregistrarea greșită din tabela Anvelopa
+      await tx.anvelopa.delete({ where: { id: anvelopa.id } });
+
+      return {
+        mesaj: `Articolul „${finalDenumire}” a fost mutat din Magazie Anvelope în ${canonicalCatName}${canonicalSubName ? ` › ${canonicalSubName}` : ''}.`,
+        articol,
+      };
+    });
+  }
+
   async adaugaAnvelopeSerializateStoc(data: {
     cantitate?: number;
     marca: string;
