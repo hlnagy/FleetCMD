@@ -111,7 +111,7 @@ function StocuriGarantiiContent() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('TOATE'); // TOATE, CRITIC, IN_STOC
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'stoc' | 'anvelope_stoc' | 'depozite' | 'componente'>('stoc');
+  const [activeTab, setActiveTab] = useState<'depozite' | 'stoc' | 'anvelope_stoc' | 'componente'>('depozite');
   const [highlightedTireSerie, setHighlightedTireSerie] = useState<string | null>(null);
 
   // Ascultăm schimbarea tab-ului și a filtrelor de depozit / serie din URL
@@ -1217,9 +1217,9 @@ function StocuriGarantiiContent() {
         <div>
           <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight flex items-center space-x-2">
             <PackageCheck className="w-6 h-6 text-sapphire-500" />
-            <span>Gestiune Stocuri, Depozite & Transferuri</span>
+            <span>Depozite, Stocuri & Transferuri</span>
           </h1>
-          <p className="text-xs text-sage-700 font-medium">Gestiune depozite, inventar anvelope serializate pe bucată, transferuri parțiale și garanții</p>
+          <p className="text-xs text-sage-700 font-medium">Depozite flotă, stocuri piese, anvelope serializate, transferuri parțiale și garanții</p>
         </div>
 
         <div className="flex items-center space-x-2 flex-wrap">
@@ -1234,19 +1234,35 @@ function StocuriGarantiiContent() {
       </div>
 
       {/* SELECTOR TABURI PRINCIPALE (CU CONTOR LIVE) */}
-      <div className="flex items-center space-x-2 border-b border-morning-200 pb-2 overflow-x-auto">
+      <div className="flex items-center space-x-2 border-b border-morning-200 dark:border-slate-800 pb-2 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setActiveTab('depozite')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            activeTab === 'depozite'
+              ? 'bg-sapphire-500 text-white shadow-xs'
+              : 'bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-morning-200 dark:hover:bg-slate-700 hover:text-sapphire-900 dark:hover:text-white'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Depozite &amp; Transferuri</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'depozite' ? 'bg-white/20 text-white' : 'bg-morning-200 dark:bg-slate-700 text-sage-700 dark:text-slate-200'}`}>
+            {depozite.length}
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('stoc')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'stoc'
               ? 'bg-sapphire-500 text-white shadow-xs'
-              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
+              : 'bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-morning-200 dark:hover:bg-slate-700 hover:text-sapphire-900 dark:hover:text-white'
           }`}
         >
           <PackageCheck className="w-4 h-4" />
-          <span>1. Gestiune Piese & Consumabile</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'stoc' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
+          <span>Piese &amp; Consumabile</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'stoc' ? 'bg-white/20 text-white' : 'bg-morning-200 dark:bg-slate-700 text-sage-700 dark:text-slate-200'}`}>
             {stocuriAfisate.length}
           </span>
         </button>
@@ -1257,29 +1273,13 @@ function StocuriGarantiiContent() {
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'anvelope_stoc'
               ? 'bg-sapphire-500 text-white shadow-xs'
-              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
+              : 'bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-morning-200 dark:hover:bg-slate-700 hover:text-sapphire-900 dark:hover:text-white'
           }`}
         >
           <CircleDot className="w-4 h-4" />
-          <span>2. Magazie Centrală Anvelope (Serializat)</span>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-black ${activeTab === 'anvelope_stoc' ? 'bg-emerald-400 text-slate-900' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'}`}>
+          <span>Magazie Anvelope</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-black ${activeTab === 'anvelope_stoc' ? 'bg-emerald-400 text-slate-900' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'}`}>
             {anvelopeStocList.length} buc
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('depozite')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
-            activeTab === 'depozite'
-              ? 'bg-sapphire-500 text-white shadow-xs'
-              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
-          }`}
-        >
-          <Building2 className="w-4 h-4" />
-          <span>3. Depozite Flotă & Transferuri</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'depozite' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
-            {depozite.length}
           </span>
         </button>
 
@@ -1289,12 +1289,12 @@ function StocuriGarantiiContent() {
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
             activeTab === 'componente'
               ? 'bg-sapphire-500 text-white shadow-xs'
-              : 'bg-morning-100 text-slate-700 hover:bg-morning-200 hover:text-sapphire-900'
+              : 'bg-morning-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-morning-200 dark:hover:bg-slate-700 hover:text-sapphire-900 dark:hover:text-white'
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
-          <span>4. Garanții Componente</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'componente' ? 'bg-white/20 text-white' : 'bg-morning-200 text-sage-600'}`}>
+          <span>Garanții Componente</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === 'componente' ? 'bg-white/20 text-white' : 'bg-morning-200 dark:bg-slate-700 text-sage-700 dark:text-slate-200'}`}>
             {componente.length}
           </span>
         </button>

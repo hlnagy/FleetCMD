@@ -4111,7 +4111,7 @@ function EFacturaContent() {
         <div className="pleasant-card p-6 rounded-2xl space-y-4">
           <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
             <ShoppingCart className="w-5 h-5 text-sapphire-500" />
-            <span>2. Recepție Marfă pe Factură Nouă (Piese, Consumabile & Uleiuri)</span>
+            <span>Recepție Manuală Factură (Piese, Consumabile &amp; Uleiuri)</span>
           </h2>
           <p className="text-xs text-sage-700 font-medium">Introduceți Prețul Total al Facturii și Cantitatea, iar sistemul va calcula automat Prețul Unitar (RON/unitate)!</p>
 

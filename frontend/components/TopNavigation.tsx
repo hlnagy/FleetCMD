@@ -52,51 +52,51 @@ export default function TopNavigation() {
 
   const navGroups: NavGroup[] = [
     {
-      name: 'Facturi & Recepție',
+      name: 'Facturi',
       icon: FileText,
       items: [
-        { name: '1. ANAF e-Factura (Import)', href: '/efactura?tab=efactura', icon: FileText, desc: 'Preluare automată din SPV & alocare directă' },
-        { name: '2. Recepție Manuală Factură', href: '/efactura?tab=manual', icon: ShoppingCart, desc: 'Introducere NIR / factură de la furnizori' },
-        { name: '3. Istoric & Căutare Facturi', href: '/efactura?tab=istoric', icon: History, desc: 'Arhivă facturi importate, sume și articole' },
+        { name: 'ANAF e-Factura', href: '/efactura?tab=efactura', icon: FileText, desc: 'Preluare automată din SPV & alocare directă' },
+        { name: 'Recepție Manuală', href: '/efactura?tab=manual', icon: ShoppingCart, desc: 'Introducere NIR / factură de la furnizori' },
+        { name: 'Istoric Facturi', href: '/efactura?tab=istoric', icon: History, desc: 'Arhivă facturi importate, sume și articole' },
       ],
     },
     {
-      name: 'Comenzi & Mentenanță',
+      name: 'Mentenanță',
       icon: Wrench,
       items: [
-        { name: 'Comenzi de Lucru (Atelier)', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
-        { name: 'Profiluri Mentenanță & Planificator', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
+        { name: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
+        { name: 'Planificator Revizii', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
         { name: 'Anvelope', href: '/anvelope', icon: CircleDot, desc: 'Poziționare anvelope pe axe utilaje' },
-        { name: 'Uleiuri & Fluide Flotă', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
+        { name: 'Uleiuri & Fluide', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
       ],
     },
     {
-      name: 'Vehicule & Flotă',
+      name: 'Flotă',
       icon: Truck,
       items: [
-        { name: 'Fișă Tehnică & Flotă', href: '/fisa-tehnica', icon: Truck, desc: 'Parc auto complet, detalii tehnice, axe' },
-        { name: 'Actualizare KM (Pompă)', href: '/import-km', icon: Gauge, desc: 'Import contor din alimentări carburant' },
-        { name: 'Ore Funcționare (mTH / GPS)', href: '/ore-functionare', icon: Timer, desc: 'Înregistrare orar utilaje grele' },
-        { name: 'Valabilitate Acte & Documente', href: '/documente', icon: FileCheck, desc: 'ITP, RCA, CASCO, tahograf, roviniete' },
-        { name: 'Cuplare Ansambluri', href: '/ansambluri', icon: Link2, desc: 'Asocieri cap tractor - semiremorcă' },
+        { name: 'Fișă Tehnică', href: '/fisa-tehnica', icon: Truck, desc: 'Parc auto complet, detalii tehnice, axe' },
+        { name: 'Actualizare KM', href: '/import-km', icon: Gauge, desc: 'Import contor din alimentări pompă carburant' },
+        { name: 'Ore Funcționare', href: '/ore-functionare', icon: Timer, desc: 'Înregistrare orar mTH / utilaje grele' },
+        { name: 'Documente Flotă', href: '/documente', icon: FileCheck, desc: 'ITP, RCA, CASCO, tahograf, roviniete' },
+        { name: 'Ansambluri', href: '/ansambluri', icon: Link2, desc: 'Asocieri cap tractor - semiremorcă' },
       ],
     },
     {
-      name: 'Gestiune Stoc',
+      name: 'Stocuri',
       icon: PackageCheck,
       items: [
-        { name: '1. Piese & Consumabile', href: '/stocuri?tab=stoc', icon: PackageCheck, desc: 'Nomenclator articole, stoc curent, FIFO' },
-        { name: '2. Magazie Centrală Anvelope (Serii)', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot, desc: 'Anvelope cu serii unice și rulaj' },
-        { name: '3. Depozite Flotă & Transferuri', href: '/stocuri?tab=depozite', icon: Building2, desc: 'Ateliere, magazii și mișcări interne' },
-        { name: '4. Garanții Componente Serializate', href: '/stocuri?tab=componente', icon: ShieldCheck, desc: 'Piese montate aflate în perioada de garanție' },
+        { name: 'Depozite & Transferuri', href: '/stocuri?tab=depozite', icon: Building2, desc: 'Ateliere, magazii și mișcări interne' },
+        { name: 'Piese & Consumabile', href: '/stocuri?tab=stoc', icon: PackageCheck, desc: 'Nomenclator articole, stoc curent, FIFO' },
+        { name: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot, desc: 'Anvelope cu serii unice și rulaj' },
+        { name: 'Garanții Componente', href: '/stocuri?tab=componente', icon: ShieldCheck, desc: 'Piese montate aflate în perioada de garanție' },
       ],
     },
     {
-      name: 'Analitice & Rapoarte',
+      name: 'Rapoarte',
       icon: BarChart3,
       items: [
-        { name: 'Rapoarte & Analitică Flotă', href: '/rapoarte', icon: BarChart3, desc: 'Costuri per km/mTH, consum ulei, grafice' },
-        { name: 'Centru Alerte Active', href: '/alerte', icon: ShieldAlert, desc: 'Avertizări depășiri, stoc critic, documente expirate' },
+        { name: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3, desc: 'Costuri per km/mTH, consum ulei, grafice' },
+        { name: 'Alerte Active', href: '/alerte', icon: ShieldAlert, desc: 'Avertizări depășiri, stoc critic, documente expirate' },
       ],
     },
   ];
@@ -203,14 +203,14 @@ export default function TopNavigation() {
               return (
                 <div
                   key={group.name}
-                  className="relative"
+                  className="relative shrink-0"
                   onMouseEnter={() => setActiveDropdown(group.name)}
                   onMouseLeave={() => setActiveDropdown(null)}
                 >
                   <button
                     type="button"
                     onClick={() => setActiveDropdown(isOpen ? null : group.name)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                       hasActiveChild
                         ? 'bg-sapphire-50 dark:bg-slate-800 text-sapphire-900 dark:text-white font-black ring-1 ring-sapphire-200 dark:ring-slate-700'
                         : 'text-slate-700 dark:text-slate-300 hover:bg-morning-100 dark:hover:bg-slate-800'
@@ -266,8 +266,8 @@ export default function TopNavigation() {
           {/* SETĂRI SISTEM */}
           <button
             type="button"
-            onClick={() => openTab({ href: '/setari', title: 'Setări Sistem', iconName: 'Settings' })}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
+            onClick={() => openTab({ href: '/setari', title: 'Setări', iconName: 'Settings' })}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
               activeTabId === '/setari'
                 ? 'bg-sapphire-50 dark:bg-slate-800 text-sapphire-900 dark:text-white font-black'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-morning-100 dark:hover:bg-slate-800'

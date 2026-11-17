@@ -36,50 +36,50 @@ export default function Sidebar() {
   const { resolvedTheme, toggleTheme } = useTheme();
 
   const navItems: NavItem[] = [
-    { name: 'Dashboard Principal', href: '/', icon: LayoutDashboard },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     {
-      name: 'Facturi & Recepție Marfă',
+      name: 'Facturi',
       href: '/efactura',
       icon: FileText,
       subItems: [
-        { name: '1. ANAF e-Factura (Import)', href: '/efactura?tab=efactura', tabKey: 'efactura', icon: FileText },
-        { name: '2. Recepție Manuală Factură', href: '/efactura?tab=manual', tabKey: 'manual', icon: ShoppingCart },
-        { name: '3. Istoric & Căutare Facturi', href: '/efactura?tab=istoric', tabKey: 'istoric', icon: History },
+        { name: 'ANAF e-Factura', href: '/efactura?tab=efactura', tabKey: 'efactura', icon: FileText },
+        { name: 'Recepție Manuală', href: '/efactura?tab=manual', tabKey: 'manual', icon: ShoppingCart },
+        { name: 'Istoric Facturi', href: '/efactura?tab=istoric', tabKey: 'istoric', icon: History },
       ],
     },
     {
-      name: 'Vehicule & Flotă',
+      name: 'Flotă',
       href: '/fisa-tehnica',
       icon: Truck,
       subItems: [
-        { name: 'Fișă Tehnică & Flotă', href: '/fisa-tehnica', icon: Truck },
-        { name: 'Actualizare KM (Pompă)', href: '/import-km', icon: Gauge },
-        { name: 'Ore Funcționare (mTH / GPS)', href: '/ore-functionare', icon: Timer },
-        { name: 'Valabilitate Acte & Documente', href: '/documente', icon: FileCheck },
-        { name: 'Cuplare Ansambluri', href: '/ansambluri', icon: Link2 },
+        { name: 'Fișă Tehnică', href: '/fisa-tehnica', icon: Truck },
+        { name: 'Actualizare KM', href: '/import-km', icon: Gauge },
+        { name: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
+        { name: 'Documente Flotă', href: '/documente', icon: FileCheck },
+        { name: 'Ansambluri', href: '/ansambluri', icon: Link2 },
       ],
     },
     { name: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
-    { name: 'Profiluri Mentenanță', href: '/mentenanta', icon: Clock },
+    { name: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
     {
-      name: 'Gestiune Stoc & Garanții',
+      name: 'Stocuri',
       href: '/stocuri',
       icon: PackageCheck,
       subItems: [
-        { name: '1. Gestiune Piese & Consumabile', href: '/stocuri?tab=stoc', tabKey: 'stoc', icon: PackageCheck },
-        { name: '2. Magazie Centrală Anvelope (Serii)', href: '/stocuri?tab=anvelope_stoc', tabKey: 'anvelope_stoc', icon: CircleDot },
-        { name: '3. Depozite Flotă & Transferuri', href: '/stocuri?tab=depozite', tabKey: 'depozite', icon: Building2 },
-        { name: '4. Garanții Componente Serializate', href: '/stocuri?tab=componente', tabKey: 'componente', icon: ShieldCheck },
+        { name: 'Depozite & Transferuri', href: '/stocuri?tab=depozite', tabKey: 'depozite', icon: Building2 },
+        { name: 'Piese & Consumabile', href: '/stocuri?tab=stoc', tabKey: 'stoc', icon: PackageCheck },
+        { name: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', tabKey: 'anvelope_stoc', icon: CircleDot },
+        { name: 'Garanții Componente', href: '/stocuri?tab=componente', tabKey: 'componente', icon: ShieldCheck },
       ],
     },
-    { name: 'Anvelope & Axe', href: '/anvelope', icon: CircleDot },
-    { name: 'Gestiune Uleiuri & Fluide', href: '/fluide', icon: Droplets },
+    { name: 'Anvelope', href: '/anvelope', icon: CircleDot },
+    { name: 'Uleiuri & Fluide', href: '/fluide', icon: Droplets },
     { name: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
-    { name: 'Rapoarte & Analitică', href: '/rapoarte', icon: BarChart3 },
+    { name: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
   ];
 
   const setariItem: NavItem = {
-    name: 'Setări Sistem',
+    name: 'Setări',
     href: '/setari',
     icon: Settings,
   };
@@ -152,7 +152,7 @@ export default function Sidebar() {
                   isSubActive =
                     pathname === item.href &&
                     (currentTab === sub.tabKey ||
-                      (!currentTab && sub.tabKey === 'stoc') ||
+                      (!currentTab && sub.tabKey === 'depozite') ||
                       (!currentTab && sub.tabKey === 'efactura') ||
                       (!currentTab && sub.tabKey === 'vehicule'));
                 } else {

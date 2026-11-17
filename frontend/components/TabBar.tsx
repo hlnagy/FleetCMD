@@ -128,19 +128,21 @@ export default function TabBar() {
 
                 <div className="pt-1 space-y-1">
                   {[
-                    { title: 'Comenzi de Lucru (Atelier)', href: '/comenzi-lucru', icon: Wrench },
-                    { title: 'ANAF e-Factura (Import)', href: '/efactura?tab=efactura', icon: FileText },
-                    { title: 'Recepție Manuală Factură', href: '/efactura?tab=manual', icon: ShoppingCart },
-                    { title: 'Gestiune Stoc Piese', href: '/stocuri?tab=stoc', icon: PackageCheck },
-                    { title: 'Magazie Anvelope (Serii)', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot },
-                    { title: 'Fișă Tehnică & Flotă', href: '/fisa-tehnica', icon: Truck },
-                    { title: 'Actualizare KM (Pompă)', href: '/import-km', icon: Gauge },
-                    { title: 'Ore Funcționare (mTH)', href: '/ore-functionare', icon: Timer },
-                    { title: 'Profiluri Mentenanță', href: '/mentenanta', icon: Clock },
-                    { title: 'Uleiuri & Fluide Flotă', href: '/fluide', icon: Droplets },
-                    { title: 'Alerte & Notificări', href: '/alerte', icon: ShieldAlert },
-                    { title: 'Rapoarte & Analitică', href: '/rapoarte', icon: BarChart3 },
-                    { title: 'Setări Sistem', href: '/setari', icon: Settings },
+                    { title: 'Depozite & Transferuri', href: '/stocuri?tab=depozite', icon: Building2 },
+                    { title: 'Piese & Consumabile', href: '/stocuri?tab=stoc', icon: PackageCheck },
+                    { title: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot },
+                    { title: 'Garanții Componente', href: '/stocuri?tab=componente', icon: ShieldCheck },
+                    { title: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
+                    { title: 'ANAF e-Factura', href: '/efactura?tab=efactura', icon: FileText },
+                    { title: 'Recepție Manuală', href: '/efactura?tab=manual', icon: ShoppingCart },
+                    { title: 'Fișă Tehnică', href: '/fisa-tehnica', icon: Truck },
+                    { title: 'Actualizare KM', href: '/import-km', icon: Gauge },
+                    { title: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
+                    { title: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
+                    { title: 'Uleiuri & Fluide', href: '/fluide', icon: Droplets },
+                    { title: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
+                    { title: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
+                    { title: 'Setări', href: '/setari', icon: Settings },
                   ].map((m) => {
                     const ModIcon = m.icon;
                     return (

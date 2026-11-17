@@ -17,24 +17,42 @@ export const ROUTE_TAB_DEFINITIONS: Record<string, { title: string; iconName: st
   '/comenzi-lucru': { title: 'Comenzi de Lucru', iconName: 'Wrench' },
   '/efactura': { title: 'ANAF e-Factura', iconName: 'FileText' },
   '/efactura?tab=efactura': { title: 'ANAF e-Factura', iconName: 'FileText' },
-  '/efactura?tab=manual': { title: 'Recepție Factură', iconName: 'ShoppingCart' },
+  '/efactura?tab=manual': { title: 'Recepție Manuală', iconName: 'ShoppingCart' },
   '/efactura?tab=istoric': { title: 'Istoric Facturi', iconName: 'History' },
-  '/fisa-tehnica': { title: 'Fișă Tehnică & Flotă', iconName: 'Truck' },
-  '/import-km': { title: 'Actualizare KM (Pompă)', iconName: 'Gauge' },
-  '/ore-functionare': { title: 'Ore Funcționare (mTH)', iconName: 'Timer' },
-  '/documente': { title: 'Valabilitate Acte', iconName: 'FileCheck' },
-  '/ansambluri': { title: 'Cuplare Ansambluri', iconName: 'Link2' },
-  '/mentenanta': { title: 'Profiluri Mentenanță', iconName: 'Clock' },
-  '/stocuri': { title: 'Piese & Consumabile', iconName: 'PackageCheck' },
+  '/fisa-tehnica': { title: 'Fișă Tehnică', iconName: 'Truck' },
+  '/import-km': { title: 'Actualizare KM', iconName: 'Gauge' },
+  '/ore-functionare': { title: 'Ore Funcționare', iconName: 'Timer' },
+  '/documente': { title: 'Documente Flotă', iconName: 'FileCheck' },
+  '/ansambluri': { title: 'Ansambluri', iconName: 'Link2' },
+  '/mentenanta': { title: 'Planificator Revizii', iconName: 'Clock' },
+  '/stocuri': { title: 'Depozite & Transferuri', iconName: 'Building2' },
+  '/stocuri?tab=depozite': { title: 'Depozite & Transferuri', iconName: 'Building2' },
   '/stocuri?tab=stoc': { title: 'Piese & Consumabile', iconName: 'PackageCheck' },
   '/stocuri?tab=anvelope_stoc': { title: 'Magazie Anvelope', iconName: 'CircleDot' },
-  '/stocuri?tab=depozite': { title: 'Depozite Flotă', iconName: 'Building2' },
-  '/stocuri?tab=componente': { title: 'Garanții Piese', iconName: 'ShieldCheck' },
+  '/stocuri?tab=componente': { title: 'Garanții Componente', iconName: 'ShieldCheck' },
   '/anvelope': { title: 'Anvelope', iconName: 'CircleDot' },
   '/fluide': { title: 'Uleiuri & Fluide', iconName: 'Droplets' },
   '/alerte': { title: 'Alerte Active', iconName: 'ShieldAlert' },
-  '/rapoarte': { title: 'Rapoarte & Analitică', iconName: 'BarChart3' },
-  '/setari': { title: 'Setări Sistem', iconName: 'Settings' },
+  '/rapoarte': { title: 'Rapoarte Flotă', iconName: 'BarChart3' },
+  '/setari': { title: 'Setări', iconName: 'Settings' },
+};
+
+const normalizeRestoredTab = (tab: WorkspaceTab): WorkspaceTab => {
+  const isCustomVehicleTab = tab.href?.startsWith('/fisa-tehnica?id=');
+  const isCustomInvoiceTab = typeof tab.title === 'string' && tab.title.startsWith('Factură:');
+  const isCustomUsersTab = tab.title === 'Utilizatori & Audit';
+
+  if (isCustomVehicleTab || isCustomInvoiceTab || isCustomUsersTab) {
+    return tab;
+  }
+
+  const def = ROUTE_TAB_DEFINITIONS[tab.id];
+  if (def) {
+    return { ...tab, title: def.title, iconName: def.iconName };
+  }
+
+  const strippedTitle = String(tab.title || '').replace(/^\d+\.\s+/, '').trim();
+  return strippedTitle ? { ...tab, title: strippedTitle } : tab;
 };
 
 export function resolveTabInfo(pathname: string, searchParams?: any): WorkspaceTab {
@@ -125,7 +143,7 @@ function TabWorkspaceInnerProvider({ children }: { children: React.ReactNode }) 
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setTabs(ensureDashboardFirst(parsed));
+          setTabs(ensureDashboardFirst(parsed.map(normalizeRestoredTab)));
         }
       }
     } catch (e) {
