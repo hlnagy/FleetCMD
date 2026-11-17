@@ -7,7 +7,7 @@ import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
   Unlock, RotateCcw, Calendar, Truck, Loader2, Package, Minus, AlertCircle, Info,
-  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2, Building2
+  ShoppingCart, RefreshCw, GripHorizontal, Maximize2, Minimize2, Building2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
 import DraggableModal from '@/components/DraggableModal';
@@ -113,6 +113,15 @@ export default function ComenziLucruPage() {
   const [stocuri, setStocuri] = useState<any[]>(() => comenziCache.stocuri || []);
   const [mecaniciList, setMecaniciList] = useState<any[]>(() => comenziCache.mecaniciList || []);
   const [isCreating, setIsCreating] = useState(false);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
+  const COLLAPSE_ELEMENTS_THRESHOLD = 3;
+  const COLLAPSED_PREVIEW_COUNT = 2;
+
+  const toggleOrderElementsExpanded = (orderId: string) => {
+    setExpandedOrderIds((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+    );
+  };
 
   // Filtre
   const [searchQuery, setSearchQuery] = useState(() => comenziCache.searchQuery || '');
@@ -1401,10 +1410,48 @@ export default function ComenziLucruPage() {
 
       {/* TABEL COMENZI DE LUCRU */}
       <div className="pleasant-card rounded-2xl p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-base font-bold text-sapphire-900">Registrul Comenzilor de Lucru & Atelier</h2>
-          <span className="text-xs font-semibold text-sage-700">{filteredComenzi.length} Comenzi Afișate</span>
-        </div>
+        {(() => {
+          const expandableOrderIds = filteredComenzi
+            .filter((c) => (c.elementeComanda?.length || 0) > COLLAPSE_ELEMENTS_THRESHOLD)
+            .map((c) => c.id);
+          const areAllExpanded =
+            expandableOrderIds.length > 0 &&
+            expandableOrderIds.every((id) => expandedOrderIds.includes(id));
+
+          return (
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <h2 className="text-base font-bold text-sapphire-900">Registrul Comenzilor de Lucru & Atelier</h2>
+              <div className="flex items-center space-x-3">
+                {expandableOrderIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (areAllExpanded) {
+                        setExpandedOrderIds((prev) => prev.filter((id) => !expandableOrderIds.includes(id)));
+                      } else {
+                        setExpandedOrderIds((prev) => Array.from(new Set([...prev, ...expandableOrderIds])));
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-700 text-[11px] font-bold flex items-center space-x-1 transition"
+                  >
+                    {areAllExpanded ? (
+                      <>
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        <span>Restrânge toate ({expandableOrderIds.length})</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                        <span>Extinde toate ({expandableOrderIds.length})</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                <span className="text-xs font-semibold text-sage-700">{filteredComenzi.length} Comenzi Afișate</span>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 min-w-[1100px]">
@@ -1425,53 +1472,126 @@ export default function ComenziLucruPage() {
                 const totalCost = cl.elementeComanda?.reduce((sum: number, el: any) => sum + (el.costTotal || 0), 0) || 0;
                 const esteInLucru = cl.stare === 'IN_LUCRU' || cl.stare === 'DEVALIDAT';
                 const esteFinalizat = cl.stare === 'FINALIZAT';
+                const vehiculMarcaModel = [cl.vehiculMarca, cl.vehiculModel]
+                  .filter((v) => v && !/^[-–—\s]+$/.test(String(v).trim()) && String(v).trim().toUpperCase() !== 'N/A')
+                  .join(' ');
+
+                const elements: any[] = cl.elementeComanda || [];
+                const canCollapse = elements.length > COLLAPSE_ELEMENTS_THRESHOLD;
+                const isExpanded = !canCollapse || expandedOrderIds.includes(cl.id);
+
+                const activeSearch = searchQuery.trim().toLowerCase();
+                let visibleElements = elements;
+                let searchMatchesInHidden = 0;
+
+                if (canCollapse && !isExpanded) {
+                  if (activeSearch) {
+                    const matched = elements.filter((el: any) => {
+                      const furn = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor || '';
+                      const fact = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura || '';
+                      return (
+                        (el.descriere || '').toLowerCase().includes(activeSearch) ||
+                        furn.toLowerCase().includes(activeSearch) ||
+                        fact.toLowerCase().includes(activeSearch)
+                      );
+                    });
+                    if (matched.length > 0) {
+                      const nonMatched = elements.filter((el: any) => !matched.includes(el));
+                      visibleElements = [...matched, ...nonMatched].slice(0, COLLAPSED_PREVIEW_COUNT);
+                      searchMatchesInHidden = Math.max(0, matched.length - COLLAPSED_PREVIEW_COUNT);
+                    } else {
+                      visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
+                    }
+                  } else {
+                    visibleElements = elements.slice(0, COLLAPSED_PREVIEW_COUNT);
+                  }
+                }
+
+                const hiddenCount = elements.length - visibleElements.length;
 
                 return (
-                  <tr key={cl.id} className={`hover:bg-morning-50 transition ${cl.stare === 'DEVALIDAT' ? 'bg-roseash-50/40' : esteInLucru ? 'bg-periwinkle-50/50' : ''}`}>
+                  <tr
+                    key={cl.id}
+                    className={`[&>td]:align-top hover:bg-morning-50 transition ${
+                      cl.stare === 'DEVALIDAT' ? 'bg-roseash-50/40' : esteInLucru ? 'bg-periwinkle-50/50' : ''
+                    }`}
+                  >
                     <td className="p-3 font-extrabold text-sapphire-900 font-mono">
                       {cl.numarComanda}
-                      {cl.observatii && <div className="text-[10px] text-sage-600 font-normal truncate max-w-xs">{cl.observatii}</div>}
+                      {cl.observatii && <div className="text-[10px] text-sage-600 font-normal truncate max-w-xs mt-0.5">{cl.observatii}</div>}
                     </td>
 
                     <td className="p-3 font-bold text-sapphire-700">
                       {cl.vehiculNumarIntern}
-                      <div className="text-[10px] text-sage-500 font-normal">{cl.vehiculInmatriculare} ({cl.vehiculMarca} {cl.vehiculModel})</div>
+                      {(cl.vehiculInmatriculare || vehiculMarcaModel) && (
+                        <div className="text-[10px] text-sage-500 font-normal mt-0.5">
+                          {cl.vehiculInmatriculare}
+                          {vehiculMarcaModel ? ` (${vehiculMarcaModel})` : ''}
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-3 font-semibold text-slate-800">
-                      <span className="px-2 py-0.5 rounded bg-morning-200 text-sapphire-900 font-bold text-[11px]">
+                      <span className="px-2 py-0.5 rounded bg-morning-200 text-sapphire-900 font-bold text-[11px] inline-block">
                         {cl.mecanicResponsabil}
                       </span>
                     </td>
 
-                    <td className="p-3 text-sage-700 text-[11px]">
+                    <td className="p-3 text-sage-700 text-[11px] whitespace-nowrap">
                       <div><strong>Deschidere:</strong> {new Date(cl.dataDeschidere).toLocaleDateString('ro-RO')}</div>
                       {cl.dataFinalizare ? (
-                        <div className="text-sapphire-600 font-semibold"><strong>Finalizat:</strong> {new Date(cl.dataFinalizare).toLocaleDateString('ro-RO')}</div>
+                        <div className="text-sapphire-600 font-semibold mt-0.5"><strong>Finalizat:</strong> {new Date(cl.dataFinalizare).toLocaleDateString('ro-RO')}</div>
                       ) : cl.stare === 'DEVALIDAT' ? (
-                        <div className="text-terracotta-600 font-bold">DEVALIDAT (În Ediție)</div>
+                        <div className="text-terracotta-600 font-bold mt-0.5">DEVALIDAT (În Ediție)</div>
                       ) : (
-                        <div className="text-periwinkle-700 font-bold">În Desfășurare</div>
+                        <div className="text-periwinkle-700 font-bold mt-0.5">În Desfășurare</div>
                       )}
                     </td>
 
-                    <td className="p-3">
+                    <td className="p-3 min-w-[340px]">
                       <div className="space-y-1.5">
-                        {cl.elementeComanda && cl.elementeComanda.length > 0 ? (
-                          cl.elementeComanda.map((el: any) => {
+                        {canCollapse && (
+                          <div className="flex items-center justify-between gap-2 pb-1 border-b border-morning-200">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-sapphire-50 text-sapphire-800 border border-sapphire-200 text-[10px] font-extrabold font-mono">
+                              <Package className="w-3 h-3 text-sapphire-600" />
+                              <span>{elements.length} poziții în deviz</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleOrderElementsExpanded(cl.id)}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-700 text-[10px] font-bold transition"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp className="w-3 h-3" />
+                                  <span>Restrânge</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-3 h-3" />
+                                  <span>Extinde toate ({elements.length})</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+
+                        {elements.length > 0 ? (
+                          visibleElements.map((el: any) => {
                             const prov = getProvenientaSuffix(el);
                             const furnizor = el.furnizor || el.articolStoc?.intrariStoc?.[0]?.furnizor;
                             const factura = el.numarFactura || el.articolStoc?.intrariStoc?.[0]?.numarFactura;
                             const dataFactura = el.articolStoc?.intrariStoc?.[0]?.dataFactura;
                             const pretUnit = Number(el.pretUnitar || el.articolStoc?.intrariStoc?.[0]?.pretUnitar || 0);
+                            const unitMeasure = el.unitateMasura || el.articolStoc?.unitateMasura || 'buc';
 
                             return (
-                              <div key={el.id} className="text-[11px] font-medium text-slate-800 space-y-0.5 border-b border-slate-100 last:border-0 pb-1 last:pb-0">
-                                <div className="flex items-center justify-between">
+                              <div key={el.id} className="text-[11px] font-medium text-slate-800 space-y-0.5 border-b border-morning-200 last:border-0 pb-1 last:pb-0">
+                                <div className="flex items-center justify-between gap-2">
                                   <span>
                                     • {el.descriere}
                                     {prov && <span className="text-slate-500 font-normal ml-1">({prov})</span>}
-                                    {' '}({el.cantitate} buc)
+                                    {' '}({el.cantitate} {unitMeasure})
                                   </span>
                                   <span className="font-mono text-sage-700 font-bold ml-2 whitespace-nowrap">
                                     {Number(el.costTotal || (Number(el.cantitate || 1) * pretUnit)).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
@@ -1494,12 +1614,12 @@ export default function ComenziLucruPage() {
                                       >
                                         <FileText className="w-2.5 h-2.5 text-slate-500" />
                                         <span>Factura: <strong className="underline decoration-dotted">{factura}</strong></span>
-                                        {dataFactura && <span className="text-[9px] text-slate-500">({new Date(dataFactura).toLocaleDateString('ro-RO')})</span>}
+                                        {dataFactura && <span className="text-[9px] text-slate-600">({new Date(dataFactura).toLocaleDateString('ro-RO')})</span>}
                                       </button>
                                     )}
                                     {pretUnit > 0 && (
-                                      <span className="font-mono text-slate-500">
-                                        {pretUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/buc
+                                      <span className="font-mono text-slate-600 font-semibold">
+                                        {pretUnit.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{unitMeasure}
                                       </span>
                                     )}
                                   </div>
@@ -1511,20 +1631,45 @@ export default function ComenziLucruPage() {
                           <span className="text-[10px] text-slate-400 italic">Fără piese (Doar descriere intervenție)</span>
                         )}
 
+                        {canCollapse && !isExpanded && hiddenCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleOrderElementsExpanded(cl.id)}
+                            className="w-full py-1.5 px-2.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 border border-sapphire-200 text-sapphire-700 text-[11px] font-bold flex items-center justify-center space-x-1.5 transition"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                            <span>
+                              Vezi încă {hiddenCount} {hiddenCount === 1 ? 'poziție' : 'poziții'} (Total {elements.length})
+                              {searchMatchesInHidden > 0 ? ` · +${searchMatchesInHidden} potriviri căutare` : ''}
+                            </span>
+                          </button>
+                        )}
+
+                        {canCollapse && isExpanded && (
+                          <button
+                            type="button"
+                            onClick={() => toggleOrderElementsExpanded(cl.id)}
+                            className="w-full py-1 px-2.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sage-700 text-[10px] font-bold flex items-center justify-center space-x-1 transition"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                            <span>Restrânge lista ({elements.length} poziții)</span>
+                          </button>
+                        )}
+
                         {esteInLucru && (
                           <button
                             onClick={() => openEditModal(cl)}
                             className="text-[10px] font-bold text-sapphire-600 hover:underline flex items-center space-x-1 pt-1"
                           >
                             <Plus className="w-3 h-3 text-sapphire-500" />
-                            <span>+ Adaugă piesă / deviz</span>
+                            <span>Adaugă piesă / deviz</span>
                           </button>
                         )}
                       </div>
                     </td>
 
-                    <td className="p-3">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                    <td className="p-3 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-block ${
                         cl.stare === 'FINALIZAT' ? 'bg-sapphire-50 text-sapphire-600 border border-sapphire-100' :
                         cl.stare === 'DEVALIDAT' ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300 font-extrabold' :
                         cl.stare === 'ANULAT' ? 'bg-slate-100 text-slate-500 border border-slate-300' :
@@ -1534,12 +1679,13 @@ export default function ComenziLucruPage() {
                       </span>
                     </td>
 
-                    <td className="p-3 text-right font-extrabold text-sapphire-900 font-mono text-sm">
+                    <td className="p-3 text-right font-extrabold text-sapphire-900 font-mono text-sm whitespace-nowrap">
                       {Number(totalCost || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                     </td>
 
                     {/* ─── ACȚIUNI MANAGEMENT (USER STRICT LOGIC) ─── */}
-                    <td className="p-3 text-right space-x-1 flex items-center justify-end whitespace-nowrap min-w-[280px]">
+                    <td className="p-3 text-right min-w-[280px]">
+                      <div className="flex items-center justify-end space-x-1 whitespace-nowrap">
                       {/* VIZUALIZARE (A4 Printable PDF Modal) */}
                       <button
                         onClick={() => setShowViewModal(cl)}
@@ -1614,6 +1760,7 @@ export default function ComenziLucruPage() {
                           </button>
                         </>
                       )}
+                      </div>
                     </td>
                   </tr>
                 );
