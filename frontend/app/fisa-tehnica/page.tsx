@@ -7,7 +7,8 @@ import Link from 'next/link';
 import {
   Truck, Plus, Edit3, Clock, DollarSign, Calendar, Layers, Search, CheckCircle2,
   FileText, CircleDot, Droplets, PieChart, Wrench, X, Eye, Settings, ShieldAlert,
-  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer, Link2, Building2
+  AlertTriangle, RotateCcw, Filter, Check, ShieldCheck, ArrowRight, Printer, Link2, Building2,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import VehicleSelector from '../../components/VehicleSelector';
 import VehicleOdometerModal from '../../components/VehicleOdometerModal';
@@ -45,9 +46,22 @@ export default function FisaTehnicaPage() {
   // MOD VIZUALIZARE: LISTĂ TABEL PE CATEGORII VS FIȘĂ DEDICATĂ
   const [viewMode, setViewMode] = useState<'lista_tabel' | 'fisa_dedicata'>('lista_tabel');
 
-  // FILTRE TABEL FLOTĂ
+  // FILTRE & SORTARE TABEL FLOTĂ
   const [selectedCatFilter, setSelectedCatFilter] = useState('');
   const [searchQueryFleet, setSearchQueryFleet] = useState('');
+  type FleetSortKey = 'numarIntern' | 'inmatriculare' | 'categorie' | 'contor' | 'stare' | 'alerte';
+  const [sortKey, setSortKey] = useState<FleetSortKey>('numarIntern');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSortColumn = (key: FleetSortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      // Numeric metrics surface highest values/alerts first on initial click
+      setSortDir(key === 'contor' || key === 'alerte' ? 'desc' : 'asc');
+    }
+  };
 
   // MODAL VEHICUL NOU
   const [showAddModal, setShowAddModal] = useState(false);
@@ -583,15 +597,67 @@ export default function FisaTehnicaPage() {
   const kpiCostPer1000Km = Number(((costTotal / Math.max(1, vehicul?.valoareContorCurent || 1)) * 1000).toFixed(2));
   const kpiCostPer10Ore = Number(((costTotal / Math.max(1, vehicul?.valoareContorCurent || 1)) * 10).toFixed(2));
 
+  const cleanVehicleName = (marcaVal?: string, modelVal?: string) =>
+    [marcaVal, modelVal]
+      .filter((part) => part && !/^[-–—\s]+$/.test(String(part).trim()) && String(part).trim().toUpperCase() !== 'N/A')
+      .join(' ');
+
+  const naturalCompare = (a: string, b: string) =>
+    a.localeCompare(b, 'ro-RO', { numeric: true, sensitivity: 'base' });
+
   const vehiculeFiltrate = vehicule.filter((v: any) => {
     const matchCat = selectedCatFilter ? v.categorieEnum === selectedCatFilter : true;
-    if (searchQueryFleet) {
-      const q = searchQueryFleet.toLowerCase();
-      const matchSearch = v.numarIntern?.toLowerCase().includes(q) || v.numarInmatriculare?.toLowerCase().includes(q) || v.marca?.toLowerCase().includes(q);
+    if (searchQueryFleet.trim()) {
+      const q = searchQueryFleet.toLowerCase().trim();
+      const matchSearch =
+        v.numarIntern?.toLowerCase().includes(q) ||
+        v.numarInmatriculare?.toLowerCase().includes(q) ||
+        v.marca?.toLowerCase().includes(q) ||
+        v.model?.toLowerCase().includes(q) ||
+        v.categorieEnum?.toLowerCase().includes(q);
       return matchCat && matchSearch;
     }
     return matchCat;
   });
+
+  const vehiculeSortate = [...vehiculeFiltrate].sort((a: any, b: any) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let cmp = 0;
+
+    if (sortKey === 'numarIntern') {
+      cmp = naturalCompare(a.numarIntern || '', b.numarIntern || '');
+    } else if (sortKey === 'inmatriculare') {
+      cmp = naturalCompare(a.numarInmatriculare || '', b.numarInmatriculare || '');
+    } else if (sortKey === 'categorie') {
+      cmp = naturalCompare(a.categorieEnum || '', b.categorieEnum || '');
+      if (cmp === 0) {
+        cmp = naturalCompare(cleanVehicleName(a.marca, a.model), cleanVehicleName(b.marca, b.model));
+      }
+    } else if (sortKey === 'contor') {
+      cmp = Number(a.valoareContorCurent || 0) - Number(b.valoareContorCurent || 0);
+    } else if (sortKey === 'stare') {
+      cmp = naturalCompare(a.stare || 'ACTIV', b.stare || 'ACTIV');
+    } else if (sortKey === 'alerte') {
+      cmp = (alerteMap[a.id] || 0) - (alerteMap[b.id] || 0);
+    }
+
+    if (cmp !== 0) return cmp * dir;
+    return naturalCompare(a.numarIntern || '', b.numarIntern || '');
+  });
+
+  const FLEET_TABLE_COLUMNS: Array<{
+    key: FleetSortKey;
+    label: string;
+    align?: 'left' | 'center';
+    isMono?: boolean;
+  }> = [
+    { key: 'numarIntern', label: 'Cod Intern Utilaj' },
+    { key: 'inmatriculare', label: 'Înmatriculare' },
+    { key: 'categorie', label: 'Categorie & Marcă / Model' },
+    { key: 'contor', label: 'Contor Curent', isMono: true },
+    { key: 'stare', label: 'Stare Operativă' },
+    { key: 'alerte', label: 'Status Alerte Active', align: 'center' },
+  ];
 
   const categoriiDisponibile = Array.from(new Set(vehicule.map((v: any) => v.categorieEnum)));
 
@@ -625,7 +691,7 @@ export default function FisaTehnicaPage() {
             className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Adaugă Vehicul</span>
+            <span>Adaugă Vehicul</span>
           </button>
 
           <button
@@ -685,7 +751,52 @@ export default function FisaTehnicaPage() {
       {viewMode === 'lista_tabel' && (
         <div className="pleasant-card rounded-2xl p-6 bg-white border border-morning-200 space-y-4 shadow-sm">
           {/* BARĂ FILTRARE PE CATEGORII & CĂUTARE */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-morning-200 pb-4">
+          <div className="space-y-3 border-b border-morning-200 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQueryFleet}
+                  onChange={(e) => setSearchQueryFleet(e.target.value)}
+                  placeholder="Căutare cod, număr, marcă, model..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-8 py-2 text-xs text-sapphire-900 font-bold focus:bg-white transition"
+                />
+                {searchQueryFleet && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQueryFleet('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sage-400 hover:text-sapphire-900"
+                    title="Șterge căutarea"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2 text-[11px] text-sage-600 font-semibold flex-wrap gap-y-1">
+                <span>
+                  Afișate: <strong className="text-sapphire-900 font-mono">{vehiculeSortate.length}</strong> / {vehicule.length} vehicule
+                </span>
+                {(sortKey !== 'numarIntern' || sortDir !== 'asc') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSortKey('numarIntern');
+                      setSortDir('asc');
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 border border-sapphire-200 font-bold inline-flex items-center space-x-1 transition"
+                    title="Resetează ordinea implicită (Cod Intern crescător)"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>
+                      Ordonat: {FLEET_TABLE_COLUMNS.find((c) => c.key === sortKey)?.label} ({sortDir === 'asc' ? 'cresc.' : 'descr.'})
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-extrabold text-sapphire-900 flex items-center space-x-1">
                 <Filter className="w-4 h-4 text-sapphire-500" />
@@ -726,43 +837,62 @@ export default function FisaTehnicaPage() {
                 );
               })}
             </div>
-
-            <div className="relative w-full md:w-64">
-              <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={searchQueryFleet}
-                onChange={(e) => setSearchQueryFleet(e.target.value)}
-                placeholder="Căutare cod, număr, marcă..."
-                className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-sapphire-900 font-bold focus:bg-white transition"
-              />
-            </div>
           </div>
 
           {/* TABEL CENTRALIZAT FLOTĂ */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700 min-w-[950px]">
-              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
+              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold border-b border-morning-200">
                 <tr>
-                  <th className="p-3">Cod Intern Utilaj</th>
-                  <th className="p-3">Înmatriculare</th>
-                  <th className="p-3">Categorie & Marcă / Model</th>
-                  <th className="p-3 font-mono">Contor Curent</th>
-                  <th className="p-3">Stare Operativă</th>
-                  <th className="p-3 text-center">Status Alerte Active</th>
+                  {FLEET_TABLE_COLUMNS.map((col) => {
+                    const isActive = sortKey === col.key;
+                    const justifyClass = col.align === 'center' ? 'justify-center' : 'justify-start';
+                    return (
+                      <th
+                        key={col.key}
+                        aria-sort={isActive ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                        className={`p-0 select-none ${col.isMono ? 'font-mono' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleSortColumn(col.key)}
+                          className={`w-full p-3 flex items-center ${justifyClass} gap-1.5 text-[10px] uppercase tracking-wider font-extrabold transition cursor-pointer ${
+                            isActive
+                              ? 'text-sapphire-700 bg-sapphire-50/70'
+                              : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200/70'
+                          }`}
+                          title={`Ordonează după ${col.label}`}
+                        >
+                          <span>{col.label}</span>
+                          {isActive ? (
+                            sortDir === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 opacity-45 shrink-0" />
+                          )}
+                        </button>
+                      </th>
+                    );
+                  })}
                   <th className="p-3 text-right whitespace-nowrap min-w-[180px]">Acțiuni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 font-medium">
-                {vehiculeFiltrate.map((v) => {
+                {vehiculeSortate.map((v) => {
                   const numAlerte = alerteMap[v.id] || 0;
+                  const vehicleLabel = cleanVehicleName(v.marca, v.model);
                   return (
                     <tr key={v.id} className="hover:bg-morning-50 transition">
                       <td className="p-3 font-black text-sapphire-900 text-sm">{v.numarIntern}</td>
                       <td className="p-3 font-bold font-mono text-slate-800">{v.numarInmatriculare}</td>
                       <td className="p-3">
-                        <span className="font-extrabold text-sapphire-900">{v.marca} {v.model}</span>
-                        <div className="mt-0.5">
+                        {vehicleLabel && (
+                          <span className="font-extrabold text-sapphire-900 block mb-0.5">{vehicleLabel}</span>
+                        )}
+                        <div>
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${getCategoryColor(v.categorieEnum).badge}`}>
                             {v.categorieEnum}
                           </span>
@@ -770,7 +900,7 @@ export default function FisaTehnicaPage() {
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-700">
                         <div className="flex items-center space-x-1.5">
-                          <span>{v.valoareContorCurent} {v.tipMasurare}</span>
+                          <span>{Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')} {v.tipMasurare}</span>
                           <button
                             onClick={() => setOdometerModalVehicul(v)}
                             title="Vezi & editează registrul istoric contor (KM/mTH)"
@@ -788,11 +918,11 @@ export default function FisaTehnicaPage() {
                       <td className="p-3 text-center">
                         {numAlerte > 0 ? (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-roseash-200 text-terracotta-700 border border-terracotta-400 animate-pulse">
-                             {numAlerte} Alerte Active
+                            {numAlerte} {numAlerte === 1 ? 'Alertă Activă' : 'Alerte Active'}
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sage-100 text-sage-700">
-                             Flotă Optimă
+                            Flotă Optimă
                           </span>
                         )}
                       </td>
@@ -811,6 +941,13 @@ export default function FisaTehnicaPage() {
                     </tr>
                   );
                 })}
+                {vehiculeSortate.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-sage-600 font-semibold">
+                      Nu s-au găsit vehicule pentru filtrele selectate.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
