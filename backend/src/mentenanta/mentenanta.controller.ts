@@ -129,4 +129,38 @@ export class MentenantaController {
       dataEnd,
     });
   }
+
+  // =========================================================================
+  // JURNAL COMENZI & NOTE ATELIER (ȘEF ATELIER)
+  // =========================================================================
+
+  @Get('note-atelier')
+  getNoteAtelier(
+    @Query('status') status?: string,
+    @Query('categorie') categorie?: string,
+    @Query('vehiculId') vehiculId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.mentenantaService.getNoteAtelier({ status, categorie, vehiculId, search });
+  }
+
+  @Post('note-atelier')
+  createNotaAtelier(@Body() body: any) {
+    return this.mentenantaService.createNotaAtelier(body);
+  }
+
+  @Patch('note-atelier/:id')
+  updateNotaAtelier(@Param('id') id: string, @Body() body: any) {
+    return this.mentenantaService.updateNotaAtelier(id, body);
+  }
+
+  @Post('note-atelier/:id/creeaza-deviz')
+  creeazaDevizDinNota(@Param('id') id: string, @Body() body: { mecanicResponsabil?: string }) {
+    return this.mentenantaService.creeazaDevizDinNota(id, body);
+  }
+
+  @Delete('note-atelier/:id')
+  deleteNotaAtelier(@Param('id') id: string) {
+    return this.mentenantaService.deleteNotaAtelier(id);
+  }
 }

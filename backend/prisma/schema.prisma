@@ -63,6 +63,7 @@ model Vehicul {
 
   cuplariCapTractor      IstoricCuplare[]    @relation("CapTractorCuplari")
   cuplariSemiremorca     IstoricCuplare[]    @relation("SemiremorcaCuplari")
+  noteAtelier            NotaAtelier[]
 
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
@@ -810,4 +811,45 @@ model BackupLog {
   @@index([status])
   @@index([createdAt])
 }
+
+// ==========================================
+// JURNAL COMENZI & NOTE ATELIER (ȘEF ATELIER)
+// ==========================================
+
+model NotaAtelier {
+  id                  String    @id @default(uuid())
+  titlu               String
+  descriere           String?
+  categorie           String    @default("PROBLEMA")    // PROBLEMA | REPARATIE | PIESE_COMANDAT | REVIZIE | GENERAL
+  status              String    @default("DE_REZOLVAT") // DE_REZOLVAT | TERMEN_LIMITA | IN_ASTEPTARE_PIESE | IN_PROGRES | REZOLVAT
+  prioritate          String    @default("NORMAL")      // SCAZUT | NORMAL | URGENT | CRITIC
+  pinuit              Boolean   @default(false)
+
+  vehiculId           String?
+  vehicul             Vehicul?  @relation(fields: [vehiculId], references: [id], onDelete: SetNull)
+  mecanicAsignat      String?
+  creatDe             String?
+
+  // Listă interactivă de verificare / piese de comandat (JSON array)
+  checklistJson       String?
+
+  // Termene limită & timestamp-uri
+  termenLimita        DateTime?
+  dataFinalizare      DateTime?
+
+  // Legătură opțională cu un Deviz de Lucru oficial (/comenzi-lucru)
+  comandaLucruId      String?
+  comandaLucruNumar   String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status])
+  @@index([categorie])
+  @@index([prioritate])
+  @@index([vehiculId])
+  @@index([termenLimita])
+  @@index([createdAt])
+}
+
 

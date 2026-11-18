@@ -5,9 +5,9 @@ import Link from 'next/link';
 import {
   Bell, ShieldAlert, User, Search, Wrench, Truck, PackageCheck,
   Droplets, FileText, CheckCircle2, ChevronDown, ChevronRight, X, RefreshCw, Menu,
-  Users, Settings, LogOut, Package, Sun, Moon, Sparkles, LayoutDashboard,
+  Users, Settings, LogOut, Package, Sun, Moon, Sparkles,
   ShoppingCart, History, CircleDot, Building2, ShieldCheck, Clock, Gauge,
-  Timer, FileCheck, Link2, BarChart3
+  Timer, FileCheck, Link2, BarChart3, ClipboardList
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useAuth } from '../lib/AuthContext';
@@ -55,7 +55,7 @@ export default function TopNavigation() {
       name: 'Facturi',
       icon: FileText,
       items: [
-        { name: 'ANAF e-Factura', href: '/efactura?tab=efactura', icon: FileText, desc: 'Preluare automată din SPV & alocare directă' },
+        { name: 'ANAF e-Factura', href: '/', icon: FileText, desc: 'Preluare automată din SPV & alocare directă' },
         { name: 'Recepție Manuală', href: '/efactura?tab=manual', icon: ShoppingCart, desc: 'Introducere NIR / factură de la furnizori' },
         { name: 'Istoric Facturi', href: '/efactura?tab=istoric', icon: History, desc: 'Arhivă facturi importate, sume și articole' },
       ],
@@ -64,7 +64,8 @@ export default function TopNavigation() {
       name: 'Mentenanță',
       icon: Wrench,
       items: [
-        { name: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, manoperă și consum' },
+        { name: 'Deviz de Lucru', href: '/comenzi-lucru', icon: Wrench, desc: 'Devize reparații, mecanici, piese și manoperă' },
+        { name: 'Comenzi', href: '/comenzi', icon: ClipboardList, desc: 'Jurnal atelier: probleme, piese de comandat & sarcini' },
         { name: 'Planificator Revizii', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
         { name: 'Anvelope', href: '/anvelope', icon: CircleDot, desc: 'Poziționare anvelope pe axe utilaje' },
         { name: 'Uleiuri', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
@@ -161,7 +162,7 @@ export default function TopNavigation() {
         <div className="flex items-center space-x-3 shrink-0">
           <button
             type="button"
-            onClick={() => openTab({ href: '/', title: 'Dashboard', iconName: 'LayoutDashboard' })}
+            onClick={() => openTab({ href: '/', title: 'ANAF e-Factura', iconName: 'FileText' })}
             className="flex items-center space-x-2.5 text-left group cursor-pointer"
           >
             <div className="w-8 h-8 rounded-xl bg-sapphire-600 dark:bg-sapphire-500 flex items-center justify-center shadow-md shadow-sapphire-600/20 group-hover:scale-105 transition">
@@ -178,20 +179,6 @@ export default function TopNavigation() {
 
         {/* MENIU ORIZONTAL PRINCIPAL CU DROPDOWN-URI ELEGANTE */}
         <nav className="hidden lg:flex items-center space-x-1 flex-1 max-w-4xl">
-          {/* DASHBOARD LINK */}
-          <button
-            type="button"
-            onClick={() => openTab({ href: '/', title: 'Dashboard', iconName: 'LayoutDashboard' })}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
-              activeTabId === '/'
-                ? 'bg-sapphire-50 dark:bg-slate-800 text-sapphire-900 dark:text-white font-black'
-                : 'text-slate-700 dark:text-slate-300 hover:bg-morning-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <LayoutDashboard className="w-3.5 h-3.5 text-sapphire-600 dark:text-cyan-400" />
-            <span>Dashboard</span>
-          </button>
-
           {/* DROPDOWN GROUPS */}
           {navGroups
             .filter((grp) => !(user?.rol === 'VIEWER' && grp.name.includes('Facturi')))
@@ -339,7 +326,7 @@ export default function TopNavigation() {
           {globalSyncStatus?.inProgress && (
             <button
               type="button"
-              onClick={() => openTab({ href: '/efactura?tab=efactura', title: 'ANAF e-Factura' })}
+              onClick={() => openTab({ href: '/', title: 'ANAF e-Factura', iconName: 'FileText' })}
               className="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-sapphire-50 dark:bg-slate-800 border border-sapphire-300 dark:border-slate-700 text-sapphire-800 dark:text-cyan-300 transition shadow-2xs animate-pulse cursor-pointer"
               title="Sincronizare ANAF SPV în curs"
             >
@@ -550,18 +537,6 @@ export default function TopNavigation() {
       {/* MOBILE DRAWER */}
       {isMobileMenuOpen && (
         <div className="lg:hidden border-t border-morning-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 max-h-[80vh] overflow-y-auto space-y-3">
-          <button
-            type="button"
-            onClick={() => {
-              openTab({ href: '/', title: 'Dashboard', iconName: 'LayoutDashboard' });
-              setIsMobileMenuOpen(false);
-            }}
-            className="w-full flex items-center space-x-2 p-2 rounded-xl text-xs font-bold text-sapphire-900 dark:text-white hover:bg-morning-100"
-          >
-            <LayoutDashboard className="w-4 h-4 text-sapphire-600" />
-            <span>Dashboard</span>
-          </button>
-
           {navGroups.map((group) => (
             <div key={group.name} className="space-y-1">
               <span className="text-[10px] font-black uppercase text-sage-500 tracking-wider block px-2">

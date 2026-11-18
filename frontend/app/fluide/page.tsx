@@ -1241,7 +1241,7 @@ export default function FluidePage() {
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 text-sapphire-900 text-xs font-bold transition border border-morning-300"
           >
             <FileText className="w-4 h-4 text-sapphire-600" />
-            <span>Comenzi de Lucru (Revizii)</span>
+            <span>Devize de Lucru (Revizii)</span>
           </a>
 
           <button

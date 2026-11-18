@@ -815,6 +815,10 @@ export class MentenantaService {
     }
 
     await removeFluidCompletariForComanda(this.prisma, comandaId);
+    await this.prisma.notaAtelier.updateMany({
+      where: { comandaLucruId: comandaId },
+      data: { comandaLucruId: null, comandaLucruNumar: null },
+    });
     return this.prisma.comandaLucru.delete({ where: { id: comandaId } });
   }
 
@@ -1209,6 +1213,11 @@ export class MentenantaService {
       await tx.completareLichid.updateMany({
         where: { comandaLucruId: { in: uniqueSourceIds } },
         data: { comandaLucruId: targetId },
+      });
+
+      await tx.notaAtelier.updateMany({
+        where: { comandaLucruId: { in: uniqueSourceIds } },
+        data: { comandaLucruId: targetId, comandaLucruNumar: freshTarget.numarComanda },
       });
 
       const updatedTarget = await tx.comandaLucru.update({
@@ -2749,5 +2758,255 @@ export class MentenantaService {
         reviziiPreconizate,
       },
     };
+  }
+
+  // =========================================================================
+  // JURNAL COMENZI & NOTE ATELIER (ȘEF ATELIER)
+  // =========================================================================
+
+  private normalizeChecklistJson(checklist: any): string | null {
+    if (!checklist) return null;
+    if (typeof checklist === 'string') {
+      try {
+        const parsed = JSON.parse(checklist);
+        return Array.isArray(parsed) && parsed.length > 0 ? JSON.stringify(parsed) : null;
+      } catch {
+        return null;
+      }
+    }
+    if (Array.isArray(checklist)) {
+      const clean = checklist
+        .map((it: any, idx: number) => ({
+          id: String(it?.id || `item-${Date.now()}-${idx}`),
+          text: String(it?.text || '').trim(),
+          done: Boolean(it?.done),
+          cantitate: it?.cantitate ? String(it.cantitate).trim() : undefined,
+        }))
+        .filter((it) => it.text.length > 0);
+      return clean.length > 0 ? JSON.stringify(clean) : null;
+    }
+    return null;
+  }
+
+  private readonly notaVehiculSelect = {
+    id: true,
+    numarIntern: true,
+    numarInmatriculare: true,
+    marca: true,
+    model: true,
+    categorieEnum: true,
+    tipMasurare: true,
+    valoareContorCurent: true,
+  };
+
+  async getNoteAtelier(filters?: { status?: string; categorie?: string; vehiculId?: string; search?: string }) {
+    const where: any = {};
+    if (filters?.status && filters.status !== 'TOATE') {
+      where.status = filters.status;
+    }
+    if (filters?.categorie && filters.categorie !== 'TOATE') {
+      where.categorie = filters.categorie;
+    }
+    if (filters?.vehiculId) {
+      where.vehiculId = filters.vehiculId === 'FARA_VEHICUL' ? null : filters.vehiculId;
+    }
+
+    const notes = await this.prisma.notaAtelier.findMany({
+      where,
+      include: {
+        vehicul: { select: this.notaVehiculSelect },
+      },
+      orderBy: [{ pinuit: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    if (filters?.search?.trim()) {
+      const q = filters.search.trim().toLowerCase();
+      return notes.filter((n) =>
+        [
+          n.titlu,
+          n.descriere,
+          n.checklistJson,
+          n.mecanicAsignat,
+          n.creatDe,
+          n.comandaLucruNumar,
+          n.vehicul?.numarIntern,
+          n.vehicul?.numarInmatriculare,
+          n.vehicul?.marca,
+          n.vehicul?.model,
+        ]
+          .filter(Boolean)
+          .some((val) => String(val).toLowerCase().includes(q)),
+      );
+    }
+
+    return notes;
+  }
+
+  async createNotaAtelier(data: {
+    titlu: string;
+    descriere?: string;
+    categorie?: string;
+    status?: string;
+    prioritate?: string;
+    pinuit?: boolean;
+    vehiculId?: string | null;
+    mecanicAsignat?: string | null;
+    creatDe?: string | null;
+    checklist?: any;
+    checklistJson?: string | null;
+    termenLimita?: string | null;
+  }) {
+    if (!data.titlu || !data.titlu.trim()) {
+      throw new BadRequestException('Titlul notei este obligatoriu.');
+    }
+
+    const parsedTermen =
+      data.termenLimita && String(data.termenLimita).trim() !== ''
+        ? new Date(data.termenLimita)
+        : null;
+    const rawStatus = (data.status || '').trim();
+    const resolvedStatus =
+      rawStatus || (parsedTermen ? 'TERMEN_LIMITA' : 'DE_REZOLVAT');
+
+    return this.prisma.notaAtelier.create({
+      data: {
+        titlu: data.titlu.trim(),
+        descriere: data.descriere?.trim() || null,
+        categorie: (data.categorie || 'PROBLEMA').trim(),
+        status: resolvedStatus,
+        prioritate: (data.prioritate || 'NORMAL').trim(),
+        pinuit: Boolean(data.pinuit),
+        vehiculId: data.vehiculId && String(data.vehiculId).trim() !== '' ? data.vehiculId : null,
+        mecanicAsignat: data.mecanicAsignat?.trim() || null,
+        creatDe: data.creatDe?.trim() || null,
+        checklistJson: this.normalizeChecklistJson(data.checklist ?? data.checklistJson),
+        termenLimita: parsedTermen,
+        dataFinalizare: resolvedStatus === 'REZOLVAT' ? new Date() : null,
+      },
+      include: {
+        vehicul: { select: this.notaVehiculSelect },
+      },
+    });
+  }
+
+  async updateNotaAtelier(
+    id: string,
+    data: {
+      titlu?: string;
+      descriere?: string | null;
+      categorie?: string;
+      status?: string;
+      prioritate?: string;
+      pinuit?: boolean;
+      vehiculId?: string | null;
+      mecanicAsignat?: string | null;
+      checklist?: any;
+      checklistJson?: string | null;
+      termenLimita?: string | null;
+    },
+  ) {
+    const existing = await this.prisma.notaAtelier.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Nota de atelier nu există.');
+
+    const updateData: any = {};
+    if (data.titlu !== undefined) updateData.titlu = data.titlu.trim() || existing.titlu;
+    if (data.descriere !== undefined) updateData.descriere = data.descriere ? data.descriere.trim() : null;
+    if (data.categorie !== undefined) updateData.categorie = data.categorie.trim();
+    if (data.prioritate !== undefined) updateData.prioritate = data.prioritate.trim();
+    if (data.pinuit !== undefined) updateData.pinuit = Boolean(data.pinuit);
+    if (data.vehiculId !== undefined) {
+      updateData.vehiculId = data.vehiculId && String(data.vehiculId).trim() !== '' ? data.vehiculId : null;
+    }
+    if (data.mecanicAsignat !== undefined) {
+      updateData.mecanicAsignat = data.mecanicAsignat ? data.mecanicAsignat.trim() : null;
+    }
+    if (data.checklist !== undefined || data.checklistJson !== undefined) {
+      updateData.checklistJson = this.normalizeChecklistJson(data.checklist ?? data.checklistJson);
+    }
+    if (data.termenLimita !== undefined) {
+      updateData.termenLimita =
+        data.termenLimita && String(data.termenLimita).trim() !== ''
+          ? new Date(data.termenLimita)
+          : null;
+    }
+    if (data.status !== undefined) {
+      const nextStatus = data.status.trim();
+      updateData.status = nextStatus;
+      if (nextStatus === 'REZOLVAT' && existing.status !== 'REZOLVAT') {
+        updateData.dataFinalizare = new Date();
+      } else if (nextStatus !== 'REZOLVAT' && existing.status === 'REZOLVAT') {
+        updateData.dataFinalizare = null;
+      }
+    }
+
+    return this.prisma.notaAtelier.update({
+      where: { id },
+      data: updateData,
+      include: {
+        vehicul: { select: this.notaVehiculSelect },
+      },
+    });
+  }
+
+  async creeazaDevizDinNota(id: string, body?: { mecanicResponsabil?: string }) {
+    const nota = await this.prisma.notaAtelier.findUnique({
+      where: { id },
+      include: { vehicul: true },
+    });
+    if (!nota) throw new NotFoundException('Nota de atelier nu există.');
+    if (!nota.vehiculId) {
+      throw new BadRequestException('Pentru a deschide un Deviz de Lucru, asociați mai întâi un vehicul acestei note.');
+    }
+
+    if (nota.comandaLucruId) {
+      const existingComanda = await this.prisma.comandaLucru.findUnique({ where: { id: nota.comandaLucruId } });
+      if (existingComanda) {
+        return { nota, comanda: existingComanda, alreadyExists: true };
+      }
+    }
+
+    let checklistSummary = '';
+    if (nota.checklistJson) {
+      try {
+        const items = JSON.parse(nota.checklistJson);
+        if (Array.isArray(items) && items.length > 0) {
+          checklistSummary =
+            '\nLista elemente: ' +
+            items.map((it: any) => `${it.cantitate ? `${it.cantitate}x ` : ''}${it.text}`).join(', ');
+        }
+      } catch {
+        // ignore invalid json
+      }
+    }
+
+    const observatii = `[Din Comandă Atelier] ${nota.titlu}${nota.descriere ? `\n${nota.descriere}` : ''}${checklistSummary}`.trim();
+
+    const comanda = await this.createComandaLucru({
+      vehiculId: nota.vehiculId,
+      mecanicResponsabil: body?.mecanicResponsabil || nota.mecanicAsignat || 'Atelier Intern',
+      observatii,
+      elemente: [],
+    });
+
+    const updatedNota = await this.prisma.notaAtelier.update({
+      where: { id },
+      data: {
+        comandaLucruId: comanda.id,
+        comandaLucruNumar: comanda.numarComanda,
+        status: nota.status === 'REZOLVAT' ? 'REZOLVAT' : 'IN_PROGRES',
+      },
+      include: {
+        vehicul: { select: this.notaVehiculSelect },
+      },
+    });
+
+    return { nota: updatedNota, comanda, alreadyExists: false };
+  }
+
+  async deleteNotaAtelier(id: string) {
+    const existing = await this.prisma.notaAtelier.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Nota de atelier nu există.');
+    await this.prisma.notaAtelier.delete({ where: { id } });
+    return { success: true };
   }
 }

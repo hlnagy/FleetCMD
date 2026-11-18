@@ -13,8 +13,9 @@ export interface WorkspaceTab {
 
 // Registry of known route definitions
 export const ROUTE_TAB_DEFINITIONS: Record<string, { title: string; iconName: string }> = {
-  '/': { title: 'Dashboard', iconName: 'LayoutDashboard' },
-  '/comenzi-lucru': { title: 'Comenzi de Lucru', iconName: 'Wrench' },
+  '/': { title: 'ANAF e-Factura', iconName: 'FileText' },
+  '/comenzi-lucru': { title: 'Deviz de Lucru', iconName: 'Wrench' },
+  '/comenzi': { title: 'Comenzi', iconName: 'ClipboardList' },
   '/efactura': { title: 'ANAF e-Factura', iconName: 'FileText' },
   '/efactura?tab=efactura': { title: 'ANAF e-Factura', iconName: 'FileText' },
   '/efactura?tab=manual': { title: 'Recepție Manuală', iconName: 'ShoppingCart' },
@@ -57,10 +58,14 @@ const normalizeRestoredTab = (tab: WorkspaceTab): WorkspaceTab => {
 
 export function resolveTabInfo(pathname: string, searchParams?: any): WorkspaceTab {
   const currentTab = searchParams?.get('tab');
+  const hasSearch = Boolean(searchParams?.get('search') || searchParams?.get('q'));
   let compositeKey = pathname;
 
-  if (currentTab && (pathname === '/efactura' || pathname === '/stocuri')) {
-    compositeKey = `${pathname}?tab=${currentTab}`;
+  if (pathname === '/efactura' && (!currentTab || currentTab === 'efactura') && !hasSearch) {
+    compositeKey = '/';
+  } else if (currentTab && (pathname === '/efactura' || pathname === '/stocuri' || pathname === '/')) {
+    compositeKey = currentTab === 'efactura' && !hasSearch ? '/' : `/efactura?tab=${currentTab}`;
+    if (pathname === '/stocuri') compositeKey = `${pathname}?tab=${currentTab}`;
   }
 
   const def = ROUTE_TAB_DEFINITIONS[compositeKey] || ROUTE_TAB_DEFINITIONS[pathname];
@@ -94,16 +99,18 @@ export function resolveTabInfo(pathname: string, searchParams?: any): WorkspaceT
 
 export const DASHBOARD_TAB: WorkspaceTab = {
   id: '/',
-  title: 'Dashboard',
+  title: 'ANAF e-Factura',
   href: '/',
-  iconName: 'LayoutDashboard',
+  iconName: 'FileText',
 };
 
 export const ensureDashboardFirst = (tabList: WorkspaceTab[]): WorkspaceTab[] => {
   if (!Array.isArray(tabList) || tabList.length === 0) {
     return [DASHBOARD_TAB];
   }
-  const filtered = tabList.filter((t) => t.id !== '/' && t.href !== '/');
+  const filtered = tabList.filter(
+    (t) => t.id !== '/' && t.href !== '/' && t.id !== '/efactura' && !(t.id === '/efactura?tab=efactura' && !t.href?.includes('search=')),
+  );
   return [DASHBOARD_TAB, ...filtered];
 };
 

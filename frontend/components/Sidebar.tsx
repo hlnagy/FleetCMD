@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
-  LayoutDashboard, Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
+  Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles, Gauge, Timer
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles, Gauge, Timer, ClipboardList
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
@@ -36,13 +36,12 @@ export default function Sidebar() {
   const { resolvedTheme, toggleTheme } = useTheme();
 
   const navItems: NavItem[] = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     {
       name: 'Facturi',
       href: '/efactura',
       icon: FileText,
       subItems: [
-        { name: 'ANAF e-Factura', href: '/efactura?tab=efactura', tabKey: 'efactura', icon: FileText },
+        { name: 'ANAF e-Factura', href: '/', tabKey: 'efactura', icon: FileText },
         { name: 'Recepție Manuală', href: '/efactura?tab=manual', tabKey: 'manual', icon: ShoppingCart },
         { name: 'Istoric Facturi', href: '/efactura?tab=istoric', tabKey: 'istoric', icon: History },
       ],
@@ -59,7 +58,8 @@ export default function Sidebar() {
         { name: 'Ansambluri', href: '/ansambluri', icon: Link2 },
       ],
     },
-    { name: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
+    { name: 'Deviz de Lucru', href: '/comenzi-lucru', icon: Wrench },
+    { name: 'Comenzi', href: '/comenzi', icon: ClipboardList },
     { name: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
     {
       name: 'Stocuri',

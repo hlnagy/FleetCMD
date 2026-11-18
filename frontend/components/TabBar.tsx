@@ -5,7 +5,7 @@ import {
   LayoutDashboard, FileText, ShoppingCart, History, Wrench, Clock, Truck,
   Gauge, Timer, FileCheck, Link2, PackageCheck, CircleDot, Building2,
   ShieldCheck, Droplets, ShieldAlert, BarChart3, Settings, X, Plus,
-  MoreVertical, ChevronRight, Sparkles
+  MoreVertical, ChevronRight, Sparkles, ClipboardList
 } from 'lucide-react';
 import { useTabWorkspace, WorkspaceTab, ROUTE_TAB_DEFINITIONS } from '../lib/TabWorkspaceContext';
 
@@ -15,6 +15,7 @@ const ICON_MAP: Record<string, any> = {
   ShoppingCart,
   History,
   Wrench,
+  ClipboardList,
   Clock,
   Truck,
   Gauge,
@@ -38,7 +39,7 @@ export default function TabBar() {
   const tabListRef = useRef<HTMLDivElement>(null);
 
   const getIcon = (iconName: string) => {
-    const Component = ICON_MAP[iconName] || LayoutDashboard;
+    const Component = ICON_MAP[iconName] || FileText;
     return <Component className="w-3.5 h-3.5 shrink-0" />;
   };
 
@@ -58,13 +59,13 @@ export default function TabBar() {
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const isDashboard = tab.id === '/' || tab.href === '/' || tab.title === 'Dashboard';
+          const isDashboard = tab.id === '/' || tab.href === '/';
           return (
             <div
               key={tab.id}
               onClick={() => openTab(tab)}
               onAuxClick={(e) => {
-                // Middle click closes tab (except Dashboard)
+                // Middle click closes tab (except permanent Home tab)
                 if (e.button === 1 && !isDashboard) {
                   e.preventDefault();
                   closeTab(tab.id);
@@ -75,7 +76,7 @@ export default function TabBar() {
                   ? 'bg-white dark:bg-slate-800 text-sapphire-900 dark:text-white border-morning-300 dark:border-slate-700 shadow-xs font-black relative top-[1px]'
                   : 'bg-morning-100/70 dark:bg-slate-950/50 text-slate-600 dark:text-slate-400 border-transparent hover:bg-white/80 dark:hover:bg-slate-800/80 hover:text-sapphire-900 dark:hover:text-white'
               }`}
-              title={isDashboard ? 'Dashboard (Panou Principal Permanent)' : `${tab.title} (Clic mijloc pentru închidere)`}
+              title={isDashboard ? 'Facturi ANAF e-Factura (Pagină Principală Permanentă)' : `${tab.title} (Clic mijloc pentru închidere)`}
             >
               <span className={isActive ? 'text-sapphire-600 dark:text-cyan-400' : 'text-sage-500'}>
                 {getIcon(tab.iconName)}
@@ -132,8 +133,9 @@ export default function TabBar() {
                     { title: 'Piese', href: '/stocuri?tab=stoc', icon: PackageCheck },
                     { title: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot },
                     { title: 'Garanții Componente', href: '/stocuri?tab=componente', icon: ShieldCheck },
-                    { title: 'Comenzi de Lucru', href: '/comenzi-lucru', icon: Wrench },
-                    { title: 'ANAF e-Factura', href: '/efactura?tab=efactura', icon: FileText },
+                    { title: 'Deviz de Lucru', href: '/comenzi-lucru', icon: Wrench },
+                    { title: 'Comenzi', href: '/comenzi', icon: ClipboardList },
+                    { title: 'ANAF e-Factura', href: '/', icon: FileText },
                     { title: 'Recepție Manuală', href: '/efactura?tab=manual', icon: ShoppingCart },
                     { title: 'Fișă Tehnică', href: '/fisa-tehnica', icon: Truck },
                     { title: 'Documente Flotă', href: '/documente', icon: FileCheck },

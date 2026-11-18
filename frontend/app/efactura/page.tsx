@@ -2750,8 +2750,8 @@ function EFacturaContent() {
           Datele financiare și facturile ANAF sunt confidențiale și pot fi accesate exclusiv de către Administratori și Operatori autorizați.
         </p>
         <div className="pt-2">
-          <Link href="/" className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md transition inline-block">
-            Înapoi la Dashboard Principal
+          <Link href="/fisa-tehnica" className="px-5 py-2.5 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-md transition inline-block">
+            Deschide Fișă Tehnică &amp; Flotă
           </Link>
         </div>
       </div>
@@ -2767,11 +2767,8 @@ function EFacturaContent() {
             <div>
               <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight flex items-center space-x-2">
                 <FileText className="w-6 h-6 text-sapphire-500" />
-                <span>ANAF RO e-Factura Hibrid (UBL 2.1)</span>
+                <span>FleetCMD • Enterprise FMS &amp; CMMS Platform</span>
               </h1>
-          <p className="text-xs text-sage-700 font-medium">
-            Sincronizare automată și receptare facturi din ANAF SPV. Import articole direct în stoc sau excludere servicii / cheltuieli operaționale.
-          </p>
         </div>
 
         <div className="flex items-center space-x-2 flex-wrap">

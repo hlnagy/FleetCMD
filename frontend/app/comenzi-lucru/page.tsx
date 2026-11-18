@@ -1453,7 +1453,7 @@ export default function ComenziLucruPage() {
         <div>
           <h1 className="text-2xl font-bold text-sapphire-900 tracking-tight flex items-center space-x-2">
             <Wrench className="w-6 h-6 text-sapphire-500" />
-            <span>Registru Comenzi de Lucru (Atelier)</span>
+            <span>Registru Devize de Lucru (Atelier)</span>
           </h1>
           <p className="text-xs text-sage-700 font-medium">
             Ciclu complet: ÎN LUCRU → FINALIZAT → DEVALIDARE (Editare & Anulare) → Vizualizare / Print A4 PDF
@@ -1648,7 +1648,7 @@ export default function ComenziLucruPage() {
 
           return (
             <div className="flex flex-wrap justify-between items-center gap-2">
-              <h2 className="text-base font-bold text-sapphire-900">Registrul Comenzilor de Lucru & Atelier</h2>
+              <h2 className="text-base font-bold text-sapphire-900">Registrul Devizelor de Lucru &amp; Atelier</h2>
               <div className="flex items-center space-x-3">
                 {expandableOrderIds.length > 0 && (
                   <button
