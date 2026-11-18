@@ -2,7 +2,7 @@
 
 import { API_BASE_URL } from '@/lib/api';
 import { getCategoryColor } from '@/lib/categoryColors';
-import { showConfirm, showError, showSuccess, showToast } from '@/lib/swal';
+import { showConfirm, showError, showToast } from '@/lib/swal';
 import { useAuth } from '@/lib/AuthContext';
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -10,7 +10,7 @@ import {
   FileCheck, FileText, AlertTriangle, CheckCircle2, Clock, X,
   Search, RotateCcw, Plus, Download, Eye, Upload, Trash2, Edit3,
   RefreshCw, Paperclip, Check, ArrowUp, ArrowDown, ArrowUpDown,
-  Image as ImageIcon, LayoutGrid, LayoutList, Layers, Zap, ExternalLink,
+  Image as ImageIcon, LayoutGrid, LayoutList, Layers, ExternalLink,
   UploadCloud
 } from 'lucide-react';
 
@@ -155,7 +155,6 @@ function DocumenteFlotaContent() {
   const [categoriiVehicul, setCategoriiVehicul] = useState<any[]>([]);
   const [tipuriDocumente, setTipuriDocumente] = useState<DocTypeItem[]>(DEFAULT_DOC_TYPES);
   const [loading, setLoading] = useState(true);
-  const [initializareRapidaLoading, setInitializareRapidaLoading] = useState(false);
 
   // Unified Filters
   const [selectedTip, setSelectedTip] = useState('TOATE');
@@ -856,36 +855,6 @@ function DocumenteFlotaContent() {
     }
   };
 
-  const handleInitializareRapidaFlota = async () => {
-    const confirmed = await showConfirm(
-      'Inițializare Automată Acte Flotă',
-      'Doriți să generați automat sloturile de documente lipsă pentru vehiculele din flotă conform categoriei lor (ITP, RCA, Rovinietă, Tahograf)?',
-      'Da, inițializează',
-      'Anulează',
-    );
-    if (!confirmed) return;
-
-    try {
-      setInitializareRapidaLoading(true);
-      const res = await safeFetch(`${API_BASE_URL}/anomalii/documente-vehicule/initializare-rapida`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await showSuccess('Inițializare Finalizată', data.message || 'Documentele au fost inițializate cu succes!');
-        fetchData();
-      } else {
-        await showError('Eroare', 'Eroare la inițializarea automată a documentelor.');
-      }
-    } catch {
-      await showError('Eroare Rețea', 'Eroare de conexiune la server.');
-    } finally {
-      setInitializareRapidaLoading(false);
-    }
-  };
-
   const resetFilters = () => {
     setSelectedTip('TOATE');
     setSelectedStatus('TOATE');
@@ -920,22 +889,11 @@ function DocumenteFlotaContent() {
         <div className="flex items-center flex-wrap gap-2 self-start lg:self-auto">
           <button
             type="button"
-            onClick={handleInitializareRapidaFlota}
-            disabled={initializareRapidaLoading}
-            className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold transition shadow-xs disabled:opacity-50"
-            title="Generează automat sloturile de documente lipsă conform categoriei fiecărui vehicul"
-          >
-            <Zap className={`w-3.5 h-3.5 text-amber-600 ${initializareRapidaLoading ? 'animate-spin' : ''}`} />
-            <span>{initializareRapidaLoading ? 'Se inițializează...' : 'Inițializare Rapidă'}</span>
-          </button>
-
-          <button
-            type="button"
             onClick={openAddTipModal}
             className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl bg-periwinkle-50 hover:bg-periwinkle-100 border border-periwinkle-300 text-periwinkle-900 text-xs font-bold transition shadow-xs"
           >
             <Layers className="w-3.5 h-3.5 text-periwinkle-700" />
-            <span>+ Tip Nou</span>
+            <span>Tip Nou</span>
           </button>
 
           <button
@@ -944,7 +902,7 @@ function DocumenteFlotaContent() {
             className="px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Document Nou</span>
+            <span>Document Nou</span>
           </button>
         </div>
       </div>
