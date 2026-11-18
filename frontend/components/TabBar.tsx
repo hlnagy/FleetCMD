@@ -136,6 +136,7 @@ export default function TabBar() {
                     { title: 'ANAF e-Factura', href: '/efactura?tab=efactura', icon: FileText },
                     { title: 'Recepție Manuală', href: '/efactura?tab=manual', icon: ShoppingCart },
                     { title: 'Fișă Tehnică', href: '/fisa-tehnica', icon: Truck },
+                    { title: 'Documente Flotă', href: '/documente', icon: FileCheck },
                     { title: 'Actualizare KM', href: '/import-km', icon: Gauge },
                     { title: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
                     { title: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
