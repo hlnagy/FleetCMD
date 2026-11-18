@@ -234,6 +234,21 @@ export class StocuriGarantiiService {
       },
     ];
 
+    const resolveDefaultSubTip = (catName: string, subName: string): string | null => {
+      const txt = `${subName} ${catName}`.toLowerCase();
+      if (/adblue|uree/i.test(txt)) return 'ADBLUE';
+      if (/g11|albastru/i.test(txt)) return 'ANTIGEL_G11';
+      if (/g12|g13|antigel|racire/i.test(txt)) return 'ANTIGEL_G12';
+      if (/hidraulic|hlp|hvlp/i.test(txt)) return 'ULEI_HIDRAULIC';
+      if (/atf|dexron|automat/i.test(txt)) return 'ULEI_CUTIE_AUTOMATA';
+      if (/liebherr.*punte|punte.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_PUNTE';
+      if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_CUTIE';
+      if (/cutie.*manual/i.test(txt)) return 'ULEI_CUTIE_MANUALA';
+      if (/80w[- ]?90|75w[- ]?90|85w[- ]?140|utto|transmis|diferen/i.test(txt)) return 'ULEI_TRANSMISIE';
+      if (/motor|10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|10w[- ]?30/i.test(txt)) return 'ULEI_MOTOR';
+      return null;
+    };
+
     for (const c of categoriiInit) {
       let cat = await this.prisma.categorieStoc.findUnique({ where: { nume: c.nume } });
       if (!cat) {
@@ -242,6 +257,7 @@ export class StocuriGarantiiService {
             nume: c.nume,
             descriere: c.descriere,
             stocMinimImplicit: c.stocMinimImplicit,
+            esteFluid: this.esteCategorieLichid(c.nume),
           },
         });
       }
@@ -255,11 +271,39 @@ export class StocuriGarantiiService {
             data: {
               nume: sub,
               categorieStocId: cat.id,
+              tipLichid: resolveDefaultSubTip(c.nume, sub),
             },
           });
         }
       }
     }
+  }
+
+  private async resolveSubcatTipLichid(categorieNume?: string | null, subcategorieNume?: string | null): Promise<string | null> {
+    const cleanSub = String(subcategorieNume || '').trim();
+    if (!cleanSub) return null;
+    const cleanCat = String(categorieNume || '').trim();
+
+    if (cleanCat) {
+      const exact = await this.prisma.subcategorieStoc.findFirst({
+        where: {
+          nume: { equals: cleanSub, mode: 'insensitive' },
+          categorieStoc: { nume: { equals: cleanCat, mode: 'insensitive' } },
+          tipLichid: { not: null },
+        },
+        select: { tipLichid: true },
+      });
+      if (exact?.tipLichid) return exact.tipLichid;
+    }
+
+    const fallbackSub = await this.prisma.subcategorieStoc.findFirst({
+      where: {
+        nume: { equals: cleanSub, mode: 'insensitive' },
+        tipLichid: { not: null },
+      },
+      select: { tipLichid: true },
+    });
+    return fallbackSub?.tipLichid || null;
   }
 
   async getCategorii() {
@@ -274,6 +318,46 @@ export class StocuriGarantiiService {
         include: { subcategorii: true },
         orderBy: { nume: 'asc' },
       });
+    }
+
+    // Backfill inițial unic pentru subcategoriile standard de fluide care nu au încă tipLichid asignat
+    const anyTipMapped = categoriiCustom.some((c) =>
+      (c.subcategorii || []).some((s) => Boolean(s.tipLichid)),
+    );
+    if (!anyTipMapped) {
+      let updatedAny = false;
+      for (const c of categoriiCustom) {
+        const isFluidCat = c.esteFluid || this.esteCategorieLichid(c.nume);
+        if (!isFluidCat) continue;
+        for (const s of c.subcategorii || []) {
+          if (s.tipLichid) continue;
+          const txt = `${s.nume} ${c.nume}`.toLowerCase();
+          let autoTip: string | null = null;
+          if (/adblue|uree/i.test(txt)) autoTip = 'ADBLUE';
+          else if (/g11|albastru/i.test(txt)) autoTip = 'ANTIGEL_G11';
+          else if (/g12|g13|antigel|racire/i.test(txt)) autoTip = 'ANTIGEL_G12';
+          else if (/hidraulic|hlp|hvlp/i.test(txt)) autoTip = 'ULEI_HIDRAULIC';
+          else if (/atf|dexron|automat/i.test(txt)) autoTip = 'ULEI_CUTIE_AUTOMATA';
+          else if (/liebherr.*punte|punte.*liebherr/i.test(txt)) autoTip = 'ULEI_LIEBHERR_PUNTE';
+          else if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) autoTip = 'ULEI_LIEBHERR_CUTIE';
+          else if (/cutie.*manual/i.test(txt)) autoTip = 'ULEI_CUTIE_MANUALA';
+          else if (/80w[- ]?90|75w[- ]?90|85w[- ]?140|utto|transmis|diferen/i.test(txt)) autoTip = 'ULEI_TRANSMISIE';
+          else if (/motor|10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|10w[- ]?30/i.test(txt)) autoTip = 'ULEI_MOTOR';
+          if (autoTip) {
+            await this.prisma.subcategorieStoc.update({
+              where: { id: s.id },
+              data: { tipLichid: autoTip },
+            });
+            updatedAny = true;
+          }
+        }
+      }
+      if (updatedAny) {
+        categoriiCustom = await this.prisma.categorieStoc.findMany({
+          include: { subcategorii: true },
+          orderBy: { nume: 'asc' },
+        });
+      }
     }
 
     const dbSubcats = await this.prisma.subcategorieStoc.findMany();
@@ -379,7 +463,7 @@ export class StocuriGarantiiService {
     return this.prisma.categorieStoc.delete({ where: { id } });
   }
 
-  async createSubcategorie(data: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string }) {
+  async createSubcategorie(data: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string; tipLichid?: string | null }) {
     const cleanSubName = String(data.nume || '').trim();
     if (!cleanSubName) throw new BadRequestException('Numele subcategoriei este obligatoriu.');
 
@@ -409,12 +493,13 @@ export class StocuriGarantiiService {
       data: {
         nume: cleanSubName,
         descriere: data.descriere?.trim() || null,
+        tipLichid: data.tipLichid?.trim() || null,
         categorieStocId: catId || null,
       },
     });
   }
 
-  async updateSubcategorie(id: string, data: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string }) {
+  async updateSubcategorie(id: string, data: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string; tipLichid?: string | null }) {
     const existing = await this.prisma.subcategorieStoc.findUnique({
       where: { id },
       include: { categorieStoc: true },
@@ -436,11 +521,15 @@ export class StocuriGarantiiService {
       if (cat) newCatNume = cat.nume;
     }
 
+    const newTipLichid =
+      data.tipLichid !== undefined ? (data.tipLichid?.trim() || null) : undefined;
+
     const updated = await this.prisma.subcategorieStoc.update({
       where: { id },
       data: {
         nume: data.nume ? data.nume.trim() : undefined,
         descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
+        tipLichid: newTipLichid,
         categorieStocId: newCatId !== undefined ? newCatId : undefined,
       },
       include: { categorieStoc: true },
@@ -466,6 +555,22 @@ export class StocuriGarantiiService {
       await this.prisma.articolStoc.updateMany({
         where: { subcategorie: oldSubName },
         data: { subcategorie: newSubName },
+      });
+    }
+
+    // Propagăm tipLichid pe articolele din această subcategorie care nu aveau un alt override diferit
+    if (newTipLichid !== undefined && newTipLichid !== existing.tipLichid) {
+      const targetCat = newCatNume || oldCatName;
+      await this.prisma.articolStoc.updateMany({
+        where: {
+          subcategorie: newSubName,
+          ...(targetCat ? { categorie: targetCat } : {}),
+          OR: [
+            { tipLichid: null },
+            ...(existing.tipLichid ? [{ tipLichid: existing.tipLichid }] : []),
+          ],
+        },
+        data: { tipLichid: newTipLichid },
       });
     }
 
@@ -541,6 +646,7 @@ export class StocuriGarantiiService {
           denumire: articolSursa.denumire,
           categorie: articolSursa.categorie,
           subcategorie: articolSursa.subcategorie,
+          tipLichid: articolSursa.tipLichid,
           marcaUlei: articolSursa.marcaUlei,
           pretUnitar: articolSursa.pretUnitar,
           unitateMasura: articolSursa.unitateMasura,
@@ -646,6 +752,7 @@ export class StocuriGarantiiService {
             a.marcaUlei,
             a.categorie,
             a.subcategorie,
+            a.tipLichid,
             a.observatiiIntern,
             a.depozit?.nume,
             ...(Array.isArray(a.intrariStoc)
@@ -698,6 +805,7 @@ export class StocuriGarantiiService {
     denumire: string;
     categorie: string;
     subcategorie?: string;
+    tipLichid?: string | null;
     stocCurent: number;
     stocMinim?: number;
     pretUnitar: number;
@@ -718,12 +826,18 @@ export class StocuriGarantiiService {
       depozitIdFinal = depozite[0]?.id;
     }
 
+    const explicitTip = data.tipLichid?.trim() || null;
+    const inheritedTip = !explicitTip
+      ? await this.resolveSubcatTipLichid(data.categorie, data.subcategorie)
+      : null;
+
     return this.prisma.articolStoc.create({
       data: {
         codArticol: data.codArticol,
         denumire: data.denumire,
         categorie: data.categorie,
         subcategorie: data.subcategorie,
+        tipLichid: explicitTip || inheritedTip || null,
         stocCurent: Number(data.stocCurent),
         stocMinim: Number(stocMinimFinal),
         pretUnitar: Number(data.pretUnitar),
@@ -794,6 +908,10 @@ export class StocuriGarantiiService {
         denumire: data.denumire !== undefined ? String(data.denumire).trim() : undefined,
         categorie: cleanCategorie !== undefined ? cleanCategorie : undefined,
         subcategorie: cleanSubcategorie,
+        tipLichid:
+          data.tipLichid !== undefined
+            ? (data.tipLichid ? String(data.tipLichid).trim() : null)
+            : undefined,
         stocCurent: data.stocCurent !== undefined ? Number(data.stocCurent) : undefined,
         stocMinim: data.stocMinim !== undefined ? Math.max(0, Number(data.stocMinim)) : undefined,
         pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
@@ -857,7 +975,11 @@ export class StocuriGarantiiService {
       depozitIdFinal = depozite[0]?.id;
     }
 
-    const isLiquid = this.esteCategorieLichid(data.categorie, data.subcategorie, data.unitateMasura);
+    const isLiquid = this.esteCategorieLichid(data.categorie, data.subcategorie, data.unitateMasura) || Boolean(data.tipLichid);
+    const resolvedTipLichid =
+      data.tipLichid?.trim() ||
+      (isLiquid ? await this.resolveSubcatTipLichid(data.categorie, data.subcategorie) : null) ||
+      null;
 
     // 1. Căutare inteligentă articol master existent:
     // a) După ID direct (dacă a fost selectat)
@@ -881,6 +1003,7 @@ export class StocuriGarantiiService {
           depozitId: depozitIdFinal,
           categorie: data.categorie,
           subcategorie: data.subcategorie,
+          ...(resolvedTipLichid ? { OR: [{ tipLichid: resolvedTipLichid }, { tipLichid: null }] } : {}),
         },
       });
     }
@@ -903,6 +1026,7 @@ export class StocuriGarantiiService {
           stocCurent: articol.stocCurent + cantitate,
           pretUnitar,
           subcategorie: data.subcategorie || articol.subcategorie,
+          tipLichid: resolvedTipLichid || articol.tipLichid,
           marcaUlei: data.marcaUlei || articol.marcaUlei,
           esteSerializat: data.areGarantie || articol.esteSerializat,
         },
@@ -917,6 +1041,7 @@ export class StocuriGarantiiService {
           denumire: data.denumire,
           categorie: data.categorie,
           subcategorie: data.subcategorie,
+          tipLichid: resolvedTipLichid,
           stocCurent: cantitate,
           stocMinim: stocMinimImplicit,
           pretUnitar,
@@ -933,7 +1058,7 @@ export class StocuriGarantiiService {
       data: {
         articolStocId: articol.id,
         depozitId: depozitIdFinal,
-        tipLichid: data.tipLichid,
+        tipLichid: resolvedTipLichid,
         marcaUlei: data.marcaUlei,
         furnizor: data.furnizor,
         numarFactura: data.numarFactura,

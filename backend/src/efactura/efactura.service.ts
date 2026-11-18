@@ -1277,6 +1277,8 @@ export class EFacturaService implements OnModuleInit {
     depozitId?: string;
     categorieNume?: string;
     subcategorieNume?: string;
+    tipLichid?: string | null;
+    marcaUlei?: string | null;
     codArticolCalculat?: string;
     pretUnitarCustom?: number;
     conversieAmbalaj?: boolean;
@@ -1337,7 +1339,7 @@ export class EFacturaService implements OnModuleInit {
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'Alte';
-    await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume);
+    await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume, data.tipLichid);
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
     const isExplicitNonTire =
       NON_TIRE_PRODUCT_REGEX.test(item.descrierePiesa || '') &&
@@ -1349,12 +1351,18 @@ export class EFacturaService implements OnModuleInit {
         isTireDescription(item.descrierePiesa, codArticol, catName));
 
     const isFluid =
+      Boolean(data.tipLichid && data.tipLichid.trim()) ||
       catName.toLowerCase().includes('ulei') ||
       catName.toLowerCase().includes('lubrifian') ||
       catName.toLowerCase().includes('antigel') ||
       catName.toLowerCase().includes('racire') ||
       catName.toLowerCase().includes('adblue') ||
       normalizedUM === 'L';
+
+    const resolvedTipLichid =
+      data.tipLichid?.trim() ||
+      (isFluid ? await this.resolveSubcategorieTipLichid(catName, data.subcategorieNume) : null) ||
+      null;
 
     // Suport Conversie Ambalaj în Volum Real (ex: Ulei motor 60 ltr facturat ca 1 buc la 1200 RON -> 60 L la 20 RON/L)
     const isConversie = !!(data.conversieAmbalaj && data.volumAmbalaj && Number(data.volumAmbalaj) > 0);
@@ -1508,6 +1516,7 @@ export class EFacturaService implements OnModuleInit {
           depozitId: targetDepozitId,
           categorie: catName,
           subcategorie: data.subcategorieNume,
+          ...(resolvedTipLichid ? { OR: [{ tipLichid: resolvedTipLichid }, { tipLichid: null }] } : {}),
         },
       });
     }
@@ -1530,6 +1539,8 @@ export class EFacturaService implements OnModuleInit {
           pretUnitar: effectivePretUnitar > 0 ? effectivePretUnitar : articol.pretUnitar,
           unitateMasura: effectiveUM,
           subcategorie: data.subcategorieNume || articol.subcategorie,
+          tipLichid: resolvedTipLichid || articol.tipLichid,
+          marcaUlei: data.marcaUlei?.trim() || articol.marcaUlei,
           esteSerializat: data.areGarantie ? true : articol.esteSerializat,
           observatiiIntern: data.observatiiIntern || articol.observatiiIntern,
         },
@@ -1544,6 +1555,8 @@ export class EFacturaService implements OnModuleInit {
           denumire: item.descrierePiesa,
           categorie: catName,
           subcategorie: data.subcategorieNume || (catName.trim().toLowerCase() === 'alte' ? 'Alte piese' : null),
+          tipLichid: resolvedTipLichid,
+          marcaUlei: data.marcaUlei?.trim() || null,
           stocCurent: effectiveCantitate,
           stocMinim: defaultMin,
           pretUnitar: effectivePretUnitar,
@@ -1571,6 +1584,8 @@ export class EFacturaService implements OnModuleInit {
       data: {
         articolStocId: articol.id,
         depozitId: targetDepozitId,
+        tipLichid: resolvedTipLichid,
+        marcaUlei: data.marcaUlei?.trim() || articol.marcaUlei || null,
         furnizor: item.factura.numeVanzator,
         numarFactura: item.factura.numarFactura,
         dataFactura: item.factura.dataFactura,
@@ -2286,6 +2301,7 @@ export class EFacturaService implements OnModuleInit {
     forceNew?: boolean;
     categorie?: string;
     subcategorie?: string;
+    tipLichid?: string | null;
     observatiiIntern?: string;
     includeFeeItemIds?: string[];
     tipOperatiuneFluid?: string;
@@ -2312,7 +2328,11 @@ export class EFacturaService implements OnModuleInit {
       );
     }
 
-    await this.ensureCategoryAndSubcategoryInDb(data.categorie || 'Alte', data.subcategorie);
+    await this.ensureCategoryAndSubcategoryInDb(data.categorie || 'Alte', data.subcategorie, data.tipLichid);
+    const resolvedDirectTipLichid =
+      data.tipLichid?.trim() ||
+      (await this.resolveSubcategorieTipLichid(data.categorie || 'Alte', data.subcategorie)) ||
+      null;
 
     const factura = item.factura;
     const cantitateMontata = Number(data.cantitate !== undefined && data.cantitate > 0 ? data.cantitate : cantitateRamasa);
@@ -2414,6 +2434,7 @@ export class EFacturaService implements OnModuleInit {
           serieUnicaPiesa: data.serieUnica?.trim() || null,
           categorie: data.categorie || 'Alte',
           subcategorie: data.subcategorie || null,
+          tipLichid: resolvedDirectTipLichid,
           observatiiIntern: mergedObsIntern || null,
         },
       });
@@ -2461,6 +2482,7 @@ export class EFacturaService implements OnModuleInit {
               serieUnicaPiesa: data.serieUnica?.trim() || null,
               categorie: data.categorie || 'Alte',
               subcategorie: data.subcategorie || null,
+              tipLichid: resolvedDirectTipLichid,
               observatiiIntern: mergedObsIntern || null,
             },
           });
@@ -2545,6 +2567,7 @@ export class EFacturaService implements OnModuleInit {
                   serieUnicaPiesa: data.serieUnica?.trim() || null,
                   categorie: data.categorie || 'Alte',
                   subcategorie: data.subcategorie || null,
+                  tipLichid: resolvedDirectTipLichid,
                   observatiiIntern: mergedObsIntern || null,
                 },
               ],
@@ -2982,10 +3005,39 @@ export class EFacturaService implements OnModuleInit {
     };
   }
 
+  private async resolveSubcategorieTipLichid(categorieNume?: string, subcategorieNume?: string): Promise<string | null> {
+    const cleanSub = String(subcategorieNume || '').trim();
+    if (!cleanSub) return null;
+    const cleanCat = String(categorieNume || '').trim();
+    if (cleanCat) {
+      const exact = await this.prisma.subcategorieStoc.findFirst({
+        where: {
+          nume: { equals: cleanSub, mode: 'insensitive' },
+          categorieStoc: { nume: { equals: cleanCat, mode: 'insensitive' } },
+          tipLichid: { not: null },
+        },
+        select: { tipLichid: true },
+      });
+      if (exact?.tipLichid) return exact.tipLichid;
+    }
+    const subOnly = await this.prisma.subcategorieStoc.findFirst({
+      where: {
+        nume: { equals: cleanSub, mode: 'insensitive' },
+        tipLichid: { not: null },
+      },
+      select: { tipLichid: true },
+    });
+    return subOnly?.tipLichid || null;
+  }
+
   /**
    * Ensure the chosen category and optional subcategory exist in CategorieStoc / SubcategorieStoc.
    */
-  private async ensureCategoryAndSubcategoryInDb(categorieNume?: string, subcategorieNume?: string) {
+  private async ensureCategoryAndSubcategoryInDb(
+    categorieNume?: string,
+    subcategorieNume?: string,
+    tipLichid?: string | null,
+  ) {
     const cleanCat = String(categorieNume || '').trim();
     if (!cleanCat) return;
     try {
@@ -3016,6 +3068,7 @@ export class EFacturaService implements OnModuleInit {
             data: {
               nume: cleanSub,
               categorieStocId: cat.id,
+              tipLichid: tipLichid?.trim() || null,
             },
           });
         }

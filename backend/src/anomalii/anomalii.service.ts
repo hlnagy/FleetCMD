@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
 import {
+  DEFAULT_TIPURI_FLUIDE,
   TIP_LICHID_LABELS,
   isMthTipMasurare,
 } from '../common/fluid.utils';
@@ -17,19 +18,212 @@ export class AnomaliiService {
     private stocuriGarantiiService: StocuriGarantiiService,
   ) {}
 
-  getTipuriUleiStandard() {
-    return [
-      { id: 'ULEI_MOTOR', nume: 'Ulei Motor (10W-40 / 15W-40 / 5W-30)' },
-      { id: 'ULEI_HIDRAULIC', nume: 'Ulei Hidraulic (HLP 46 / HVLP 46)' },
-      { id: 'ULEI_TRANSMISIE', nume: 'Ulei Transmisie & Diferențial (80W-90 / 75W-90)' },
-      { id: 'ANTIGEL_G12', nume: 'Antigel G12+ (Lichid Răcire Roz / Organic)' },
-      { id: 'ANTIGEL_G11', nume: 'Antigel G11 (Lichid Răcire Albastru / Clasic)' },
-      { id: 'ADBLUE', nume: 'AdBlue (Soluție Uree 32.5%)' },
-      { id: 'ULEI_LIEBHERR_PUNTE', nume: 'Ulei - Liebherr Punte față + spate' },
-      { id: 'ULEI_LIEBHERR_CUTIE', nume: 'Ulei - Liebherr Cutie Viteze' },
-      { id: 'ULEI_CUTIE_MANUALA', nume: 'Ulei Cutie Manuală' },
-      { id: 'ULEI_CUTIE_AUTOMATA', nume: 'Ulei Cutie Automată' },
-    ];
+  private parsePresetsJson(raw?: string | null, fallback: number[] = []): number[] {
+    if (!raw) return fallback;
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)
+        : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private formatTipFluid(row: any) {
+    return {
+      id: row.cod,
+      dbId: row.id,
+      cod: row.cod,
+      nume: row.nume,
+      descriere: row.descriere || '',
+      accentColor: row.accentColor || 'amber',
+      recomandat: row.recomandat || '',
+      presetKm: this.parsePresetsJson(row.presetKmJson, [15000, 30000]),
+      presetMth: this.parsePresetsJson(row.presetMthJson, [250, 500]),
+      esteStandard: Boolean(row.esteStandard),
+      ordine: Number(row.ordine || 0),
+      activ: row.activ !== false,
+    };
+  }
+
+  private async asiguraTipuriFluideStandard() {
+    const count = await this.prisma.tipFluid.count();
+    if (count === 0) {
+      for (const f of DEFAULT_TIPURI_FLUIDE) {
+        await this.prisma.tipFluid.upsert({
+          where: { cod: f.cod },
+          update: {},
+          create: {
+            cod: f.cod,
+            nume: f.nume,
+            descriere: f.descriere,
+            accentColor: f.accentColor,
+            recomandat: f.recomandat,
+            presetKmJson: JSON.stringify(f.presetKm),
+            presetMthJson: JSON.stringify(f.presetMth),
+            esteStandard: true,
+            ordine: f.ordine,
+            activ: true,
+          },
+        });
+      }
+    }
+  }
+
+  async getTipFluidLabelsMap(): Promise<Record<string, string>> {
+    await this.asiguraTipuriFluideStandard();
+    const rows = await this.prisma.tipFluid.findMany({
+      select: { cod: true, nume: true },
+    });
+    const map: Record<string, string> = { ...TIP_LICHID_LABELS };
+    for (const r of rows) {
+      if (r.cod && r.nume) map[r.cod] = r.nume;
+    }
+    return map;
+  }
+
+  async getTipuriUleiStandard() {
+    await this.asiguraTipuriFluideStandard();
+    const rows = await this.prisma.tipFluid.findMany({
+      where: { activ: true },
+      orderBy: [{ ordine: 'asc' }, { nume: 'asc' }],
+    });
+    return rows.map((r) => this.formatTipFluid(r));
+  }
+
+  async createTipFluid(data: {
+    cod?: string;
+    nume: string;
+    descriere?: string;
+    accentColor?: string;
+    recomandat?: string;
+    presetKm?: number[];
+    presetMth?: number[];
+  }) {
+    await this.asiguraTipuriFluideStandard();
+    const cleanNume = String(data.nume || '').trim();
+    if (!cleanNume) {
+      throw new BadRequestException('Denumirea tipului de lubrifiant este obligatorie.');
+    }
+
+    const toSlugCod = (txt: string) =>
+      txt
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 48);
+
+    const hasExplicitCod = Boolean(data.cod && data.cod.trim());
+    let cod = toSlugCod(hasExplicitCod ? data.cod! : cleanNume);
+    if (!cod) cod = `FLUID_${Date.now().toString().slice(-6)}`;
+
+    if (hasExplicitCod) {
+      const exists = await this.prisma.tipFluid.findUnique({ where: { cod } });
+      if (exists) {
+        throw new BadRequestException(`Există deja un tip de lubrifiant cu codul "${cod}".`);
+      }
+    } else {
+      let candidate = cod;
+      let idx = 2;
+      while (await this.prisma.tipFluid.findUnique({ where: { cod: candidate } })) {
+        candidate = `${cod}_${idx}`;
+        idx++;
+      }
+      cod = candidate;
+    }
+
+    const maxAgg = await this.prisma.tipFluid.aggregate({ _max: { ordine: true } });
+    const presetKm = Array.isArray(data.presetKm) && data.presetKm.length > 0
+      ? data.presetKm.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+      : [15000, 30000, 50000];
+    const presetMth = Array.isArray(data.presetMth) && data.presetMth.length > 0
+      ? data.presetMth.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+      : [250, 500, 1000];
+
+    const created = await this.prisma.tipFluid.create({
+      data: {
+        cod,
+        nume: cleanNume,
+        descriere: data.descriere?.trim() || null,
+        accentColor: data.accentColor?.trim() || 'amber',
+        recomandat: data.recomandat?.trim() || null,
+        presetKmJson: JSON.stringify(presetKm),
+        presetMthJson: JSON.stringify(presetMth),
+        esteStandard: false,
+        ordine: Number(maxAgg._max.ordine || 10) + 1,
+        activ: true,
+      },
+    });
+
+    return this.formatTipFluid(created);
+  }
+
+  async updateTipFluid(
+    idOrCod: string,
+    data: {
+      nume?: string;
+      descriere?: string;
+      accentColor?: string;
+      recomandat?: string;
+      presetKm?: number[];
+      presetMth?: number[];
+      activ?: boolean;
+    },
+  ) {
+    const existing = await this.prisma.tipFluid.findFirst({
+      where: { OR: [{ id: idOrCod }, { cod: idOrCod }] },
+    });
+    if (!existing) {
+      throw new NotFoundException('Tipul de lubrifiant nu a fost găsit.');
+    }
+
+    const cleanNume = data.nume !== undefined ? String(data.nume).trim() : undefined;
+    if (cleanNume !== undefined && !cleanNume) {
+      throw new BadRequestException('Denumirea tipului de lubrifiant nu poate fi empty.');
+    }
+
+    const updated = await this.prisma.tipFluid.update({
+      where: { id: existing.id },
+      data: {
+        nume: cleanNume,
+        descriere: data.descriere !== undefined ? (data.descriere?.trim() || null) : undefined,
+        accentColor: data.accentColor !== undefined ? (data.accentColor?.trim() || 'amber') : undefined,
+        recomandat: data.recomandat !== undefined ? (data.recomandat?.trim() || null) : undefined,
+        presetKmJson:
+          Array.isArray(data.presetKm)
+            ? JSON.stringify(data.presetKm.map(Number).filter((n) => Number.isFinite(n) && n > 0))
+            : undefined,
+        presetMthJson:
+          Array.isArray(data.presetMth)
+            ? JSON.stringify(data.presetMth.map(Number).filter((n) => Number.isFinite(n) && n > 0))
+            : undefined,
+        activ: data.activ !== undefined ? Boolean(data.activ) : undefined,
+      },
+    });
+
+    return this.formatTipFluid(updated);
+  }
+
+  async deleteTipFluid(idOrCod: string) {
+    const existing = await this.prisma.tipFluid.findFirst({
+      where: { OR: [{ id: idOrCod }, { cod: idOrCod }] },
+    });
+    if (!existing) {
+      throw new NotFoundException('Tipul de lubrifiant nu a fost găsit.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.configurareUleiCategorie.deleteMany({ where: { tipLichid: existing.cod } });
+      await tx.configurareUleiVehicul.deleteMany({ where: { tipLichid: existing.cod } });
+      await tx.subcategorieStoc.updateMany({ where: { tipLichid: existing.cod }, data: { tipLichid: null } });
+      await tx.articolStoc.updateMany({ where: { tipLichid: existing.cod }, data: { tipLichid: null } });
+      await tx.tipFluid.delete({ where: { id: existing.id } });
+    });
+
+    return { succes: true, cod: existing.cod, nume: existing.nume };
   }
 
   // 1. INTRARI ULEI (Oil Stock Reception)
@@ -67,6 +261,7 @@ export class AnomaliiService {
           stocCurent: articol.stocCurent + cantitate,
           pretUnitar: pretPerLitru,
           marcaUlei: data.marcaUlei,
+          tipLichid: data.tipLichid || articol.tipLichid,
         },
       });
     } else {
@@ -75,6 +270,7 @@ export class AnomaliiService {
           codArticol,
           denumire,
           categorie: 'Ulei Motor',
+          tipLichid: data.tipLichid || null,
           marcaUlei: data.marcaUlei,
           stocCurent: cantitate,
           stocMinim: 20,
@@ -373,11 +569,13 @@ export class AnomaliiService {
       }
     }
 
+    const labelsMap = await this.getTipFluidLabelsMap();
+    const tipLabel = labelsMap[data.tipLichid] || data.tipLichid;
     const operatiuneNume = isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE';
     return {
       mesaj: isSchimb
-        ? `${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${TIP_LICHID_LABELS[data.tipLichid] || data.tipLichid} a fost RESETAT la ${effectiveContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Consumat FIFO: ${cantitate}L din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/L, Cost total: ${costTotal} RON)` : ''}`
-        : `Completare ${cantitate}L ${TIP_LICHID_LABELS[data.tipLichid] || data.tipLichid} înregistrată.${articolUlei ? ` Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/L) · Stoc dedus din ${articolUlei.denumire}` : ''}`,
+        ? `${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${tipLabel} a fost RESETAT la ${effectiveContor} ${vehicul.tipMasurare}.${articolUlei ? ` (Consumat FIFO: ${cantitate}L din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/L, Cost total: ${costTotal} RON)` : ''}`
+        : `Completare ${cantitate}L ${tipLabel} înregistrată.${articolUlei ? ` Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/L) · Stoc dedus din ${articolUlei.denumire}` : ''}`,
       completare,
       anomalie: verificareScurgere,
       fifoResult,
@@ -763,6 +961,8 @@ export class AnomaliiService {
     const pragAdmis = 5.0;
     const esteAnomalie = totalLitri > pragAdmis;
 
+    const labelsMap = await this.getTipFluidLabelsMap();
+    const tipLabel = labelsMap[tipLichid] || tipLichid;
     return {
       vehiculNumar: vehicul.numarInmatriculare || vehicul.numarIntern,
       tipLichid,
@@ -770,7 +970,7 @@ export class AnomaliiService {
       pragAdmis,
       esteAnomalie,
       mesaj: esteAnomalie
-        ? `Atenție: Posibilă scurgere de ${TIP_LICHID_LABELS[tipLichid] || tipLichid} pe utilajul ${vehicul.numarIntern} (${vehicul.numarInmatriculare})! S-au înregistrat ${totalLitri}L completări în ultimele ${fereastraContor} ${unitLabel}.`
+        ? `Atenție: Posibilă scurgere de ${tipLabel} pe utilajul ${vehicul.numarIntern} (${vehicul.numarInmatriculare})! S-au înregistrat ${totalLitri}L completări în ultimele ${fereastraContor} ${unitLabel}.`
         : `Nivel completare în limite normale (${totalLitri}L / max ${pragAdmis}L).`,
     };
   }
@@ -1966,7 +2166,7 @@ export class AnomaliiService {
     });
 
     // 1b. Alerte Norme Schimb Uleiuri & Fluide (ConfigurareUleiVehicul & Categorii)
-    const [vehiculeFluide, normeCategorii] = await Promise.all([
+    const [vehiculeFluide, normeCategorii, tipLabelsMap] = await Promise.all([
       this.prisma.vehicul.findMany({
         where: { stare: { notIn: ['CASAT', 'VANDUT'] } },
         include: {
@@ -1975,6 +2175,7 @@ export class AnomaliiService {
         },
       }),
       this.prisma.configurareUleiCategorie.findMany(),
+      this.getTipFluidLabelsMap(),
     ]);
 
     const normeCatMap = new Map<string, any[]>();
@@ -1988,7 +2189,7 @@ export class AnomaliiService {
       const statuses = this.computeVehicleFluidStatuses(v, catNorme, acum);
       for (const st of statuses) {
         if (!st.esteDepasit && !st.esteInPragAvertizare) continue;
-        const labelLichid = TIP_LICHID_LABELS[st.tipLichid] || st.tipLichid.replace(/_/g, ' ');
+        const labelLichid = tipLabelsMap[st.tipLichid] || st.tipLichid.replace(/_/g, ' ');
         listaAlerte.push({
           id: `ulei-${v.id}-${st.tipLichid}`,
           dbId: `${v.id}::${st.tipLichid}`,

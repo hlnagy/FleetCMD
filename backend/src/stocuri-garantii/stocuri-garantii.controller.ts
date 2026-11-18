@@ -62,14 +62,14 @@ export class StocuriGarantiiController {
   }
 
   @Post('subcategorii')
-  createSubcategorie(@Body() body: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string }) {
+  createSubcategorie(@Body() body: { categorieStocId?: string; categorieNume?: string; nume: string; descriere?: string; tipLichid?: string | null }) {
     return this.stocuriGarantiiService.createSubcategorie(body);
   }
 
   @Patch('subcategorii/:id')
   updateSubcategorie(
     @Param('id') id: string,
-    @Body() body: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string }
+    @Body() body: { nume?: string; descriere?: string; categorieStocId?: string; categorieNume?: string; tipLichid?: string | null }
   ) {
     return this.stocuriGarantiiService.updateSubcategorie(id, body);
   }

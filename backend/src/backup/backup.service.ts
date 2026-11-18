@@ -219,6 +219,8 @@ export class BackupService implements OnModuleInit {
         const perioadeFunctionareMth = await tx.perioadaFunctionareMth.findMany();
         const configurariUleiVehicule = await tx.configurareUleiVehicul.findMany();
         const configurariUleiCategorii = await tx.configurareUleiCategorie.findMany();
+        const tipuriFluide = await tx.tipFluid.findMany();
+        const noteAtelier = await tx.notaAtelier.findMany();
         const profileMentenanta = await tx.profilMentenanta.findMany();
         const profileVehicule = await tx.profilMentenantaVehicul.findMany();
         const sarciniMentenanta = await tx.sarcinaMentenanta.findMany();
@@ -288,6 +290,8 @@ export class BackupService implements OnModuleInit {
           perioadeFunctionareMth,
           configurariUleiVehicule,
           configurariUleiCategorii,
+          tipuriFluide,
+          noteAtelier,
           profileMentenanta,
           profileVehicule,
           sarciniMentenanta,

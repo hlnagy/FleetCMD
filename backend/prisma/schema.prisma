@@ -279,6 +279,7 @@ model ElementComandaLucru {
   numarFactura         String?
   categorie            String?
   subcategorie         String?
+  tipLichid            String?
   observatiiIntern     String?
 
   createdAt            DateTime            @default(now())
@@ -467,10 +468,13 @@ model SubcategorieStoc {
   id              String         @id @default(uuid())
   nume            String
   descriere       String?
+  tipLichid       String?        // Cod TipFluid (ex: ULEI_MOTOR, ULEI_HIDRAULIC, etc.) pentru legătură directă cu normele
   categorieStocId String?
   categorieStoc   CategorieStoc? @relation(fields: [categorieStocId], references: [id], onDelete: Cascade)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+
+  @@index([tipLichid])
 }
 
 model ArticolStoc {
@@ -479,6 +483,7 @@ model ArticolStoc {
   denumire           String
   categorie          String
   subcategorie       String?
+  tipLichid          String?               // Cod TipFluid (ex: ULEI_MOTOR) — prioritate maximă la consum și norme
   marcaUlei          String?
   stocCurent         Float                 @default(0)
   stocMinim          Float                 @default(0)
@@ -502,6 +507,7 @@ model ArticolStoc {
   @@index([codArticol])
   @@index([denumire])
   @@index([categorie])
+  @@index([tipLichid])
   @@index([depozitId])
 }
 
@@ -852,4 +858,25 @@ model NotaAtelier {
   @@index([createdAt])
 }
 
+// ==========================================
+// NOMENCLATOR CENTRALIZAT TIPURI LUBRIFIANȚI
+// ==========================================
+
+model TipFluid {
+  id            String   @id @default(uuid())
+  cod           String   @unique
+  nume          String
+  descriere     String?
+  accentColor   String   @default("amber")
+  recomandat    String?
+  presetKmJson  String?
+  presetMthJson String?
+  esteStandard  Boolean  @default(false)
+  ordine        Int      @default(0)
+  activ         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([activ, ordine])
+}
 

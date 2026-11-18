@@ -2,18 +2,127 @@
 // UTILITARE CENTRALIZATE FLUIDE & LUBRIFIANȚI
 // ==========================================
 
-export const TIP_LICHID_LABELS: Record<string, string> = {
-  ULEI_MOTOR: 'Ulei Motor',
-  ULEI_HIDRAULIC: 'Ulei Hidraulic',
-  ULEI_TRANSMISIE: 'Ulei Transmisie & Diferențial',
-  ANTIGEL_G12: 'Antigel G12+ (Lichid Răcire Roz)',
-  ANTIGEL_G11: 'Antigel G11 (Lichid Răcire Albastru)',
-  ADBLUE: 'AdBlue (Soluție Uree 32.5%)',
-  ULEI_LIEBHERR_PUNTE: 'Ulei Punte Liebherr',
-  ULEI_LIEBHERR_CUTIE: 'Ulei Cutie Liebherr',
-  ULEI_CUTIE_MANUALA: 'Ulei Cutie Manuală',
-  ULEI_CUTIE_AUTOMATA: 'Ulei Cutie Automată',
-};
+export interface DefaultTipFluidSeed {
+  cod: string;
+  nume: string;
+  descriere: string;
+  accentColor: string;
+  recomandat: string;
+  presetKm: number[];
+  presetMth: number[];
+  ordine: number;
+}
+
+export const DEFAULT_TIPURI_FLUIDE: DefaultTipFluidSeed[] = [
+  {
+    cod: 'ULEI_MOTOR',
+    nume: 'Ulei Motor',
+    descriere: 'Lubrifiere motor termic, protecție împotriva uzurii și depunerilor la temperaturi înalte.',
+    accentColor: 'amber',
+    recomandat: 'Esențial pentru toate utilajele și autovehiculele',
+    presetKm: [10000, 15000, 20000, 30000, 40000],
+    presetMth: [150, 250, 500],
+    ordine: 1,
+  },
+  {
+    cod: 'ULEI_HIDRAULIC',
+    nume: 'Ulei Hidraulic',
+    descriere: 'Transmisie putere hidraulică, operare braț, cilindri și pompe de presiune.',
+    accentColor: 'blue',
+    recomandat: 'Critic pentru Excavatoare, Încărcătoare, Basculante',
+    presetKm: [30000, 60000, 100000],
+    presetMth: [500, 1000, 1500, 2000],
+    ordine: 2,
+  },
+  {
+    cod: 'ULEI_TRANSMISIE',
+    nume: 'Ulei Transmisie & Diferențial',
+    descriere: 'Protecție cutie viteze mecanică/automată, grupuri conice și diferențiale axe.',
+    accentColor: 'indigo',
+    recomandat: 'Capete Tractor, Camioane 8x4, Basculante, Autoutilitare',
+    presetKm: [30000, 60000, 90000, 120000],
+    presetMth: [500, 1000, 1500],
+    ordine: 3,
+  },
+  {
+    cod: 'ANTIGEL_G12',
+    nume: 'Antigel G12+ (Lichid Răcire Roz)',
+    descriere: 'Răcire motor, protecție anti-îngheț și anticoroziune aluminiu/aliaj.',
+    accentColor: 'rose',
+    recomandat: 'Flotă modernă (Euro 5, Euro 6, Stage IV / V)',
+    presetKm: [40000, 60000, 100000],
+    presetMth: [1000, 2000],
+    ordine: 4,
+  },
+  {
+    cod: 'ADBLUE',
+    nume: 'AdBlue (Soluție Uree 32.5%)',
+    descriere: 'Tratare gaze eșapament SCR, reducere emisii NOx conform normelor antipoluare.',
+    accentColor: 'emerald',
+    recomandat: 'Vehicule echipate cu catalizator SCR (Euro 6 / Stage V)',
+    presetKm: [10000, 15000, 25000],
+    presetMth: [250, 500],
+    ordine: 5,
+  },
+  {
+    cod: 'ANTIGEL_G11',
+    nume: 'Antigel G11 (Lichid Răcire Albastru)',
+    descriere: 'Răcire motor pe bază de silicați pentru utilaje din generații clasice.',
+    accentColor: 'cyan',
+    recomandat: 'Generații clasice de utilaje',
+    presetKm: [30000, 50000],
+    presetMth: [1000],
+    ordine: 6,
+  },
+  {
+    cod: 'ULEI_LIEBHERR_PUNTE',
+    nume: 'Ulei Punte Liebherr',
+    descriere: 'Ulei specific de înaltă presiune pentru punți și reductoare de roată Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Utilaje grele Liebherr (Excavatoare, Vole)',
+    presetKm: [30000, 50000],
+    presetMth: [500, 1000],
+    ordine: 7,
+  },
+  {
+    cod: 'ULEI_LIEBHERR_CUTIE',
+    nume: 'Ulei Cutie Liebherr',
+    descriere: 'Ulei transmisie hidrostatică sau powershift pentru utilaje terasiere Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Transmisii utilaje Liebherr',
+    presetKm: [30000, 50000],
+    presetMth: [500, 1000],
+    ordine: 8,
+  },
+  {
+    cod: 'ULEI_CUTIE_MANUALA',
+    nume: 'Ulei Cutie Manuală',
+    descriere: 'Transmisii manuale sinteză 75W-80 sau 80W-90.',
+    accentColor: 'slate',
+    recomandat: 'Camioane și autoutilitare cu cutie manuală',
+    presetKm: [40000, 80000],
+    presetMth: [500, 1000],
+    ordine: 9,
+  },
+  {
+    cod: 'ULEI_CUTIE_AUTOMATA',
+    nume: 'Ulei Cutie Automată (ATF)',
+    descriere: 'Fluide de transmisie automată ATF Dexron / ZF Ecolife / TraXon.',
+    accentColor: 'violet',
+    recomandat: 'Capete tractor automate și autoturisme',
+    presetKm: [60000, 120000],
+    presetMth: [1000, 1500],
+    ordine: 10,
+  },
+];
+
+export const TIP_LICHID_LABELS: Record<string, string> = DEFAULT_TIPURI_FLUIDE.reduce(
+  (acc, item) => {
+    acc[item.cod] = item.nume;
+    return acc;
+  },
+  {} as Record<string, string>,
+);
 
 export function isMthTipMasurare(tipMasurare?: string | null): boolean {
   const tm = String(tipMasurare || '').trim().toUpperCase();
@@ -37,6 +146,7 @@ export function isActualFluidItem(
   descriere?: string | null,
   categorie?: string | null,
   subcategorie?: string | null,
+  explicitTipLichid?: string | null,
 ): boolean {
   const desc = String(descriere || '').trim();
   const cat = String(categorie || '').trim();
@@ -44,6 +154,10 @@ export function isActualFluidItem(
 
   if (desc && NON_FLUID_PATTERN.test(desc)) {
     return false;
+  }
+
+  if (explicitTipLichid && String(explicitTipLichid).trim() !== '') {
+    return true;
   }
 
   if (FLUID_CATEGORY_PATTERN.test(cat) || FLUID_CATEGORY_PATTERN.test(sub)) {
@@ -54,14 +168,18 @@ export function isActualFluidItem(
 }
 
 /**
- * Deduce tipul standardizat de lichid din descriere / categorie / subcategorie.
+ * Deduce tipul standardizat de lichid din asocierea explicită sau, în lipsă, din descriere / categorie / subcategorie.
  */
 export function detectTipLichidFromText(
   descriere?: string | null,
   categorie?: string | null,
   subcategorie?: string | null,
   fallback = 'ULEI_MOTOR',
+  explicitTipLichid?: string | null,
 ): string {
+  const explicit = String(explicitTipLichid || '').trim();
+  if (explicit) return explicit;
+
   const txt = `${subcategorie || ''} ${descriere || ''} ${categorie || ''}`.toLowerCase();
 
   if (/adblue|uree/i.test(txt)) return 'ADBLUE';
@@ -183,16 +301,42 @@ export async function syncFluidCompletariForComanda(
     return { synced: 0 };
   }
 
+  const subcatsWithTip = await prisma.subcategorieStoc.findMany({
+    where: { tipLichid: { not: null } },
+    include: { categorieStoc: { select: { nume: true } } },
+  });
+
+  const findMappedSubcatTip = (el: any): string | null => {
+    const subName = String(el.subcategorie || el.articolStoc?.subcategorie || '').trim().toLowerCase();
+    if (!subName) return null;
+    const catName = String(el.categorie || el.articolStoc?.categorie || '').trim().toLowerCase();
+    const exact = subcatsWithTip.find(
+      (sc: any) =>
+        String(sc.nume || '').trim().toLowerCase() === subName &&
+        (!catName || String(sc.categorieStoc?.nume || '').trim().toLowerCase() === catName),
+    );
+    if (exact?.tipLichid) return exact.tipLichid;
+    const subOnly = subcatsWithTip.find((sc: any) => String(sc.nume || '').trim().toLowerCase() === subName);
+    return subOnly?.tipLichid || null;
+  };
+
   const fluidElements = (comanda.elementeComanda || []).filter(
-    (el: any) =>
-      el.pilonCost !== 'MANOPERA_INTERNA' &&
-      el.pilonCost !== 'PRESTATIE_EXTERNA' &&
-      Number(el.costTotal || 0) >= 0 &&
-      isActualFluidItem(
+    (el: any) => {
+      if (
+        el.pilonCost === 'MANOPERA_INTERNA' ||
+        el.pilonCost === 'PRESTATIE_EXTERNA' ||
+        Number(el.costTotal || 0) < 0
+      ) {
+        return false;
+      }
+      const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || findMappedSubcatTip(el);
+      return isActualFluidItem(
         el.descriere,
         el.categorie || el.articolStoc?.categorie,
         el.subcategorie || el.articolStoc?.subcategorie,
-      ),
+        explicitTip,
+      );
+    },
   );
 
   if (fluidElements.length === 0) {
@@ -213,10 +357,13 @@ export async function syncFluidCompletariForComanda(
 
   let synced = 0;
   for (const el of fluidElements) {
+    const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || findMappedSubcatTip(el);
     const tipLichid = detectTipLichidFromText(
       el.descriere,
       el.categorie || el.articolStoc?.categorie,
       el.subcategorie || el.articolStoc?.subcategorie,
+      'ULEI_MOTOR',
+      explicitTip,
     );
 
     const textCombined = `${el.descriere || ''} ${el.observatiiIntern || ''}`.toLowerCase();

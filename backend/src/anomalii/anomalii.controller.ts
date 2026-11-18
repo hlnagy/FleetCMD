@@ -63,6 +63,26 @@ export class AnomaliiController {
     return this.anomaliiService.getTipuriUleiStandard();
   }
 
+  @Get('tipuri-fluide')
+  getTipuriFluide() {
+    return this.anomaliiService.getTipuriUleiStandard();
+  }
+
+  @Post('tipuri-fluide')
+  createTipFluid(@Body() body: any) {
+    return this.anomaliiService.createTipFluid(body);
+  }
+
+  @Patch('tipuri-fluide/:id')
+  updateTipFluid(@Param('id') id: string, @Body() body: any) {
+    return this.anomaliiService.updateTipFluid(id, body);
+  }
+
+  @Delete('tipuri-fluide/:id')
+  deleteTipFluid(@Param('id') id: string) {
+    return this.anomaliiService.deleteTipFluid(id);
+  }
+
   @Get('flota-fluide')
   getToateFluideleFlota() {
     return this.anomaliiService.getToateFluideleFlota();

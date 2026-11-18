@@ -17,6 +17,13 @@ import { showConfirm, showToast } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
 import { useAuth } from '@/lib/AuthContext';
 import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
+import {
+  FALLBACK_TIPURI_FLUIDE,
+  TipFluidDef,
+  detectTipLichidFromStockText,
+  isFluidCategoryOrItem,
+  normalizeTipuriFluideList,
+} from '@/lib/fluids';
 
 function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
   isPackagedFluid: boolean;
@@ -286,6 +293,7 @@ interface EFacturaPersistentCache {
   config?: any;
   depozite?: any[];
   categoriiStoc?: any[];
+  tipuriFluide?: TipFluidDef[];
   stocuriFlota?: any[];
   intrariHistory?: any[];
   selectedFactura?: any;
@@ -345,6 +353,7 @@ function EFacturaContent() {
   const [config, setConfig] = useState<any>(() => efacturaCache.config || null);
   const [depozite, setDepozite] = useState<any[]>(() => efacturaCache.depozite || []);
   const [categoriiStoc, setCategoriiStoc] = useState<any[]>(() => efacturaCache.categoriiStoc || []);
+  const [tipuriFluide, setTipuriFluide] = useState<TipFluidDef[]>(() => efacturaCache.tipuriFluide || FALLBACK_TIPURI_FLUIDE);
   const [stocuriFlota, setStocuriFlota] = useState<any[]>(() => efacturaCache.stocuriFlota || []);
 
   const [loading, setLoading] = useState(() => !efacturaCache.facturi || efacturaCache.facturi.length === 0);
@@ -454,6 +463,8 @@ function EFacturaContent() {
   const [targetDepozitId, setTargetDepozitId] = useState('');
   const [targetCategorie, setTargetCategorie] = useState('Alte');
   const [targetSubcategorie, setTargetSubcategorie] = useState('Alte piese');
+  const [targetTipLichid, setTargetTipLichid] = useState('');
+  const [marcaUleiImport, setMarcaUleiImport] = useState('');
   const [codArticolCalculat, setCodArticolCalculat] = useState('');
   const [pretUnitarImport, setPretUnitarImport] = useState<number>(0);
   const [includeEcovalor, setIncludeEcovalor] = useState<boolean>(true);
@@ -505,6 +516,7 @@ function EFacturaContent() {
   const [valoareContorDirectText, setValoareContorDirectText] = useState<string>('');
   const [targetCategorieDirect, setTargetCategorieDirect] = useState('Alte');
   const [targetSubcategorieDirect, setTargetSubcategorieDirect] = useState('Alte piese');
+  const [targetTipLichidDirect, setTargetTipLichidDirect] = useState('');
   const [observatiiInternPiesa, setObservatiiInternPiesa] = useState('');
   const [cantitateDepozitImport, setCantitateDepozitImport] = useState<number>(1);
   const [observatiiComanda, setObservatiiComanda] = useState('');
@@ -699,6 +711,19 @@ function EFacturaContent() {
           console.warn(`Tentativă ${attempt + 1} de încărcare categorii:`, err);
         }
         if (attempt < 1) await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+
+      // Încărcare Tipuri Lubrifianți (Master Registry)
+      try {
+        const resTipuri = await authFetch(`${API_BASE_URL}/anomalii/tipuri-fluide`);
+        if (resTipuri.ok) {
+          const tData = await resTipuri.json();
+          const normT = normalizeTipuriFluideList(tData);
+          setTipuriFluide(normT);
+          efacturaCache.tipuriFluide = normT;
+        }
+      } catch (err) {
+        console.warn('Nu s-au putut încărca tipurile de fluide:', err);
       }
 
       // Verificăm dacă o sincronizare este deja în curs pe server
@@ -1535,6 +1560,31 @@ function EFacturaContent() {
       }
     }
 
+    const finalCatName = matchedStock?.categorie || resCat.categorie;
+    const finalSubName = matchedStock?.subcategorie || resCat.subcategorie;
+    const matchedCatObj = categoriiStoc.find((c: any) => c.nume === finalCatName);
+    const matchedSubObj = (matchedCatObj?.subcategorii || []).find((sc: any) => sc.nume === finalSubName);
+    const initIsFluid = isFluidCategoryOrItem(
+      finalCatName,
+      matchedCatObj?.esteFluid,
+      matchedStock?.tipLichid || matchedSubObj?.tipLichid,
+      item.unitateMasura,
+      item.descrierePiesa,
+    );
+    const initTip =
+      matchedStock?.tipLichid ||
+      matchedSubObj?.tipLichid ||
+      (initIsFluid
+        ? detectTipLichidFromStockText({
+            denumire: item.descrierePiesa,
+            categorie: finalCatName,
+            subcategorie: finalSubName,
+          })
+        : '');
+    setTargetTipLichid(initTip);
+    setTargetTipLichidDirect(initTip);
+    setMarcaUleiImport(matchedStock?.marcaUlei || '');
+
     setIsAddingNewCat(false);
     setIsAddingNewSubcat(false);
     setNewCatNume('');
@@ -1806,6 +1856,7 @@ function EFacturaContent() {
           categorieStocId: parentCatObj?.id,
           categorieNume: parentCatName,
           nume: cleanSubName,
+          tipLichid: (mode === 'DIRECT' ? targetTipLichidDirect : targetTipLichid) || undefined,
         }),
       });
       if (res.ok) {
@@ -1843,8 +1894,10 @@ function EFacturaContent() {
     const isDirect = mode === 'DIRECT';
     const currentCat = isDirect ? targetCategorieDirect : targetCategorie;
     const currentSubcat = isDirect ? targetSubcategorieDirect : targetSubcategorie;
+    const currentTip = isDirect ? targetTipLichidDirect : targetTipLichid;
     const setCat = isDirect ? setTargetCategorieDirect : setTargetCategorie;
     const setSubcat = isDirect ? setTargetSubcategorieDirect : setTargetSubcategorie;
+    const setTip = isDirect ? setTargetTipLichidDirect : setTargetTipLichid;
 
     const currentCatObj = categoriiStoc.find(
       (c: any) => c.nume === currentCat || c.id === currentCat,
@@ -1856,6 +1909,13 @@ function EFacturaContent() {
     ) {
       availableSubcats.unshift({ id: `alte-piese-opt-${mode}`, nume: 'Alte piese' });
     }
+    const showFluidTipPicker = isFluidCategoryOrItem(
+      currentCat,
+      currentCatObj?.esteFluid,
+      currentTip,
+      importingItem?.unitateMasura,
+      importingItem?.descrierePiesa,
+    );
 
     return (
       <div className={isDirect ? 'grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-morning-200' : 'space-y-3'}>
@@ -1953,6 +2013,16 @@ function EFacturaContent() {
                 } else {
                   setSubcat('');
                 }
+                if (!isFluidCategoryOrItem(val, catObj?.esteFluid, '', importingItem?.unitateMasura, importingItem?.descrierePiesa)) {
+                  setTip('');
+                } else if (!currentTip) {
+                  setTip(
+                    detectTipLichidFromStockText({
+                      denumire: importingItem?.descrierePiesa,
+                      categorie: val,
+                    }),
+                  );
+                }
               }}
               className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
                 isDirect
@@ -2034,7 +2104,14 @@ function EFacturaContent() {
           ) : (
             <select
               value={currentSubcat}
-              onChange={(e) => setSubcat(e.target.value)}
+              onChange={(e) => {
+                const subVal = e.target.value;
+                setSubcat(subVal);
+                const subObj = availableSubcats.find((s: any) => s.nume === subVal);
+                if (subObj?.tipLichid) {
+                  setTip(subObj.tipLichid);
+                }
+              }}
               className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
                 isDirect
                   ? 'bg-white border border-morning-300'
@@ -2044,14 +2121,53 @@ function EFacturaContent() {
               <option value="">
                 {isDirect ? '-- Fără Subcategorie --' : '-- Fără Subcategorie (Doar Categoria Principală) --'}
               </option>
-              {availableSubcats.map((sub: any) => (
-                <option key={sub.id || sub.nume} value={sub.nume}>
-                  {sub.nume} {sub.descriere ? `(${sub.descriere})` : ''}
-                </option>
-              ))}
+              {availableSubcats.map((sub: any) => {
+                const tf = sub.tipLichid ? tipuriFluide.find((t) => t.cod === sub.tipLichid) : null;
+                return (
+                  <option key={sub.id || sub.nume} value={sub.nume}>
+                    {sub.nume}{tf ? ` [Normă: ${tf.nume}]` : sub.descriere ? ` (${sub.descriere})` : ''}
+                  </option>
+                );
+              })}
             </select>
           )}
         </div>
+
+        {/* TIP LUBRIFIANT / NORMĂ (AFISAT PENTRU FLUIDE / LUBRIFIANTI) */}
+        {showFluidTipPicker && (
+          <div className={isDirect ? 'sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 bg-sapphire-50/70 border border-sapphire-200 rounded-xl' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl'}>
+            <div className={isDirect ? 'sm:col-span-2' : ''}>
+              <label className="text-sapphire-900 font-bold text-xs block mb-1">
+                Tip Lubrifiant / Normă Întreținere:
+              </label>
+              <select
+                value={currentTip}
+                onChange={(e) => setTip(e.target.value)}
+                className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-bold text-xs"
+              >
+                <option value="">-- Fără asociere normă (detectare automată) --</option>
+                {tipuriFluide.map((tf) => (
+                  <option key={tf.cod} value={tf.cod}>
+                    {tf.nume} ({tf.cod})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!isDirect && (
+              <div>
+                <label className="text-sapphire-900 font-bold text-xs block mb-1">
+                  Marcă Lubrifiant (Opțional):
+                </label>
+                <input
+                  value={marcaUleiImport}
+                  onChange={(e) => setMarcaUleiImport(e.target.value)}
+                  placeholder="ex: Mobil Delvac, Castrol, Liebherr"
+                  className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-semibold text-xs"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -2123,6 +2239,7 @@ function EFacturaContent() {
           pretUnitar: isGarantieGratuita ? 0 : Number(pretUnitarImport),
           categorie: targetCategorieDirect || 'Alte',
           subcategorie: targetSubcategorieDirect || undefined,
+          tipLichid: targetTipLichidDirect || undefined,
           observatiiIntern: observatiiInternPiesa.trim() || undefined,
           tipOperatiuneFluid: isDirectFluid ? tipOperatiuneFluidDirect : undefined,
           cantitateLitriReala: realLitersDirect,
@@ -2236,6 +2353,8 @@ function EFacturaContent() {
           depozitId: targetDepozitId,
           categorieNume: targetCategorie,
           subcategorieNume: targetSubcategorie,
+          tipLichid: targetTipLichid || undefined,
+          marcaUlei: marcaUleiImport.trim() || undefined,
           codArticolCalculat,
           pretUnitarCustom: isGarantieGratuita ? 0 : Number(pretUnitarImport),
           conversieAmbalaj: isConversie,
@@ -4171,7 +4290,14 @@ function EFacturaContent() {
                 <label className="text-sage-700 block mb-1 font-bold">Subcategorie Stoc:</label>
                 <select
                   value={bevSubcategorie}
-                  onChange={(e) => setBevSubcategorie(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBevSubcategorie(val);
+                    const subObj = getSubcategoriiPentruCategorie(bevCategorie).find((s: any) => s.nume === val);
+                    if (subObj?.tipLichid) {
+                      setBevTipLichid(subObj.tipLichid);
+                    }
+                  }}
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   <option value="">-- Fără Subcategorie --</option>
@@ -4230,19 +4356,18 @@ function EFacturaContent() {
             {/* Suport Special Achiziție Uleiuri */}
             <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sapphire-900 block mb-1 font-bold">Dacă este Achiziție Ulei, alegeți Tipul:</label>
+                <label className="text-sapphire-900 block mb-1 font-bold">Dacă este Achiziție Ulei / Fluid, alegeți Tipul (Norma):</label>
                 <select
                   value={bevTipLichid}
                   onChange={(e) => setBevTipLichid(e.target.value)}
                   className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
                 >
-                  <option value="NICIUNUL">Nu este ulei (Piesă / Filtru / Consumabil)</option>
-                  <option value="ULEI_MOTOR">Ulei motor</option>
-                  <option value="ULEI_HIDRAULIC">Ulei hidraulic</option>
-                  <option value="ULEI_LIEBHERR_PUNTE">Ulei - Liebherr Punte faţă + spate</option>
-                  <option value="ULEI_LIEBHERR_CUTIE">Ulei - Liebherr Cutie Viteze</option>
-                  <option value="ULEI_CUTIE_MANUALA">Ulei cutie manuală</option>
-                  <option value="ULEI_CUTIE_AUTOMATA">Ulei cutie automată</option>
+                  <option value="NICIUNUL">Nu este fluid (Piesă / Filtru / Consumabil)</option>
+                  {tipuriFluide.map((tf) => (
+                    <option key={tf.cod} value={tf.cod}>
+                      {tf.nume} ({tf.cod})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -4682,7 +4807,7 @@ function EFacturaContent() {
               {renderCategoryAndSubcategoryFields('DEPOZIT')}
 
               {/* SECȚIUNE CONVERSIE AMBALAJ ÎN LITRI / KG (PENTRU ULEIURI, ANTIGEL, LUBRIFIANȚI) */}
-              {(/ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) || detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura).detectedVolume !== null) && (
+              {(Boolean(targetTipLichid) || categoriiStoc.find((c: any) => c.nume === targetCategorie)?.esteFluid || /ulei|lubrifiant|antigel|racire|adblue|lichid/i.test(targetCategorie) || detectFluidPackaging(importingItem.descrierePiesa, importingItem.unitateMasura).detectedVolume !== null) && (
                 <div className="p-3.5 bg-gradient-to-br from-amber-500/10 via-emerald-500/5 to-morning-50 border-2 border-amber-300 rounded-2xl space-y-3 shadow-xs">
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center space-x-2">

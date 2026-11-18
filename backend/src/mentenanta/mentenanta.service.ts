@@ -595,16 +595,26 @@ export class MentenantaService {
     let furnizor = el.furnizor || null;
     let numarFactura = el.numarFactura || null;
     let pretUnitar = Number(el.pretUnitar || 0);
+    let articolTipLichid: string | null = (el as any).tipLichid || null;
 
-    if (el.articolStocId && (!furnizor || !numarFactura)) {
-      const latestLot = await this.prisma.intrareStoc.findFirst({
-        where: { articolStocId: el.articolStocId },
-        orderBy: { dataFactura: 'desc' },
+    if (el.articolStocId) {
+      const artInfo = await this.prisma.articolStoc.findUnique({
+        where: { id: el.articolStocId },
+        select: { tipLichid: true },
       });
-      if (latestLot) {
-        if (!furnizor) furnizor = latestLot.furnizor;
-        if (!numarFactura) numarFactura = latestLot.numarFactura;
-        if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+      if (!articolTipLichid && artInfo?.tipLichid) {
+        articolTipLichid = artInfo.tipLichid;
+      }
+      if (!furnizor || !numarFactura) {
+        const latestLot = await this.prisma.intrareStoc.findFirst({
+          where: { articolStocId: el.articolStocId },
+          orderBy: { dataFactura: 'desc' },
+        });
+        if (latestLot) {
+          if (!furnizor) furnizor = latestLot.furnizor;
+          if (!numarFactura) numarFactura = latestLot.numarFactura;
+          if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+        }
       }
     }
 
@@ -619,6 +629,7 @@ export class MentenantaService {
         costTotal: Number(el.cantitate || 1) * pretUnitar,
         provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
         articolStocId: el.articolStocId || null,
+        tipLichid: articolTipLichid,
         furnizor,
         numarFactura,
       },
@@ -917,16 +928,26 @@ export class MentenantaService {
           let furnizor = el.furnizor || null;
           let numarFactura = el.numarFactura || null;
           let pretUnitar = Number(el.pretUnitar || 0);
+          let tipLichid: string | null = el.tipLichid || null;
 
-          if (el.articolStocId && (!furnizor || !numarFactura)) {
-            const latestLot = await this.prisma.intrareStoc.findFirst({
-              where: { articolStocId: el.articolStocId },
-              orderBy: { dataFactura: 'desc' },
-            });
-            if (latestLot) {
-              if (!furnizor) furnizor = latestLot.furnizor;
-              if (!numarFactura) numarFactura = latestLot.numarFactura;
-              if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+          if (el.articolStocId) {
+            if (!tipLichid) {
+              const artInfo = await this.prisma.articolStoc.findUnique({
+                where: { id: el.articolStocId },
+                select: { tipLichid: true },
+              });
+              if (artInfo?.tipLichid) tipLichid = artInfo.tipLichid;
+            }
+            if (!furnizor || !numarFactura) {
+              const latestLot = await this.prisma.intrareStoc.findFirst({
+                where: { articolStocId: el.articolStocId },
+                orderBy: { dataFactura: 'desc' },
+              });
+              if (latestLot) {
+                if (!furnizor) furnizor = latestLot.furnizor;
+                if (!numarFactura) numarFactura = latestLot.numarFactura;
+                if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+              }
             }
           }
 
@@ -939,6 +960,7 @@ export class MentenantaService {
             costTotal: Number(el.cantitate || 1) * pretUnitar,
             provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : el.pilonCost === 'PIESA_DIRECTA' ? 'Achiziție Directă' : 'Stoc Intern'),
             articolStocId: el.articolStocId || null,
+            tipLichid,
             furnizor,
             numarFactura,
           };
@@ -1369,6 +1391,8 @@ export class MentenantaService {
                 codArticol: true,
                 unitateMasura: true,
                 categorie: true,
+                subcategorie: true,
+                tipLichid: true,
               },
             },
           },
@@ -1895,10 +1919,12 @@ export class MentenantaService {
         const cant = Number(el.cantitate || 1);
         const isManopera = el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA';
         const isAnvelopa = /\b(\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?|anvelop|cauciuc|pneu)\b/i.test(el.descriere);
+        const explicitTip = (el as any).tipLichid || el.articolStoc?.tipLichid || null;
         const isFluid = isActualFluidItem(
           el.descriere,
           el.categorie || el.articolStoc?.categorie,
-          el.subcategorie,
+          el.subcategorie || el.articolStoc?.subcategorie,
+          explicitTip,
         );
 
         if (isManopera) {
@@ -1952,7 +1978,16 @@ export class MentenantaService {
           if (isTopUpCmd) totalFluidePotlasCost += cost;
           else totalFluideCsereCost += cost;
 
-          const catInfo = mapFluidCategory(el.descriere, detectTipLichidFromText(el.descriere, el.categorie || el.articolStoc?.categorie, el.subcategorie));
+          const catInfo = mapFluidCategory(
+            el.descriere,
+            detectTipLichidFromText(
+              el.descriere,
+              el.categorie || el.articolStoc?.categorie,
+              el.subcategorie || el.articolStoc?.subcategorie,
+              'ULEI_MOTOR',
+              explicitTip,
+            ),
+          );
           if (fluideTipuriMap[catInfo.key]) {
             if (cost >= 0) {
               fluideTipuriMap[catInfo.key].totalLitri += fluidLiters;

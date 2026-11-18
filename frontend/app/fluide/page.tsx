@@ -6,126 +6,22 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
-  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog
+  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog, Link2
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { showConfirm } from '@/lib/swal';
-
-const TIP_LICHID_LABELS: Record<string, string> = {
-  ULEI_MOTOR: 'Ulei Motor',
-  ULEI_HIDRAULIC: 'Ulei Hidraulic',
-  ULEI_TRANSMISIE: 'Ulei Transmisie & Diferențial',
-  ANTIGEL_G12: 'Antigel G12+ (Lichid Răcire Roz)',
-  ANTIGEL_G11: 'Antigel G11 (Lichid Răcire Albastru)',
-  ADBLUE: 'AdBlue (Uree 32.5%)',
-  ULEI_LIEBHERR_PUNTE: 'Ulei Punte Liebherr',
-  ULEI_LIEBHERR_CUTIE: 'Ulei Cutie Liebherr',
-  ULEI_CUTIE_MANUALA: 'Ulei Cutie Manuală',
-  ULEI_CUTIE_AUTOMATA: 'Ulei Cutie Automată',
-};
-
-const FLUIDE_CATEGORII_CONFIG = [
-  {
-    key: 'ULEI_MOTOR',
-    nume: 'Ulei Motor',
-    descriere: 'Lubrifiere motor termic, protecție împotriva uzurii și depunerilor la temperaturi înalte.',
-    iconType: 'Droplets',
-    accentColor: 'amber',
-    presetKm: [10000, 15000, 20000, 30000, 40000],
-    presetMth: [150, 250, 500],
-    recomandat: 'Esențial pentru toate utilajele și autovehiculele',
-  },
-  {
-    key: 'ULEI_HIDRAULIC',
-    nume: 'Ulei Hidraulic',
-    descriere: 'Transmisie putere hidraulică, operare braț, cilindri și pompe de presiune.',
-    iconType: 'Activity',
-    accentColor: 'blue',
-    presetKm: [30000, 60000, 100000],
-    presetMth: [500, 1000, 1500, 2000],
-    recomandat: 'Critic pentru Excavatoare, Încărcătoare, Basculante',
-  },
-  {
-    key: 'ULEI_TRANSMISIE',
-    nume: 'Ulei Transmisie & Diferențial',
-    descriere: 'Protecție cutie viteze mecanică/automată, grupuri conice și diferențiale axe.',
-    iconType: 'Sliders',
-    accentColor: 'indigo',
-    presetKm: [30000, 60000, 90000, 120000],
-    presetMth: [500, 1000, 1500],
-    recomandat: 'Capete Tractor, Camioane 8x4, Basculante, Autoutilitare',
-  },
-  {
-    key: 'ANTIGEL_G12',
-    nume: 'Antigel G12+ (Lichid Răcire Roz)',
-    descriere: 'Răcire motor, protecție anti-îngheț și anticoroziune aluminiu/aliaj.',
-    iconType: 'ShieldCheck',
-    accentColor: 'rose',
-    presetKm: [40000, 60000, 100000],
-    presetMth: [1000, 2000],
-    recomandat: 'Flotă modernă (Euro 5, Euro 6, Stage IV / V)',
-  },
-  {
-    key: 'ADBLUE',
-    nume: 'AdBlue (Soluție Uree 32.5%)',
-    descriere: 'Tratare gaze eșapament SCR, reducere emisii NOx conform normelor antipoluare.',
-    iconType: 'Sparkles',
-    accentColor: 'emerald',
-    presetKm: [10000, 15000, 25000],
-    presetMth: [250, 500],
-    recomandat: 'Vehicule echipate cu catalizator SCR (Euro 6 / Stage V)',
-  },
-  {
-    key: 'ANTIGEL_G11',
-    nume: 'Antigel G11 (Lichid Răcire Albastru)',
-    descriere: 'Răcire motor pe bază de silicați pentru utilaje din generații clasice.',
-    iconType: 'ShieldCheck',
-    accentColor: 'cyan',
-    presetKm: [30000, 50000],
-    presetMth: [1000],
-    recomandat: 'Generații clasice de utilaje',
-  },
-  {
-    key: 'ULEI_LIEBHERR_PUNTE',
-    nume: 'Ulei Punte Liebherr',
-    descriere: 'Ulei specific de înaltă presiune pentru punți și reductoare de roată Liebherr.',
-    iconType: 'Gauge',
-    accentColor: 'purple',
-    presetKm: [30000, 50000],
-    presetMth: [500, 1000],
-    recomandat: 'Utilaje grele Liebherr (Excavatoare, Vole)',
-  },
-  {
-    key: 'ULEI_LIEBHERR_CUTIE',
-    nume: 'Ulei Cutie Liebherr',
-    descriere: 'Ulei transmisie hidrostatică sau powershift pentru utilaje terasiere Liebherr.',
-    iconType: 'Gauge',
-    accentColor: 'purple',
-    presetKm: [30000, 50000],
-    presetMth: [500, 1000],
-    recomandat: 'Transmisii utilaje Liebherr',
-  },
-  {
-    key: 'ULEI_CUTIE_MANUALA',
-    nume: 'Ulei Cutie Manuală',
-    descriere: 'Transmisii manuale sinteză 75W-80 sau 80W-90.',
-    iconType: 'Sliders',
-    accentColor: 'slate',
-    presetKm: [40000, 80000],
-    presetMth: [500, 1000],
-    recomandat: 'Camioane și autoutilitare cu cutie manuală',
-  },
-  {
-    key: 'ULEI_CUTIE_AUTOMATA',
-    nume: 'Ulei Cutie Automată (ATF)',
-    descriere: 'Fluide de transmisie automată ATF Dexron / ZF Ecolife / TraXon.',
-    iconType: 'Sliders',
-    accentColor: 'violet',
-    presetKm: [60000, 120000],
-    presetMth: [1000, 1500],
-    recomandat: 'Capete tractor automate și autoturisme',
-  },
-];
+import {
+  FALLBACK_TIPURI_FLUIDE,
+  FLUID_ACCENT_OPTIONS,
+  TipFluidDef,
+  buildSubcatTipMap,
+  buildTipLichidLabelMap,
+  getAccentClasses,
+  getTipFluidLabel,
+  isArticolMatchingTipLichid,
+  normalizeTipuriFluideList,
+  resolveEffectiveTipLichid,
+} from '@/lib/fluids';
 
 const CategoryIcon = ({ catName, className = "w-4 h-4" }: { catName?: string; className?: string }) => {
   const c = (catName || '').toUpperCase();
@@ -145,89 +41,6 @@ const CategoryIcon = ({ catName, className = "w-4 h-4" }: { catName?: string; cl
     return <Bike className={className} />;
   }
   return <Cog className={className} />;
-};
-
-const isArticolMatchingTipLichid = (item: any, tipLichid: string): boolean => {
-  if (!item) return false;
-  const sub = (item.subcategorie || '').toLowerCase();
-  const den = (item.denumire || '').toLowerCase();
-  const cat = (item.categorie || '').toLowerCase();
-  const marca = (item.marcaUlei || '').toLowerCase();
-  const combined = `${sub} ${den} ${cat} ${marca}`;
-
-  if (/spuma|curatitor|spray|degresant/i.test(combined)) {
-    return false;
-  }
-
-  switch (tipLichid) {
-    case 'ULEI_MOTOR':
-      return (
-        (sub.includes('motor') || den.includes('motor') || /15w40|10w40|5w30|5w40|0w30|0w20|delvac|castrol/i.test(combined)) &&
-        !/hidraulic|hlp|dte|tellus|hvlp|transmisie|diferential|gear|punte|cutie|80w90|75w90|atf|antigel|adblue/i.test(combined)
-      );
-
-    case 'ULEI_HIDRAULIC':
-      return (
-        /hidraulic|hlp|dte|tellus|hvlp|hvi/i.test(combined) &&
-        !/delvac|castrol.*10w40|antigel|adblue/i.test(combined)
-      );
-
-    case 'ULEI_TRANSMISIE':
-      return (
-        /transmisie|diferential|gear|punte|cutie|80w90|75w90|75w80|85w140|atf|utto/i.test(combined) &&
-        !/hidraulic|antigel|adblue/i.test(combined)
-      );
-
-    case 'ULEI_LIEBHERR_PUNTE':
-      return (
-        /punte/i.test(combined) ||
-        (combined.includes('liebherr') && /gear|80w90|punte/i.test(combined)) ||
-        /80w90|gear\s*oil|punte/i.test(combined)
-      );
-
-    case 'ULEI_LIEBHERR_CUTIE':
-      return (
-        (combined.includes('liebherr') && /cutie|transmisie/i.test(combined)) ||
-        /cutie/i.test(combined) ||
-        /transmisie|atf/i.test(combined)
-      );
-
-    case 'ULEI_CUTIE_MANUALA':
-      return (
-        /cutie.*manual|manual.*cutie/i.test(combined) ||
-        /75w80|75w90|80w90|transmisie|cutie/i.test(combined)
-      );
-
-    case 'ULEI_CUTIE_AUTOMATA':
-      return /automat|atf|dexron/i.test(combined);
-
-    case 'ANTIGEL_G12':
-      return /g12|antigel.*roz|coolant.*pink|antigel/i.test(combined);
-
-    case 'ANTIGEL_G11':
-      return /g11|antigel.*albastru|coolant.*blue|antigel/i.test(combined);
-
-    case 'ADBLUE':
-      return /adblue|uree/i.test(combined);
-
-    default:
-      return true;
-  }
-};
-
-const detectTipLichidFromStock = (item: any): string => {
-  const txt = `${item?.subcategorie || ''} ${item?.denumire || ''} ${item?.categorie || ''} ${item?.marcaUlei || ''}`.toLowerCase();
-  if (/adblue|uree/i.test(txt)) return 'ADBLUE';
-  if (/antigel|coolant|racire|g12|g11/i.test(txt)) {
-    return /g11|albastru|blue/i.test(txt) ? 'ANTIGEL_G11' : 'ANTIGEL_G12';
-  }
-  if (/hidraulic|hlp|hvlp|tellus|dte/i.test(txt)) return 'ULEI_HIDRAULIC';
-  if (/liebherr.*punte|punte.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_PUNTE';
-  if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_CUTIE';
-  if (/cutie.*automat|atf|dexron/i.test(txt)) return 'ULEI_CUTIE_AUTOMATA';
-  if (/cutie.*manual/i.test(txt)) return 'ULEI_CUTIE_MANUALA';
-  if (/transmis|diferential|gear|punte|cutie|80w90|75w90|ls90/i.test(txt)) return 'ULEI_TRANSMISIE';
-  return 'ULEI_MOTOR';
 };
 
 export default function FluidePage() {
@@ -255,15 +68,39 @@ export default function FluidePage() {
   const [filterIstoricTip, setFilterIstoricTip] = useState<string>('TOATE');
   const [filterIstoricOperatiune, setFilterIstoricOperatiune] = useState<'TOATE' | 'SCHIMB' | 'COMPLETARE'>('TOATE');
 
-  // Categorii & Depozite Fluide
+  // Categorii & Depozite Fluide + Tipuri Fluide Dinamice
   const [categoriiFluide, setCategoriiFluide] = useState<any[]>([]);
+  const [tipuriFluide, setTipuriFluide] = useState<TipFluidDef[]>(FALLBACK_TIPURI_FLUIDE);
   const [depoziteList, setDepoziteList] = useState<any[]>([]);
+
+  const tipLichidLabels = useMemo(() => buildTipLichidLabelMap(tipuriFluide), [tipuriFluide]);
+  const subcatTipMap = useMemo(() => buildSubcatTipMap(categoriiFluide), [categoriiFluide]);
 
   // Filtre Tab Stocuri Fluide
   const [searchStoc, setSearchStoc] = useState('');
   const [selectedDepozitStoc, setSelectedDepozitStoc] = useState('');
   const [selectedCategorieStoc, setSelectedCategorieStoc] = useState('');
+  const [selectedTipFluidStoc, setSelectedTipFluidStoc] = useState('');
   const [selectedStatusStoc, setSelectedStatusStoc] = useState<'TOATE' | 'CRITIC' | 'OPTIM'>('TOATE');
+
+  // Modal Asociere Tip Normă pe Articol Stoc
+  const [editingStockTipArticol, setEditingStockTipArticol] = useState<any>(null);
+  const [stockTipValue, setStockTipValue] = useState<string>('');
+  const [stockMarcaValue, setStockMarcaValue] = useState<string>('');
+  const [isSavingStockTip, setIsSavingStockTip] = useState<boolean>(false);
+
+  // Modal Nomenclator Tip Fluid Nou / Editare
+  const [showTipFluidModal, setShowTipFluidModal] = useState<boolean>(false);
+  const [editingTipFluid, setEditingTipFluid] = useState<TipFluidDef | null>(null);
+  const [tipFluidForm, setTipFluidForm] = useState({
+    cod: '',
+    nume: '',
+    descriere: '',
+    accentColor: 'amber',
+    presetKmText: '15000, 30000',
+    presetMthText: '250, 500',
+  });
+  const [isSavingTipFluid, setIsSavingTipFluid] = useState<boolean>(false);
 
   // Modal Ajustare Prag Alertă Stoc Minim per Articol
   const [editingAlertArticol, setEditingAlertArticol] = useState<any>(null);
@@ -283,6 +120,7 @@ export default function FluidePage() {
   const [targetCatForSubcat, setTargetCatForSubcat] = useState<string>('');
   const [subcatNume, setSubcatNume] = useState<string>('');
   const [subcatDescriere, setSubcatDescriere] = useState<string>('');
+  const [subcatTipLichid, setSubcatTipLichid] = useState<string>('');
 
   // Modal Trasabilitate Loturi FIFO
   const [viewingFifoArticol, setViewingFifoArticol] = useState<any>(null);
@@ -328,8 +166,8 @@ export default function FluidePage() {
   // Filtrare automată a articolelor din stoc după Tip Fluid / Lubrifiant selectat
   const articoleStocFiltrate = useMemo(() => {
     if (arataToateFluidele) return stocUleiuri;
-    return stocUleiuri.filter((art) => isArticolMatchingTipLichid(art, iesireTipLichid));
-  }, [stocUleiuri, iesireTipLichid, arataToateFluidele]);
+    return stocUleiuri.filter((art) => isArticolMatchingTipLichid(art, iesireTipLichid, subcatTipMap));
+  }, [stocUleiuri, iesireTipLichid, arataToateFluidele, subcatTipMap]);
 
   // Actualizare automată a selecției când se schimbă categoria sau lista filtrată
   useEffect(() => {
@@ -461,6 +299,7 @@ export default function FluidePage() {
           if (isFilter || isNonFluid) return false;
 
           const isFluid =
+            Boolean(s.tipLichid && String(s.tipLichid).trim() !== '') ||
             cat.includes('lubrifian') ||
             cat.includes('ulei') ||
             cat.includes('fluid') ||
@@ -534,6 +373,13 @@ export default function FluidePage() {
       if (resDep.ok) {
         const depData = await resDep.json();
         setDepoziteList(Array.isArray(depData) ? depData : []);
+      }
+
+      // Fetch Tipuri Fluide Dinamice
+      const resTipuri = await fetch(`${API_BASE_URL}/anomalii/tipuri-fluide`);
+      if (resTipuri.ok) {
+        const tipuriData = await resTipuri.json();
+        setTipuriFluide(normalizeTipuriFluideList(tipuriData));
       }
 
       // Fetch Norme pe Categorii
@@ -694,6 +540,7 @@ export default function FluidePage() {
     setTargetCatForSubcat(catNumeParam || (categoriiFluide[0]?.nume || ''));
     setSubcatNume('');
     setSubcatDescriere('');
+    setSubcatTipLichid('');
     setShowAddSubcatModal(true);
   };
 
@@ -702,6 +549,7 @@ export default function FluidePage() {
     setTargetCatForSubcat(catNumeParam);
     setSubcatNume(sc.nume || '');
     setSubcatDescriere(sc.descriere || '');
+    setSubcatTipLichid(sc.tipLichid || '');
     setShowAddSubcatModal(true);
   };
 
@@ -727,6 +575,7 @@ export default function FluidePage() {
           categorieStocId: targetCatObj?.id,
           nume: subcatNume.trim(),
           descriere: subcatDescriere.trim() || null,
+          tipLichid: subcatTipLichid.trim() || null,
         }),
       });
 
@@ -736,6 +585,7 @@ export default function FluidePage() {
         setEditingSubcat(null);
         setSubcatNume('');
         setSubcatDescriere('');
+        setSubcatTipLichid('');
         fetchInitialData();
       } else {
         const err = await res.json();
@@ -743,6 +593,143 @@ export default function FluidePage() {
       }
     } catch (e) {
       alert('Eroare la salvarea subcategoriei.');
+    }
+  };
+
+  // Handlers Asociere Tip Normă pe Articol Stoc
+  const handleOpenEditStockTip = (art: any) => {
+    const resolved = resolveEffectiveTipLichid(art, subcatTipMap);
+    setEditingStockTipArticol(art);
+    setStockTipValue(art.tipLichid || resolved.cod || '');
+    setStockMarcaValue(art.marcaUlei || '');
+  };
+
+  const handleSaveStockTip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStockTipArticol) return;
+    setIsSavingStockTip(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingStockTipArticol.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipLichid: stockTipValue.trim() || null,
+          marcaUlei: stockMarcaValue.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingStockTipArticol(null);
+        await fetchInitialData();
+      } else {
+        alert('Nu s-a putut actualiza asocierea articolului.');
+      }
+    } catch {
+      alert('Eroare de rețea la actualizarea articolului.');
+    } finally {
+      setIsSavingStockTip(false);
+    }
+  };
+
+  // Handlers CRUD Nomenclator Tipuri Lubrifianți (Master Registry)
+  const openAddTipFluid = () => {
+    setEditingTipFluid(null);
+    setTipFluidForm({
+      cod: '',
+      nume: '',
+      descriere: '',
+      accentColor: 'amber',
+      presetKmText: '15000, 30000, 50000',
+      presetMthText: '250, 500, 1000',
+    });
+    setShowTipFluidModal(true);
+  };
+
+  const openEditTipFluid = (tf: TipFluidDef) => {
+    setEditingTipFluid(tf);
+    setTipFluidForm({
+      cod: tf.cod,
+      nume: tf.nume,
+      descriere: tf.descriere || '',
+      accentColor: tf.accentColor || 'amber',
+      presetKmText: (tf.presetKm || [15000, 30000]).join(', '),
+      presetMthText: (tf.presetMth || [250, 500]).join(', '),
+    });
+    setShowTipFluidModal(true);
+  };
+
+  const handleSaveTipFluid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tipFluidForm.nume.trim()) {
+      alert('Introduceți denumirea tipului de lubrifiant!');
+      return;
+    }
+    const parseNums = (raw: string) =>
+      raw
+        .split(/[,;\s]+/)
+        .map((x) => Number(x.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0);
+
+    setIsSavingTipFluid(true);
+    try {
+      const targetId = editingTipFluid ? (editingTipFluid.dbId || editingTipFluid.cod) : '';
+      const url = editingTipFluid
+        ? `${API_BASE_URL}/anomalii/tipuri-fluide/${encodeURIComponent(targetId)}`
+        : `${API_BASE_URL}/anomalii/tipuri-fluide`;
+      const method = editingTipFluid ? 'PATCH' : 'POST';
+
+      const payload: any = {
+        nume: tipFluidForm.nume.trim(),
+        descriere: tipFluidForm.descriere.trim() || null,
+        accentColor: tipFluidForm.accentColor || 'amber',
+        presetKm: parseNums(tipFluidForm.presetKmText),
+        presetMth: parseNums(tipFluidForm.presetMthText),
+      };
+      if (!editingTipFluid && tipFluidForm.cod.trim()) {
+        payload.cod = tipFluidForm.cod.trim();
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setShowTipFluidModal(false);
+        setEditingTipFluid(null);
+        await fetchInitialData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare: ${err.message || 'Verificați datele introduse.'}`);
+      }
+    } catch {
+      alert('Eroare de rețea la salvarea tipului de lubrifiant.');
+    } finally {
+      setIsSavingTipFluid(false);
+    }
+  };
+
+  const handleDeleteTipFluid = async (tf: TipFluidDef) => {
+    const confirmed = await showConfirm(
+      'Ștergere Tip Lubrifiant',
+      `Sigur doriți să ștergeți tipul "${tf.nume}" (${tf.cod})?\n\nVor fi dezactivate normele de pe categorii/utilaje și dezlegate asocierile directe din stoc pentru acest tip (istoricul de consum rămâne păstrat).`,
+      'Da, șterge tipul',
+      'Anulează'
+    );
+    if (!confirmed) return;
+
+    try {
+      const targetId = tf.dbId || tf.cod;
+      const res = await fetch(`${API_BASE_URL}/anomalii/tipuri-fluide/${encodeURIComponent(targetId)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        await fetchInitialData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare: ${err.message || 'Nu s-a putut șterge tipul.'}`);
+      }
+    } catch {
+      alert('Eroare de rețea la ștergere.');
     }
   };
 
@@ -825,11 +812,12 @@ export default function FluidePage() {
     }
 
     if (opts.articol) {
-      const detectedTip = detectTipLichidFromStock(opts.articol);
+      const resolved = resolveEffectiveTipLichid(opts.articol, subcatTipMap);
+      const detectedTip = resolved.cod || 'ULEI_MOTOR';
       setIesireTipLichid(detectedTip);
       setSelectedArticolStocId(opts.articol.id);
       setIesireMarca(opts.articol.marcaUlei || opts.articol.denumire);
-      setArataToateFluidele(!isArticolMatchingTipLichid(opts.articol, detectedTip));
+      setArataToateFluidele(!isArticolMatchingTipLichid(opts.articol, detectedTip, subcatTipMap));
     } else {
       if (opts.tipLichid) {
         setIesireTipLichid(opts.tipLichid);
@@ -909,7 +897,7 @@ export default function FluidePage() {
   };
 
   const handleStergeCompletare = async (rec: any) => {
-    const tipLabel = TIP_LICHID_LABELS[rec.tipLichid] || rec.tipLichid;
+    const tipLabel = tipLichidLabels[rec.tipLichid] || rec.tipLichid;
     const confirmed = await showConfirm(
       'Anulare & Ștergere Intervenție Fluid',
       `Doriți să ștergeți înregistrarea (${rec.cantitateLitri} L ${tipLabel}) pentru ${rec.vehicul?.numarIntern || 'vehicul'}?\n\n${
@@ -991,7 +979,7 @@ export default function FluidePage() {
   const handleStergeConfigCategorie = async (normaId?: string, tipFluid?: string, catNume?: string) => {
     const targetCat = catNume || selectedCatObj?.nume;
     const targetFluid = tipFluid || modalNormaTipLichid;
-    const fluidLabel = TIP_LICHID_LABELS[targetFluid] || targetFluid?.replace(/_/g, ' ');
+    const fluidLabel = tipLichidLabels[targetFluid] || targetFluid?.replace(/_/g, ' ');
     const confirmed = await showConfirm(
       'Ștergere / Dezactivare Normă Fluid',
       `Sigur doriți să ștergeți / dezactivați norma pentru "${fluidLabel}" din categoria "${targetCat?.replace(/_/g, ' ')}"?\n\nToate utilajele din această categorie NU vor mai necesita și nu vor mai monitoriza acest schimb de ulei/fluid.`,
@@ -1132,7 +1120,7 @@ export default function FluidePage() {
     return [...flotaFluide]
       .filter((f) => {
         if (q) {
-          const tipLabel = (TIP_LICHID_LABELS[f.tipLichid] || f.tipLichid || '').toLowerCase();
+          const tipLabel = (tipLichidLabels[f.tipLichid] || f.tipLichid || '').toLowerCase();
           const match =
             (f.vehiculNumarIntern || '').toLowerCase().includes(q) ||
             (f.vehiculInmatriculare || '').toLowerCase().includes(q) ||
@@ -1206,6 +1194,11 @@ export default function FluidePage() {
     if (selectedCategorieStoc && s.categorie !== selectedCategorieStoc) {
       return false;
     }
+    // Filtru Tip Lubrifiant / Normă
+    if (selectedTipFluidStoc) {
+      const resolved = resolveEffectiveTipLichid(s, subcatTipMap);
+      if (resolved.cod !== selectedTipFluidStoc) return false;
+    }
     // Filtru stare
     const min = Number(s.stocMinim) || 0;
     const cur = Number(s.stocCurent) || 0;
@@ -1228,11 +1221,8 @@ export default function FluidePage() {
             <div className="p-2 rounded-xl bg-sapphire-100 text-sapphire-700">
               <Droplets className="w-6 h-6" />
             </div>
-            <span>Gestiune Fluide & Lubrifianți Flotă</span>
+            <span>Lubrifianți</span>
           </h1>
-          <p className="text-xs text-sage-600 font-medium mt-1">
-            Monitorizare preventivă niveluri, intervale schimb, detecție automată scurgeri și scăderi din stoc
-          </p>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -1529,8 +1519,8 @@ export default function FluidePage() {
                 className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
               >
                 <option value="TOATE">Fluid: Toate Tipurile</option>
-                {Object.entries(TIP_LICHID_LABELS).map(([k, label]) => (
-                  <option key={k} value={k}>{label}</option>
+                {tipuriFluide.map((tf) => (
+                  <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
               </select>
 
@@ -1590,7 +1580,7 @@ export default function FluidePage() {
                         const unit = f.unitateMasura || 'KM';
                         const isOver = Boolean(f.esteDepasit);
                         const isWarn = !isOver && Boolean(f.esteInPragAvertizare);
-                        const tipLabel = TIP_LICHID_LABELS[f.tipLichid] || f.tipLichid?.replace(/_/g, ' ');
+                        const tipLabel = tipLichidLabels[f.tipLichid] || f.tipLichid?.replace(/_/g, ' ');
                         const opDefault = String(f.tipLichid || '').includes('ANTIGEL') ? 'SCHIMB_ANTIGEL' : 'SCHIMB_ULEI';
                         const opTopUp = String(f.tipLichid || '').includes('ANTIGEL') ? 'COMPLETARE_ANTIGEL' : 'COMPLETARE_ULEI';
 
@@ -1758,8 +1748,8 @@ export default function FluidePage() {
               className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
             >
               <option value="TOATE">Fluid: Toate Tipurile</option>
-              {Object.entries(TIP_LICHID_LABELS).map(([k, label]) => (
-                <option key={k} value={k}>{label}</option>
+              {tipuriFluide.map((tf) => (
+                <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
               ))}
             </select>
 
@@ -1825,7 +1815,7 @@ export default function FluidePage() {
                             )}
                           </div>
                           <div className="text-[11px] font-bold text-sapphire-800">
-                            {TIP_LICHID_LABELS[c.tipLichid] || c.tipLichid?.replace(/_/g, ' ')}
+                            {tipLichidLabels[c.tipLichid] || c.tipLichid?.replace(/_/g, ' ')}
                           </div>
                         </td>
                         <td className="p-3">
@@ -2036,6 +2026,18 @@ export default function FluidePage() {
                   ))}
                 </select>
 
+                {/* Filtru Tip Lubrifiant / Normă */}
+                <select
+                  value={selectedTipFluidStoc}
+                  onChange={(e) => setSelectedTipFluidStoc(e.target.value)}
+                  className="px-3 py-2 bg-white rounded-xl border border-morning-300 text-xs font-bold text-sapphire-900 shadow-2xs"
+                >
+                  <option value="">Toate Tipurile (Norme)</option>
+                  {tipuriFluide.map((tf) => (
+                    <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
+                  ))}
+                </select>
+
                 {/* Filtru Stare Alertă */}
                 <select
                   value={selectedStatusStoc}
@@ -2103,18 +2105,46 @@ export default function FluidePage() {
                             </div>
                           </td>
 
-                          {/* 2. Categorie & Subcategorie */}
+                          {/* 2. Categorie & Subcategorie + Normă Asociată */}
                           <td className="p-3">
-                            <div className="space-y-0.5">
-                              <span className="px-2 py-0.5 rounded-lg bg-sapphire-100 text-sapphire-900 font-bold text-[10px]">
-                                {s.categorie}
-                              </span>
-                              {s.subcategorie && (
-                                <p className="text-[11px] text-sage-600 font-medium">
-                                  ▸ {s.subcategorie}
-                                </p>
-                              )}
-                            </div>
+                            {(() => {
+                              const effTip = resolveEffectiveTipLichid(s, subcatTipMap);
+                              const tipLabel = effTip.cod ? getTipFluidLabel(effTip.cod, tipuriFluide) : null;
+                              return (
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded-lg bg-sapphire-100 text-sapphire-900 font-bold text-[10px]">
+                                      {s.categorie}
+                                    </span>
+                                    {s.subcategorie && (
+                                      <span className="text-[11px] text-sage-600 font-medium">
+                                        ▸ {s.subcategorie}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditStockTip(s)}
+                                    title="Click pentru a asocia acest articol cu un Tip Lubrifiant din Norme"
+                                    className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer border ${
+                                      effTip.source === 'ARTICOL'
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                                        : effTip.source === 'SUBCATEGORIE'
+                                        ? 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                                        : 'bg-morning-100 text-sage-700 border-dashed border-morning-300 hover:border-sapphire-400'
+                                    }`}
+                                  >
+                                    <Link2 className="w-2.5 h-2.5 shrink-0" />
+                                    <span>
+                                      {tipLabel
+                                        ? `${tipLabel}${effTip.source === 'AUTO' ? ' (Auto)' : ''}`
+                                        : 'Asociază normă'}
+                                    </span>
+                                    <Edit3 className="w-2.5 h-2.5 opacity-60" />
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </td>
 
                           {/* 3. Depozit */}
@@ -2303,6 +2333,11 @@ export default function FluidePage() {
                             title={sc.descriere || sc.nume}
                           >
                             <span>{sc.nume}</span>
+                            {sc.tipLichid && (
+                              <span className="px-1.5 py-0.2 rounded bg-sapphire-100 text-sapphire-800 border border-sapphire-200 text-[9px] font-extrabold">
+                                → {getTipFluidLabel(sc.tipLichid, tipuriFluide)}
+                              </span>
+                            )}
                             <button
                               onClick={() => openEditSubcat(sc, c.nume)}
                               title="Editare Subcategorie"
@@ -2355,6 +2390,15 @@ export default function FluidePage() {
 
               {/* BUTOANE ACȚIUNE HEADER */}
               <div className="flex items-center flex-wrap gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={openAddTipFluid}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tip Lubrifiant Nou</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setArataToateNormeleCategoriilor(!arataToateNormeleCategoriilor)}
@@ -2540,7 +2584,7 @@ export default function FluidePage() {
                     if (!searchNorme.trim()) return true;
                     const query = searchNorme.toLowerCase();
                     const cat = (n.categorieNume || '').toLowerCase();
-                    const fluid = (TIP_LICHID_LABELS[n.tipLichid] || n.tipLichid || '').toLowerCase();
+                    const fluid = (tipLichidLabels[n.tipLichid] || n.tipLichid || '').toLowerCase();
                     return cat.includes(query) || fluid.includes(query);
                   });
 
@@ -2574,7 +2618,7 @@ export default function FluidePage() {
                       <tbody className="divide-y divide-morning-200">
                         {allNorms.map((norma: any) => {
                           const isKm = (norma.categorieTipMasurare || 'KM').toUpperCase() === 'KM';
-                          const fluidLabel = TIP_LICHID_LABELS[norma.tipLichid] || norma.tipLichid?.replace(/_/g, ' ');
+                          const fluidLabel = tipLichidLabels[norma.tipLichid] || norma.tipLichid?.replace(/_/g, ' ');
 
                           return (
                             <tr key={norma.id} className="hover:bg-morning-50 transition">
@@ -2701,7 +2745,7 @@ export default function FluidePage() {
                             : 'text-sage-600 hover:text-sapphire-900'
                         }`}
                       >
-                        Toate ({FLUIDE_CATEGORII_CONFIG.length})
+                        Toate ({tipuriFluide.length})
                       </button>
                       <button
                         type="button"
@@ -2732,10 +2776,9 @@ export default function FluidePage() {
 
                 {/* GRID CARDURI INTERACTIVE PENTRU TOATE FLUIDELE DIN CATEGORIE */}
                 {(() => {
-                  const activeNormeCount = selectedCatObj.norme?.length || 0;
-                  const fluidsToDisplay = FLUIDE_CATEGORII_CONFIG.filter((fluid) => {
+                  const fluidsToDisplay = tipuriFluide.filter((fluid) => {
                     if (!filtreazaDoarNormeActive) return true;
-                    return (selectedCatObj.norme || []).some((n: any) => n.tipLichid === fluid.key);
+                    return (selectedCatObj.norme || []).some((n: any) => n.tipLichid === fluid.cod);
                   });
 
                   if (fluidsToDisplay.length === 0) {
@@ -2758,11 +2801,11 @@ export default function FluidePage() {
                             onClick={() => setFiltreazaDoarNormeActive(false)}
                             className="px-4 py-2 rounded-xl bg-white hover:bg-morning-100 text-sapphire-900 font-bold text-xs border border-morning-200 shadow-2xs transition cursor-pointer"
                           >
-                            Afișează toate cele 10 fluide
+                            Afișează toate cele {tipuriFluide.length} tipuri
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                            onClick={() => handleOpenModalNorma(selectedCatObj.nume, tipuriFluide[0]?.cod || 'ULEI_MOTOR')}
                             className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -2776,62 +2819,71 @@ export default function FluidePage() {
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {fluidsToDisplay.map((fluid) => {
-                        const existingNorm = (selectedCatObj.norme || []).find((n: any) => n.tipLichid === fluid.key);
+                        const existingNorm = (selectedCatObj.norme || []).find((n: any) => n.tipLichid === fluid.cod);
                         const isCustom = !!existingNorm;
+                        const accentCls = getAccentClasses(fluid.accentColor);
 
                         return (
                           <div
-                            key={fluid.key}
+                            key={fluid.cod}
                             className={`pleasant-card rounded-2xl p-5 border transition flex flex-col justify-between space-y-4 shadow-2xs hover:shadow-sm ${
                               isCustom
                                 ? 'bg-white border-sapphire-300 ring-1 ring-sapphire-100'
-                                : 'bg-morning-50/50 border-morning-200 hover:border-morning-300 opacity-80 hover:opacity-100'
+                                : 'bg-morning-50/50 border-morning-200 hover:border-morning-300 opacity-90 hover:opacity-100'
                             }`}
                           >
                             {/* ANTET CARD FLUID */}
                             <div className="space-y-2">
-                              <div className="flex items-start justify-between">
-                                <div className="flex items-center space-x-2.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center space-x-2.5 min-w-0">
                                   <div
-                                    className={`p-2 rounded-xl ${
-                                      isCustom
-                                        ? fluid.accentColor === 'amber'
-                                          ? 'bg-amber-100 text-amber-800'
-                                          : fluid.accentColor === 'blue'
-                                          ? 'bg-blue-100 text-blue-800'
-                                          : fluid.accentColor === 'indigo'
-                                          ? 'bg-indigo-100 text-indigo-800'
-                                          : fluid.accentColor === 'emerald'
-                                          ? 'bg-emerald-100 text-emerald-800'
-                                          : fluid.accentColor === 'rose'
-                                          ? 'bg-roseash-100 text-terracotta-700'
-                                          : 'bg-morning-200 text-sapphire-900'
-                                        : 'bg-morning-200 text-sage-400'
+                                    className={`p-2 rounded-xl shrink-0 ${
+                                      isCustom ? accentCls.iconBg : 'bg-morning-200 text-sage-500'
                                     }`}
                                   >
                                     <Droplets className="w-4 h-4" />
                                   </div>
-                                  <div>
-                                    <h4 className={`font-extrabold text-sm ${isCustom ? 'text-sapphire-900' : 'text-sage-700'}`}>
+                                  <div className="min-w-0">
+                                    <h4 className={`font-extrabold text-sm truncate ${isCustom ? 'text-sapphire-900' : 'text-sage-700'}`}>
                                       {fluid.nume}
                                     </h4>
-                                    <span className="text-[10px] font-mono text-sage-500 uppercase">{fluid.key}</span>
+                                    <span className="text-[10px] font-mono text-sage-500 uppercase block truncate">{fluid.cod}</span>
                                   </div>
                                 </div>
 
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                                    isCustom
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                      : 'bg-morning-200 text-sage-500 border border-morning-300'
-                                  }`}
-                                >
-                                  {isCustom ? 'Normă Activă' : 'Fără Normă (Nu se aplică)'}
-                                </span>
+                                <div className="flex items-center space-x-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditTipFluid(fluid)}
+                                    title="Editează definiția tipului de lubrifiant (nume, descriere, presetări)"
+                                    className="p-1 rounded-lg text-sage-400 hover:text-sapphire-700 hover:bg-morning-200 transition cursor-pointer"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  {!fluid.esteStandard && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTipFluid(fluid)}
+                                      title="Șterge acest tip personalizat de lubrifiant"
+                                      className="p-1 rounded-lg text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 transition cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                      isCustom
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : 'bg-morning-200 text-sage-600 border border-morning-300'
+                                    }`}
+                                  >
+                                    {isCustom ? 'Normă Activă' : 'Fără Normă'}
+                                  </span>
+                                </div>
                               </div>
 
                               <p className="text-[11px] text-sage-600 line-clamp-2 leading-relaxed">
-                                {fluid.descriere}
+                                {fluid.descriere || 'Tip de lubrifiant disponibil și la recepția în stoc.'}
                               </p>
                             </div>
 
@@ -2886,37 +2938,37 @@ export default function FluidePage() {
                                 {selectedCatObj.totalVehicule} utilaje
                               </span>
 
-                              <div className="flex items-center space-x-1.5">
-                                {isCustom ? (
-                                  <>
+                                <div className="flex items-center space-x-1.5">
+                                  {isCustom ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStergeConfigCategorie(existingNorm.id, fluid.cod, selectedCatObj.nume)}
+                                        title="Șterge / Dezactivează această normă (nu se va mai cere schimbul)"
+                                        className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.cod)}
+                                        className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs border border-sapphire-200 transition flex items-center space-x-1 cursor-pointer"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        <span>Editează</span>
+                                      </button>
+                                    </>
+                                  ) : (
                                     <button
                                       type="button"
-                                      onClick={() => handleStergeConfigCategorie(existingNorm.id, fluid.key, selectedCatObj.nume)}
-                                      title="Șterge / Dezactivează această normă (nu se va mai cere schimbul)"
-                                      className="p-1.5 text-sage-400 hover:text-terracotta-600 hover:bg-roseash-100 rounded-lg transition cursor-pointer"
+                                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.cod)}
+                                      className="px-3 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-2xs transition flex items-center space-x-1 cursor-pointer"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Activează Normă</span>
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
-                                      className="px-3 py-1.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 font-bold text-xs border border-sapphire-200 transition flex items-center space-x-1 cursor-pointer"
-                                    >
-                                      <Edit3 className="w-3.5 h-3.5" />
-                                      <span>Editează</span>
-                                    </button>
-                                  </>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenModalNorma(selectedCatObj.nume, fluid.key)}
-                                    className="px-3 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-2xs transition flex items-center space-x-1 cursor-pointer"
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    <span>Activează Normă</span>
-                                  </button>
-                                )}
-                              </div>
+                                  )}
+                                </div>
                             </div>
                           </div>
                         );
@@ -3042,7 +3094,7 @@ export default function FluidePage() {
                     }`}
                   >
                     <div>
-                      <span className="font-extrabold">Normă {TIP_LICHID_LABELS[iesireTipLichid] || iesireTipLichid}:</span>{' '}
+                      <span className="font-extrabold">Normă {tipLichidLabels[iesireTipLichid] || iesireTipLichid}:</span>{' '}
                       <span>
                         Ultimul schimb la{' '}
                         <strong className="font-mono">
@@ -3099,8 +3151,8 @@ export default function FluidePage() {
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
-                    {Object.entries(TIP_LICHID_LABELS).map(([k, lbl]) => (
-                      <option key={k} value={k}>{lbl}</option>
+                    {tipuriFluide.map((tf) => (
+                      <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                     ))}
                   </select>
                 </div>
@@ -3139,7 +3191,7 @@ export default function FluidePage() {
 
                   {articoleStocFiltrate.length === 0 && !faraDeducereStoc && (
                     <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-center justify-between gap-2">
-                      <span>Nu există în stoc fluide pentru <strong>{TIP_LICHID_LABELS[iesireTipLichid] || iesireTipLichid}</strong>.</span>
+                      <span>Nu există în stoc fluide pentru <strong>{tipLichidLabels[iesireTipLichid] || iesireTipLichid}</strong>.</span>
                       <button
                         type="button"
                         onClick={() => setArataToateFluidele(true)}
@@ -3157,7 +3209,7 @@ export default function FluidePage() {
                         onClick={() => setArataToateFluidele(false)}
                         className="text-[11px] text-sapphire-600 underline hover:text-sapphire-800"
                       >
-                        ← Filtrează strict după {TIP_LICHID_LABELS[iesireTipLichid] || 'categoria selectată'}
+                        ← Filtrează strict după {tipLichidLabels[iesireTipLichid] || 'categoria selectată'}
                       </button>
                     </div>
                   )}
@@ -3491,6 +3543,27 @@ export default function FluidePage() {
                 />
               </div>
 
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">
+                  Tip Lubrifiant / Normă Asociată (legătură directă cu reviziile):
+                </label>
+                <select
+                  value={subcatTipLichid}
+                  onChange={(e) => setSubcatTipLichid(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  <option value="">-- Fără asociere implicită (detecție automată) --</option>
+                  {tipuriFluide.map((tf) => (
+                    <option key={tf.cod} value={tf.cod}>
+                      {tf.nume} ({tf.cod})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-sage-500 mt-1">
+                  Orice articol importat din e-Factura în acest subtip va moșteni automat norma selectată.
+                </p>
+              </div>
+
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
                 <button
                   type="button"
@@ -3673,8 +3746,8 @@ export default function FluidePage() {
       {modalNormaOpen && (() => {
         const cat = categoriiNormeList.find((c: any) => c.nume === modalNormaCategorie);
         const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
-        const fluidConfig = FLUIDE_CATEGORII_CONFIG.find((f) => f.key === modalNormaTipLichid);
-        const fluidLabel = TIP_LICHID_LABELS[modalNormaTipLichid] || modalNormaTipLichid?.replace(/_/g, ' ');
+        const fluidConfig = tipuriFluide.find((f) => f.cod === modalNormaTipLichid);
+        const fluidLabel = tipLichidLabels[modalNormaTipLichid] || modalNormaTipLichid?.replace(/_/g, ' ');
 
         // Calcule pentru bara vizuală interactivă (Timeline Gauge)
         const intervalVal = isKm ? Number(modalNormaIntervalKm || 0) : Number(modalNormaIntervalMth || 0);
@@ -3686,8 +3759,8 @@ export default function FluidePage() {
         const okPercent = 100 - warnPercent;
 
         const presets = isKm
-          ? [10000, 15000, 20000, 30000, 50000, 100000]
-          : [100, 250, 500, 1000, 1500, 2000];
+          ? (fluidConfig?.presetKm && fluidConfig.presetKm.length > 0 ? fluidConfig.presetKm : [10000, 15000, 20000, 30000, 50000, 100000])
+          : (fluidConfig?.presetMth && fluidConfig.presetMth.length > 0 ? fluidConfig.presetMth : [100, 250, 500, 1000, 1500, 2000]);
 
         return (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -3764,9 +3837,9 @@ export default function FluidePage() {
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
                   >
-                    {FLUIDE_CATEGORII_CONFIG.map((f) => (
-                      <option key={f.key} value={f.key}>
-                        {f.nume} ({f.key})
+                    {tipuriFluide.map((f) => (
+                      <option key={f.cod} value={f.cod}>
+                        {f.nume} ({f.cod})
                       </option>
                     ))}
                   </select>
@@ -4087,6 +4160,217 @@ export default function FluidePage() {
           </div>
         );
       })()}
+      {/* ========================================================================= */}
+      {/* MODAL 7: ASOCIERE TIP LUBRIFIANT / NORMĂ PE ARTICOL DIN STOC */}
+      {/* ========================================================================= */}
+      {editingStockTipArticol && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl border border-morning-200">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <Link2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-sapphire-900">Asociere Tip Lubrifiant &amp; Normă</h3>
+                  <p className="text-[11px] text-sage-600 font-medium truncate max-w-xs">
+                    {editingStockTipArticol.denumire}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStockTipArticol(null)}
+                className="text-sage-500 hover:text-sapphire-900 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStockTip} className="space-y-3.5 text-xs">
+              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 space-y-0.5 text-[11px]">
+                <div>
+                  <span className="text-sage-600">Categorie:</span>{' '}
+                  <strong className="text-sapphire-900">{editingStockTipArticol.categorie}</strong>
+                  {editingStockTipArticol.subcategorie && (
+                    <span className="text-sage-700"> ▸ {editingStockTipArticol.subcategorie}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-sage-600">Cod:</span>{' '}
+                  <strong className="font-mono text-sapphire-900">{editingStockTipArticol.codArticol}</strong>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">
+                  Tip Lubrifiant / Normă Întreținere:
+                </label>
+                <select
+                  value={stockTipValue}
+                  onChange={(e) => setStockTipValue(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  <option value="">-- Fără asociere directă (moștenește subcategoria / auto) --</option>
+                  {tipuriFluide.map((tf) => (
+                    <option key={tf.cod} value={tf.cod}>
+                      {tf.nume} ({tf.cod})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-sage-500 mt-1">
+                  La eliberarea din depozit sau pe Deviz de Lucru, acest ulei va contoriza automat pentru norma aleasă.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Marcă / Brand (opțional):</label>
+                <input
+                  value={stockMarcaValue}
+                  onChange={(e) => setStockMarcaValue(e.target.value)}
+                  placeholder="ex: Mobil Delvac, Castrol, Liebherr, Ravenol"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2.5 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingStockTipArticol(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingStockTip}
+                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingStockTip ? 'Se salvează...' : 'Salvează Asocierea'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 8: CREARE / EDITARE TIP LUBRIFIANT (NOMENCLATOR MASTER) */}
+      {/* ========================================================================= */}
+      {showTipFluidModal && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <Droplets className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-sapphire-900">
+                    {editingTipFluid ? `Editare Tip Lubrifiant (${editingTipFluid.cod})` : 'Tip Lubrifiant / Fluid Nou'}
+                  </h3>
+                  <p className="text-[11px] text-sage-600 font-medium">
+                    Disponibil imediat atât la configurarea normelor pe utilaje, cât și la recepția în stoc.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowTipFluidModal(false); setEditingTipFluid(null); }}
+                className="text-sage-500 hover:text-sapphire-900 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTipFluid} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Tip Lubrifiant: *</label>
+                <input
+                  required
+                  value={tipFluidForm.nume}
+                  onChange={(e) => setTipFluidForm({ ...tipFluidForm, nume: e.target.value })}
+                  placeholder="ex: Ulei Reductor Liebherr, Ulei Retarder ZF, Vaselină Centralizată"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                />
+              </div>
+
+              {!editingTipFluid && (
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Cod Sistem (opțional — generat automat):</label>
+                  <input
+                    value={tipFluidForm.cod}
+                    onChange={(e) => setTipFluidForm({ ...tipFluidForm, cod: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') })}
+                    placeholder="ex: ULEI_REDUCTOR_LIEBHERR"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Descriere Tehnică:</label>
+                <input
+                  value={tipFluidForm.descriere}
+                  onChange={(e) => setTipFluidForm({ ...tipFluidForm, descriere: e.target.value })}
+                  placeholder="ex: Ulei sintetic 75W-90 pentru reductoare finale și punți grele"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Culoare Accent:</label>
+                <select
+                  value={tipFluidForm.accentColor}
+                  onChange={(e) => setTipFluidForm({ ...tipFluidForm, accentColor: e.target.value })}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
+                  {FLUID_ACCENT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Presetări Rapide KM (separate prin virgulă):</label>
+                  <input
+                    value={tipFluidForm.presetKmText}
+                    onChange={(e) => setTipFluidForm({ ...tipFluidForm, presetKmText: e.target.value })}
+                    placeholder="ex: 15000, 30000, 60000"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Presetări Rapide mTH (separate prin virgulă):</label>
+                  <input
+                    value={tipFluidForm.presetMthText}
+                    onChange={(e) => setTipFluidForm({ ...tipFluidForm, presetMthText: e.target.value })}
+                    placeholder="ex: 250, 500, 1000"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2.5 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => { setShowTipFluidModal(false); setEditingTipFluid(null); }}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTipFluid}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingTipFluid ? 'Se salvează...' : (editingTipFluid ? 'Salvează Tipul' : 'Creează Tip Lubrifiant')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

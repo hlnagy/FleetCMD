@@ -12,6 +12,13 @@ import {
 } from 'lucide-react';
 import { showConfirm, showToast } from '@/lib/swal';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
+import {
+  FALLBACK_TIPURI_FLUIDE,
+  TipFluidDef,
+  getTipFluidLabel,
+  isFluidCategoryOrItem,
+  normalizeTipuriFluideList,
+} from '@/lib/fluids';
 
 /** Matches an existing option name case-insensitively so HTML <select> reflects stored DB values. */
 const resolveCanonicalOption = (options: Array<{ nume?: string }>, raw?: string | null): string => {
@@ -167,17 +174,22 @@ function StocuriGarantiiContent() {
   const [denumire, setDenumire] = useState('');
   const [categorie, setCategorie] = useState('Anvelope');
   const [subcategorie, setSubcategorie] = useState('');
+  const [articolTipLichid, setArticolTipLichid] = useState('');
   const [depozitId, setDepozitId] = useState('');
   const [stocCurent, setStocCurent] = useState(10);
   const [stocMinim, setStocMinim] = useState(5);
   const [pretUnitar, setPretUnitar] = useState(100);
   const [unitateMasura, setUnitateMasura] = useState('buc');
 
+  // Tipuri Lubrifianți (Master Registry)
+  const [tipuriFluide, setTipuriFluide] = useState<TipFluidDef[]>(FALLBACK_TIPURI_FLUIDE);
+
   // Stare Creare Categorie / Subcategorie Nouă
   const [numeCategorieNoua, setNumeCategorieNoua] = useState('');
   const [descriereCatNoua, setDescriereCatNoua] = useState('');
   const [stocMinimImplicitCat, setStocMinimImplicitCat] = useState(5);
   const [numeSubcatNoua, setNumeSubcatNoua] = useState('');
+  const [subcatTipLichidNou, setSubcatTipLichidNou] = useState('');
   const [targetCatForSubcat, setTargetCatForSubcat] = useState('Anvelope');
 
   // Stare Creare / Editare Depozit Nou
@@ -268,7 +280,7 @@ function StocuriGarantiiContent() {
         return null;
       };
 
-      const [depRes, catRes, critRes, intrariRes, transRes, compRes, mecaniciRes, anvStocRes] =
+      const [depRes, catRes, critRes, intrariRes, transRes, compRes, mecaniciRes, anvStocRes, tipuriRes] =
         await Promise.allSettled([
           fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/depozite`),
           fetchCategoriiWithRetry(),
@@ -278,6 +290,7 @@ function StocuriGarantiiContent() {
           fetchJsonSafe(`${API_BASE_URL}/stocuri-garantii/componente-serializate`),
           fetchJsonSafe(`${API_BASE_URL}/mentenanta/mecanici`),
           fetchJsonSafe(`${API_BASE_URL}/anvelope/depozit-stoc`),
+          fetchJsonSafe(`${API_BASE_URL}/anomalii/tipuri-fluide`),
         ]);
 
       if (depRes.status === 'fulfilled' && Array.isArray(depRes.value)) {
@@ -318,6 +331,10 @@ function StocuriGarantiiContent() {
 
       if (anvStocRes.status === 'fulfilled' && anvStocRes.value) {
         setAnvelopeStocList(anvStocRes.value);
+      }
+
+      if (tipuriRes.status === 'fulfilled' && Array.isArray(tipuriRes.value)) {
+        setTipuriFluide(normalizeTipuriFluideList(tipuriRes.value));
       }
     } catch (e) {
       console.log('Error fetching stock data', e);
@@ -377,12 +394,14 @@ function StocuriGarantiiContent() {
         body: JSON.stringify({
           categorieNume: targetCatForSubcat,
           nume: numeSubcatNoua,
+          tipLichid: subcatTipLichidNou.trim() || null,
         }),
       });
       if (res.ok) {
         alert('Subcategoria a fost adăugată cu succes!');
         setShowAddSubcatModal(false);
         setNumeSubcatNoua('');
+        setSubcatTipLichidNou('');
         fetchData();
       }
     } catch (e) {
@@ -555,6 +574,7 @@ function StocuriGarantiiContent() {
           denumire,
           categorie,
           subcategorie,
+          tipLichid: articolTipLichid.trim() || null,
           depozitId,
           stocCurent: Number(stocCurent),
           stocMinim: Math.max(0, Number(stocMinim) || 0),
@@ -568,6 +588,7 @@ function StocuriGarantiiContent() {
         setCodArticol('');
         setDenumire('');
         setSubcategorie('');
+        setArticolTipLichid('');
         fetchData();
         alert('Articol adăugat în stoc cu succes!');
       }
@@ -714,6 +735,8 @@ function StocuriGarantiiContent() {
       ...s,
       categorie: canonCat,
       subcategorie: canonSub,
+      tipLichid: s.tipLichid || '',
+      marcaUlei: s.marcaUlei || '',
       pretUnitar: Number(Number(s.pretUnitar || 0).toFixed(2)),
       stocCurent: Number(Number(s.stocCurent || 0).toFixed(2)),
       stocMinim: Number(Number(s.stocMinim || 0).toFixed(2)),
@@ -771,6 +794,8 @@ function StocuriGarantiiContent() {
         ...editingArticol,
         categorie: editingArticol.categorie?.trim(),
         subcategorie: editingArticol.subcategorie?.trim() || null,
+        tipLichid: editingArticol.tipLichid?.trim() || null,
+        marcaUlei: editingArticol.marcaUlei?.trim() || null,
         observatiiIntern: editingArticol.observatiiIntern?.trim() || null,
         pretUnitar: Number(Number(editingArticol.pretUnitar || 0).toFixed(2)),
         stocCurent: Number(Number(editingArticol.stocCurent || 0).toFixed(2)),
@@ -1712,6 +1737,14 @@ function StocuriGarantiiContent() {
                                 ▸ {s.subcategorie}
                               </span>
                             )}
+                            {s.tipLichid && (
+                              <span
+                                className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold"
+                                title={`Normă asociată: ${s.tipLichid}`}
+                              >
+                                Normă: {getTipFluidLabel(s.tipLichid, tipuriFluide)}
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => openInlineCatEdit(s)}
@@ -2582,6 +2615,10 @@ function StocuriGarantiiContent() {
                     onChange={(e) => {
                       setCategorie(e.target.value);
                       setSubcategorie('');
+                      const catObj = categorii.find((c: any) => c.nume === e.target.value);
+                      if (!isFluidCategoryOrItem(e.target.value, catObj?.esteFluid)) {
+                        setArticolTipLichid('');
+                      }
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
@@ -2607,7 +2644,14 @@ function StocuriGarantiiContent() {
                   </div>
                   <select
                     value={subcategorie}
-                    onChange={(e) => setSubcategorie(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSubcategorie(val);
+                      const subObj = getSubcategoriiPentruCategorie(categorie).find((s: any) => s.nume === val);
+                      if (subObj?.tipLichid) {
+                        setArticolTipLichid(subObj.tipLichid);
+                      }
+                    }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Fără Subcategorie --</option>
@@ -2617,6 +2661,32 @@ function StocuriGarantiiContent() {
                   </select>
                 </div>
               </div>
+
+              {isFluidCategoryOrItem(
+                categorie,
+                categorii.find((c: any) => c.nume === categorie)?.esteFluid,
+                articolTipLichid,
+                unitateMasura,
+                denumire,
+              ) && (
+                <div className="p-2.5 bg-sapphire-50/70 border border-sapphire-200 rounded-xl">
+                  <label className="text-sapphire-900 block mb-1 font-bold">
+                    Tip Lubrifiant / Normă Întreținere:
+                  </label>
+                  <select
+                    value={articolTipLichid}
+                    onChange={(e) => setArticolTipLichid(e.target.value)}
+                    className="w-full bg-white border border-sapphire-200 rounded-lg p-2 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Fără asociere normă (detectare automată) --</option>
+                    {tipuriFluide.map((tf) => (
+                      <option key={tf.cod} value={tf.cod}>
+                        {tf.nume} ({tf.cod})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -2685,6 +2755,29 @@ function StocuriGarantiiContent() {
                 />
               </div>
 
+              {isFluidCategoryOrItem(
+                targetCatForSubcat,
+                categorii.find((c: any) => c.nume === targetCatForSubcat)?.esteFluid,
+              ) && (
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    Tip Lubrifiant / Normă Asociată (opțional):
+                  </label>
+                  <select
+                    value={subcatTipLichidNou}
+                    onChange={(e) => setSubcatTipLichidNou(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="">-- Fără asociere implicită --</option>
+                    {tipuriFluide.map((tf) => (
+                      <option key={tf.cod} value={tf.cod}>
+                        {tf.nume} ({tf.cod})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
                 <button type="button" onClick={() => setShowAddSubcatModal(false)} className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold">Anulează</button>
                 <button type="submit" className="px-4 py-2 rounded-lg bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Salvează Subcategorie</button>
@@ -2724,8 +2817,53 @@ function StocuriGarantiiContent() {
                 onChangeCat: (newCat) =>
                   setEditingArticol((prev: any) => (prev ? { ...prev, categorie: newCat, subcategorie: '' } : prev)),
                 onChangeSubcat: (newSub) =>
-                  setEditingArticol((prev: any) => (prev ? { ...prev, subcategorie: newSub } : prev)),
+                  setEditingArticol((prev: any) => {
+                    if (!prev) return prev;
+                    const subObj = getSubcategoriiPentruCategorie(prev.categorie).find((x: any) => x.nume === newSub);
+                    return {
+                      ...prev,
+                      subcategorie: newSub,
+                      tipLichid: subObj?.tipLichid || prev.tipLichid || '',
+                    };
+                  }),
               })}
+
+              {isFluidCategoryOrItem(
+                editingArticol.categorie,
+                categorii.find((c: any) => c.nume === editingArticol.categorie)?.esteFluid,
+                editingArticol.tipLichid,
+                editingArticol.unitateMasura,
+                editingArticol.denumire,
+              ) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl">
+                  <div>
+                    <label className="text-sapphire-900 block mb-1 font-bold">
+                      Tip Lubrifiant / Normă Întreținere:
+                    </label>
+                    <select
+                      value={editingArticol.tipLichid || ''}
+                      onChange={(e) => setEditingArticol({ ...editingArticol, tipLichid: e.target.value })}
+                      className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-bold text-xs"
+                    >
+                      <option value="">-- Fără asociere normă (auto) --</option>
+                      {tipuriFluide.map((tf) => (
+                        <option key={tf.cod} value={tf.cod}>
+                          {tf.nume} ({tf.cod})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sapphire-900 block mb-1 font-bold">Marcă Lubrifiant (Opțional):</label>
+                    <input
+                      value={editingArticol.marcaUlei || ''}
+                      onChange={(e) => setEditingArticol({ ...editingArticol, marcaUlei: e.target.value })}
+                      placeholder="ex: Mobil, Castrol, Liebherr"
+                      className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-semibold text-xs"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Notă Internă / Observații (Opțional):</label>
