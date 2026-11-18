@@ -191,6 +191,11 @@ export class AnomaliiController {
     return this.anomaliiService.addTipDocument(body);
   }
 
+  @Patch('tipuri-documente/:cod')
+  updateTipDocument(@Param('cod') cod: string, @Body() body: any) {
+    return this.anomaliiService.updateTipDocument(cod, body);
+  }
+
   @Delete('tipuri-documente/:cod')
   deleteTipDocument(@Param('cod') cod: string) {
     return this.anomaliiService.deleteTipDocument(cod);

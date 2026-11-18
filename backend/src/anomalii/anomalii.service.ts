@@ -1306,19 +1306,82 @@ export class AnomaliiService {
     },
   ];
 
-  async getTipuriDocumente() {
+  private async readSavedTipuriDocumente(): Promise<{ memoryId: string | null; entries: any[] }> {
     const memory = await this.prisma.aiMemory.findFirst({
       where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
     });
 
-    let customTypes: any[] = [];
+    let entries: any[] = [];
     if (memory && memory.valoare) {
       try {
-        customTypes = JSON.parse(memory.valoare);
-      } catch (e) {
-        customTypes = [];
+        const parsed = JSON.parse(memory.valoare);
+        if (Array.isArray(parsed)) entries = parsed;
+      } catch {
+        entries = [];
       }
     }
+
+    return { memoryId: memory?.id || null, entries };
+  }
+
+  private async writeSavedTipuriDocumente(memoryId: string | null, entries: any[]): Promise<void> {
+    if (memoryId) {
+      await this.prisma.aiMemory.update({
+        where: { id: memoryId },
+        data: { valoare: JSON.stringify(entries) },
+      });
+    } else {
+      await this.prisma.aiMemory.create({
+        data: {
+          tip: 'CONFIG',
+          cheie: 'TIPURI_DOCUMENTE_VEHICULE',
+          valoare: JSON.stringify(entries),
+          context: 'Configurare Nomenclator Tipuri Documente',
+        },
+      });
+    }
+  }
+
+  private normalizeDocumentCategorii(categorii?: string[], defaultToAll = true): string[] {
+    if (!Array.isArray(categorii)) {
+      return defaultToAll ? ['TOATE'] : [];
+    }
+    const clean = Array.from(
+      new Set(
+        categorii
+          .map((c) => String(c || '').trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    );
+    return clean.includes('TOATE') ? ['TOATE'] : clean;
+  }
+
+  async getTipuriDocumente() {
+    const { entries: savedEntries } = await this.readSavedTipuriDocumente();
+    const savedMap = new Map<string, any>();
+    for (const item of savedEntries) {
+      if (item?.cod) {
+        savedMap.set(String(item.cod).toUpperCase().trim(), item);
+      }
+    }
+
+    const standardCodes = new Set(AnomaliiService.STANDARD_TIPURI_DOCUMENTE.map((s) => s.cod));
+    const mergedStandard = AnomaliiService.STANDARD_TIPURI_DOCUMENTE.map((std) => {
+      const override = savedMap.get(std.cod);
+      if (!override) return std;
+      return {
+        ...std,
+        label: override.label || std.label,
+        zileAvertizare: override.zileAvertizare !== undefined ? Number(override.zileAvertizare) : std.zileAvertizare,
+        descriere: override.descriere !== undefined ? override.descriere : std.descriere,
+        categorii: Array.isArray(override.categorii) ? this.normalizeDocumentCategorii(override.categorii, false) : std.categorii,
+        culoare: override.culoare || std.culoare,
+        esteStandard: true,
+      };
+    });
+
+    const customTypes = savedEntries.filter((c: any) => c?.cod && !standardCodes.has(String(c.cod).toUpperCase().trim()));
+    const customCodes = new Set(customTypes.map((c: any) => String(c.cod).toUpperCase().trim()));
 
     // Include automat și orice tip existent în baza de date
     const distinctDocs = await this.prisma.documentVehicul.findMany({
@@ -1326,25 +1389,23 @@ export class AnomaliiService {
       distinct: ['tipDocument'],
     });
 
-    const standardCodes = new Set(AnomaliiService.STANDARD_TIPURI_DOCUMENTE.map((s) => s.cod));
-    const customCodes = new Set(customTypes.map((c: any) => c.cod));
-
     for (const d of distinctDocs) {
-      if (d.tipDocument && !standardCodes.has(d.tipDocument) && !customCodes.has(d.tipDocument)) {
+      const docCod = d.tipDocument ? String(d.tipDocument).toUpperCase().trim() : '';
+      if (docCod && !standardCodes.has(docCod) && !customCodes.has(docCod)) {
         customTypes.push({
-          cod: d.tipDocument,
-          label: d.tipDocument.replace(/_/g, ' '),
+          cod: docCod,
+          label: docCod.replace(/_/g, ' '),
           zileAvertizare: 30,
           descriere: 'Tip document activ în flotă',
           categorii: ['TOATE'],
           esteStandard: false,
           culoare: 'slate',
         });
-        customCodes.add(d.tipDocument);
+        customCodes.add(docCod);
       }
     }
 
-    return [...AnomaliiService.STANDARD_TIPURI_DOCUMENTE, ...customTypes];
+    return [...mergedStandard, ...customTypes];
   }
 
   async addTipDocument(data: { cod: string; label: string; zileAvertizare?: number; descriere?: string; categorii?: string[]; culoare?: string }) {
@@ -1358,45 +1419,54 @@ export class AnomaliiService {
       throw new BadRequestException(`Tipul de document cu codul "${codClean}" există deja.`);
     }
 
-    const memory = await this.prisma.aiMemory.findFirst({
-      where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
-    });
-
-    let customTypes: any[] = [];
-    if (memory && memory.valoare) {
-      try {
-        customTypes = JSON.parse(memory.valoare);
-      } catch (e) {
-        customTypes = [];
-      }
-    }
-
-    customTypes.push({
+    const { memoryId, entries } = await this.readSavedTipuriDocumente();
+    entries.push({
       cod: codClean,
       label: data.label.trim(),
       zileAvertizare: Number(data.zileAvertizare) || 30,
       descriere: data.descriere?.trim() || '',
-      categorii: Array.isArray(data.categorii) && data.categorii.length > 0 ? data.categorii : ['TOATE'],
+      categorii: this.normalizeDocumentCategorii(data.categorii, true),
       esteStandard: false,
       culoare: data.culoare || 'indigo',
     });
 
-    if (memory) {
-      await this.prisma.aiMemory.update({
-        where: { id: memory.id },
-        data: { valoare: JSON.stringify(customTypes) },
-      });
-    } else {
-      await this.prisma.aiMemory.create({
-        data: {
-          tip: 'CONFIG',
-          cheie: 'TIPURI_DOCUMENTE_VEHICULE',
-          valoare: JSON.stringify(customTypes),
-          context: 'Configurare Nomenclator Tipuri Documente Setări',
-        },
-      });
+    await this.writeSavedTipuriDocumente(memoryId, entries);
+    return this.getTipuriDocumente();
+  }
+
+  async updateTipDocument(
+    cod: string,
+    data: { label?: string; zileAvertizare?: number; descriere?: string; categorii?: string[]; culoare?: string },
+  ) {
+    const codUpper = cod.toUpperCase().trim();
+    const allTypes = await this.getTipuriDocumente();
+    const current = allTypes.find((t: any) => t.cod === codUpper);
+    if (!current) {
+      throw new NotFoundException(`Tipul de document "${codUpper}" nu a fost găsit.`);
     }
 
+    const { memoryId, entries } = await this.readSavedTipuriDocumente();
+    const updatedItem = {
+      cod: codUpper,
+      label: data.label !== undefined && data.label.trim() ? data.label.trim() : current.label,
+      zileAvertizare: data.zileAvertizare !== undefined ? Number(data.zileAvertizare) || 30 : current.zileAvertizare,
+      descriere: data.descriere !== undefined ? data.descriere.trim() : current.descriere || '',
+      categorii:
+        data.categorii !== undefined
+          ? this.normalizeDocumentCategorii(data.categorii, false)
+          : current.categorii || ['TOATE'],
+      esteStandard: Boolean(current.esteStandard),
+      culoare: data.culoare || current.culoare || 'indigo',
+    };
+
+    const idx = entries.findIndex((item: any) => String(item?.cod || '').toUpperCase().trim() === codUpper);
+    if (idx >= 0) {
+      entries[idx] = updatedItem;
+    } else {
+      entries.push(updatedItem);
+    }
+
+    await this.writeSavedTipuriDocumente(memoryId, entries);
     return this.getTipuriDocumente();
   }
 
@@ -1406,22 +1476,10 @@ export class AnomaliiService {
       throw new BadRequestException('Tipurile standard de sistem (ITP, RCA, etc.) nu pot fi șterse.');
     }
 
-    const memory = await this.prisma.aiMemory.findFirst({
-      where: { cheie: 'TIPURI_DOCUMENTE_VEHICULE' },
-    });
-
-    if (memory && memory.valoare) {
-      let customTypes: any[] = [];
-      try {
-        customTypes = JSON.parse(memory.valoare);
-      } catch (e) {
-        customTypes = [];
-      }
-      customTypes = customTypes.filter((c: any) => c.cod !== codUpper);
-      await this.prisma.aiMemory.update({
-        where: { id: memory.id },
-        data: { valoare: JSON.stringify(customTypes) },
-      });
+    const { memoryId, entries } = await this.readSavedTipuriDocumente();
+    if (memoryId) {
+      const filtered = entries.filter((c: any) => String(c?.cod || '').toUpperCase().trim() !== codUpper);
+      await this.writeSavedTipuriDocumente(memoryId, filtered);
     }
 
     return this.getTipuriDocumente();
@@ -1439,11 +1497,12 @@ export class AnomaliiService {
     const oneYearLater = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
 
     for (const v of vehicule) {
-      const vCat = (v.categorieEnum || '').toUpperCase();
+      const vCat = (v.categorieEnum || '').trim().toUpperCase();
 
       const applicable = tipuri.filter((t: any) => {
-        if (!t.categorii || t.categorii.includes('TOATE')) return true;
-        return t.categorii.some((c: string) => vCat.includes(c) || c.includes(vCat));
+        if (!Array.isArray(t.categorii)) return true;
+        if (t.categorii.includes('TOATE')) return true;
+        return t.categorii.some((c: string) => String(c || '').trim().toUpperCase() === vCat);
       });
 
       for (const t of applicable) {

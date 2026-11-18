@@ -21,6 +21,7 @@ interface DocTypeItem {
   esteStandard?: boolean;
   culoare?: string;
   descriere?: string;
+  categorii?: string[];
 }
 
 type DocViewMode = 'matrice' | 'lista' | 'tipuri';
@@ -29,13 +30,37 @@ type ListSortField = 'vehicul' | 'tip' | 'serie' | 'expirare' | 'zile' | 'act';
 
 const VIEW_STORAGE_KEY = 'fleetcmd_documente_view_mode';
 
+const OFF_ROAD_CATEGORIES = new Set([
+  'EXCAVATOR',
+  'INCARCATOR_FRONTAL',
+  'BULLDOZER',
+  'AUTOVALT',
+  'UTILAJ_SPECIAL',
+  'STATIE_MARE',
+  'BAZINE_COMBUSTIBIL',
+  'BAZINE_APA',
+  'PARC_FOTOVOLTAIC',
+  'ATELIER_1',
+  'ATELIER_2',
+]);
+const TRUCK_CATEGORIES = new Set(['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA']);
+const LIGHT_ROAD_CATEGORIES = new Set(['AUTOTURISM', 'AUTOUTILITARA']);
+
+const isTipApplicableToCategory = (tip: { categorii?: string[] }, categorieEnum?: string | null): boolean => {
+  if (!Array.isArray(tip.categorii)) return true;
+  if (tip.categorii.includes('TOATE')) return true;
+  const vCat = String(categorieEnum || '').trim().toUpperCase();
+  if (!vCat) return false;
+  return tip.categorii.some((c) => String(c || '').trim().toUpperCase() === vCat);
+};
+
 const DEFAULT_DOC_TYPES: DocTypeItem[] = [
-  { cod: 'ITP', label: 'Inspecție Tehnică Periodică (ITP)', zileAvertizare: 30, esteStandard: true, culoare: 'blue' },
-  { cod: 'RCA', label: 'Asigurare Obligatorie (RCA)', zileAvertizare: 30, esteStandard: true, culoare: 'emerald' },
-  { cod: 'ROVINIETA', label: 'Rovinietă (Taxă Drum)', zileAvertizare: 30, esteStandard: true, culoare: 'amber' },
-  { cod: 'COPIE_CONFORMA', label: 'Copie Conformă Transport', zileAvertizare: 30, esteStandard: true, culoare: 'purple' },
-  { cod: 'VERIFICARE_TAHOGRAF', label: 'Verificare Tahograf', zileAvertizare: 30, esteStandard: true, culoare: 'cyan' },
-  { cod: 'CASCO', label: 'Asigurare Facultativă (CASCO)', zileAvertizare: 30, esteStandard: true, culoare: 'indigo' },
+  { cod: 'ITP', label: 'Inspecție Tehnică Periodică (ITP)', zileAvertizare: 30, esteStandard: true, culoare: 'blue', categorii: ['TOATE'] },
+  { cod: 'RCA', label: 'Asigurare Obligatorie (RCA)', zileAvertizare: 30, esteStandard: true, culoare: 'emerald', categorii: ['TOATE'] },
+  { cod: 'ROVINIETA', label: 'Rovinietă (Taxă Drum)', zileAvertizare: 30, esteStandard: true, culoare: 'amber', categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA', 'AUTOUTILITARA', 'AUTOTURISM'] },
+  { cod: 'COPIE_CONFORMA', label: 'Copie Conformă Transport', zileAvertizare: 30, esteStandard: true, culoare: 'purple', categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA', 'AUTOUTILITARA'] },
+  { cod: 'VERIFICARE_TAHOGRAF', label: 'Verificare Tahograf', zileAvertizare: 30, esteStandard: true, culoare: 'cyan', categorii: ['CAP_TRACTOR', 'CAMION_8X4', 'BASCULANTA'] },
+  { cod: 'CASCO', label: 'Asigurare Facultativă (CASCO)', zileAvertizare: 30, esteStandard: true, culoare: 'indigo', categorii: ['TOATE'] },
 ];
 
 const DOC_BADGE_STYLES: Record<string, { shortLabel: string; bg: string; text: string; border: string }> = {
@@ -169,12 +194,14 @@ function DocumenteFlotaContent() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Modal Add Custom Document Type
-  const [showAddTipModal, setShowAddTipModal] = useState(false);
-  const [newTipCod, setNewTipCod] = useState('');
-  const [newTipLabel, setNewTipLabel] = useState('');
-  const [newTipZile, setNewTipZile] = useState(30);
-  const [newTipDescriere, setNewTipDescriere] = useState('');
+  // Modal Add / Edit Document Type & Categories
+  const [showTipModal, setShowTipModal] = useState(false);
+  const [editingTipCod, setEditingTipCod] = useState<string | null>(null);
+  const [tipFormCod, setTipFormCod] = useState('');
+  const [tipFormLabel, setTipFormLabel] = useState('');
+  const [tipFormZile, setTipFormZile] = useState(30);
+  const [tipFormDescriere, setTipFormDescriere] = useState('');
+  const [tipFormCategorii, setTipFormCategorii] = useState<string[]>(['TOATE']);
 
   // Modal Preview Scanned File (disponibil în ambele vizualizări)
   const [previewFisier, setPreviewFisier] = useState<{
@@ -259,15 +286,31 @@ function DocumenteFlotaContent() {
     [vehicule],
   );
 
+  // Complete list of fleet vehicle categories (backend config + existing vehicles) with counts
+  const allCategoryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    categoriiVehicul.forEach((c: any) => {
+      const code = String(c?.cod || c?.nume || c || '').trim().toUpperCase();
+      if (code && !counts.has(code)) counts.set(code, 0);
+    });
+    vehicule.forEach((v) => {
+      const code = String(v?.categorieEnum || '').trim().toUpperCase();
+      if (code) counts.set(code, (counts.get(code) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([cod, count]) => ({ cod, count }))
+      .sort((a, b) => naturalCompare(a.cod, b.cod));
+  }, [categoriiVehicul, vehicule]);
+
   // Known doc type codes
   const standardAndConfiguredCodes = useMemo(
     () => new Set(tipuriDocumente.map((t) => t.cod)),
     [tipuriDocumente],
   );
 
-  // Columns shown in Matrix view (respects Tip Document filter if selected)
+  // Columns shown in Matrix view (respects Tip Document AND Category applicability)
   const displayedMatrixTipuri = useMemo(() => {
-    if (selectedTip === 'TOATE') return tipuriDocumente;
+    let base: DocTypeItem[];
     if (selectedTip === 'ALTELE') {
       const customCodes = Array.from(
         new Set(
@@ -276,10 +319,34 @@ function DocumenteFlotaContent() {
             .filter((cod) => cod && !standardAndConfiguredCodes.has(cod)),
         ),
       );
-      return customCodes.map((cod) => ({ cod, label: cod.replace(/_/g, ' ') }));
+      base = customCodes.map((cod) => ({ cod, label: cod.replace(/_/g, ' '), categorii: ['TOATE'] }));
+    } else if (selectedTip !== 'TOATE') {
+      base = tipuriDocumente.filter((t) => t.cod === selectedTip);
+    } else {
+      base = tipuriDocumente;
     }
-    return tipuriDocumente.filter((t) => t.cod === selectedTip);
-  }, [tipuriDocumente, selectedTip, documente, standardAndConfiguredCodes]);
+
+    if (selectedTip !== 'TOATE') return base;
+
+    if (filterCategorie !== 'TOATE') {
+      const docsInCat = new Set(
+        documente
+          .filter((d) => {
+            const vCat = d.vehicul?.categorieEnum || vehicule.find((v) => v.id === d.vehiculId)?.categorieEnum;
+            return vCat === filterCategorie;
+          })
+          .map((d) => d.tipDocument),
+      );
+      return base.filter((t) => isTipApplicableToCategory(t, filterCategorie) || docsInCat.has(t.cod));
+    }
+
+    return base.filter(
+      (t) =>
+        isTipApplicableToCategory(t, undefined) ||
+        (Array.isArray(t.categorii) && t.categorii.length > 0) ||
+        documente.some((d) => d.tipDocument === t.cod),
+    );
+  }, [tipuriDocumente, selectedTip, filterCategorie, documente, vehicule, standardAndConfiguredCodes]);
 
   // Matrix rows: ALL matching vehicles rendered without pagination
   const vehiculeMatrice = useMemo(() => {
@@ -307,7 +374,9 @@ function DocumenteFlotaContent() {
         displayedMatrixTipuri.forEach((t) => {
           const doc = vDocs[t.cod];
           if (!doc) {
-            hasMissing = true;
+            if (isTipApplicableToCategory(t, v.categorieEnum)) {
+              hasMissing = true;
+            }
           } else {
             const meta = getDocStatusMeta(doc, nowMs);
             if (meta.isExpired) hasExpired = true;
@@ -482,12 +551,19 @@ function DocumenteFlotaContent() {
   };
 
   const handleOpenAddModal = (vehiculIdParam?: string, tipParam?: string) => {
-    const initialTip = tipParam || (selectedTip !== 'TOATE' && selectedTip !== 'ALTELE' ? selectedTip : 'ITP');
+    const targetVehId = vehiculIdParam || selectedVehiculId || vehiculeSortate[0]?.id || '';
+    const targetVeh = vehicule.find((v) => v.id === targetVehId);
+    const firstApplicableTip = targetVeh
+      ? tipuriDocumente.find((t) => isTipApplicableToCategory(t, targetVeh.categorieEnum))?.cod
+      : undefined;
+    const initialTip =
+      tipParam ||
+      (selectedTip !== 'TOATE' && selectedTip !== 'ALTELE' ? selectedTip : firstApplicableTip || 'ITP');
     const tipObj = tipuriDocumente.find((t) => t.cod === initialTip);
 
     setEditingDoc(null);
     setCanChangeVehicul(true);
-    setFormVehiculId(vehiculIdParam || selectedVehiculId || vehiculeSortate[0]?.id || '');
+    setFormVehiculId(targetVehId);
     setFormTip(initialTip);
     setFormTipCustom('');
     setFormSerie('');
@@ -678,33 +754,74 @@ function DocumenteFlotaContent() {
     }
   };
 
+  const openAddTipModal = () => {
+    setEditingTipCod(null);
+    setTipFormCod('');
+    setTipFormLabel('');
+    setTipFormZile(30);
+    setTipFormDescriere('');
+    setTipFormCategorii(['TOATE']);
+    setShowTipModal(true);
+  };
+
+  const openEditTipModal = (tip: DocTypeItem) => {
+    setEditingTipCod(tip.cod);
+    setTipFormCod(tip.cod);
+    setTipFormLabel(tip.label || tip.cod);
+    setTipFormZile(tip.zileAvertizare || 30);
+    setTipFormDescriere(tip.descriere || '');
+    setTipFormCategorii(Array.isArray(tip.categorii) ? [...tip.categorii] : ['TOATE']);
+    setShowTipModal(true);
+  };
+
+  const toggleTipCategory = (catCode: string) => {
+    const allCodes = allCategoryOptions.map((c) => c.cod);
+    setTipFormCategorii((prev) => {
+      if (catCode === 'TOATE') return ['TOATE'];
+      const base = prev.includes('TOATE') ? allCodes : prev;
+      const next = base.includes(catCode) ? base.filter((c) => c !== catCode) : [...base, catCode];
+      if (allCodes.length > 0 && next.length === allCodes.length) {
+        return ['TOATE'];
+      }
+      return next;
+    });
+  };
+
   const handleSaveTipDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTipCod.trim() || !newTipLabel.trim()) {
-      await showError('Date incomplete', 'Introduceți codul și denumirea noului tip de document.');
+    if (!editingTipCod && !tipFormCod.trim()) {
+      await showError('Date incomplete', 'Introduceți codul tipului de document.');
+      return;
+    }
+    if (!tipFormLabel.trim()) {
+      await showError('Date incomplete', 'Introduceți denumirea tipului de document.');
       return;
     }
 
     try {
-      const res = await safeFetch(`${API_BASE_URL}/anomalii/tipuri-documente`, {
-        method: 'POST',
+      const isEdit = Boolean(editingTipCod);
+      const url = isEdit
+        ? `${API_BASE_URL}/anomalii/tipuri-documente/${encodeURIComponent(editingTipCod!)}`
+        : `${API_BASE_URL}/anomalii/tipuri-documente`;
+      const method = isEdit ? 'PATCH' : 'POST';
+
+      const res = await safeFetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cod: newTipCod.trim(),
-          label: newTipLabel.trim(),
-          zileAvertizare: Number(newTipZile) || 30,
-          descriere: newTipDescriere.trim(),
-          categorii: ['TOATE'],
+          ...(isEdit ? {} : { cod: tipFormCod.trim() }),
+          label: tipFormLabel.trim(),
+          zileAvertizare: Number(tipFormZile) || 30,
+          descriere: tipFormDescriere.trim(),
+          categorii: tipFormCategorii,
         }),
       });
       if (res.ok) {
         const updated = await res.json();
         if (Array.isArray(updated)) setTipuriDocumente(updated);
-        setShowAddTipModal(false);
-        setNewTipCod('');
-        setNewTipLabel('');
-        setNewTipDescriere('');
-        await showToast('Tipul de document a fost adăugat.');
+        setShowTipModal(false);
+        setEditingTipCod(null);
+        await showToast(isEdit ? 'Tipul de document a fost actualizat.' : 'Tipul de document a fost adăugat.');
       } else {
         const err = await res.json().catch(() => ({}));
         await showError('Eroare', err.message || 'Nu s-a putut salva tipul de document.');
@@ -814,7 +931,7 @@ function DocumenteFlotaContent() {
 
           <button
             type="button"
-            onClick={() => setShowAddTipModal(true)}
+            onClick={openAddTipModal}
             className="flex items-center space-x-1.5 px-3 py-2.5 rounded-xl bg-periwinkle-50 hover:bg-periwinkle-100 border border-periwinkle-300 text-periwinkle-900 text-xs font-bold transition shadow-xs"
           >
             <Layers className="w-3.5 h-3.5 text-periwinkle-700" />
@@ -1268,6 +1385,20 @@ function DocumenteFlotaContent() {
                           const isSortedCol = matrixSortCol === t.cod;
                           const doc = v.docs[t.cod];
                           if (!doc) {
+                            const applies = isTipApplicableToCategory(t, v.categorieEnum);
+                            if (!applies) {
+                              return (
+                                <td
+                                  key={t.cod}
+                                  className={`p-2 text-center border-b border-morning-200 ${isSortedCol ? 'bg-sapphire-50/30' : ''}`}
+                                  title={`Nu se aplică categoriei ${v.categorieEnum || 'selectate'}`}
+                                >
+                                  <span className="inline-block py-1 px-2.5 rounded-md text-[10px] font-bold text-slate-400/80 select-none">
+                                    —
+                                  </span>
+                                </td>
+                              );
+                            }
                             return (
                               <td
                                 key={t.cod}
@@ -1631,14 +1762,14 @@ function DocumenteFlotaContent() {
         <div className="space-y-3">
           <div className="p-4 rounded-2xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-between text-sapphire-900 text-xs">
             <div>
-              <p className="font-extrabold text-sapphire-950">Nomenclator Tipuri Documente &amp; Certificate Flotă</p>
+              <p className="font-extrabold text-sapphire-950">Nomenclator Tipuri Documente &amp; Categorii Aplicabile</p>
               <p className="text-sage-700 text-[11px]">
-                Fiecare tip configurat aici devine automat o coloană în Tabelul Matrice și o opțiune la înregistrarea documentelor.
+                Configurați categoriile de vehicule pentru care apare fiecare tip de act în Tabelul Matrice și la Inițializarea Rapidă.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => setShowAddTipModal(true)}
+              onClick={openAddTipModal}
               className="px-3.5 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold transition shrink-0 flex items-center space-x-1.5 shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1649,6 +1780,10 @@ function DocumenteFlotaContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {tipuriDocumente.map((t) => {
               const countInFleet = documente.filter((d) => d.tipDocument === t.cod).length;
+              const cats = Array.isArray(t.categorii) ? t.categorii : ['TOATE'];
+              const isAllCats = cats.includes('TOATE');
+              const isDisabledAll = !isAllCats && cats.length === 0;
+
               return (
                 <div
                   key={t.cod}
@@ -1677,6 +1812,44 @@ function DocumenteFlotaContent() {
                     {t.descriere && (
                       <p className="text-[11px] text-sage-600 line-clamp-2">{t.descriere}</p>
                     )}
+
+                    {/* Categorii Aplicabile */}
+                    <div className="pt-1 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-sage-500">
+                        <span>Categorii aplicabile</span>
+                        <button
+                          type="button"
+                          onClick={() => openEditTipModal(t)}
+                          className="text-sapphire-600 hover:underline font-bold normal-case tracking-normal cursor-pointer"
+                        >
+                          Configurează
+                        </button>
+                      </div>
+                      <div
+                        onClick={() => openEditTipModal(t)}
+                        className="flex flex-wrap gap-1 cursor-pointer"
+                        title="Click pentru a selecta categoriile de vehicule"
+                      >
+                        {isAllCats ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sapphire-50 text-sapphire-800 border border-sapphire-200">
+                            Toate categoriile flotă
+                          </span>
+                        ) : isDisabledAll ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-morning-100 text-slate-500 border border-morning-300">
+                            Nicio categorie selectată (Dezactivat)
+                          </span>
+                        ) : (
+                          cats.map((c) => (
+                            <span
+                              key={c}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${getCategoryColor(c).badge}`}
+                            >
+                              {c}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="pt-2 border-t border-morning-200 space-y-2 text-xs">
@@ -1696,11 +1869,20 @@ function DocumenteFlotaContent() {
                     <div className="flex items-center space-x-2 pt-1">
                       <button
                         type="button"
+                        onClick={() => openEditTipModal(t)}
+                        className="flex-1 py-1.5 px-2 bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-800 border border-sapphire-200 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Categorii &amp; Editare</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleOpenAddModal(undefined, t.cod)}
-                        className="flex-1 py-1.5 px-2 bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-700 text-slate-700 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
+                        className="py-1.5 px-2.5 bg-morning-100 hover:bg-sapphire-50 hover:text-sapphire-700 text-slate-700 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 cursor-pointer"
+                        title="Înregistrează un act de acest tip"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Înregistrează</span>
+                        <span>Act</span>
                       </button>
                       {!t.esteStandard && (
                         <button
@@ -1831,32 +2013,63 @@ function DocumenteFlotaContent() {
                     <label className="text-sage-700 font-bold">Tip Document: *</label>
                     <button
                       type="button"
-                      onClick={() => setShowAddTipModal(true)}
+                      onClick={openAddTipModal}
                       className="text-[11px] font-bold text-sapphire-600 hover:underline flex items-center space-x-0.5"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Tip Nou</span>
                     </button>
                   </div>
-                  <select
-                    value={formTip}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormTip(val);
-                      const tipObj = tipuriDocumente.find((t) => t.cod === val);
-                      if (!editingDoc && tipObj?.zileAvertizare) {
-                        setFormZileAvertizare(tipObj.zileAvertizare);
-                      }
-                    }}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    {tipuriDocumente.map((t) => (
-                      <option key={t.cod} value={t.cod}>
-                        {t.cod} — {t.label || t.cod}
-                      </option>
-                    ))}
-                    <option value="ALTELE">Alt Document Specific</option>
-                  </select>
+                  {(() => {
+                    const selVehCat =
+                      editingDoc?.vehicul?.categorieEnum ||
+                      vehicule.find((v) => v.id === formVehiculId)?.categorieEnum;
+                    const applicableTips = tipuriDocumente.filter((t) => isTipApplicableToCategory(t, selVehCat));
+                    const otherTips = tipuriDocumente.filter((t) => !isTipApplicableToCategory(t, selVehCat));
+
+                    return (
+                      <select
+                        value={formTip}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormTip(val);
+                          const tipObj = tipuriDocumente.find((t) => t.cod === val);
+                          if (!editingDoc && tipObj?.zileAvertizare) {
+                            setFormZileAvertizare(tipObj.zileAvertizare);
+                          }
+                        }}
+                        className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                      >
+                        {selVehCat && otherTips.length > 0 ? (
+                          <>
+                            {applicableTips.length > 0 && (
+                              <optgroup label={`Aplicabile categoriei ${selVehCat}`}>
+                                {applicableTips.map((t) => (
+                                  <option key={t.cod} value={t.cod}>
+                                    {t.cod} — {t.label || t.cod}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            <optgroup label="Alte tipuri (opțional)">
+                              {otherTips.map((t) => (
+                                <option key={t.cod} value={t.cod}>
+                                  {t.cod} — {t.label || t.cod}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </>
+                        ) : (
+                          tipuriDocumente.map((t) => (
+                            <option key={t.cod} value={t.cod}>
+                              {t.cod} — {t.label || t.cod}
+                            </option>
+                          ))
+                        )}
+                        <option value="ALTELE">Alt Document Specific</option>
+                      </select>
+                    );
+                  })()}
                 </div>
 
                 {formTip === 'ALTELE' ? (
@@ -2110,62 +2323,65 @@ function DocumenteFlotaContent() {
       )}
 
       {/* ===================================================================== */}
-      {/* MODAL TIP NOU DE DOCUMENT (NOMENCLATOR FLOTĂ)                         */}
+      {/* MODAL ADĂUGARE / EDITARE TIP DOCUMENT & CATEGORII VEHICULE            */}
       {/* ===================================================================== */}
-      {showAddTipModal && (
+      {showTipModal && (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl">
+          <div className="pleasant-card bg-white border border-morning-200 p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <h3 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <Layers className="w-5 h-5 text-sapphire-500" />
-                <span>+ Tip Nou de Document</span>
+                <span>{editingTipCod ? `Configurare Tip Act: ${editingTipCod}` : '+ Tip Nou de Document'}</span>
               </h3>
               <button
                 type="button"
-                onClick={() => setShowAddTipModal(false)}
+                onClick={() => {
+                  setShowTipModal(false);
+                  setEditingTipCod(null);
+                }}
                 className="text-sage-500 hover:text-sapphire-900"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveTipDocument} className="space-y-3.5 text-xs">
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">
-                  Cod Unic Document (ex: AGREERE_ADR): *
-                </label>
-                <input
-                  required
-                  value={newTipCod}
-                  onChange={(e) => setNewTipCod(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))}
-                  placeholder="ex: AGREERE_ADR"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold uppercase"
-                />
-                <p className="text-[10px] text-sage-500 mt-1">
-                  Devine coloană în Tabelul Matrice.
-                </p>
+            <form onSubmit={handleSaveTipDocument} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    Cod Unic Document: *
+                  </label>
+                  <input
+                    required
+                    disabled={Boolean(editingTipCod)}
+                    value={tipFormCod}
+                    onChange={(e) => setTipFormCod(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))}
+                    placeholder="ex: AGREERE_ADR"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold uppercase disabled:opacity-65"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Preaviz Alertă Scadență (Zile):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="180"
+                    value={tipFormZile}
+                    onChange={(e) => setTipFormZile(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Denumire Completă: *</label>
                 <input
                   required
-                  value={newTipLabel}
-                  onChange={(e) => setNewTipLabel(e.target.value)}
+                  value={tipFormLabel}
+                  onChange={(e) => setTipFormLabel(e.target.value)}
                   placeholder="ex: Certificat Agreere ADR Transport"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Preaviz Alertă Scadență (Zile):</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="180"
-                  value={newTipZile}
-                  onChange={(e) => setNewTipZile(Number(e.target.value))}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-terracotta-700 font-mono font-bold"
                 />
               </div>
 
@@ -2173,17 +2389,128 @@ function DocumenteFlotaContent() {
                 <label className="text-sage-700 block mb-1 font-bold">Descriere (Opțional):</label>
                 <textarea
                   rows={2}
-                  value={newTipDescriere}
-                  onChange={(e) => setNewTipDescriere(e.target.value)}
+                  value={tipFormDescriere}
+                  onChange={(e) => setTipFormDescriere(e.target.value)}
                   placeholder="ex: Necesar pentru transporturi speciale"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-medium"
                 />
+              </div>
+
+              {/* MULTI-SELECT CATEGORII VEHICULE */}
+              <div className="p-3.5 rounded-2xl bg-morning-50 border border-morning-200 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <p className="font-extrabold text-sapphire-900 text-xs">
+                      Categorii de Vehicule unde se aplică acest act
+                    </p>
+                    <p className="text-[11px] text-sage-600">
+                      Categoriile nebifate nu vor afișa „+ Lipsă” în Matrice și nu vor genera sloturi la Inițializare Rapidă (ex: excavatoare fără ITP/RCA, camioane fără Rovinietă).
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-sapphire-100 text-sapphire-800 shrink-0 self-start">
+                    {tipFormCategorii.includes('TOATE')
+                      ? `Toate (${allCategoryOptions.length})`
+                      : `${tipFormCategorii.length} / ${allCategoryOptions.length}`}
+                  </span>
+                </div>
+
+                {/* Preseturi Rapide */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTipFormCategorii(['TOATE'])}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      tipFormCategorii.includes('TOATE')
+                        ? 'bg-sapphire-500 text-white border-sapphire-500'
+                        : 'bg-white text-slate-700 border-morning-300 hover:bg-morning-100'
+                    }`}
+                  >
+                    Toate categoriile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTipFormCategorii(
+                        allCategoryOptions.map((c) => c.cod).filter((c) => !OFF_ROAD_CATEGORIES.has(c)),
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-morning-300 hover:bg-sapphire-50 transition cursor-pointer"
+                  >
+                    Doar Rutiere (fără șantier)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTipFormCategorii(
+                        allCategoryOptions.map((c) => c.cod).filter((c) => LIGHT_ROAD_CATEGORIES.has(c)),
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-morning-300 hover:bg-amber-50 transition cursor-pointer"
+                  >
+                    Auto &amp; Autoutilitare (Toll-Ro / Rovinietă)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTipFormCategorii(
+                        allCategoryOptions.map((c) => c.cod).filter((c) => TRUCK_CATEGORIES.has(c)),
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white text-slate-700 border-morning-300 hover:bg-emerald-50 transition cursor-pointer"
+                  >
+                    Doar Camioane &amp; Cap Tractor
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipFormCategorii([])}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-white text-terracotta-700 border-roseash-300 hover:bg-roseash-50 transition cursor-pointer"
+                  >
+                    Deselectează tot
+                  </button>
+                </div>
+
+                {/* Grilă Categorii Selectabile */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
+                  {allCategoryOptions.map((cat) => {
+                    const isChecked =
+                      tipFormCategorii.includes('TOATE') || tipFormCategorii.includes(cat.cod);
+                    return (
+                      <button
+                        key={cat.cod}
+                        type="button"
+                        onClick={() => toggleTipCategory(cat.cod)}
+                        className={`flex items-center justify-between px-2.5 py-2 rounded-xl border text-left transition cursor-pointer ${
+                          isChecked
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-extrabold shadow-2xs'
+                            : 'bg-white border-morning-200 text-slate-500 font-semibold hover:bg-morning-100'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2 min-w-0">
+                          <span
+                            className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${
+                              isChecked
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : 'bg-white border-morning-300'
+                            }`}
+                          >
+                            {isChecked && <Check className="w-3 h-3" />}
+                          </span>
+                          <span className="truncate text-[11px]">{cat.cod}</span>
+                        </div>
+                        <span className="text-[10px] font-mono opacity-70 ml-1 shrink-0">{cat.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
                 <button
                   type="button"
-                  onClick={() => setShowAddTipModal(false)}
+                  onClick={() => {
+                    setShowTipModal(false);
+                    setEditingTipCod(null);
+                  }}
                   className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold"
                 >
                   Anulează
@@ -2192,7 +2519,7 @@ function DocumenteFlotaContent() {
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20"
                 >
-                  Salvează Tip Document
+                  {editingTipCod ? 'Salvează Categoriile & Datele' : 'Salvează Tip Document'}
                 </button>
               </div>
             </form>
