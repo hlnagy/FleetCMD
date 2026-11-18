@@ -12,7 +12,6 @@ import VehicleSelector from '@/components/VehicleSelector';
 import { showConfirm } from '@/lib/swal';
 import {
   FALLBACK_TIPURI_FLUIDE,
-  FLUID_ACCENT_OPTIONS,
   TipFluidDef,
   buildSubcatTipMap,
   buildTipLichidLabelMap,
@@ -96,7 +95,6 @@ export default function FluidePage() {
     cod: '',
     nume: '',
     descriere: '',
-    accentColor: 'amber',
     presetKmText: '15000, 30000',
     presetMthText: '250, 500',
   });
@@ -637,7 +635,6 @@ export default function FluidePage() {
       cod: '',
       nume: '',
       descriere: '',
-      accentColor: 'amber',
       presetKmText: '15000, 30000, 50000',
       presetMthText: '250, 500, 1000',
     });
@@ -650,7 +647,6 @@ export default function FluidePage() {
       cod: tf.cod,
       nume: tf.nume,
       descriere: tf.descriere || '',
-      accentColor: tf.accentColor || 'amber',
       presetKmText: (tf.presetKm || [15000, 30000]).join(', '),
       presetMthText: (tf.presetMth || [250, 500]).join(', '),
     });
@@ -680,7 +676,6 @@ export default function FluidePage() {
       const payload: any = {
         nume: tipFluidForm.nume.trim(),
         descriere: tipFluidForm.descriere.trim() || null,
-        accentColor: tipFluidForm.accentColor || 'amber',
         presetKm: parseNums(tipFluidForm.presetKmText),
         presetMth: parseNums(tipFluidForm.presetMthText),
       };
@@ -4315,19 +4310,6 @@ export default function FluidePage() {
                   placeholder="ex: Ulei sintetic 75W-90 pentru reductoare finale și punți grele"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
                 />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Culoare Accent:</label>
-                <select
-                  value={tipFluidForm.accentColor}
-                  onChange={(e) => setTipFluidForm({ ...tipFluidForm, accentColor: e.target.value })}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  {FLUID_ACCENT_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
