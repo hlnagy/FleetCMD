@@ -1249,14 +1249,14 @@ function DocumenteFlotaContent() {
       {/* VIZUALIZARE 1: TABEL MATRICE FLOTĂ (FĂRĂ PAGINARE - TOATĂ FLOTA)     */}
       {/* ===================================================================== */}
       {viewMode === 'matrice' && (
-        <div className="pleasant-card rounded-2xl border border-morning-200 overflow-x-auto shadow-xs relative">
+        <div className="pleasant-card rounded-2xl border border-morning-200 overflow-auto max-h-[calc(100vh-140px)] shadow-xs relative">
           {loading ? (
             <div className="p-12 text-center text-sage-500 font-bold text-xs animate-pulse">
               Se încarcă matricea documentelor flotă...
             </div>
           ) : (
             <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[920px]">
-              <thead>
+              <thead className="sticky top-0 z-20">
                 <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[11px]">
                   <th
                     onClick={() => {
@@ -1267,9 +1267,9 @@ function DocumenteFlotaContent() {
                         setMatrixVehSortMode((prev) => (prev === 'abc' ? 'categorie' : 'abc'));
                       }
                     }}
-                    className={`p-3 sticky left-0 z-20 min-w-[230px] border-b border-r border-morning-200 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.06)] cursor-pointer select-none transition group ${
+                    className={`p-3 sticky left-0 top-0 z-30 min-w-[230px] border-b border-r border-morning-200 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.06)] cursor-pointer select-none transition group ${
                       matrixSortCol === 'vehicul'
-                        ? 'bg-morning-200/90 text-sapphire-950 font-black'
+                        ? 'bg-morning-200 text-sapphire-950 font-black'
                         : 'bg-morning-100 hover:bg-morning-200'
                     }`}
                     title="Apasă pentru a schimba sortarea: Alfabetic (A-Z) ⟷ Categorie Flotă"
@@ -1312,10 +1312,10 @@ function DocumenteFlotaContent() {
                             setMatrixSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
                           }
                         }}
-                        className={`p-3 text-center min-w-[145px] border-b border-morning-200 cursor-pointer select-none transition group ${
+                        className={`p-3 text-center min-w-[145px] sticky top-0 z-20 border-b border-morning-200 cursor-pointer select-none transition group ${
                           isSorted
-                            ? 'bg-sapphire-100/80 border-b-2 border-b-sapphire-500 text-sapphire-950 font-black'
-                            : 'bg-morning-100 hover:bg-morning-200/80'
+                            ? 'bg-sapphire-100 border-b-2 border-b-sapphire-500 text-sapphire-950 font-black'
+                            : 'bg-morning-100 hover:bg-morning-200'
                         }`}
                         title={`Sortează după expirare ${t.cod}`}
                       >
@@ -1339,7 +1339,7 @@ function DocumenteFlotaContent() {
                     );
                   })}
 
-                  <th className="p-3 text-right min-w-[85px] bg-morning-100 border-b border-morning-200">Acțiuni</th>
+                  <th className="p-3 text-right min-w-[85px] sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Acțiuni</th>
                 </tr>
               </thead>
 
@@ -1514,12 +1514,12 @@ function DocumenteFlotaContent() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
+            <div className="overflow-auto max-h-[calc(100vh-140px)] relative">
+              <table className="w-full text-left text-xs border-separate border-spacing-0">
+                <thead className="sticky top-0 z-20">
                   <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-black uppercase text-[10px] tracking-wider select-none">
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group"
                       onClick={() => handleListSort('vehicul')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -1528,7 +1528,7 @@ function DocumenteFlotaContent() {
                       </div>
                     </th>
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group"
                       onClick={() => handleListSort('tip')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -1537,7 +1537,7 @@ function DocumenteFlotaContent() {
                       </div>
                     </th>
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group"
                       onClick={() => handleListSort('serie')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -1546,7 +1546,7 @@ function DocumenteFlotaContent() {
                       </div>
                     </th>
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group"
                       onClick={() => handleListSort('expirare')}
                     >
                       <div className="flex items-center space-x-1.5">
@@ -1555,7 +1555,7 @@ function DocumenteFlotaContent() {
                       </div>
                     </th>
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group text-center"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group text-center"
                       onClick={() => handleListSort('zile')}
                     >
                       <div className="flex items-center justify-center space-x-1.5">
@@ -1564,7 +1564,7 @@ function DocumenteFlotaContent() {
                       </div>
                     </th>
                     <th
-                      className="p-3.5 cursor-pointer hover:bg-morning-200/80 transition group text-center"
+                      className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 cursor-pointer hover:bg-morning-200 transition group text-center"
                       onClick={() => handleListSort('act')}
                     >
                       <div className="flex items-center justify-center space-x-1.5">
@@ -1572,7 +1572,7 @@ function DocumenteFlotaContent() {
                         {renderListSortIcon('act')}
                       </div>
                     </th>
-                    <th className="p-3.5 text-right">Acțiuni</th>
+                    <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-right">Acțiuni</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-morning-200 font-medium text-slate-700">
