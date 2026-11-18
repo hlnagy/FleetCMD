@@ -18,8 +18,10 @@ interface UtilajItem {
   anFabricatie?: number;
   categorieEnum: string;
   tipMasurare: string;
+  areContorDualMth?: boolean;
   valoareContorCurent: number;
   valoareContorInitial: number;
+  valoareKmCurent?: number | null;
   dataInregistrareContor?: string;
   stare: string;
   numarPerioade: number;
@@ -624,12 +626,14 @@ export default function OreFunctionarePage() {
                         )}
                         <span
                           className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
-                            (u.tipMasurare || '').toUpperCase().includes('MTH')
+                            u.areContorDualMth
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                              : (u.tipMasurare || '').toUpperCase().includes('MTH')
                               ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
                               : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
                           }`}
                         >
-                          {u.tipMasurare}
+                          {u.areContorDualMth ? 'KM+mTH' : u.tipMasurare}
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[220px]">

@@ -88,11 +88,13 @@ export default function FisaTehnicaPage() {
 
   // MODAL ÎNREGISTRARE RAPIDĂ CONTOARE (BATCH & GPS)
   const [showContorModal, setShowContorModal] = useState(false);
+  const [batchTipContor, setBatchTipContor] = useState<'KM' | 'MTH'>('MTH');
   const [dataOperareContor, setDataOperareContor] = useState(new Date().toISOString().split('T')[0]);
   const [operatorContor, setOperatorContor] = useState('Șofer / Mecanic Atelier');
   const [observatiiContor, setObservatiiContor] = useState('');
   const [searchContorModal, setSearchContorModal] = useState('');
   const [contoareEditMap, setContoareEditMap] = useState<{ [vehiculId: string]: number }>({});
+  const [contoareMthEditMap, setContoareMthEditMap] = useState<{ [vehiculId: string]: number }>({});
   const [istoricContoare, setIstoricContoare] = useState<any[]>([]);
   const [tabContorModal, setTabContorModal] = useState<'batch' | 'gps' | 'istoric'>('batch');
   const [gpsRawText, setGpsRawText] = useState('');
@@ -160,12 +162,18 @@ export default function FisaTehnicaPage() {
           setSelectedId(data[0].id);
         }
 
-        // Pre-fill contor map for batch modal
+        // Pre-fill contor maps for batch modal (KM + mTH for dual vehicles)
         const initialMap: { [id: string]: number } = {};
+        const initialMthMap: { [id: string]: number } = {};
         data.forEach((v: any) => {
-          initialMap[v.id] = v.valoareContorCurent;
+          initialMap[v.id] = Number(v.valoareContorCurent || 0);
+          const isMthVeh = (v.tipMasurare || '').toUpperCase().includes('MTH');
+          initialMthMap[v.id] = isMthVeh
+            ? Number(v.valoareContorCurent || 0)
+            : Number(v.oreFunctionareCurent || 0);
         });
         setContoareEditMap(initialMap);
+        setContoareMthEditMap(initialMthMap);
       }
 
       // Fetch active alerts count per vehicle
@@ -392,12 +400,19 @@ export default function FisaTehnicaPage() {
   };
 
   const handleSaveContorSingle = async (vehiculId: string) => {
-    const nouaValoare = contoareEditMap[vehiculId];
     const veh = vehicule.find((v) => v.id === vehiculId);
-    if (!veh || nouaValoare === undefined) return;
+    if (!veh) return;
 
-    if (nouaValoare < veh.valoareContorCurent) {
-      alert(`Valoarea contorului nu poate fi mai mică decât contorul curent (${veh.valoareContorCurent} ${veh.tipMasurare})!`);
+    const isMthMode = batchTipContor === 'MTH';
+    const isVehMth = (veh.tipMasurare || '').toUpperCase().includes('MTH');
+    const nouaValoare = isMthMode ? contoareMthEditMap[vehiculId] : contoareEditMap[vehiculId];
+    const currVal = isMthMode
+      ? (isVehMth ? Number(veh.valoareContorCurent || 0) : Number(veh.oreFunctionareCurent || 0))
+      : Number(veh.valoareContorCurent || 0);
+    if (nouaValoare === undefined) return;
+
+    if (nouaValoare < currVal) {
+      alert(`Valoarea contorului nu poate fi mai mică decât contorul curent (${currVal} ${isMthMode ? 'mTH' : 'KM'})!`);
       return;
     }
 
@@ -408,9 +423,10 @@ export default function FisaTehnicaPage() {
         body: JSON.stringify({
           vehiculId,
           valoareContor: Number(nouaValoare),
+          tipContor: isMthMode ? 'MTH' : 'KM',
           dataInregistrare: dataOperareContor,
           operator: operatorContor,
-          observatii: observatiiContor || 'Actualizare manuală rapidă contor',
+          observatii: observatiiContor || `Actualizare manuală rapidă contor (${isMthMode ? 'mTH' : 'KM'})`,
         }),
       });
 
@@ -427,16 +443,27 @@ export default function FisaTehnicaPage() {
 
   const handleSaveContoareBatch = async () => {
     const entries: any[] = [];
+    const isMthMode = batchTipContor === 'MTH';
 
     vehicule.forEach((v) => {
-      const editVal = contoareEditMap[v.id];
-      if (editVal !== undefined && editVal > v.valoareContorCurent) {
+      const isVehMth = (v.tipMasurare || '').toUpperCase().includes('MTH');
+      const isDual = Boolean(v.areContorDualMth) || v.categorieEnum === 'CAP_TRACTOR';
+      if (isMthMode && !isVehMth && !isDual) return;
+      if (!isMthMode && isVehMth) return;
+
+      const editVal = isMthMode ? contoareMthEditMap[v.id] : contoareEditMap[v.id];
+      const currVal = isMthMode
+        ? (isVehMth ? Number(v.valoareContorCurent || 0) : Number(v.oreFunctionareCurent || 0))
+        : Number(v.valoareContorCurent || 0);
+
+      if (editVal !== undefined && editVal > currVal) {
         entries.push({
           vehiculId: v.id,
           valoareContor: Number(editVal),
+          tipContor: isMthMode ? 'MTH' : 'KM',
           dataInregistrare: dataOperareContor,
           operator: operatorContor,
-          observatii: observatiiContor || 'Actualizare în lot (Batch)',
+          observatii: observatiiContor || `Actualizare în lot (${isMthMode ? 'mTH Manual' : 'KM'})`,
         });
       }
     });
@@ -907,7 +934,14 @@ export default function FisaTehnicaPage() {
                       </td>
                       <td className="p-3 font-mono font-extrabold text-sapphire-700">
                         <div className="flex items-center space-x-1.5">
-                          <span>{Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')} {v.tipMasurare}</span>
+                          <div>
+                            <span>{Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')} {v.tipMasurare}</span>
+                            {(v.areContorDualMth || v.categorieEnum === 'CAP_TRACTOR') && (
+                              <span className="block text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                {Number(v.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH
+                              </span>
+                            )}
+                          </div>
                           <button
                             onClick={() => setOdometerModalVehicul(v)}
                             title="Vezi & editează registrul istoric contor (KM/mTH)"
@@ -1002,9 +1036,16 @@ export default function FisaTehnicaPage() {
               <div>
                 <p className="text-[10px] text-sage-700 font-bold uppercase tracking-wider">Contor Curent</p>
                 <div className="flex items-center space-x-1.5">
-                  <p className="text-base font-extrabold text-sapphire-700 font-mono">
-                    {vehicul.valoareContorCurent} {vehicul.tipMasurare}
-                  </p>
+                  <div>
+                    <p className="text-base font-extrabold text-sapphire-700 font-mono">
+                      {Number(vehicul.valoareContorCurent || 0).toLocaleString('ro-RO')} {vehicul.tipMasurare}
+                    </p>
+                    {(vehicul.areContorDualMth || vehicul.categorieEnum === 'CAP_TRACTOR') && (
+                      <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 font-mono">
+                        {Number(vehicul.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH (Manual)
+                      </p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setOdometerModalVehicul(vehicul)}
                     title="Vezi & editează registrul istoric contor (KM/mTH)"
@@ -2097,8 +2138,11 @@ export default function FisaTehnicaPage() {
           vehiculInfo={{
             numarIntern: odometerModalVehicul.numarIntern,
             numarInmatriculare: odometerModalVehicul.numarInmatriculare,
+            categorieEnum: odometerModalVehicul.categorieEnum,
             tipMasurare: odometerModalVehicul.tipMasurare,
             valoareContorCurent: odometerModalVehicul.valoareContorCurent,
+            areContorDualMth: odometerModalVehicul.areContorDualMth,
+            oreFunctionareCurent: odometerModalVehicul.oreFunctionareCurent,
           }}
           onUpdateSuccess={() => {
             fetchVehicule();
@@ -2188,16 +2232,34 @@ export default function FisaTehnicaPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="relative w-72">
-                    <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      value={searchContorModal}
-                      onChange={(e) => setSearchContorModal(e.target.value)}
-                      placeholder="Filtrează utilaj..."
-                      className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-sapphire-900 font-bold"
-                    />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative w-64">
+                      <Search className="w-4 h-4 text-sage-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={searchContorModal}
+                        onChange={(e) => setSearchContorModal(e.target.value)}
+                        placeholder="Filtrează utilaj..."
+                        className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-sapphire-900 font-bold"
+                      />
+                    </div>
+                    <div className="inline-flex rounded-xl border border-morning-200 bg-morning-100 p-0.5 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setBatchTipContor('MTH')}
+                        className={`px-3 py-1.5 rounded-lg transition ${batchTipContor === 'MTH' ? 'bg-amber-500 text-white shadow-xs' : 'text-sage-700 hover:text-sapphire-900'}`}
+                      >
+                        Ore (mTH) — Cap Tractor &amp; Utilaje
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBatchTipContor('KM')}
+                        className={`px-3 py-1.5 rounded-lg transition ${batchTipContor === 'KM' ? 'bg-blue-600 text-white shadow-xs' : 'text-sage-700 hover:text-sapphire-900'}`}
+                      >
+                        Kilometri (KM)
+                      </button>
+                    </div>
                   </div>
 
                   <button
@@ -2217,40 +2279,67 @@ export default function FisaTehnicaPage() {
                         <th className="p-2.5">Cod Utilaj</th>
                         <th className="p-2.5">Înmatriculare & Marcă</th>
                         <th className="p-2.5 font-mono">Contor Înregistrat Curent</th>
-                        <th className="p-2.5 font-mono">Nou Contor (Editabil)</th>
+                        <th className="p-2.5 font-mono">Nou Contor ({batchTipContor === 'MTH' ? 'mTH' : 'KM'})</th>
                         <th className="p-2.5 text-right">Salvare Rapidă</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-morning-200">
                       {vehicule
-                        .filter(v => !searchContorModal || v.numarIntern.toLowerCase().includes(searchContorModal.toLowerCase()) || v.numarInmatriculare.toLowerCase().includes(searchContorModal.toLowerCase()))
+                        .filter((v) => {
+                          const isVehMth = (v.tipMasurare || '').toUpperCase().includes('MTH');
+                          const isDual = Boolean(v.areContorDualMth) || v.categorieEnum === 'CAP_TRACTOR';
+                          if (batchTipContor === 'MTH' && !isVehMth && !isDual) return false;
+                          if (batchTipContor === 'KM' && isVehMth) return false;
+                          return !searchContorModal || v.numarIntern.toLowerCase().includes(searchContorModal.toLowerCase()) || v.numarInmatriculare.toLowerCase().includes(searchContorModal.toLowerCase());
+                        })
                         .map((v) => {
-                          const val = contoareEditMap[v.id] !== undefined ? contoareEditMap[v.id] : v.valoareContorCurent;
-                          const hasChanged = val > v.valoareContorCurent;
+                          const isMthMode = batchTipContor === 'MTH';
+                          const isVehMth = (v.tipMasurare || '').toUpperCase().includes('MTH');
+                          const currVal = isMthMode
+                            ? (isVehMth ? Number(v.valoareContorCurent || 0) : Number(v.oreFunctionareCurent || 0))
+                            : Number(v.valoareContorCurent || 0);
+                          const val = isMthMode
+                            ? (contoareMthEditMap[v.id] !== undefined ? contoareMthEditMap[v.id] : currVal)
+                            : (contoareEditMap[v.id] !== undefined ? contoareEditMap[v.id] : currVal);
+                          const hasChanged = val > currVal;
+                          const unitLbl = isMthMode ? 'mTH' : 'KM';
                           return (
                             <tr key={v.id} className={`hover:bg-morning-50 transition ${hasChanged ? 'bg-amber-50/60' : ''}`}>
-                              <td className="p-2.5 font-extrabold text-sapphire-900">{v.numarIntern}</td>
+                              <td className="p-2.5 font-extrabold text-sapphire-900">
+                                {v.numarIntern}
+                                <span className="block text-[10px] font-medium text-sage-500">{v.categorieEnum}</span>
+                              </td>
                               <td className="p-2.5 text-slate-700 font-medium">
                                 {v.numarInmatriculare} <span className="text-sage-500 text-[10px]">({v.marca})</span>
                               </td>
                               <td className="p-2.5 font-mono font-bold text-slate-600">
-                                {v.valoareContorCurent} {v.tipMasurare}
+                                {currVal.toLocaleString('ro-RO')} {unitLbl}
+                                {isMthMode && !isVehMth && (
+                                  <span className="block text-[10px] text-blue-600 font-normal">
+                                    KM pompă: {Number(v.valoareContorCurent || 0).toLocaleString('ro-RO')} KM
+                                  </span>
+                                )}
                               </td>
                               <td className="p-2.5">
                                 <div className="flex items-center space-x-2">
                                   <input
                                     type="number"
-                                    min={v.valoareContorCurent}
+                                    min={currVal}
+                                    step={isMthMode ? '0.5' : '1'}
                                     value={val}
                                     onChange={(e) => {
                                       const num = Number(e.target.value);
-                                      setContoareEditMap(prev => ({ ...prev, [v.id]: num }));
+                                      if (isMthMode) {
+                                        setContoareMthEditMap((prev) => ({ ...prev, [v.id]: num }));
+                                      } else {
+                                        setContoareEditMap((prev) => ({ ...prev, [v.id]: num }));
+                                      }
                                     }}
                                     className={`w-36 border rounded-lg p-1.5 font-mono font-extrabold text-xs text-sapphire-900 ${
                                       hasChanged ? 'bg-amber-100 border-amber-400' : 'bg-white border-morning-300'
                                     }`}
                                   />
-                                  <span className="font-mono text-sage-600 text-[10px] font-bold">{v.tipMasurare}</span>
+                                  <span className="font-mono text-sage-600 text-[10px] font-bold">{unitLbl}</span>
                                 </div>
                               </td>
                               <td className="p-2.5 text-right">
@@ -2388,14 +2477,18 @@ export default function FisaTehnicaPage() {
                     className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
                   >
                     <option value="CAP_TRACTOR">Cap Tractor</option>
-                    <option value="REMORCA">Remorcă / Semiremorcă</option>
-                    <option value="BASCULANTA">Basculantă</option>
-                    <option value="EXCAVATOR">Excavator</option>
-                    <option value="INCARCATOR_FRONTAL">Încărcător Frontal</option>
+                    <option value="SEMIREMORCA">Semiremorcă</option>
+                    <option value="CAMION_8X4">Camion 8x4</option>
+                    <option value="VOLE_KOMATSU">Vole Komatsu</option>
+                    <option value="VOLE_LIEBHERR">Vole Liebherr</option>
+                    <option value="EXC_KOMATSU">Excavator Komatsu</option>
+                    <option value="EXC_LIEBHERR">Excavator Liebherr</option>
                     <option value="BULLDOZER">Bulldozer</option>
-                    <option value="AUTOVALT">Autovalt / Compactor</option>
-                    <option value="UTILAJ_SPECIAL">Utilaj Special</option>
+                    <option value="BOBCAT">Bobcat</option>
+                    <option value="CONCASOR">Concasor</option>
+                    <option value="AUTOTURISM">Autoturism</option>
                     <option value="AUTOUTILITARA">Autoutilitară</option>
+                    <option value="NEDEFINIT">Nedefinit</option>
                   </select>
                 </div>
 
@@ -2543,14 +2636,18 @@ export default function FisaTehnicaPage() {
                     className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
                   >
                     <option value="CAP_TRACTOR">Cap Tractor</option>
-                    <option value="REMORCA">Remorcă / Semiremorcă</option>
-                    <option value="BASCULANTA">Basculantă</option>
-                    <option value="EXCAVATOR">Excavator</option>
-                    <option value="INCARCATOR_FRONTAL">Încărcător Frontal</option>
+                    <option value="SEMIREMORCA">Semiremorcă</option>
+                    <option value="CAMION_8X4">Camion 8x4</option>
+                    <option value="VOLE_KOMATSU">Vole Komatsu</option>
+                    <option value="VOLE_LIEBHERR">Vole Liebherr</option>
+                    <option value="EXC_KOMATSU">Excavator Komatsu</option>
+                    <option value="EXC_LIEBHERR">Excavator Liebherr</option>
                     <option value="BULLDOZER">Bulldozer</option>
-                    <option value="AUTOVALT">Autovalt / Compactor</option>
-                    <option value="UTILAJ_SPECIAL">Utilaj Special</option>
+                    <option value="BOBCAT">Bobcat</option>
+                    <option value="CONCASOR">Concasor</option>
+                    <option value="AUTOTURISM">Autoturism</option>
                     <option value="AUTOUTILITARA">Autoutilitară</option>
+                    <option value="NEDEFINIT">Nedefinit</option>
                   </select>
                 </div>
 

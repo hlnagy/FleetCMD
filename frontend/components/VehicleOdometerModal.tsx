@@ -14,8 +14,11 @@ interface VehicleOdometerModalProps {
   vehiculInfo?: {
     numarIntern: string;
     numarInmatriculare?: string;
+    categorieEnum?: string;
     tipMasurare?: string;
     valoareContorCurent?: number;
+    areContorDualMth?: boolean;
+    oreFunctionareCurent?: number;
   };
   isOpen: boolean;
   onClose: () => void;
@@ -35,6 +38,9 @@ export default function VehicleOdometerModal({
   const [sursaFilter, setSursaFilter] = useState('');
 
   // Stare formular adăugare manuală nouă
+  const isDualMth = Boolean(vehiculInfo?.areContorDualMth) || vehiculInfo?.categorieEnum === 'CAP_TRACTOR';
+  const [newTipContor, setNewTipContor] = useState<'KM' | 'MTH'>('MTH');
+  const [filterTipContor, setFilterTipContor] = useState<'TOATE' | 'KM' | 'MTH'>('TOATE');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newValoare, setNewValoare] = useState<number | ''>('');
   const [newData, setNewData] = useState(new Date().toISOString().split('T')[0]);
@@ -67,7 +73,12 @@ export default function VehicleOdometerModal({
   useEffect(() => {
     if (isOpen && vehiculId) {
       fetchIstoric();
-      if (vehiculInfo?.valoareContorCurent !== undefined) {
+      const defaultIsMth = isDualMth || (vehiculInfo?.tipMasurare || '').toUpperCase().includes('MTH');
+      setNewTipContor(defaultIsMth ? 'MTH' : 'KM');
+      setFilterTipContor('TOATE');
+      if (isDualMth) {
+        setNewValoare(Number(vehiculInfo?.oreFunctionareCurent || 0));
+      } else if (vehiculInfo?.valoareContorCurent !== undefined) {
         setNewValoare(vehiculInfo.valoareContorCurent + 100);
       }
     }
@@ -76,6 +87,7 @@ export default function VehicleOdometerModal({
   if (!isOpen) return null;
 
   const tipM = vehiculInfo?.tipMasurare || 'KM';
+  const activeInputUnit = isDualMth ? (newTipContor === 'MTH' ? 'mTH' : 'KM') : tipM;
 
   const handleAddManual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,9 +101,10 @@ export default function VehicleOdometerModal({
         body: JSON.stringify({
           vehiculId,
           valoareContor: Number(newValoare),
+          tipContor: isDualMth ? newTipContor : ((tipM || '').toUpperCase().includes('MTH') ? 'MTH' : 'KM'),
           dataInregistrare: newData,
           operator: newOperator,
-          observatii: newObservatii || 'Înregistrare manuală din registru',
+          observatii: newObservatii || `Înregistrare manuală din registru (${activeInputUnit})`,
         }),
       });
 
@@ -193,6 +206,9 @@ export default function VehicleOdometerModal({
 
   const istoricFiltrat = istoric.filter((item) => {
     const matchSursa = sursaFilter ? item.sursa?.toUpperCase().includes(sursaFilter.toUpperCase()) : true;
+    const itemTip = String(item.tipContor || ((tipM || '').toUpperCase().includes('MTH') ? 'MTH' : 'KM')).toUpperCase();
+    const matchTip = filterTipContor === 'TOATE' || itemTip === filterTipContor;
+    if (!matchTip) return false;
     if (!searchQuery) return matchSursa;
 
     const q = searchQuery.toLowerCase();
@@ -214,11 +230,14 @@ export default function VehicleOdometerModal({
             </div>
             <div>
               <h2 className="text-lg font-black tracking-tight flex items-center space-x-2">
-                <span>Registru Istoric Contoare ({tipM}) — {vehiculInfo?.numarIntern || 'Vehicul'}</span>
+                <span>Registru Istoric Contoare ({isDualMth ? 'Dual KM + mTH' : tipM}) — {vehiculInfo?.numarIntern || 'Vehicul'}</span>
               </h2>
               <p className="text-xs text-sapphire-300 font-medium">
                 {vehiculInfo?.numarInmatriculare ? `Înmatriculare: ${vehiculInfo.numarInmatriculare} | ` : ''}
                 Contor curent: <span className="font-mono font-bold text-white">{vehiculInfo?.valoareContorCurent || 0} {tipM}</span>
+                {isDualMth && (
+                  <> · Ore funcționare: <span className="font-mono font-bold text-amber-300">{vehiculInfo?.oreFunctionareCurent || 0} mTH</span></>
+                )}
               </p>
             </div>
           </div>
@@ -258,6 +277,17 @@ export default function VehicleOdometerModal({
               <option value="ANVELOPE">Anvelope</option>
               <option value="CUPLARE">Cuplare Ansamblu</option>
             </select>
+            {isDualMth && (
+              <select
+                value={filterTipContor}
+                onChange={(e) => setFilterTipContor(e.target.value as any)}
+                className="bg-white border border-morning-200 rounded-xl p-1.5 font-bold text-sapphire-900 focus:outline-none cursor-pointer"
+              >
+                <option value="TOATE">Toate unitățile (KM &amp; mTH)</option>
+                <option value="MTH">Doar Ore (mTH Manual)</option>
+                <option value="KM">Doar Kilometri (KM Pompă)</option>
+              </select>
+            )}
           </div>
 
           <button
@@ -265,21 +295,47 @@ export default function VehicleOdometerModal({
             className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold shadow-md shadow-sapphire-500/20 transition whitespace-nowrap"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Înregistrează KM / mTH Nou</span>
+            <span>{isDualMth ? '+ Înregistrează mTH / KM' : '+ Înregistrează KM / mTH Nou'}</span>
           </button>
         </div>
 
         {/* FORMULAR ADĂUGARE MANUALĂ NOUĂ */}
         {showAddForm && (
           <form onSubmit={handleAddManual} className="p-4 bg-sapphire-50 border-b border-sapphire-200 space-y-3 text-xs">
-            <h3 className="font-extrabold text-sapphire-900 flex items-center space-x-2">
-              <Plus className="w-4 h-4 text-sapphire-500" />
-              <span>Înregistrare Contor Nouă (Manual)</span>
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-extrabold text-sapphire-900 flex items-center space-x-2">
+                <Plus className="w-4 h-4 text-sapphire-500" />
+                <span>Înregistrare Contor Nouă (Manual)</span>
+              </h3>
+              {isDualMth && (
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-sapphire-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewTipContor('MTH');
+                      setNewValoare(Number(vehiculInfo?.oreFunctionareCurent || 0));
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition ${newTipContor === 'MTH' ? 'bg-amber-500 text-white' : 'text-sage-700 hover:bg-morning-100'}`}
+                  >
+                    Ore (mTH)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewTipContor('KM');
+                      setNewValoare(Number(vehiculInfo?.valoareContorCurent || 0) + 100);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition ${newTipContor === 'KM' ? 'bg-blue-600 text-white' : 'text-sage-700 hover:bg-morning-100'}`}
+                  >
+                    Kilometri (KM)
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Valoare Contor ({tipM}): *</label>
+                <label className="text-sage-700 block mb-1 font-bold">Valoare Contor ({activeInputUnit}): *</label>
                 <input
                   type="number"
                   required
@@ -427,7 +483,7 @@ export default function VehicleOdometerModal({
                         {new Date(entry.dataInregistrare).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="p-3 font-mono font-black text-sapphire-900 text-sm">
-                        {entry.valoareContor} {tipM}
+                        {entry.valoareContor} {entry.tipContor === 'MTH' ? 'mTH' : (entry.tipContor || tipM)}
                       </td>
                       <td className="p-3">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap inline-block ${badge.class}`}>

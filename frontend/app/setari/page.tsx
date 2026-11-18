@@ -684,6 +684,8 @@ function SetariContent() {
           serieSasiu: editingVehicul.serieSasiu || editingVehicul.vin,
           tipMasurare: editingVehicul.tipMasurare,
           valoareContorCurent: Number(editingVehicul.valoareContorCurent),
+          areContorDualMth: Boolean(editingVehicul.areContorDualMth) || editingVehicul.categorieEnum === 'CAP_TRACTOR',
+          oreFunctionareCurent: editingVehicul.oreFunctionareCurent !== undefined ? Number(editingVehicul.oreFunctionareCurent) : undefined,
           tarifOrarManoperaAtelier: Number(editingVehicul.tarifOrarManoperaAtelier || editingVehicul.tarifOrarStandard || 0),
         }),
       });
@@ -2090,6 +2092,11 @@ function SetariContent() {
                             {v.tipMasurare || 'KM'}
                           </span>
                         </div>
+                        {(v.areContorDualMth || v.categorieEnum === 'CAP_TRACTOR') && (
+                          <div className="text-[11px] font-bold text-amber-700 dark:text-amber-300 mt-0.5">
+                            {Number(v.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH
+                          </div>
+                        )}
                       </td>
 
                       {/* TARIF ORAR */}
@@ -4627,10 +4634,18 @@ function SetariContent() {
                     ) : (
                       <>
                         <option value="CAP_TRACTOR">CAP TRACTOR</option>
-                        <option value="BASCULANTA">BASCULANTĂ</option>
-                        <option value="EXCAVATOR">EXCAVATOR</option>
-                        <option value="INCARCATOR_FRONTAL">ÎNCĂRCĂTOR FRONTAL</option>
+                        <option value="SEMIREMORCA">SEMIREMORCĂ</option>
+                        <option value="CAMION_8X4">CAMION 8X4</option>
+                        <option value="VOLE_KOMATSU">VOLE KOMATSU</option>
+                        <option value="VOLE_LIEBHERR">VOLE LIEBHERR</option>
+                        <option value="EXC_KOMATSU">EXC. KOMATSU</option>
+                        <option value="EXC_LIEBHERR">EXC. LIEBHERR</option>
+                        <option value="BULLDOZER">BULLDOZER</option>
+                        <option value="BOBCAT">BOBCAT</option>
+                        <option value="CONCASOR">CONCASOR</option>
+                        <option value="AUTOTURISM">AUTOTURISM</option>
                         <option value="AUTOUTILITARA">AUTOUTILITARĂ</option>
+                        <option value="NEDEFINIT">NEDEFINIT</option>
                       </>
                     )}
                   </select>
@@ -4745,6 +4760,25 @@ function SetariContent() {
                   <input type="number" value={editingVehicul.valoareContorCurent || 0} onChange={(e) => setEditingVehicul({ ...editingVehicul, valoareContorCurent: Number(e.target.value) })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
                 </div>
               </div>
+
+              {(editingVehicul.areContorDualMth || editingVehicul.categorieEnum === 'CAP_TRACTOR') && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="text-amber-900 block mb-1 font-bold">Ore Funcționare Curente (mTH Manual):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={editingVehicul.oreFunctionareCurent || 0}
+                      onChange={(e) => setEditingVehicul({ ...editingVehicul, oreFunctionareCurent: Number(e.target.value) })}
+                      className="w-full bg-white border border-amber-300 rounded-xl p-2 text-sapphire-900 font-mono font-bold"
+                    />
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    <strong>Contor Dual Activ:</strong> Kilometrajul se actualizează din alimentări pompă, iar uleiul motor se urmărește pe acest contor de ore (mTH).
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-3 border-t border-morning-200">
                 <button type="button" onClick={() => setEditingVehicul(null)} className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold">Anulează</button>

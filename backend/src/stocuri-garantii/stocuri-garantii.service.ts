@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { detectTipLichidFromText } from '../common/fluid.utils';
 
 /** Normalizes text for case- and diacritic-insensitive search matching. */
 function normalizeSearchText(value?: string | null): string {
@@ -235,18 +236,8 @@ export class StocuriGarantiiService {
     ];
 
     const resolveDefaultSubTip = (catName: string, subName: string): string | null => {
-      const txt = `${subName} ${catName}`.toLowerCase();
-      if (/adblue|uree/i.test(txt)) return 'ADBLUE';
-      if (/g11|albastru/i.test(txt)) return 'ANTIGEL_G11';
-      if (/g12|g13|antigel|racire/i.test(txt)) return 'ANTIGEL_G12';
-      if (/hidraulic|hlp|hvlp/i.test(txt)) return 'ULEI_HIDRAULIC';
-      if (/atf|dexron|automat/i.test(txt)) return 'ULEI_CUTIE_AUTOMATA';
-      if (/liebherr.*punte|punte.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_PUNTE';
-      if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_CUTIE';
-      if (/cutie.*manual/i.test(txt)) return 'ULEI_CUTIE_MANUALA';
-      if (/80w[- ]?90|75w[- ]?90|85w[- ]?140|utto|transmis|diferen/i.test(txt)) return 'ULEI_TRANSMISIE';
-      if (/motor|10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|10w[- ]?30/i.test(txt)) return 'ULEI_MOTOR';
-      return null;
+      if (!this.esteCategorieLichid(catName)) return null;
+      return detectTipLichidFromText(undefined, catName, subName, 'ULEI_MOTOR_15W40');
     };
 
     for (const c of categoriiInit) {
@@ -331,18 +322,7 @@ export class StocuriGarantiiService {
         if (!isFluidCat) continue;
         for (const s of c.subcategorii || []) {
           if (s.tipLichid) continue;
-          const txt = `${s.nume} ${c.nume}`.toLowerCase();
-          let autoTip: string | null = null;
-          if (/adblue|uree/i.test(txt)) autoTip = 'ADBLUE';
-          else if (/g11|albastru/i.test(txt)) autoTip = 'ANTIGEL_G11';
-          else if (/g12|g13|antigel|racire/i.test(txt)) autoTip = 'ANTIGEL_G12';
-          else if (/hidraulic|hlp|hvlp/i.test(txt)) autoTip = 'ULEI_HIDRAULIC';
-          else if (/atf|dexron|automat/i.test(txt)) autoTip = 'ULEI_CUTIE_AUTOMATA';
-          else if (/liebherr.*punte|punte.*liebherr/i.test(txt)) autoTip = 'ULEI_LIEBHERR_PUNTE';
-          else if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) autoTip = 'ULEI_LIEBHERR_CUTIE';
-          else if (/cutie.*manual/i.test(txt)) autoTip = 'ULEI_CUTIE_MANUALA';
-          else if (/80w[- ]?90|75w[- ]?90|85w[- ]?140|utto|transmis|diferen/i.test(txt)) autoTip = 'ULEI_TRANSMISIE';
-          else if (/motor|10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|10w[- ]?30/i.test(txt)) autoTip = 'ULEI_MOTOR';
+          const autoTip = detectTipLichidFromText(undefined, c.nume, s.nume, '');
           if (autoTip) {
             await this.prisma.subcategorieStoc.update({
               where: { id: s.id },

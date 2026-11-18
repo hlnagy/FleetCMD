@@ -1,5 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  getEffectiveMthCounter,
+  isDualMthVehicle,
+  isMthTipMasurare,
+} from '../common/fluid.utils';
 
 export function parseOreMth(val: any): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
@@ -25,22 +30,29 @@ export class VehiculeService {
     const count = await this.prisma.categorieVehicul.count();
     if (count === 0) {
       const implicite = [
-        { nume: 'CAP_TRACTOR', descriere: 'Cap Tractor' },
-        { nume: 'REMORCA', descriere: 'Remorcă / Semiremorcă' },
-        { nume: 'BASCULANTA', descriere: 'Basculantă 4 Axe' },
-        { nume: 'EXCAVATOR', descriere: 'Excavator / Utilitară' },
-        { nume: 'INCARCATOR_FRONTAL', descriere: 'Încărcător Frontal' },
-        { nume: 'BULLDOZER', descriere: 'Bulldozer' },
-        { nume: 'AUTOVALT', descriere: 'Autovalt / Compactor' },
-        { nume: 'UTILAJ_SPECIAL', descriere: 'Utilaj Special' },
-        { nume: 'AUTOUTILITARA', descriere: 'Autoutilitară' },
+        { nume: 'CAP_TRACTOR', descriere: 'Cap Tractor (KM + mTH manual)', tipMasurareImplicit: 'KM' },
+        { nume: 'SEMIREMORCA', descriere: 'Semiremorcă', tipMasurareImplicit: 'KM' },
+        { nume: 'CAMION_8X4', descriere: 'Camion 8x4', tipMasurareImplicit: 'MTH' },
+        { nume: 'VOLE_KOMATSU', descriere: 'Vole Komatsu', tipMasurareImplicit: 'MTH' },
+        { nume: 'VOLE_LIEBHERR', descriere: 'Vole Liebherr', tipMasurareImplicit: 'MTH' },
+        { nume: 'EXC_KOMATSU', descriere: 'Excavatoare Komatsu', tipMasurareImplicit: 'MTH' },
+        { nume: 'EXC_LIEBHERR', descriere: 'Excavatoare Liebherr', tipMasurareImplicit: 'MTH' },
+        { nume: 'BULLDOZER', descriere: 'Buldozer', tipMasurareImplicit: 'MTH' },
+        { nume: 'BOBCAT', descriere: 'Bobcat', tipMasurareImplicit: 'MTH' },
+        { nume: 'CONCASOR', descriere: 'Concasor', tipMasurareImplicit: 'MTH' },
+        { nume: 'AUTOTURISM', descriere: 'Autoturisme', tipMasurareImplicit: 'KM' },
+        { nume: 'AUTOUTILITARA', descriere: 'Autoutilitară', tipMasurareImplicit: 'KM' },
       ];
 
       for (const cat of implicite) {
         await this.prisma.categorieVehicul.upsert({
           where: { nume: cat.nume },
           update: {},
-          create: { nume: cat.nume, descriere: cat.descriere },
+          create: {
+            nume: cat.nume,
+            descriere: cat.descriere,
+            tipMasurareImplicit: cat.tipMasurareImplicit || 'KM',
+          },
         });
       }
     }
@@ -171,6 +183,9 @@ export class VehiculeService {
     dataContorInitial?: string | Date;
     tarifOrarManopera?: number;
     tarifOrarStandard?: number;
+    areContorDualMth?: boolean;
+    oreFunctionareCurent?: number;
+    oreFunctionareInitial?: number;
     configuratieManualAxe?: Array<{ numarAx: number; numarRoti: number }>;
   }) {
     if (!data.numarIntern || !data.numarIntern.trim()) {
@@ -208,19 +223,32 @@ export class VehiculeService {
       create: { nume: catName, descriere: `Categorie ${catName}` },
     });
 
+    const isDualMth =
+      data.areContorDualMth !== undefined
+        ? Boolean(data.areContorDualMth)
+        : catName === 'CAP_TRACTOR';
+
+    const oreInit = data.oreFunctionareInitial !== undefined
+      ? Number(data.oreFunctionareInitial)
+      : Number(data.oreFunctionareCurent || 0);
+
     const vehicul = await this.prisma.vehicul.create({
       data: {
         numarInmatriculare: numInmat,
         serieSasiu: data.serieSasiu || data.vin || null,
         numarIntern: data.numarIntern.trim(),
-        categorieEnum: data.categorieEnum || 'CAP_TRACTOR',
+        categorieEnum: catName,
         marca: data.marca || 'Nedefinit',
         model: data.model || 'Standard',
         anFabricatie: Number(data.anFabricatie || new Date().getFullYear()),
-        tipMasurare: data.tipMasurare || 'KM',
+        tipMasurare: isMthTipMasurare(data.tipMasurare) ? 'MTH' : (data.tipMasurare || 'KM'),
         valoareContorCurent: Number(data.valoareContorCurent || 0),
         valoareContorInitial: valInitial,
         dataInregistrareContor: dataInitial,
+        areContorDualMth: isDualMth,
+        oreFunctionareCurent: Number(data.oreFunctionareCurent || 0),
+        oreFunctionareInitial: oreInit,
+        dataInregistrareMth: data.oreFunctionareCurent ? new Date() : null,
         tarifOrarStandard: data.tarifOrarStandard || data.tarifOrarManopera ? Number(data.tarifOrarStandard || data.tarifOrarManopera) : 0,
       },
     });
@@ -417,12 +445,13 @@ export class VehiculeService {
     if (data.tipMasurare) {
       const tm = String(data.tipMasurare).toUpperCase();
       if (tm === 'ORE' || tm === 'MTH' || tm === 'M_TH' || tm === 'HOUR' || tm === 'HOURS') {
-        normalizedTipMasurare = 'mTH';
+        normalizedTipMasurare = 'MTH';
       } else {
         normalizedTipMasurare = 'KM';
       }
     }
 
+    const nextCat = data.categorieEnum ?? v.categorieEnum;
     if (data.categorieEnum && data.categorieEnum !== v.categorieEnum) {
       await this.prisma.categorieVehicul.upsert({
         where: { nume: data.categorieEnum },
@@ -431,13 +460,20 @@ export class VehiculeService {
       });
     }
 
+    const nextDualMth =
+      data.areContorDualMth !== undefined
+        ? Boolean(data.areContorDualMth)
+        : nextCat === 'CAP_TRACTOR'
+        ? true
+        : v.areContorDualMth;
+
     const updated = await this.prisma.vehicul.update({
       where: { id },
       data: {
         numarInmatriculare: data.numarInmatriculare ?? v.numarInmatriculare,
         serieSasiu: data.serieSasiu || data.vin || v.serieSasiu,
         numarIntern: data.numarIntern ?? v.numarIntern,
-        categorieEnum: data.categorieEnum ?? v.categorieEnum,
+        categorieEnum: nextCat,
         marca: data.marca ?? v.marca,
         model: data.model ?? v.model,
         anFabricatie: data.anFabricatie ? Number(data.anFabricatie) : v.anFabricatie,
@@ -445,6 +481,10 @@ export class VehiculeService {
         valoareContorCurent: data.valoareContorCurent !== undefined ? Number(data.valoareContorCurent) : v.valoareContorCurent,
         valoareContorInitial: data.valoareContorInitial !== undefined ? Number(data.valoareContorInitial) : v.valoareContorInitial,
         dataInregistrareContor: data.dataContorInitial || data.dataInregistrareContor ? new Date(data.dataContorInitial || data.dataInregistrareContor) : v.dataInregistrareContor,
+        areContorDualMth: nextDualMth,
+        oreFunctionareCurent: data.oreFunctionareCurent !== undefined ? Number(data.oreFunctionareCurent) : v.oreFunctionareCurent,
+        oreFunctionareInitial: data.oreFunctionareInitial !== undefined ? Number(data.oreFunctionareInitial) : v.oreFunctionareInitial,
+        dataInregistrareMth: data.oreFunctionareCurent !== undefined ? new Date() : v.dataInregistrareMth,
         tarifOrarStandard: data.tarifOrarStandard || data.tarifOrarManopera !== undefined ? Number(data.tarifOrarStandard || data.tarifOrarManopera) : v.tarifOrarStandard,
       },
     });
@@ -498,10 +538,11 @@ export class VehiculeService {
     };
   }
 
-  // Înregistrare Manuală Contor cu Dată & Operator
+  // Înregistrare Manuală Contor cu Dată & Operator (suportă atât KM cât și mTH pentru vehicule duale ex: CAP_TRACTOR)
   async inregistreazaContorManual(data: {
     vehiculId: string;
     valoareContor: number;
+    tipContor?: 'KM' | 'MTH';
     dataInregistrare?: string | Date;
     operator?: string;
     observatii?: string;
@@ -516,16 +557,24 @@ export class VehiculeService {
       throw new BadRequestException('Valoarea contorului este invalidă.');
     }
 
-    const isLower = valContor < v.valoareContorCurent;
+    const isVehMth = isMthTipMasurare(v.tipMasurare);
+    const tipContor: 'KM' | 'MTH' = data.tipContor
+      ? (data.tipContor.toUpperCase() === 'MTH' ? 'MTH' : 'KM')
+      : (isVehMth ? 'MTH' : 'KM');
+    const isDualSecondaryMth = tipContor === 'MTH' && !isVehMth;
+
+    const currentActiveVal = isDualSecondaryMth ? Number(v.oreFunctionareCurent || 0) : Number(v.valoareContorCurent || 0);
+    const unitLabel = tipContor === 'MTH' ? 'mTH' : 'KM';
+    const isLower = valContor < currentActiveVal;
     const sursaFinal = isLower ? 'MANUAL_CORECȚIE' : 'MANUAL';
     const noteFinal = data.observatii || (isLower
-      ? `[CORECȚIE MANUALĂ / RESET BORD] Valoare nouă mai mică (${valContor} < ${v.valoareContorCurent} ${v.tipMasurare})`
-      : `Înregistrare manuală contor (${valContor} ${v.tipMasurare})`);
+      ? `[CORECȚIE MANUALĂ / RESET BORD] Valoare nouă mai mică (${valContor} < ${currentActiveVal} ${unitLabel})`
+      : `Înregistrare manuală contor (${valContor} ${unitLabel})`);
 
-    // Record audit history entry
     const entry = await this.prisma.istoricContorVehicul.create({
       data: {
         vehiculId: data.vehiculId,
+        tipContor,
         valoareContor: valContor,
         dataInregistrare: dataInreg,
         sursa: sursaFinal,
@@ -534,26 +583,37 @@ export class VehiculeService {
       },
     });
 
-    // Update current vehicle odometer
-    if (v.categorieEnum === 'CAP_TRACTOR' && valContor > v.valoareContorCurent) {
-      await this.propagaKmCuplare(data.vehiculId, v.valoareContorCurent, valContor);
+    if (isDualSecondaryMth) {
+      await this.prisma.vehicul.update({
+        where: { id: data.vehiculId },
+        data: {
+          areContorDualMth: true,
+          oreFunctionareCurent: valContor,
+          dataInregistrareMth: dataInreg,
+        },
+      });
+    } else {
+      if (v.categorieEnum === 'CAP_TRACTOR' && valContor > v.valoareContorCurent) {
+        await this.propagaKmCuplare(data.vehiculId, v.valoareContorCurent, valContor);
+      }
+
+      await this.prisma.vehicul.update({
+        where: { id: data.vehiculId },
+        data: {
+          valoareContorCurent: valContor,
+          dataInregistrareContor: dataInreg,
+        },
+      });
     }
 
-    await this.prisma.vehicul.update({
-      where: { id: data.vehiculId },
-      data: {
-        valoareContorCurent: valContor,
-        dataInregistrareContor: dataInreg,
-      },
-    });
-
-    return { mesaj: ` Contor înregistrat cu succes pentru ${v.numarIntern}: ${valContor} ${v.tipMasurare}!`, entry };
+    return { mesaj: ` Contor înregistrat cu succes pentru ${v.numarIntern}: ${valContor} ${unitLabel}!`, entry };
   }
 
   // Înregistrare Rapidă în Lot (Batch) Contoare Flotă
   async inregistreazaContoareBatch(entries: Array<{
     vehiculId: string;
     valoareContor: number;
+    tipContor?: 'KM' | 'MTH';
     dataInregistrare?: string | Date;
     operator?: string;
     observatii?: string;
@@ -580,6 +640,36 @@ export class VehiculeService {
     });
   }
 
+  private async recalculeazaContorDupaIstoric(vehiculId: string, tipContor: string) {
+    const vehicul = await this.prisma.vehicul.findUnique({ where: { id: vehiculId } });
+    if (!vehicul) return;
+    const isVehMth = isMthTipMasurare(vehicul.tipMasurare);
+    const tipNorm = String(tipContor || 'KM').toUpperCase() === 'MTH' ? 'MTH' : 'KM';
+
+    const latest = await this.prisma.istoricContorVehicul.findFirst({
+      where: { vehiculId, tipContor: tipNorm },
+      orderBy: [{ dataInregistrare: 'desc' }, { valoareContor: 'desc' }],
+    });
+
+    if (tipNorm === 'MTH' && !isVehMth) {
+      await this.prisma.vehicul.update({
+        where: { id: vehiculId },
+        data: {
+          oreFunctionareCurent: latest ? latest.valoareContor : (vehicul.oreFunctionareInitial || 0),
+          dataInregistrareMth: latest ? latest.dataInregistrare : vehicul.dataInregistrareMth,
+        },
+      });
+    } else if (latest) {
+      await this.prisma.vehicul.update({
+        where: { id: vehiculId },
+        data: {
+          valoareContorCurent: latest.valoareContor,
+          dataInregistrareContor: latest.dataInregistrare,
+        },
+      });
+    }
+  }
+
   async updateIstoricContor(id: string, data: {
     valoareContor?: number;
     dataInregistrare?: string | Date;
@@ -599,21 +689,7 @@ export class VehiculeService {
       },
     });
 
-    // Recalculare valoare contor curent pentru vehicul
-    const latest = await this.prisma.istoricContorVehicul.findFirst({
-      where: { vehiculId: entry.vehiculId },
-      orderBy: { valoareContor: 'desc' },
-    });
-
-    if (latest) {
-      await this.prisma.vehicul.update({
-        where: { id: entry.vehiculId },
-        data: {
-          valoareContorCurent: latest.valoareContor,
-          dataInregistrareContor: latest.dataInregistrare,
-        },
-      });
-    }
+    await this.recalculeazaContorDupaIstoric(entry.vehiculId, entry.tipContor || 'KM');
 
     return { mesaj: ' Înregistrare contor actualizată cu succes!', entry: updated };
   }
@@ -623,22 +699,7 @@ export class VehiculeService {
     if (!entry) throw new NotFoundException('Înregistrarea de contor nu există.');
 
     await this.prisma.istoricContorVehicul.delete({ where: { id } });
-
-    // Recalculare valoare contor curent pentru vehicul
-    const latest = await this.prisma.istoricContorVehicul.findFirst({
-      where: { vehiculId: entry.vehiculId },
-      orderBy: { valoareContor: 'desc' },
-    });
-
-    if (latest) {
-      await this.prisma.vehicul.update({
-        where: { id: entry.vehiculId },
-        data: {
-          valoareContorCurent: latest.valoareContor,
-          dataInregistrareContor: latest.dataInregistrare,
-        },
-      });
-    }
+    await this.recalculeazaContorDupaIstoric(entry.vehiculId, entry.tipContor || 'KM');
 
     return { mesaj: ' Înregistrare contor ștearsă cu succes!' };
   }
@@ -684,16 +745,18 @@ export class VehiculeService {
       const dataInreg = item.dataInregistrare ? new Date(item.dataInregistrare) : new Date();
       const sursa = item.sursaGps || 'GPS_TELEMATICA';
 
-      const entry = await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: vehicul.id,
-          valoareContor: valContor,
-          dataInregistrare: dataInreg,
-          sursa: sursa,
-          operator: 'Sistem GPS Telematică (Import)',
-          observatii: item.observatii || `Import automat telematică GPS (${valContor} ${vehicul.tipMasurare})`,
-        },
-      });
+        const isVehMth = isMthTipMasurare(vehicul.tipMasurare);
+        const entry = await this.prisma.istoricContorVehicul.create({
+          data: {
+            vehiculId: vehicul.id,
+            tipContor: isVehMth ? 'MTH' : 'KM',
+            valoareContor: valContor,
+            dataInregistrare: dataInreg,
+            sursa: sursa,
+            operator: 'Sistem GPS Telematică (Import)',
+            observatii: item.observatii || `Import automat telematică GPS (${valContor} ${vehicul.tipMasurare})`,
+          },
+        });
 
     if (valContor >= vehicul.valoareContorCurent) {
         if (vehicul.categorieEnum === 'CAP_TRACTOR' && valContor > vehicul.valoareContorCurent) {
@@ -1508,6 +1571,7 @@ export class VehiculeService {
           await this.prisma.istoricContorVehicul.create({
             data: {
               vehiculId: v.id,
+              tipContor: 'KM',
               valoareContor: alKm,
               dataInregistrare: alDataInreg,
               sursa: 'ALIMENTARE',
@@ -1518,9 +1582,9 @@ export class VehiculeService {
         }
       }
 
-      // Căutăm înregistrarea absolut cea mai recentă din întregul istoric al vehiculului
+      // Căutăm înregistrarea absolut cea mai recentă din istoricul KM al vehiculului (izolat de eventuale ore mTH manuale)
       const latestOverall = await this.prisma.istoricContorVehicul.findFirst({
-        where: { vehiculId: v.id },
+        where: { vehiculId: v.id, tipContor: 'KM' },
         orderBy: [
           { dataInregistrare: 'desc' },
           { valoareContor: 'desc' },
@@ -1586,8 +1650,12 @@ export class VehiculeService {
     if (!allVehicles) {
       whereClause.OR = [
         { tipMasurare: { contains: 'MTH', mode: 'insensitive' } },
-        { tipMasurare: { contains: 'mTH' } },
-        { categorieEnum: { in: ['EXCAVATOR', 'BASCULA_8X4', 'INCARCATOR', 'BULLDOZER', 'COMPACTOR', 'UTILAJ', 'UTILAJ_GREU', 'INCARCATOR_FRONTAL', 'AUTOVALT', 'UTILAJ_SPECIAL'] } }
+        { areContorDualMth: true },
+        { categorieEnum: { in: [
+          'CAP_TRACTOR', 'CAMION_8X4', 'VOLE_KOMATSU', 'VOLE_LIEBHERR',
+          'EXC_KOMATSU', 'EXC_LIEBHERR', 'BULLDOZER', 'BOBCAT', 'CONCASOR',
+          'STATIE_MARE', 'NEDEFINIT', 'AUTOVALT', 'UTILAJ', 'UTILAJ_GREU', 'UTILAJ_SPECIAL',
+        ] } },
       ];
     }
 
@@ -1610,6 +1678,7 @@ export class VehiculeService {
 
     return vehicule.map((v) => {
       const ultimaPerioada = v.perioadeMth[0] || null;
+      const dualMth = isDualMthVehicle(v);
       return {
         id: v.id,
         numarIntern: v.numarIntern,
@@ -1619,9 +1688,13 @@ export class VehiculeService {
         anFabricatie: v.anFabricatie,
         categorieEnum: v.categorieEnum,
         tipMasurare: v.tipMasurare,
-        valoareContorCurent: v.valoareContorCurent,
-        valoareContorInitial: v.valoareContorInitial,
-        dataInregistrareContor: v.dataInregistrareContor,
+        areContorDualMth: dualMth,
+        valoareContorCurent: dualMth ? Number(v.oreFunctionareCurent || 0) : Number(v.valoareContorCurent || 0),
+        valoareContorInitial: dualMth ? Number(v.oreFunctionareInitial || 0) : Number(v.valoareContorInitial || 0),
+        valoareKmCurent: !isMthTipMasurare(v.tipMasurare) ? Number(v.valoareContorCurent || 0) : null,
+        oreFunctionareCurent: Number(v.oreFunctionareCurent || 0),
+        oreFunctionareInitial: Number(v.oreFunctionareInitial || 0),
+        dataInregistrareContor: dualMth ? (v.dataInregistrareMth || v.dataInregistrareContor) : v.dataInregistrareContor,
         stare: v.stare,
         numarPerioade: v._count.perioadeMth,
         ultimaPerioada: ultimaPerioada
@@ -1655,6 +1728,7 @@ export class VehiculeService {
     });
 
     const totalOre = perioade.reduce((acc, p) => acc + p.oreFunctionare, 0);
+    const dualMth = isDualMthVehicle(vehicul);
 
     return {
       vehicul: {
@@ -1665,9 +1739,11 @@ export class VehiculeService {
         model: vehicul.model,
         categorieEnum: vehicul.categorieEnum,
         tipMasurare: vehicul.tipMasurare,
-        valoareContorCurent: vehicul.valoareContorCurent,
-        valoareContorInitial: vehicul.valoareContorInitial,
-        dataInregistrareContor: vehicul.dataInregistrareContor,
+        areContorDualMth: dualMth,
+        valoareContorCurent: dualMth ? Number(vehicul.oreFunctionareCurent || 0) : Number(vehicul.valoareContorCurent || 0),
+        valoareContorInitial: dualMth ? Number(vehicul.oreFunctionareInitial || 0) : Number(vehicul.valoareContorInitial || 0),
+        valoareKmCurent: !isMthTipMasurare(vehicul.tipMasurare) ? Number(vehicul.valoareContorCurent || 0) : null,
+        dataInregistrareContor: dualMth ? (vehicul.dataInregistrareMth || vehicul.dataInregistrareContor) : vehicul.dataInregistrareContor,
       },
       statistici: {
         numarPerioade: perioade.length,
@@ -1786,10 +1862,14 @@ export class VehiculeService {
       }
     }
 
-    // Calcul index contor estimat
+    // Calcul index contor estimat (pe mTH efectiv — pentru vehicule duale folosește oreFunctionare)
+    const dualMth = isDualMthVehicle(vehicul);
+    const activeMthBase = dualMth
+      ? (vehicul.oreFunctionareInitial || vehicul.oreFunctionareCurent || 0)
+      : (vehicul.valoareContorInitial || vehicul.valoareContorCurent || 0);
     const startContorEstimat = prevPeriod
       ? prevPeriod.indexContorEnd
-      : (vehicul.valoareContorInitial || vehicul.valoareContorCurent || 0);
+      : activeMthBase;
     const endContorEstimat = Number((startContorEstimat + ore).toFixed(2));
 
     // 3. Verificare CONTINUITATE sau GOL (Gap)
@@ -1948,7 +2028,7 @@ export class VehiculeService {
     });
 
     return {
-      mesaj: `Perioada de funcționare a fost salvată cu succes! Contor utilaj: ${vehicul?.valoareContorCurent} mTH.`,
+      mesaj: `Perioada de funcționare a fost salvată cu succes! Contor utilaj: ${vehicul ? getEffectiveMthCounter(vehicul) : 0} mTH.`,
       perioada: perioadaActualizata,
       vehicul,
     };
@@ -1976,23 +2056,31 @@ export class VehiculeService {
     }
 
     const dInit = data.dataInitiala ? new Date(data.dataInitiala) : new Date();
+    const dualMth = isDualMthVehicle(vehicul);
 
     const countPerioade = await this.prisma.perioadaFunctionareMth.count({
       where: { vehiculId: data.vehiculId },
     });
 
-    // Actualizăm baza inițială pe vehicul
+    // Actualizăm baza inițială pe vehicul (separat pentru dual-mTH ca să nu suprascriem KM)
     await this.prisma.vehicul.update({
       where: { id: data.vehiculId },
-      data: {
-        valoareContorInitial: valBaza,
-        ...(countPerioade === 0
-          ? { valoareContorCurent: valBaza, dataInregistrareContor: dInit }
-          : {}),
-      },
+      data: dualMth
+        ? {
+            areContorDualMth: true,
+            oreFunctionareInitial: valBaza,
+            ...(countPerioade === 0
+              ? { oreFunctionareCurent: valBaza, dataInregistrareMth: dInit }
+              : {}),
+          }
+        : {
+            valoareContorInitial: valBaza,
+            ...(countPerioade === 0
+              ? { valoareContorCurent: valBaza, dataInregistrareContor: dInit }
+              : {}),
+          },
     });
 
-    // Curățăm vechea intrare de BAZA_INITIALA din istoric contor și adăugăm noua bază
     await this.prisma.istoricContorVehicul.deleteMany({
       where: {
         vehiculId: data.vehiculId,
@@ -2003,6 +2091,7 @@ export class VehiculeService {
     await this.prisma.istoricContorVehicul.create({
       data: {
         vehiculId: data.vehiculId,
+        tipContor: 'MTH',
         valoareContor: valBaza,
         dataInregistrare: dInit,
         sursa: 'BAZA_INITIALA',
@@ -2010,7 +2099,6 @@ export class VehiculeService {
       },
     });
 
-    // Recalculăm toate perioadele GPS dacă există
     if (countPerioade > 0) {
       await this.recalculeazaCronologieMth(data.vehiculId, valBaza);
     }
@@ -2026,13 +2114,15 @@ export class VehiculeService {
   }
 
   /**
-   * Recalculează în lanț cronologic toate perioadele unui vehicul și actualizează contorul curent
+   * Recalculează în lanț cronologic toate perioadele unui vehicul și actualizează contorul curent mTH
    */
   async recalculeazaCronologieMth(vehiculId: string, customInitialBase?: number) {
     const vehicul = await this.prisma.vehicul.findUnique({
       where: { id: vehiculId },
     });
     if (!vehicul) return;
+
+    const dualMth = isDualMthVehicle(vehicul);
 
     const perioade = await this.prisma.perioadaFunctionareMth.findMany({
       where: { vehiculId },
@@ -2046,15 +2136,18 @@ export class VehiculeService {
       return;
     }
 
-    // Baza inițială a contorului
     let contorRulant = customInitialBase !== undefined && customInitialBase !== null
       ? Number(customInitialBase)
+      : dualMth
+      ? (vehicul.oreFunctionareInitial || 0)
       : (vehicul.valoareContorInitial || 0);
 
     if (customInitialBase !== undefined && customInitialBase !== null) {
       await this.prisma.vehicul.update({
         where: { id: vehiculId },
-        data: { valoareContorInitial: contorRulant },
+        data: dualMth
+          ? { areContorDualMth: true, oreFunctionareInitial: contorRulant }
+          : { valoareContorInitial: contorRulant },
       });
     }
 
@@ -2119,16 +2212,23 @@ export class VehiculeService {
 
     await this.prisma.vehicul.update({
       where: { id: vehiculId },
-      data: {
-        valoareContorCurent: valoareFinala,
-        dataInregistrareContor: ultimaPerioada.dataEnd,
-      },
+      data: dualMth
+        ? {
+            areContorDualMth: true,
+            oreFunctionareCurent: valoareFinala,
+            dataInregistrareMth: ultimaPerioada.dataEnd,
+          }
+        : {
+            valoareContorCurent: valoareFinala,
+            dataInregistrareContor: ultimaPerioada.dataEnd,
+          },
     });
 
     // Înregistrăm intrarea în IstoricContorVehicul pentru ultima perioadă
     await this.prisma.istoricContorVehicul.create({
       data: {
         vehiculId,
+        tipContor: 'MTH',
         valoareContor: valoareFinala,
         dataInregistrare: ultimaPerioada.dataEnd,
         sursa: 'GPS',
@@ -2153,21 +2253,20 @@ export class VehiculeService {
       where: { id },
     });
 
-    // Recalculăm lanțul
     await this.recalculeazaCronologieMth(vehiculId);
 
-    // Dacă nu mai există perioade, resetăm la contor inițial
     const remaining = await this.prisma.perioadaFunctionareMth.count({
       where: { vehiculId },
     });
     if (remaining === 0) {
       const v = await this.prisma.vehicul.findUnique({ where: { id: vehiculId } });
       if (v) {
+        const dualMth = isDualMthVehicle(v);
         await this.prisma.vehicul.update({
           where: { id: vehiculId },
-          data: {
-            valoareContorCurent: v.valoareContorInitial,
-          },
+          data: dualMth
+            ? { oreFunctionareCurent: v.oreFunctionareInitial || 0 }
+            : { valoareContorCurent: v.valoareContorInitial },
         });
       }
     }

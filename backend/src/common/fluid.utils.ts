@@ -15,118 +15,277 @@ export interface DefaultTipFluidSeed {
 
 export const DEFAULT_TIPURI_FLUIDE: DefaultTipFluidSeed[] = [
   {
-    cod: 'ULEI_MOTOR',
-    nume: 'Ulei Motor',
-    descriere: 'Lubrifiere motor termic, protecție împotriva uzurii și depunerilor la temperaturi înalte.',
+    cod: 'ULEI_MOTOR_15W40',
+    nume: 'ULEI MOTOR 15W40',
+    descriere: 'Ulei motor heavy-duty 15W-40 pentru camioane, vole, excavatoare, buldozer și bobcat.',
     accentColor: 'amber',
-    recomandat: 'Esențial pentru toate utilajele și autovehiculele',
-    presetKm: [10000, 15000, 20000, 30000, 40000],
-    presetMth: [150, 250, 500],
+    recomandat: 'Cap Tractor, Camion 8x4, Vole, Excavatoare, Buldozer, Bobcat',
+    presetKm: [15000, 30000],
+    presetMth: [500, 1000, 1250],
     ordine: 1,
   },
   {
     cod: 'ULEI_HIDRAULIC',
-    nume: 'Ulei Hidraulic',
-    descriere: 'Transmisie putere hidraulică, operare braț, cilindri și pompe de presiune.',
+    nume: 'ULEI HIDRAULIC',
+    descriere: 'Ulei hidraulic HLP / HVLP pentru utilaje de șantier, camioane 8x4 și semiremorci.',
     accentColor: 'blue',
-    recomandat: 'Critic pentru Excavatoare, Încărcătoare, Basculante',
-    presetKm: [30000, 60000, 100000],
-    presetMth: [500, 1000, 1500, 2000],
+    recomandat: 'Semiremorci, Camion 8x4, Vole, Excavatoare, Buldozer, Bobcat',
+    presetKm: [50000],
+    presetMth: [4000, 5000],
     ordine: 2,
   },
   {
-    cod: 'ULEI_TRANSMISIE',
-    nume: 'Ulei Transmisie & Diferențial',
-    descriere: 'Protecție cutie viteze mecanică/automată, grupuri conice și diferențiale axe.',
+    cod: 'ULEI_CUTIE_DIF_80W90_GL5',
+    nume: 'ULEI CUTIE / DIFERENTIAL 80W90 GL5',
+    descriere: 'Ulei transmisie SAE 80W-90 API GL-5 pentru cutii de viteză și diferențiale grele.',
     accentColor: 'indigo',
-    recomandat: 'Capete Tractor, Camioane 8x4, Basculante, Autoutilitare',
-    presetKm: [30000, 60000, 90000, 120000],
-    presetMth: [500, 1000, 1500],
+    recomandat: 'Cap Tractor, Camion 8x4',
+    presetKm: [60000, 100000],
+    presetMth: [2000],
     ordine: 3,
   },
   {
-    cod: 'ANTIGEL_G12',
-    nume: 'Antigel G12+ (Lichid Răcire Roz)',
-    descriere: 'Răcire motor, protecție anti-îngheț și anticoroziune aluminiu/aliaj.',
-    accentColor: 'rose',
-    recomandat: 'Flotă modernă (Euro 5, Euro 6, Stage IV / V)',
-    presetKm: [40000, 60000, 100000],
-    presetMth: [1000, 2000],
+    cod: 'ULEI_CUTIE_VITEZA',
+    nume: 'ULEI CUTIE DE VITEZA',
+    descriere: 'Ulei cutie de viteze pentru capete tractor.',
+    accentColor: 'indigo',
+    recomandat: 'Cap Tractor',
+    presetKm: [80000, 120000],
+    presetMth: [2000],
     ordine: 4,
   },
   {
-    cod: 'ADBLUE',
-    nume: 'AdBlue (Soluție Uree 32.5%)',
-    descriere: 'Tratare gaze eșapament SCR, reducere emisii NOx conform normelor antipoluare.',
-    accentColor: 'emerald',
-    recomandat: 'Vehicule echipate cu catalizator SCR (Euro 6 / Stage V)',
-    presetKm: [10000, 15000, 25000],
-    presetMth: [250, 500],
+    cod: 'ULEI_DIFERENTIAL',
+    nume: 'ULEI DIFERENTIAL',
+    descriere: 'Ulei diferențial punți grele pentru camioane 8x4.',
+    accentColor: 'indigo',
+    recomandat: 'Camion 8x4',
+    presetKm: [60000, 100000],
+    presetMth: [2000],
     ordine: 5,
   },
   {
+    cod: 'ULEI_AXE_10W_KOM',
+    nume: 'ULEI AXE 10W KOM',
+    descriere: 'Ulei axe și reductoare finale SAE 10W pentru vole Komatsu.',
+    accentColor: 'amber',
+    recomandat: 'Vole Komatsu',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 6,
+  },
+  {
+    cod: 'ULEI_CUTIE_KOM',
+    nume: 'ULEI CUTIE KOM',
+    descriere: 'Ulei transmisie powershift / cutie viteze Komatsu, Buldozer și Bobcat.',
+    accentColor: 'amber',
+    recomandat: 'Vole Komatsu, Buldozer, Bobcat',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 7,
+  },
+  {
+    cod: 'ULEI_AXE_LIEB',
+    nume: 'ULEI AXE LIEB',
+    descriere: 'Ulei punți și reductoare roți pentru vole Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Vole Liebherr',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 8,
+  },
+  {
+    cod: 'ULEI_CUTIE_LIEB',
+    nume: 'ULEI CUTIE LIEB',
+    descriere: 'Ulei cutie / transmisie hidrostatică pentru vole Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Vole Liebherr',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 9,
+  },
+  {
+    cod: 'ULEI_ROTIRE_KOM',
+    nume: 'ULEI ROTIRE KOM',
+    descriere: 'Ulei reductor mecanism rotire pentru excavatoare Komatsu.',
+    accentColor: 'amber',
+    recomandat: 'Excavatoare Komatsu',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 10,
+  },
+  {
+    cod: 'ULEI_GRUPURI_KOM',
+    nume: 'ULEI GRUPURI KOM',
+    descriere: 'Ulei grupuri și reductoare finale Komatsu, Buldozer și Bobcat.',
+    accentColor: 'amber',
+    recomandat: 'Excavatoare Komatsu, Buldozer, Bobcat',
+    presetKm: [50000],
+    presetMth: [3000],
+    ordine: 11,
+  },
+  {
+    cod: 'ULEI_ROTIRE_LIEB',
+    nume: 'ULEI ROTIRE LIEB',
+    descriere: 'Ulei reductor mecanism rotire pentru excavatoare Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Excavatoare Liebherr',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 12,
+  },
+  {
+    cod: 'ULEI_GRUPURI_LIEB',
+    nume: 'ULEI GRUPURI LIEB',
+    descriere: 'Ulei grupuri și reductoare finale pentru excavatoare Liebherr.',
+    accentColor: 'purple',
+    recomandat: 'Excavatoare Liebherr',
+    presetKm: [50000],
+    presetMth: [3000],
+    ordine: 13,
+  },
+  {
+    cod: 'ULEI_HIDRAULIC_CONCASOR',
+    nume: 'ULEI HIDRAULIC CONCASOR',
+    descriere: 'Ulei sistem hidraulic specific concasor.',
+    accentColor: 'blue',
+    recomandat: 'Concasor',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 14,
+  },
+  {
+    cod: 'ULEI_DE_UNGERE_CONCASOR',
+    nume: 'ULEI DE UNGERE CONCASOR',
+    descriere: 'Ulei circulație și ungere con/lagăre concasor (ex: Mobil Gear 600 XP 150).',
+    accentColor: 'slate',
+    recomandat: 'Concasor',
+    presetKm: [50000],
+    presetMth: [2000],
+    ordine: 15,
+  },
+  {
+    cod: 'ULEI_MOTOR_TURISME',
+    nume: 'ULEI MOTOR TURISME',
+    descriere: 'Ulei motor sintetic autoturisme (5W-30 / 5W-40 / 0W-30).',
+    accentColor: 'emerald',
+    recomandat: 'Autoturisme',
+    presetKm: [15000],
+    presetMth: [500],
+    ordine: 16,
+  },
+  {
+    cod: 'ANTIGEL_G12',
+    nume: 'Antigel G12+ (Roz)',
+    descriere: 'Lichid răcire motor, protecție anti-îngheț și anticoroziune aluminiu/aliaj.',
+    accentColor: 'rose',
+    recomandat: 'Flotă modernă',
+    presetKm: [40000, 60000],
+    presetMth: [1000, 2000],
+    ordine: 17,
+  },
+  {
     cod: 'ANTIGEL_G11',
-    nume: 'Antigel G11 (Lichid Răcire Albastru)',
-    descriere: 'Răcire motor pe bază de silicați pentru utilaje din generații clasice.',
+    nume: 'Antigel G11 (Albastru)',
+    descriere: 'Lichid răcire motor pe bază de silicați.',
     accentColor: 'cyan',
     recomandat: 'Generații clasice de utilaje',
     presetKm: [30000, 50000],
     presetMth: [1000],
-    ordine: 6,
+    ordine: 18,
   },
   {
-    cod: 'ULEI_LIEBHERR_PUNTE',
-    nume: 'Ulei Punte Liebherr',
-    descriere: 'Ulei specific de înaltă presiune pentru punți și reductoare de roată Liebherr.',
-    accentColor: 'purple',
-    recomandat: 'Utilaje grele Liebherr (Excavatoare, Vole)',
-    presetKm: [30000, 50000],
-    presetMth: [500, 1000],
-    ordine: 7,
-  },
-  {
-    cod: 'ULEI_LIEBHERR_CUTIE',
-    nume: 'Ulei Cutie Liebherr',
-    descriere: 'Ulei transmisie hidrostatică sau powershift pentru utilaje terasiere Liebherr.',
-    accentColor: 'purple',
-    recomandat: 'Transmisii utilaje Liebherr',
-    presetKm: [30000, 50000],
-    presetMth: [500, 1000],
-    ordine: 8,
-  },
-  {
-    cod: 'ULEI_CUTIE_MANUALA',
-    nume: 'Ulei Cutie Manuală',
-    descriere: 'Transmisii manuale sinteză 75W-80 sau 80W-90.',
-    accentColor: 'slate',
-    recomandat: 'Camioane și autoutilitare cu cutie manuală',
-    presetKm: [40000, 80000],
-    presetMth: [500, 1000],
-    ordine: 9,
-  },
-  {
-    cod: 'ULEI_CUTIE_AUTOMATA',
-    nume: 'Ulei Cutie Automată (ATF)',
-    descriere: 'Fluide de transmisie automată ATF Dexron / ZF Ecolife / TraXon.',
-    accentColor: 'violet',
-    recomandat: 'Capete tractor automate și autoturisme',
-    presetKm: [60000, 120000],
-    presetMth: [1000, 1500],
-    ordine: 10,
+    cod: 'ADBLUE',
+    nume: 'AdBlue',
+    descriere: 'Soluție uree 32.5% pentru tratare gaze eșapament SCR.',
+    accentColor: 'emerald',
+    recomandat: 'Vehicule echipate SCR',
+    presetKm: [10000, 15000],
+    presetMth: [250, 500],
+    ordine: 19,
   },
 ];
 
-export const TIP_LICHID_LABELS: Record<string, string> = DEFAULT_TIPURI_FLUIDE.reduce(
-  (acc, item) => {
-    acc[item.cod] = item.nume;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
+export const TIP_LICHID_LABELS: Record<string, string> = {
+  ...DEFAULT_TIPURI_FLUIDE.reduce(
+    (acc, item) => {
+      acc[item.cod] = item.nume;
+      return acc;
+    },
+    {} as Record<string, string>,
+  ),
+  ULEI_MOTOR: 'Ulei Motor',
+  ULEI_TRANSMISIE: 'Ulei Transmisie & Diferențial',
+  ULEI_LIEBHERR_PUNTE: 'Ulei Punte Liebherr',
+  ULEI_LIEBHERR_CUTIE: 'Ulei Cutie Liebherr',
+  ULEI_CUTIE_MANUALA: 'Ulei Cutie Manuală',
+  ULEI_CUTIE_AUTOMATA: 'Ulei Cutie Automată (ATF)',
+};
 
 export function isMthTipMasurare(tipMasurare?: string | null): boolean {
   const tm = String(tipMasurare || '').trim().toUpperCase();
   return tm === 'MTH' || tm === 'ORE' || tm === 'M_TH';
+}
+
+export function isDualMthVehicle(vehicul?: any): boolean {
+  if (!vehicul) return false;
+  if (isMthTipMasurare(vehicul.tipMasurare)) return false;
+  return Boolean(vehicul.areContorDualMth) || String(vehicul.categorieEnum || '').toUpperCase() === 'CAP_TRACTOR';
+}
+
+export function getEffectiveMthCounter(vehicul?: any): number {
+  if (!vehicul) return 0;
+  if (isMthTipMasurare(vehicul.tipMasurare)) {
+    return Number(vehicul.valoareContorCurent || 0);
+  }
+  return Number(vehicul.oreFunctionareCurent || 0);
+}
+
+/**
+ * Rezolvă unitatea de măsură și contorul efectiv pentru o normă de fluid,
+ * suportând inclusiv vehicule duale (KM la alimentare + mTH manual pentru ulei motor, ex: CAP_TRACTOR).
+ */
+export function resolveFluidRuleCounterConfig(vehicul: any, cfg: any): {
+  trackingMode: 'MTH' | 'KM' | 'LUNI';
+  unitateMasura: 'mTH' | 'KM';
+  currentContor: number;
+  intervalPrincipal: number | null;
+  pragPrincipal: number;
+} {
+  const vehicleIsMth = isMthTipMasurare(vehicul?.tipMasurare);
+  const dualMth = isDualMthVehicle(vehicul);
+  const hasMthRule = Boolean(cfg?.intervalMth && Number(cfg.intervalMth) > 0);
+  const hasKmRule = Boolean(cfg?.intervalKm && Number(cfg.intervalKm) > 0);
+
+  if (hasMthRule && (vehicleIsMth || dualMth || !hasKmRule)) {
+    return {
+      trackingMode: 'MTH',
+      unitateMasura: 'mTH',
+      currentContor: vehicleIsMth
+        ? Number(vehicul?.valoareContorCurent || 0)
+        : Number(vehicul?.oreFunctionareCurent || 0),
+      intervalPrincipal: Number(cfg.intervalMth),
+      pragPrincipal: Number(cfg.pragAvertizareMth || 50),
+    };
+  }
+
+  if (hasKmRule && (!vehicleIsMth || !hasMthRule)) {
+    return {
+      trackingMode: 'KM',
+      unitateMasura: 'KM',
+      currentContor: Number(vehicul?.valoareContorCurent || 0),
+      intervalPrincipal: Number(cfg.intervalKm),
+      pragPrincipal: Number(cfg.pragAvertizareKm || 1000),
+    };
+  }
+
+  return {
+    trackingMode: 'LUNI',
+    unitateMasura: vehicleIsMth ? 'mTH' : 'KM',
+    currentContor: Number(vehicul?.valoareContorCurent || 0),
+    intervalPrincipal: null,
+    pragPrincipal: 0,
+  };
 }
 
 const NON_FLUID_PATTERN =
@@ -174,7 +333,7 @@ export function detectTipLichidFromText(
   descriere?: string | null,
   categorie?: string | null,
   subcategorie?: string | null,
-  fallback = 'ULEI_MOTOR',
+  fallback = 'ULEI_MOTOR_15W40',
   explicitTipLichid?: string | null,
 ): string {
   const explicit = String(explicitTipLichid || '').trim();
@@ -187,16 +346,23 @@ export function detectTipLichidFromText(
     if (/g11|albastru|blue/i.test(txt)) return 'ANTIGEL_G11';
     return 'ANTIGEL_G12';
   }
+  if (/hidraulic.*concasor|concasor.*hidraulic/i.test(txt)) return 'ULEI_HIDRAULIC_CONCASOR';
+  if (/ung.*concasor|concasor.*ung|gear\s*600/i.test(txt)) return 'ULEI_DE_UNGERE_CONCASOR';
   if (/hidraulic|hlp|hvlp|tellus|dte/i.test(txt)) return 'ULEI_HIDRAULIC';
-  if (/liebherr.*punte|punte.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_PUNTE';
-  if (/liebherr.*cutie|cutie.*liebherr/i.test(txt)) return 'ULEI_LIEBHERR_CUTIE';
-  if (/cutie.*automat|atf|dexron/i.test(txt)) return 'ULEI_CUTIE_AUTOMATA';
-  if (/cutie.*manual/i.test(txt)) return 'ULEI_CUTIE_MANUALA';
-  if (/transmisie|diferential|gear|punte|cutie|80w[- ]?90|75w[- ]?90|75w[- ]?80|85w[- ]?140|ls90/i.test(txt)) {
-    return 'ULEI_TRANSMISIE';
-  }
-  if (/motor|15w[- ]?40|10w[- ]?40|5w[- ]?30|5w[- ]?40|0w[- ]?30|0w[- ]?20|castrol|delvac|urania|rimula/i.test(txt)) {
-    return 'ULEI_MOTOR';
+  if (/axe.*10w.*kom|10w.*kom/i.test(txt)) return 'ULEI_AXE_10W_KOM';
+  if (/axe.*lieb|lieb.*axe|punte.*lieb/i.test(txt)) return 'ULEI_AXE_LIEB';
+  if (/cutie.*kom|kom.*cutie/i.test(txt)) return 'ULEI_CUTIE_KOM';
+  if (/cutie.*lieb|lieb.*cutie/i.test(txt)) return 'ULEI_CUTIE_LIEB';
+  if (/rotire.*kom/i.test(txt)) return 'ULEI_ROTIRE_KOM';
+  if (/rotire.*lieb/i.test(txt)) return 'ULEI_ROTIRE_LIEB';
+  if (/grup.*kom/i.test(txt)) return 'ULEI_GRUPURI_KOM';
+  if (/grup.*lieb/i.test(txt)) return 'ULEI_GRUPURI_LIEB';
+  if (/80w[- ]?90|gl5|cutie.*diferen/i.test(txt)) return 'ULEI_CUTIE_DIF_80W90_GL5';
+  if (/cutie.*vitez/i.test(txt)) return 'ULEI_CUTIE_VITEZA';
+  if (/diferential/i.test(txt)) return 'ULEI_DIFERENTIAL';
+  if (/turism|5w[- ]?30|5w[- ]?40|0w[- ]?30|0w[- ]?20/i.test(txt)) return 'ULEI_MOTOR_TURISME';
+  if (/motor|15w[- ]?40|10w[- ]?40|castrol|delvac|urania|rimula/i.test(txt)) {
+    return 'ULEI_MOTOR_15W40';
   }
   return fallback;
 }
@@ -348,23 +514,43 @@ export async function syncFluidCompletariForComanda(
     select: { descrierePiesa: true, pretUnitar: true },
   });
 
-  const effectiveContor =
-    Number(comanda.valoareContorLaExecutie || 0) > 0
-      ? Number(comanda.valoareContorLaExecutie)
-      : Number(comanda.vehicul?.valoareContorCurent || 0);
   const opDate = comanda.dataFinalizare || comanda.dataDeschidere || new Date();
   const isMth = isMthTipMasurare(comanda.vehicul?.tipMasurare);
+
+  const [vehNorms, catNorms] = await Promise.all([
+    prisma.configurareUleiVehicul.findMany({ where: { vehiculId: comanda.vehiculId } }),
+    comanda.vehicul?.categorieEnum
+      ? prisma.configurareUleiCategorie.findMany({ where: { categorieEnum: comanda.vehicul.categorieEnum } })
+      : Promise.resolve([]),
+  ]);
 
   let synced = 0;
   for (const el of fluidElements) {
     const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || findMappedSubcatTip(el);
+    const defaultMotor = String(comanda.vehicul?.categorieEnum || '').toUpperCase() === 'AUTOTURISM'
+      ? 'ULEI_MOTOR_TURISME'
+      : 'ULEI_MOTOR_15W40';
     const tipLichid = detectTipLichidFromText(
       el.descriere,
       el.categorie || el.articolStoc?.categorie,
       el.subcategorie || el.articolStoc?.subcategorie,
-      'ULEI_MOTOR',
+      defaultMotor,
       explicitTip,
     );
+
+    const matchingVehNorm = vehNorms.find((n: any) => n.tipLichid === tipLichid);
+    const matchingCatNorm = catNorms.find((n: any) => n.tipLichid === tipLichid);
+    const ruleCfg = matchingVehNorm || matchingCatNorm || {};
+    const counterMeta = resolveFluidRuleCounterConfig(comanda.vehicul, ruleCfg);
+    const useMthCounter = counterMeta.trackingMode === 'MTH';
+
+    const effectiveContor =
+      useMthCounter && isDualMthVehicle(comanda.vehicul)
+        ? Number(comanda.vehicul?.oreFunctionareCurent || 0)
+        : Number(comanda.valoareContorLaExecutie || 0) > 0
+        ? Number(comanda.valoareContorLaExecutie)
+        : Number(comanda.vehicul?.valoareContorCurent || 0);
+    const unitateContor = useMthCounter ? 'MTH' : (isMth ? 'MTH' : 'KM');
 
     const textCombined = `${el.descriere || ''} ${el.observatiiIntern || ''}`.toLowerCase();
     const explicitOp = overrides?.tipOperatiuneFluid;
@@ -407,6 +593,7 @@ export async function syncFluidCompletariForComanda(
         pretPerLitru,
         costTotal,
         valoareContor: effectiveContor,
+        unitateContor,
         dataCompletare: opDate,
         mecanic: comanda.mecanicResponsabil || 'Atelier Intern',
         observatii: `Sincronizat automat din Comandă de Lucru ${comanda.numarComanda}`,
@@ -428,9 +615,12 @@ export async function syncFluidCompletariForComanda(
           tipLichid,
           ultimulSchimbContor: effectiveContor,
           ultimulSchimbData: opDate,
-          intervalMth: isMth ? 250 : null,
-          intervalKm: !isMth ? 15000 : null,
-          intervalLuni: 12,
+          intervalMth: matchingCatNorm?.intervalMth ?? (useMthCounter ? 500 : null),
+          intervalKm: matchingCatNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
+          intervalLuni: matchingCatNorm?.intervalLuni ?? null,
+          pragAvertizareMth: matchingCatNorm?.pragAvertizareMth ?? (useMthCounter ? 50 : null),
+          pragAvertizareKm: matchingCatNorm?.pragAvertizareKm ?? (!useMthCounter ? 1000 : null),
+          pragAvertizareLuni: matchingCatNorm?.pragAvertizareLuni ?? null,
         },
       });
     }
@@ -450,8 +640,8 @@ export function mapFluidCategoryReport(
   if (t.includes('HIDRAULIC') || d.includes('hidraulic') || d.includes('hlp') || d.includes('hvlp')) {
     return { key: 'HIDRAULIC', label: 'Ulei Hidraulic' };
   }
-  if (t.includes('TRANSMISIE') || t.includes('CUTIE') || t.includes('PUNTE') || d.includes('transmis') || d.includes('diferen') || d.includes('gear') || d.includes('80w90') || d.includes('75w90') || d.includes('atf') || d.includes('ls90')) {
-    return { key: 'TRANSMISIE', label: 'Ulei Transmisie / Cutie / Punte' };
+  if (t.includes('TRANSMISIE') || t.includes('CUTIE') || t.includes('PUNTE') || t.includes('AXE') || t.includes('GRUPURI') || t.includes('ROTIRE') || t.includes('DIFERENTIAL') || t.includes('UNGERE') || d.includes('transmis') || d.includes('diferen') || d.includes('gear') || d.includes('80w90') || d.includes('75w90') || d.includes('atf') || d.includes('ls90')) {
+    return { key: 'TRANSMISIE', label: 'Ulei Transmisie / Cutie / Punte / Grupuri' };
   }
   if (t.includes('ANTIGEL') || d.includes('antigel') || d.includes('g12') || d.includes('g11') || d.includes('racire') || d.includes('coolant')) {
     return { key: 'ANTIGEL', label: 'Antigel & Lichid Răcire' };

@@ -42,6 +42,10 @@ model Vehicul {
   valoareContorCurent    Float               @default(0)
   valoareContorInitial   Float               @default(0)
   dataInregistrareContor DateTime            @default(now())
+  areContorDualMth       Boolean             @default(false) // ex: CAP_TRACTOR (KM din alimentare + mTH manual)
+  oreFunctionareCurent   Float               @default(0)
+  oreFunctionareInitial  Float               @default(0)
+  dataInregistrareMth    DateTime?
   tarifOrarStandard      Float?              @default(0) // Manoperă/Chirie per oră
 
   stare                  String              @default("ACTIV") // ACTIV, IN_REPARATIE, CASAT
@@ -97,6 +101,7 @@ model IstoricContorVehicul {
   id               String   @id @default(uuid())
   vehiculId        String
   vehicul          Vehicul  @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  tipContor        String   @default("KM") // "KM" | "MTH"
   valoareContor    Float
   dataInregistrare DateTime @default(now())
   sursa            String   @default("MANUAL") // MANUAL | ALIMENTARE | SERVICE | GPS
@@ -104,6 +109,7 @@ model IstoricContorVehicul {
   observatii       String?
 
   @@index([vehiculId, dataInregistrare])
+  @@index([vehiculId, tipContor, dataInregistrare])
 }
 
 model PerioadaFunctionareMth {
@@ -328,6 +334,7 @@ model CompletareLichid {
   pretPerLitru        Float       @default(0)
   costTotal           Float       @default(0)
   valoareContor       Float
+  unitateContor       String?     // "KM" | "MTH"
   dataCompletare      DateTime    @default(now())
   mecanic             String
   observatii          String?

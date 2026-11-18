@@ -24,8 +24,11 @@ import {
 
 const CategoryIcon = ({ catName, className = "w-4 h-4" }: { catName?: string; className?: string }) => {
   const c = (catName || '').toUpperCase();
-  if (c.includes('EXCAVATOR') || c.includes('INCARCATOR') || c.includes('BULLDOZER') || c.includes('AUTOVALT') || c.includes('UTILAJ')) {
+  if (c.includes('EXC') || c.includes('VOLE') || c.includes('INCARCATOR') || c.includes('BULLDOZER') || c.includes('BOBCAT') || c.includes('AUTOVALT') || c.includes('UTILAJ')) {
     return <Tractor className={className} />;
+  }
+  if (c.includes('CONCASOR') || c.includes('STATIE')) {
+    return <Cog className={className} />;
   }
   if (c.includes('TRACTOR') || c.includes('BASCULANTA') || c.includes('CAMION') || c.includes('AUTOUTILITARA')) {
     return <Truck className={className} />;
@@ -41,6 +44,13 @@ const CategoryIcon = ({ catName, className = "w-4 h-4" }: { catName?: string; cl
   }
   return <Cog className={className} />;
 };
+
+function getNormTrackingMode(norma: any, catTipMasurare?: string): 'MTH' | 'KM' | 'LUNI' {
+  if (norma?.intervalMth && Number(norma.intervalMth) > 0) return 'MTH';
+  if (norma?.intervalKm && Number(norma.intervalKm) > 0) return 'KM';
+  if (norma?.intervalLuni && Number(norma.intervalLuni) > 0) return 'LUNI';
+  return (catTipMasurare || 'KM').toUpperCase() === 'MTH' ? 'MTH' : 'KM';
+}
 
 export default function FluidePage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -148,12 +158,13 @@ export default function FluidePage() {
   };
 
   // Stare Formular Ieșiri Ulei (Completare pe vehicul)
-  const [iesireTipLichid, setIesireTipLichid] = useState('ULEI_MOTOR');
+  const [iesireTipLichid, setIesireTipLichid] = useState('ULEI_MOTOR_15W40');
   const [iesireOperatiune, setIesireOperatiune] = useState('COMPLETARE_ULEI');
   const [selectedArticolStocId, setSelectedArticolStocId] = useState('');
   const [iesireMarca, setIesireMarca] = useState('Mobil1');
   const [iesireCantitate, setIesireCantitate] = useState(5);
   const [iesireContor, setIesireContor] = useState(0);
+  const [iesireUnitateContor, setIesireUnitateContor] = useState<'KM' | 'MTH'>('KM');
   const [iesireData, setIesireData] = useState(new Date().toISOString().split('T')[0]);
   const [iesireMecanic, setIesireMecanic] = useState('Brașoveanu Virgil (Șef Atelier)');
   const [iesireObservatii, setIesireObservatii] = useState('');
@@ -197,16 +208,24 @@ export default function FluidePage() {
   // Modal Editare / Configurare Normă Fluid pe Categorie
   const [modalNormaOpen, setModalNormaOpen] = useState<boolean>(false);
   const [modalNormaCategorie, setModalNormaCategorie] = useState<string>('');
-  const [modalNormaTipLichid, setModalNormaTipLichid] = useState<string>('ULEI_MOTOR');
+  const [modalNormaTipLichid, setModalNormaTipLichid] = useState<string>('ULEI_MOTOR_15W40');
+  const [modalNormaTrackingMode, setModalNormaTrackingMode] = useState<'KM' | 'MTH' | 'LUNI'>('KM');
   const [modalNormaIntervalKm, setModalNormaIntervalKm] = useState<number>(15000);
   const [modalNormaPragKm, setModalNormaPragKm] = useState<number>(1000);
-  const [modalNormaIntervalMth, setModalNormaIntervalMth] = useState<number>(250);
+  const [modalNormaIntervalMth, setModalNormaIntervalMth] = useState<number>(500);
   const [modalNormaPragMth, setModalNormaPragMth] = useState<number>(50);
-  const [modalNormaIntervalLuni, setModalNormaIntervalLuni] = useState<number>(12);
+  const [modalNormaIntervalLuni, setModalNormaIntervalLuni] = useState<number | ''>(12);
   const [modalNormaPragLuni, setModalNormaPragLuni] = useState<number>(1);
   const [isModalSaving, setIsModalSaving] = useState<boolean>(false);
 
-  const [cfgTipLichid, setCfgTipLichid] = useState('ULEI_MOTOR');
+  // Modal Actualizare Rapidă Contor mTH / Ultimul Schimb per Utilaj (Status Flotă)
+  const [editingBaselineRow, setEditingBaselineRow] = useState<any>(null);
+  const [baselineMthValue, setBaselineMthValue] = useState<number>(0);
+  const [baselineSchimbContor, setBaselineSchimbContor] = useState<number>(0);
+  const [baselineSchimbData, setBaselineSchimbData] = useState<string>('');
+  const [isSavingVehicleBaseline, setIsSavingVehicleBaseline] = useState<boolean>(false);
+
+  const [cfgTipLichid, setCfgTipLichid] = useState('ULEI_MOTOR_15W40');
   const [cfgIntervalMth, setCfgIntervalMth] = useState(250);
   const [cfgIntervalKm, setCfgIntervalKm] = useState(15000);
   const [cfgIntervalLuni, setCfgIntervalLuni] = useState(12);
@@ -783,13 +802,33 @@ export default function FluidePage() {
     fetchInitialData();
   }, []);
 
+  const resolveInterventionCounter = (vehId: string, tipCod: string) => {
+    const v = vehicule.find((item) => item.id === vehId);
+    if (!v) return { unit: 'KM' as 'KM' | 'MTH', contor: 0 };
+    const isVehMth = (v.tipMasurare || '').toUpperCase().includes('MTH');
+    if (isVehMth) {
+      return { unit: 'MTH' as const, contor: Number(v.valoareContorCurent || 0) };
+    }
+    const catObj = categoriiNormeList.find((c) => c.nume === v.categorieEnum);
+    const catNorm = (catObj?.norme || []).find((n: any) => n.tipLichid === tipCod);
+    const rowMatch = flotaFluide.find((f) => f.vehiculId === vehId && f.tipLichid === tipCod);
+    const usesMth =
+      rowMatch?.trackingMode === 'MTH' ||
+      Boolean(catNorm?.intervalMth && Number(catNorm.intervalMth) > 0);
+    if (usesMth) {
+      return { unit: 'MTH' as const, contor: Number(v.oreFunctionareCurent || 0) };
+    }
+    return { unit: 'KM' as const, contor: Number(v.valoareContorCurent || 0) };
+  };
+
   useEffect(() => {
     if (selectedVehiculId) {
       fetchStatusSchimburi(selectedVehiculId);
-      const v = vehicule.find(item => item.id === selectedVehiculId);
-      if (v) setIesireContor(v.valoareContorCurent || 0);
+      const resolved = resolveInterventionCounter(selectedVehiculId, iesireTipLichid);
+      setIesireUnitateContor(resolved.unit);
+      setIesireContor(resolved.contor);
     }
-  }, [selectedVehiculId]);
+  }, [selectedVehiculId, iesireTipLichid]);
 
   const handleOpenCompletare = (
     arg1?: string | { vehiculId?: string; tipLichid?: string; tipOperatiune?: string; articol?: any },
@@ -800,24 +839,31 @@ export default function FluidePage() {
         ? arg1
         : { vehiculId: typeof arg1 === 'string' ? arg1 : undefined, tipLichid: tipLichidArg };
 
+    const targetVehId = opts.vehiculId || selectedVehiculId;
+    let targetTip = opts.tipLichid || iesireTipLichid;
+
     if (opts.vehiculId) {
       setSelectedVehiculId(opts.vehiculId);
-      const v = vehicule.find((item) => item.id === opts.vehiculId);
-      if (v) setIesireContor(v.valoareContorCurent || 0);
     }
 
     if (opts.articol) {
       const resolved = resolveEffectiveTipLichid(opts.articol, subcatTipMap);
-      const detectedTip = resolved.cod || 'ULEI_MOTOR';
-      setIesireTipLichid(detectedTip);
+      targetTip = resolved.cod || 'ULEI_MOTOR_15W40';
+      setIesireTipLichid(targetTip);
       setSelectedArticolStocId(opts.articol.id);
       setIesireMarca(opts.articol.marcaUlei || opts.articol.denumire);
-      setArataToateFluidele(!isArticolMatchingTipLichid(opts.articol, detectedTip, subcatTipMap));
+      setArataToateFluidele(!isArticolMatchingTipLichid(opts.articol, targetTip, subcatTipMap));
     } else {
       if (opts.tipLichid) {
         setIesireTipLichid(opts.tipLichid);
       }
       setArataToateFluidele(false);
+    }
+
+    if (targetVehId) {
+      const cMeta = resolveInterventionCounter(targetVehId, targetTip);
+      setIesireUnitateContor(cMeta.unit);
+      setIesireContor(cMeta.contor);
     }
 
     setIesireOperatiune(opts.tipOperatiune || 'COMPLETARE_ULEI');
@@ -868,6 +914,7 @@ export default function FluidePage() {
           marcaUlei: iesireMarca,
           cantitateLitri: cant,
           valoareContor: Number(iesireContor || 0),
+          unitateContor: iesireUnitateContor,
           dataOperatiune: iesireData,
           mecanic: iesireMecanic,
           observatii: iesireObservatii,
@@ -1017,25 +1064,24 @@ export default function FluidePage() {
     const existing = (cat?.norme || []).find((n: any) => n.tipLichid === tipLichid);
 
     if (existing) {
+      const mode = getNormTrackingMode(existing, cat?.tipMasurareImplicit);
+      setModalNormaTrackingMode(mode);
       setModalNormaIntervalKm(existing.intervalKm || 15000);
       setModalNormaPragKm(existing.pragAvertizareKm || 1000);
-      setModalNormaIntervalMth(existing.intervalMth || 250);
+      setModalNormaIntervalMth(existing.intervalMth || 500);
       setModalNormaPragMth(existing.pragAvertizareMth || 50);
-      setModalNormaIntervalLuni(existing.intervalLuni || 12);
+      setModalNormaIntervalLuni(existing.intervalLuni || '');
       setModalNormaPragLuni(existing.pragAvertizareLuni || 1);
     } else {
-      if (isKm) {
-        setModalNormaIntervalKm(tipLichid === 'ULEI_MOTOR' ? 15000 : 30000);
-        setModalNormaPragKm(1000);
-        setModalNormaIntervalMth(250);
-        setModalNormaPragMth(50);
-      } else {
-        setModalNormaIntervalMth(tipLichid === 'ULEI_MOTOR' ? 250 : 500);
-        setModalNormaPragMth(50);
-        setModalNormaIntervalKm(15000);
-        setModalNormaPragKm(1000);
-      }
-      setModalNormaIntervalLuni(12);
+      const defaultMode: 'KM' | 'MTH' | 'LUNI' = cat?.areContorDualMth
+        ? 'MTH'
+        : (isKm ? 'KM' : 'MTH');
+      setModalNormaTrackingMode(defaultMode);
+      setModalNormaIntervalKm(tipLichid.includes('MOTOR') ? 15000 : 50000);
+      setModalNormaPragKm(1500);
+      setModalNormaIntervalMth(tipLichid.includes('MOTOR') ? 500 : 2000);
+      setModalNormaPragMth(100);
+      setModalNormaIntervalLuni('');
       setModalNormaPragLuni(1);
     }
     setModalNormaOpen(true);
@@ -1045,28 +1091,36 @@ export default function FluidePage() {
     e.preventDefault();
     if (!modalNormaCategorie || !modalNormaTipLichid) return;
 
-    const cat = categoriiNormeList.find((c) => c.nume === modalNormaCategorie);
-    const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+    if (modalNormaTrackingMode === 'LUNI' && (!modalNormaIntervalLuni || Number(modalNormaIntervalLuni) <= 0)) {
+      alert('Pentru monitorizarea calendaristică introduceți intervalul în luni (ex: 24 luni).');
+      return;
+    }
 
     setIsModalSaving(true);
     try {
+      const luniVal = modalNormaIntervalLuni ? Number(modalNormaIntervalLuni) : null;
       const payload: any = {
         categorieEnum: modalNormaCategorie,
         tipLichid: modalNormaTipLichid,
-        intervalLuni: modalNormaIntervalLuni ? Number(modalNormaIntervalLuni) : null,
-        pragAvertizareLuni: modalNormaPragLuni ? Number(modalNormaPragLuni) : 1,
+        intervalLuni: luniVal,
+        pragAvertizareLuni: luniVal ? (modalNormaPragLuni ? Number(modalNormaPragLuni) : 1) : null,
       };
 
-      if (isKm) {
+      if (modalNormaTrackingMode === 'KM') {
         payload.intervalKm = Number(modalNormaIntervalKm);
         payload.pragAvertizareKm = Number(modalNormaPragKm);
         payload.intervalMth = null;
         payload.pragAvertizareMth = null;
-      } else {
+      } else if (modalNormaTrackingMode === 'MTH') {
         payload.intervalMth = Number(modalNormaIntervalMth);
         payload.pragAvertizareMth = Number(modalNormaPragMth);
         payload.intervalKm = null;
         payload.pragAvertizareKm = null;
+      } else {
+        payload.intervalKm = null;
+        payload.pragAvertizareKm = null;
+        payload.intervalMth = null;
+        payload.pragAvertizareMth = null;
       }
 
       const res = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei/categorie`, {
@@ -1089,6 +1143,66 @@ export default function FluidePage() {
       alert('Eroare de rețea la salvarea normei de categorie.');
     } finally {
       setIsModalSaving(false);
+    }
+  };
+
+  const handleOpenVehicleBaseline = (row: any) => {
+    setEditingBaselineRow(row);
+    setBaselineMthValue(Number(row.oreFunctionareCurent || 0));
+    setBaselineSchimbContor(Number(row.ultimulSchimbContor || 0));
+    setBaselineSchimbData(
+      row.ultimulSchimbData
+        ? new Date(row.ultimulSchimbData).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+    );
+  };
+
+  const handleSaveVehicleBaseline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBaselineRow) return;
+    setIsSavingVehicleBaseline(true);
+    try {
+      // 1. Dacă vehiculul are contor dual mTH (CAP_TRACTOR) sau mTH manual, actualizăm mTH-ul curent dacă s-a modificat
+      if (editingBaselineRow.areContorDualMth && baselineMthValue !== Number(editingBaselineRow.oreFunctionareCurent || 0)) {
+        const resMth = await fetch(`${API_BASE_URL}/vehicule/inregistrare-contor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehiculId: editingBaselineRow.vehiculId,
+            valoareContor: Number(baselineMthValue),
+            tipContor: 'MTH',
+            operator: 'Atelier / Lubrifianți',
+            observatii: `Actualizare manuală ore funcționare (${Number(baselineMthValue)} mTH)`,
+          }),
+        });
+        if (!resMth.ok) {
+          const err = await resMth.json().catch(() => ({}));
+          throw new Error(err.message || 'Eroare la salvarea orelor de funcționare mTH.');
+        }
+      }
+
+      // 2. Actualizăm valoarea de bază a ultimului schimb pentru norma selectată
+      const resCfg = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehiculId: editingBaselineRow.vehiculId,
+          tipLichid: editingBaselineRow.tipLichid,
+          ultimulSchimbContor: Number(baselineSchimbContor || 0),
+          ultimulSchimbData: baselineSchimbData || undefined,
+        }),
+      });
+      if (!resCfg.ok) {
+        const err = await resCfg.json().catch(() => ({}));
+        throw new Error(err.message || 'Eroare la salvarea ultimului schimb.');
+      }
+
+      setEditingBaselineRow(null);
+      await fetchInitialData();
+    } catch (err: any) {
+      alert(err?.message || 'Eroare la salvare.');
+    } finally {
+      setIsSavingVehicleBaseline(false);
     }
   };
 
@@ -1595,6 +1709,11 @@ export default function FluidePage() {
                               <div className="text-[11px] text-sage-600">
                                 {f.vehiculInmatriculare} {f.vehiculCategorie ? `· ${f.vehiculCategorie}` : ''}
                               </div>
+                              {f.areContorDualMth && (
+                                <div className="text-[10px] font-mono text-amber-700 dark:text-amber-300 font-bold mt-0.5">
+                                  Dual: {Number(f.valoareContorCurent || 0).toLocaleString('ro-RO')} KM · {Number(f.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH
+                                </div>
+                              )}
                             </td>
 
                             <td className="p-3">
@@ -1604,9 +1723,15 @@ export default function FluidePage() {
                             </td>
 
                             <td className="p-3 font-mono text-[11px]">
-                              <div className="font-bold text-sapphire-900">
-                                {Number(f.ultimulSchimbContor || 0).toLocaleString('ro-RO')} → {Number(f.valoareContorCurent || 0).toLocaleString('ro-RO')} {unit}
-                              </div>
+                              {f.trackingMode === 'LUNI' ? (
+                                <div className="font-bold text-sapphire-900">
+                                  Schimb: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.intervalLuni} luni)
+                                </div>
+                              ) : (
+                                <div className="font-bold text-sapphire-900">
+                                  {Number(f.ultimulSchimbContor || 0).toLocaleString('ro-RO')} → {Number(f.currentContor ?? f.valoareContorCurent ?? 0).toLocaleString('ro-RO')} {unit}
+                                </div>
+                              )}
                               <div className="text-sage-600">
                                 Data: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.luniTrecute} luni)
                                 {f.totalLitriCompletati > 0 ? ` · +${f.totalLitriCompletati}L completări` : ''}
@@ -1616,16 +1741,19 @@ export default function FluidePage() {
                             <td className="p-3 space-y-1">
                               <div className="flex items-center justify-between font-mono text-[11px]">
                                 <span className="font-bold text-sapphire-900">
-                                  {Number(f.rulajEfectiv || 0).toLocaleString('ro-RO')}
-                                  {f.intervalPrincipal ? ` / ${Number(f.intervalPrincipal).toLocaleString('ro-RO')} ${unit}` : ` ${unit}`}
+                                  {f.trackingMode === 'LUNI'
+                                    ? `${f.luniTrecute} / ${f.intervalLuni || '—'} luni`
+                                    : `${Number(f.rulajEfectiv || 0).toLocaleString('ro-RO')}${f.intervalPrincipal ? ` / ${Number(f.intervalPrincipal).toLocaleString('ro-RO')} ${unit}` : ` ${unit}`}`}
                                 </span>
                                 <span className={`font-extrabold ${isOver ? 'text-terracotta-700' : isWarn ? 'text-amber-700' : 'text-emerald-700'}`}>
                                   {f.rulajRamas !== null
                                     ? f.rulajRamas <= 0
                                       ? `Depășit +${Math.abs(f.rulajRamas).toLocaleString('ro-RO')} ${unit}`
                                       : `Rămas ${Number(f.rulajRamas).toLocaleString('ro-RO')} ${unit}`
-                                    : f.intervalLuni
-                                    ? `${f.luniTrecute}/${f.intervalLuni} luni`
+                                    : f.luniRamase !== null
+                                    ? f.luniRamase <= 0
+                                      ? `Depășit (${f.luniTrecute} luni)`
+                                      : `Rămas ${Math.max(0, f.luniRamase).toFixed(1)} luni`
                                     : 'Monitorizat'}
                                 </span>
                               </div>
@@ -1660,6 +1788,15 @@ export default function FluidePage() {
 
                             <td className="p-3 text-right whitespace-nowrap">
                               <div className="inline-flex items-center space-x-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenVehicleBaseline(f)}
+                                  title={f.areContorDualMth ? 'Actualizează orele mTH și/sau ultimul schimb' : 'Editează ultimul schimb (bază de pornire)'}
+                                  className="px-2 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-800 font-bold text-[11px] transition inline-flex items-center space-x-1"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  {f.areContorDualMth && <span>mTH</span>}
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1784,7 +1921,7 @@ export default function FluidePage() {
                 ) : (
                   istoricCompletariFiltrat.map((c: any) => {
                     const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
-                    const unit = c.vehicul?.tipMasurare || 'KM';
+                    const unit = c.unitateContor || c.vehicul?.tipMasurare || 'KM';
                     return (
                       <tr key={c.id} className="hover:bg-morning-50 transition">
                         <td className="p-3 font-mono whitespace-nowrap">
@@ -2502,12 +2639,14 @@ export default function FluidePage() {
                           </span>
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-wider ${
-                              isSelected
+                              cat.areContorDualMth
+                                ? isSelected ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
+                                : isSelected
                                 ? isKm ? 'bg-blue-500 text-white' : 'bg-amber-500 text-white'
                                 : isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
                             }`}
                           >
-                            {isKm ? 'KM' : 'mTH'}
+                            {cat.areContorDualMth ? 'KM+mTH' : isKm ? 'KM' : 'mTH'}
                           </span>
                         </div>
 
@@ -2612,7 +2751,7 @@ export default function FluidePage() {
                       </thead>
                       <tbody className="divide-y divide-morning-200">
                         {allNorms.map((norma: any) => {
-                          const isKm = (norma.categorieTipMasurare || 'KM').toUpperCase() === 'KM';
+                          const mode = getNormTrackingMode(norma, norma.categorieTipMasurare);
                           const fluidLabel = tipLichidLabels[norma.tipLichid] || norma.tipLichid?.replace(/_/g, ' ');
 
                           return (
@@ -2628,10 +2767,14 @@ export default function FluidePage() {
                               <td className="p-3">
                                 <span
                                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                                    isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                                    mode === 'KM'
+                                      ? 'bg-blue-100 text-blue-800'
+                                      : mode === 'MTH'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-800'
                                   }`}
                                 >
-                                  {isKm ? 'KM' : 'mTH'}
+                                  {mode === 'KM' ? 'KM' : mode === 'MTH' ? 'mTH' : 'LUNI'}
                                 </span>
                               </td>
                               <td className="p-3">
@@ -2644,11 +2787,13 @@ export default function FluidePage() {
                               </td>
                               <td className="p-3 font-mono font-bold text-sapphire-800">
                                 <div>
-                                  {isKm
+                                  {mode === 'KM'
                                     ? `${norma.intervalKm ? Number(norma.intervalKm).toLocaleString('ro-RO') : '—'} KM`
-                                    : `${norma.intervalMth ? Number(norma.intervalMth).toLocaleString('ro-RO') : '—'} mTH`}
+                                    : mode === 'MTH'
+                                    ? `${norma.intervalMth ? Number(norma.intervalMth).toLocaleString('ro-RO') : '—'} mTH`
+                                    : `${norma.intervalLuni ? Number(norma.intervalLuni) : '—'} luni`}
                                 </div>
-                                {norma.intervalLuni && (
+                                {mode !== 'LUNI' && norma.intervalLuni && (
                                   <div className="text-[10px] font-medium text-sage-600">
                                     sau maxim {norma.intervalLuni} luni
                                   </div>
@@ -2656,11 +2801,13 @@ export default function FluidePage() {
                               </td>
                               <td className="p-3 font-mono font-semibold text-terracotta-700">
                                 <div>
-                                  {isKm
+                                  {mode === 'KM'
                                     ? `${norma.pragAvertizareKm ? Number(norma.pragAvertizareKm).toLocaleString('ro-RO') : '1.000'} KM`
-                                    : `${norma.pragAvertizareMth ? Number(norma.pragAvertizareMth).toLocaleString('ro-RO') : '50'} mTH`}
+                                    : mode === 'MTH'
+                                    ? `${norma.pragAvertizareMth ? Number(norma.pragAvertizareMth).toLocaleString('ro-RO') : '50'} mTH`
+                                    : `${norma.pragAvertizareLuni || 1} luni`}
                                 </div>
-                                {norma.pragAvertizareLuni && (
+                                {mode !== 'LUNI' && norma.pragAvertizareLuni && (
                                   <div className="text-[10px] font-medium text-sage-600">
                                     cu {norma.pragAvertizareLuni} lună înainte
                                   </div>
@@ -2717,10 +2864,16 @@ export default function FluidePage() {
                         </h3>
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-mono font-extrabold uppercase ${
-                            isCatKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                            selectedCatObj.areContorDualMth
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isCatKm
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          Contor: {isCatKm ? 'Kilometri (KM)' : 'Ore Funcționare (mTH)'}
+                          {selectedCatObj.areContorDualMth
+                            ? 'Contor Dual: KM (Pompă) + mTH (Manual)'
+                            : `Contor: ${isCatKm ? 'Kilometri (KM)' : 'Ore Funcționare (mTH)'}`}
                         </span>
                       </div>
                       <p className="text-xs text-sage-600 font-medium mt-0.5">
@@ -2760,7 +2913,7 @@ export default function FluidePage() {
 
                     <button
                       type="button"
-                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                      onClick={() => handleOpenModalNorma(selectedCatObj.nume, tipuriFluide[0]?.cod || 'ULEI_MOTOR_15W40')}
                       className="px-3.5 py-1.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-xs transition flex items-center space-x-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -2889,18 +3042,25 @@ export default function FluidePage() {
                               <div className="flex items-center justify-between">
                                 <span className="text-[11px] font-bold text-sage-600">Interval Schimb:</span>
                                 <div className="text-right">
-                                  {isCustom ? (
-                                    <>
-                                      <span className="font-mono font-black text-sm text-sapphire-900 block">
-                                        {isCatKm
-                                          ? `${Number(existingNorm.intervalKm).toLocaleString('ro-RO')} KM`
-                                          : `${Number(existingNorm.intervalMth).toLocaleString('ro-RO')} mTH`}
-                                      </span>
-                                      <span className="text-[10px] font-medium text-sage-500">
-                                        {existingNorm.intervalLuni ? `sau maxim ${existingNorm.intervalLuni} luni` : 'fără limită timp'}
-                                      </span>
-                                    </>
-                                  ) : (
+                                  {isCustom ? (() => {
+                                    const mode = getNormTrackingMode(existingNorm, selectedCatObj.tipMasurareImplicit);
+                                    return (
+                                      <>
+                                        <span className="font-mono font-black text-sm text-sapphire-900 block">
+                                          {mode === 'KM'
+                                            ? `${Number(existingNorm.intervalKm).toLocaleString('ro-RO')} KM`
+                                            : mode === 'MTH'
+                                            ? `${Number(existingNorm.intervalMth).toLocaleString('ro-RO')} mTH`
+                                            : `${Number(existingNorm.intervalLuni)} luni (Calendar)`}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-sage-500">
+                                          {mode !== 'LUNI'
+                                            ? (existingNorm.intervalLuni ? `sau maxim ${existingNorm.intervalLuni} luni` : 'fără limită timp')
+                                            : 'monitorizare periodică calendaristică'}
+                                        </span>
+                                      </>
+                                    );
+                                  })() : (
                                     <>
                                       <span className="font-mono font-bold text-xs text-sage-400 block">
                                         Fără schimb programat
@@ -2916,11 +3076,14 @@ export default function FluidePage() {
                               <div className="pt-2 border-t border-morning-200/80 flex items-center justify-between">
                                 <span className="text-[11px] font-bold text-sage-600">Prag Avertizare:</span>
                                 <span className={`font-mono text-xs ${isCustom ? 'font-bold text-terracotta-700' : 'text-sage-400'}`}>
-                                  {isCustom ? (
-                                    isCatKm
+                                  {isCustom ? (() => {
+                                    const mode = getNormTrackingMode(existingNorm, selectedCatObj.tipMasurareImplicit);
+                                    return mode === 'KM'
                                       ? `cu ${Number(existingNorm.pragAvertizareKm || 1000).toLocaleString('ro-RO')} KM înainte`
-                                      : `cu ${Number(existingNorm.pragAvertizareMth || 50).toLocaleString('ro-RO')} mTH înainte`
-                                  ) : (
+                                      : mode === 'MTH'
+                                      ? `cu ${Number(existingNorm.pragAvertizareMth || 50).toLocaleString('ro-RO')} mTH înainte`
+                                      : `cu ${Number(existingNorm.pragAvertizareLuni || 1)} lună înainte`;
+                                  })() : (
                                     'Dezactivat (Fără alerte)'
                                   )}
                                 </span>
@@ -3273,12 +3436,37 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold flex items-center justify-between">
-                    <span>Index Contor Utilaj (opțional):</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sapphire-100 text-sapphire-700 font-mono">
-                      {currentVehicul?.tipMasurare || 'KM'}
-                    </span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sage-700 font-bold">Index Contor Utilaj (opțional):</label>
+                    {currentVehicul?.areContorDualMth ? (
+                      <div className="inline-flex rounded-lg border border-morning-300 overflow-hidden text-[10px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIesireUnitateContor('MTH');
+                            setIesireContor(Number(currentVehicul.oreFunctionareCurent || 0));
+                          }}
+                          className={`px-2 py-0.5 ${iesireUnitateContor === 'MTH' ? 'bg-amber-500 text-white' : 'bg-morning-100 text-sage-700'}`}
+                        >
+                          mTH
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIesireUnitateContor('KM');
+                            setIesireContor(Number(currentVehicul.valoareContorCurent || 0));
+                          }}
+                          className={`px-2 py-0.5 ${iesireUnitateContor === 'KM' ? 'bg-blue-600 text-white' : 'bg-morning-100 text-sage-700'}`}
+                        >
+                          KM
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sapphire-100 text-sapphire-700 font-mono">
+                        {iesireUnitateContor}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="0"
@@ -3740,22 +3928,35 @@ export default function FluidePage() {
       {/* ========================================================================= */}
       {modalNormaOpen && (() => {
         const cat = categoriiNormeList.find((c: any) => c.nume === modalNormaCategorie);
-        const isKm = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
         const fluidConfig = tipuriFluide.find((f) => f.cod === modalNormaTipLichid);
         const fluidLabel = tipLichidLabels[modalNormaTipLichid] || modalNormaTipLichid?.replace(/_/g, ' ');
 
+        const isModeKm = modalNormaTrackingMode === 'KM';
+        const isModeMth = modalNormaTrackingMode === 'MTH';
+        const isModeLuni = modalNormaTrackingMode === 'LUNI';
+
         // Calcule pentru bara vizuală interactivă (Timeline Gauge)
-        const intervalVal = isKm ? Number(modalNormaIntervalKm || 0) : Number(modalNormaIntervalMth || 0);
-        const pragVal = isKm ? Number(modalNormaPragKm || 0) : Number(modalNormaPragMth || 0);
+        const intervalVal = isModeKm
+          ? Number(modalNormaIntervalKm || 0)
+          : isModeMth
+          ? Number(modalNormaIntervalMth || 0)
+          : Number(modalNormaIntervalLuni || 24);
+        const pragVal = isModeKm
+          ? Number(modalNormaPragKm || 0)
+          : isModeMth
+          ? Number(modalNormaPragMth || 0)
+          : Number(modalNormaPragLuni || 1);
         const warnStartVal = Math.max(0, intervalVal - pragVal);
-        const unitate = isKm ? 'KM' : 'mTH';
+        const unitate = isModeKm ? 'KM' : isModeMth ? 'mTH' : 'luni';
 
         const warnPercent = intervalVal > 0 ? Math.min(100, Math.max(10, Math.round((pragVal / intervalVal) * 100))) : 20;
         const okPercent = 100 - warnPercent;
 
-        const presets = isKm
-          ? (fluidConfig?.presetKm && fluidConfig.presetKm.length > 0 ? fluidConfig.presetKm : [10000, 15000, 20000, 30000, 50000, 100000])
-          : (fluidConfig?.presetMth && fluidConfig.presetMth.length > 0 ? fluidConfig.presetMth : [100, 250, 500, 1000, 1500, 2000]);
+        const presets = isModeKm
+          ? (fluidConfig?.presetKm && fluidConfig.presetKm.length > 0 ? fluidConfig.presetKm : [15000, 30000, 50000, 100000])
+          : isModeMth
+          ? (fluidConfig?.presetMth && fluidConfig.presetMth.length > 0 ? fluidConfig.presetMth : [500, 1000, 1250, 2000, 3000, 4000, 5000])
+          : [6, 12, 18, 24, 36];
 
         return (
           <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -3773,10 +3974,10 @@ export default function FluidePage() {
                       </h3>
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-black uppercase tracking-wider ${
-                          isKm ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                          isModeKm ? 'bg-blue-100 text-blue-800' : isModeMth ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {isKm ? 'Rutier • KM' : 'Utilaj Șantier • mTH'}
+                        {isModeKm ? 'KM' : isModeMth ? 'mTH (Ore)' : 'Calendar (Luni)'}
                       </span>
                     </div>
                     <p className="text-xs text-sage-600 font-medium mt-0.5 flex items-center flex-wrap gap-1.5">
@@ -3814,20 +4015,16 @@ export default function FluidePage() {
                       setModalNormaTipLichid(newTip);
                       const existing = (cat?.norme || []).find((n: any) => n.tipLichid === newTip);
                       if (existing) {
+                        setModalNormaTrackingMode(getNormTrackingMode(existing, cat?.tipMasurareImplicit));
                         setModalNormaIntervalKm(existing.intervalKm || 15000);
                         setModalNormaPragKm(existing.pragAvertizareKm || 1000);
-                        setModalNormaIntervalMth(existing.intervalMth || 250);
+                        setModalNormaIntervalMth(existing.intervalMth || 500);
                         setModalNormaPragMth(existing.pragAvertizareMth || 50);
-                        setModalNormaIntervalLuni(existing.intervalLuni || 12);
+                        setModalNormaIntervalLuni(existing.intervalLuni || '');
                         setModalNormaPragLuni(existing.pragAvertizareLuni || 1);
                       } else {
-                        if (isKm) {
-                          setModalNormaIntervalKm(newTip === 'ULEI_MOTOR' ? 15000 : 30000);
-                          setModalNormaPragKm(1000);
-                        } else {
-                          setModalNormaIntervalMth(newTip === 'ULEI_MOTOR' ? 250 : 500);
-                          setModalNormaPragMth(50);
-                        }
+                        const isCatKmLocal = (cat?.tipMasurareImplicit || 'KM').toUpperCase() === 'KM';
+                        setModalNormaTrackingMode(cat?.areContorDualMth ? 'MTH' : (isCatKmLocal ? 'KM' : 'MTH'));
                       }
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
@@ -3845,6 +4042,36 @@ export default function FluidePage() {
                   )}
                 </div>
 
+                {/* Selector Unitate Monitorizare Normă */}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-morning-100 rounded-xl border border-morning-200">
+                  <span className="text-[11px] font-bold text-sapphire-900">Bază calcul normă:</span>
+                  <div className="flex items-center gap-1.5">
+                    {([
+                      { id: 'MTH', label: 'Ore Funcționare (mTH)' },
+                      { id: 'KM', label: 'Kilometri (KM)' },
+                      { id: 'LUNI', label: 'Doar Calendaristic (Luni)' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setModalNormaTrackingMode(opt.id);
+                          if (opt.id === 'LUNI' && !modalNormaIntervalLuni) {
+                            setModalNormaIntervalLuni(24);
+                          }
+                        }}
+                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          modalNormaTrackingMode === opt.id
+                            ? 'bg-sapphire-900 text-white shadow-xs'
+                            : 'bg-white text-sage-700 hover:bg-morning-200 border border-morning-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Butoane Preset 1-Click */}
                 <div className="p-3 bg-morning-50/80 rounded-xl border border-morning-200 space-y-2">
                   <div className="flex items-center justify-between">
@@ -3858,21 +4085,27 @@ export default function FluidePage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {presets.map((val) => {
-                      const isCurrent = isKm ? modalNormaIntervalKm === val : modalNormaIntervalMth === val;
+                      const isCurrent = isModeKm
+                        ? modalNormaIntervalKm === val
+                        : isModeMth
+                        ? modalNormaIntervalMth === val
+                        : Number(modalNormaIntervalLuni) === val;
                       return (
                         <button
                           key={val}
                           type="button"
                           onClick={() => {
-                            if (isKm) {
+                            if (isModeKm) {
                               setModalNormaIntervalKm(val);
-                              // Auto ajustare prag sugerat (8-10% din interval)
                               const suggestedPrag = Math.max(500, Math.round((val * 0.08) / 500) * 500);
                               setModalNormaPragKm(suggestedPrag);
-                            } else {
+                            } else if (isModeMth) {
                               setModalNormaIntervalMth(val);
-                              const suggestedPrag = Math.max(25, Math.round((val * 0.1) / 10) * 10);
+                              const suggestedPrag = Math.max(25, Math.round((val * 0.08) / 25) * 25);
                               setModalNormaPragMth(suggestedPrag);
+                            } else {
+                              setModalNormaIntervalLuni(val);
+                              setModalNormaPragLuni(1);
                             }
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
@@ -3888,145 +4121,133 @@ export default function FluidePage() {
                   </div>
                 </div>
 
-                {/* Câmpuri de Intrare: KM vs MTH (Strict separate) */}
-                <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
-                  <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
-                    <Gauge className="w-4 h-4 text-sapphire-600" />
-                    <span>Configurare Contor Principal ({isKm ? 'Kilometri — KM' : 'Ore Funcționare — mTH'})</span>
-                  </h4>
+                {/* Câmpuri de Intrare: KM vs MTH */}
+                {!isModeLuni && (
+                  <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
+                    <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
+                      <Gauge className="w-4 h-4 text-sapphire-600" />
+                      <span>Configurare Contor Principal ({isModeKm ? 'Kilometri — KM' : 'Ore Funcționare — mTH'})</span>
+                    </h4>
 
-                  {isKm ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
-                          Interval Schimb Normat (KM): *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="1000"
-                            step="500"
-                            required
-                            value={modalNormaIntervalKm}
-                            onChange={(e) => setModalNormaIntervalKm(Number(e.target.value))}
-                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
-                            placeholder="ex: 15000"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
-                            KM
-                          </span>
+                    {isModeKm ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                            Interval Schimb Normat (KM): *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1000"
+                              step="500"
+                              required
+                              value={modalNormaIntervalKm}
+                              onChange={(e) => setModalNormaIntervalKm(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                              placeholder="ex: 15000"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                              KM
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-sage-500 mt-1">
-                          La atingerea acestui rulaj, pachetul de schimb devine <strong>Depășit</strong>.
-                        </p>
-                      </div>
 
-                      <div>
-                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
-                          Marjă Avertizare Anticipată (KM): *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="100"
-                            step="100"
-                            required
-                            value={modalNormaPragKm}
-                            onChange={(e) => setModalNormaPragKm(Number(e.target.value))}
-                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
-                            placeholder="ex: 1000"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
-                            KM
-                          </span>
+                        <div>
+                          <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                            Marjă Avertizare Anticipată (KM): *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="100"
+                              step="100"
+                              required
+                              value={modalNormaPragKm}
+                              onChange={(e) => setModalNormaPragKm(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
+                              placeholder="ex: 1500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                              KM
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-sage-500 mt-1">
-                          Alertă galbenă înainte de termen (ex: {modalNormaPragKm} KM înainte).
-                        </p>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
-                          Interval Schimb Normat (mTH): *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="20"
-                            step="10"
-                            required
-                            value={modalNormaIntervalMth}
-                            onChange={(e) => setModalNormaIntervalMth(Number(e.target.value))}
-                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
-                            placeholder="ex: 250"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
-                            mTH
-                          </span>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                            Interval Schimb Normat (mTH): *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="20"
+                              step="10"
+                              required
+                              value={modalNormaIntervalMth}
+                              onChange={(e) => setModalNormaIntervalMth(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
+                              placeholder="ex: 500"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                              mTH
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-sage-500 mt-1">
-                          La atingerea acestor ore de funcționare, norma devine <strong>Depășită</strong>.
-                        </p>
-                      </div>
 
-                      <div>
-                        <label className="text-[11px] font-bold text-sage-700 block mb-1">
-                          Marjă Avertizare Anticipată (mTH): *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="5"
-                            step="5"
-                            required
-                            value={modalNormaPragMth}
-                            onChange={(e) => setModalNormaPragMth(Number(e.target.value))}
-                            className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
-                            placeholder="ex: 50"
-                          />
-                          <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
-                            mTH
-                          </span>
+                        <div>
+                          <label className="text-[11px] font-bold text-sage-700 block mb-1">
+                            Marjă Avertizare Anticipată (mTH): *
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="5"
+                              step="5"
+                              required
+                              value={modalNormaPragMth}
+                              onChange={(e) => setModalNormaPragMth(Number(e.target.value))}
+                              className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-14"
+                              placeholder="ex: 50"
+                            />
+                            <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500 font-mono">
+                              mTH
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-sage-500 mt-1">
-                          Alertă galbenă înainte de termen (ex: cu {modalNormaPragMth} mTH înainte).
-                        </p>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
-                {/* Câmpuri Opționale: Limită Calendaristică (Luni) */}
+                {/* Limită Calendaristică (Luni) */}
                 <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
                   <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
                     <Calendar className="w-4 h-4 text-sapphire-600" />
-                    <span>Interval Calendaristic Alternativ (Timp de Îmbătrânire Ulei)</span>
+                    <span>{isModeLuni ? 'Interval Calendaristic Principal (Luni)' : 'Interval Calendaristic Opțional (Timp de Îmbătrânire Ulei)'}</span>
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-[11px] font-bold text-sage-700 block mb-1">
-                        Interval Maxim Calendaristic (Luni):
+                        Interval Calendaristic (Luni){isModeLuni ? ': *' : ' (opțional):'}
                       </label>
                       <div className="relative">
                         <input
                           type="number"
                           min="1"
-                          max="60"
+                          max="120"
+                          required={isModeLuni}
                           value={modalNormaIntervalLuni}
-                          onChange={(e) => setModalNormaIntervalLuni(Number(e.target.value))}
+                          onChange={(e) => setModalNormaIntervalLuni(e.target.value ? Number(e.target.value) : '')}
                           className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
-                          placeholder="ex: 12"
+                          placeholder="lăsați gol dacă nu se aplică"
                         />
                         <span className="absolute right-3 top-2.5 text-xs font-bold text-sage-500">
                           luni
                         </span>
                       </div>
-                      <p className="text-[10px] text-sage-500 mt-1">
-                        Schimb chiar dacă rulajul nu a fost atins (ex: 12 luni).
-                      </p>
                     </div>
 
                     <div>
@@ -4037,7 +4258,7 @@ export default function FluidePage() {
                         <input
                           type="number"
                           min="0"
-                          max="6"
+                          max="12"
                           value={modalNormaPragLuni}
                           onChange={(e) => setModalNormaPragLuni(Number(e.target.value))}
                           className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-mono font-bold focus:outline-none focus:border-sapphire-500 pr-12"
@@ -4047,9 +4268,6 @@ export default function FluidePage() {
                           luni
                         </span>
                       </div>
-                      <p className="text-[10px] text-sage-500 mt-1">
-                        Alertă galbenă cu X luni înainte de termenul calendaristic.
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -4347,6 +4565,95 @@ export default function FluidePage() {
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingTipFluid ? 'Se salvează...' : (editingTipFluid ? 'Salvează Tipul' : 'Creează Tip Lubrifiant')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL 8: ACTUALIZARE RAPIDĂ ORE MTH & BAZĂ ULTIMUL SCHIMB */}
+      {/* ========================================================================= */}
+      {editingBaselineRow && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl border border-morning-200">
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <span>{editingBaselineRow.vehiculNumarIntern} — Reglaj Contor &amp; Bază</span>
+                </h3>
+                <p className="text-[11px] text-sage-600 mt-0.5">
+                  {tipLichidLabels[editingBaselineRow.tipLichid] || editingBaselineRow.tipLichid}
+                </p>
+              </div>
+              <button type="button" onClick={() => setEditingBaselineRow(null)} className="text-sage-400 hover:text-sapphire-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVehicleBaseline} className="space-y-4 text-xs">
+              {editingBaselineRow.areContorDualMth && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-extrabold text-amber-900">Ore Funcționare Curente (mTH Manual):</label>
+                    <span className="text-[10px] font-mono text-amber-700 font-bold">
+                      KM pompă: {Number(editingBaselineRow.valoareContorCurent || 0).toLocaleString('ro-RO')} km
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={baselineMthValue}
+                    onChange={(e) => setBaselineMthValue(Number(e.target.value))}
+                    className="w-full bg-white border border-amber-300 rounded-xl p-2.5 text-sm font-mono font-black text-sapphire-900"
+                  />
+                  <p className="text-[10px] text-amber-800">
+                    Modificarea orelor mTH nu afectează kilometrajul importat de la pompă.
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-sage-700 block mb-1">
+                    Contor la Ultimul Schimb ({editingBaselineRow.unitateMasura || 'KM'}):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={baselineSchimbContor}
+                    onChange={(e) => setBaselineSchimbContor(Number(e.target.value))}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-sage-700 block mb-1">Dată Ultimul Schimb:</label>
+                  <input
+                    type="date"
+                    value={baselineSchimbData}
+                    onChange={(e) => setBaselineSchimbData(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingBaselineRow(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingVehicleBaseline}
+                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold shadow-xs disabled:opacity-50"
+                >
+                  {isSavingVehicleBaseline ? 'Se salvează...' : 'Salvează'}
                 </button>
               </div>
             </form>
