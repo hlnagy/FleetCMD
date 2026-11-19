@@ -4733,29 +4733,6 @@ function EFacturaContent() {
               </div>
             </div>
 
-            {/* MOTIV RECEPȚIE MANUALĂ (OBLIGATORIU PENTRU AUDIT) */}
-            <div className="p-4 bg-amber-50/70 border border-amber-300 rounded-2xl space-y-1.5">
-              <label
-                htmlFor="motivReceptieManualaInput"
-                className="text-amber-900 font-extrabold text-xs flex items-center space-x-1.5"
-              >
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Motiv Recepție Manuală (Obligatoriu): *</span>
-              </label>
-              <input
-                id="motivReceptieManualaInput"
-                type="text"
-                required
-                value={bevMotivManual}
-                onChange={(e) => setBevMotivManual(e.target.value)}
-                placeholder="ex: Factură externă (nu intră în ANAF SPV), factură emisă pe altă firmă din grup, bon fiscal..."
-                className="w-full bg-white border border-amber-300 rounded-xl p-2.5 text-sapphire-900 font-semibold focus:outline-none focus:border-amber-500"
-              />
-              <p className="text-[11px] text-amber-800 font-medium">
-                Specificați motivul introducerii manuale a facturii (rămâne memorat pentru pozițiile următoare ale aceleiași facturi și apare în istoric).
-              </p>
-            </div>
-
             {/* Suport Special Achiziție Uleiuri */}
             <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -4878,14 +4855,31 @@ function EFacturaContent() {
               )}
             </div>
 
-            <div>
-              <label className="text-sage-700 block mb-1 font-bold">Observații & Notițe Recepție:</label>
-              <input
-                value={bevObservatii}
-                onChange={(e) => setBevObservatii(e.target.value)}
-                placeholder="ex: Recepție 200L butoi ulei hidraulic sau turbină în garanție"
-                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="motivReceptieManualaInput" className="text-sage-700 block mb-1 font-bold">
+                  Motiv Recepție Manuală: <span className="text-terracotta-600">*</span>
+                </label>
+                <input
+                  id="motivReceptieManualaInput"
+                  type="text"
+                  required
+                  value={bevMotivManual}
+                  onChange={(e) => setBevMotivManual(e.target.value)}
+                  placeholder="ex: Factură externă fără SPV, altă firmă din grup..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">Observații &amp; Notițe Recepție:</label>
+                <input
+                  value={bevObservatii}
+                  onChange={(e) => setBevObservatii(e.target.value)}
+                  placeholder="ex: Recepție 200L butoi ulei hidraulic sau turbină în garanție"
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end pt-2">
