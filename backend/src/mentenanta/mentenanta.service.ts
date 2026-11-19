@@ -388,11 +388,28 @@ export class MentenantaService {
     return false;
   }
 
+  private parseDevizDateInput(raw?: string | Date | null): Date | null {
+    if (!raw) return null;
+    if (raw instanceof Date) {
+      return Number.isNaN(raw.getTime()) ? null : raw;
+    }
+    const str = String(raw).trim();
+    if (!str) return null;
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+    if (ymd) {
+      return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10), 12, 0, 0);
+    }
+    const d = new Date(str);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
   async createComandaLucru(data: {
     vehiculId: string;
     mecanicResponsabil: string;
     valoareContorLaExecutie?: number;
     valoareContor?: number;
+    dataDeschidere?: string | Date;
+    dataDeviz?: string | Date;
     observatii?: string;
     elemente?: Array<{
       sarcinaMentenantaId?: string;
@@ -410,6 +427,9 @@ export class MentenantaService {
     const vehicul = await this.prisma.vehicul.findUnique({ where: { id: data.vehiculId } });
     if (!vehicul) throw new NotFoundException('Vehicul negăsit');
 
+    const dataDeschidereFinal =
+      this.parseDevizDateInput(data.dataDeschidere ?? data.dataDeviz) || new Date();
+
     const rawContorInput = data.valoareContorLaExecutie ?? data.valoareContor;
     const parsedContor =
       rawContorInput !== undefined && rawContorInput !== null && String(rawContorInput).trim() !== ''
@@ -423,7 +443,7 @@ export class MentenantaService {
         where: { id: data.vehiculId },
         data: {
           valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorVal),
-          dataInregistrareContor: new Date(),
+          dataInregistrareContor: dataDeschidereFinal,
         },
       });
 
@@ -431,7 +451,7 @@ export class MentenantaService {
         data: {
           vehiculId: data.vehiculId,
           valoareContor: contorVal,
-          dataInregistrare: new Date(),
+          dataInregistrare: dataDeschidereFinal,
           sursa: 'SERVICE',
           operator: data.mecanicResponsabil || 'Atelier Intern',
           observatii: data.observatii || `Deschidere Comandă de Lucru (${contorVal} ${vehicul.tipMasurare})`,
@@ -528,7 +548,7 @@ export class MentenantaService {
         observatii: data.observatii,
         valoareContorLaExecutie: contorVal,
         stare: 'IN_LUCRU',
-        dataDeschidere: new Date(),
+        dataDeschidere: dataDeschidereFinal,
         elementeComanda: {
           create: processedElemente,
         },
@@ -767,13 +787,11 @@ export class MentenantaService {
     if (comanda.stare === 'FINALIZAT') {
       for (const elem of comanda.elementeComanda) {
         if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
-          if (articol) {
-            await this.prisma.articolStoc.update({
-              where: { id: elem.articolStocId },
-              data: { stocCurent: articol.stocCurent + elem.cantitate },
-            });
-          }
+          await this.stocuriGarantiiService.restituieStocFIFO(
+            elem.articolStocId,
+            elem.cantitate,
+            elem.numarFactura,
+          );
         }
       }
     }
@@ -814,13 +832,11 @@ export class MentenantaService {
     if (comanda.stare === 'FINALIZAT') {
       for (const elem of comanda.elementeComanda) {
         if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
-          if (articol) {
-            await this.prisma.articolStoc.update({
-              where: { id: elem.articolStocId },
-              data: { stocCurent: articol.stocCurent + elem.cantitate },
-            });
-          }
+          await this.stocuriGarantiiService.restituieStocFIFO(
+            elem.articolStocId,
+            elem.cantitate,
+            elem.numarFactura,
+          );
         }
       }
     }
@@ -845,13 +861,11 @@ export class MentenantaService {
     if (comanda.stare === 'FINALIZAT') {
       for (const elem of comanda.elementeComanda) {
         if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
-          if (articol) {
-            await this.prisma.articolStoc.update({
-              where: { id: elem.articolStocId },
-              data: { stocCurent: articol.stocCurent + elem.cantitate },
-            });
-          }
+          await this.stocuriGarantiiService.restituieStocFIFO(
+            elem.articolStocId,
+            elem.cantitate,
+            elem.numarFactura,
+          );
         }
       }
     }
@@ -867,10 +881,12 @@ export class MentenantaService {
     });
   }
 
-  // UPDATE COMANDĂ DE LUCRU: Editare (mecanic, observații, elemente)
+  // UPDATE COMANDĂ DE LUCRU: Editare (dată deviz, mecanic, observații, elemente)
   async updateComandaLucru(comandaId: string, data: {
     mecanicResponsabil?: string;
     observatii?: string;
+    dataDeschidere?: string | Date;
+    dataFinalizare?: string | Date | null;
     elementeComanda?: Array<{
       id?: string;
       pilonCost: string;
@@ -882,17 +898,56 @@ export class MentenantaService {
   }) {
     const comanda = await this.prisma.comandaLucru.findUnique({ where: { id: comandaId } });
     if (!comanda) throw new NotFoundException('Comanda nu există.');
-    if (comanda.stare === 'FINALIZAT') {
+
+    const hasDateUpdate = data.dataDeschidere !== undefined || data.dataFinalizare !== undefined;
+    const hasContentUpdate =
+      data.mecanicResponsabil !== undefined ||
+      data.observatii !== undefined ||
+      data.elementeComanda !== undefined;
+
+    if (comanda.stare === 'FINALIZAT' && hasContentUpdate) {
       throw new BadRequestException('Comanda finalizată trebuie mai întâi DEVALIDATĂ pentru a putea fi editată!');
     }
 
-    if (data.mecanicResponsabil || data.observatii !== undefined) {
+    const parsedDataDeschidere =
+      data.dataDeschidere !== undefined ? this.parseDevizDateInput(data.dataDeschidere) : undefined;
+    if (data.dataDeschidere !== undefined && !parsedDataDeschidere) {
+      throw new BadRequestException('Data deschiderii devizului nu este validă.');
+    }
+
+    const parsedDataFinalizare =
+      data.dataFinalizare !== undefined
+        ? data.dataFinalizare === null || String(data.dataFinalizare).trim() === ''
+          ? null
+          : this.parseDevizDateInput(data.dataFinalizare)
+        : undefined;
+    if (
+      data.dataFinalizare !== undefined &&
+      data.dataFinalizare !== null &&
+      String(data.dataFinalizare).trim() !== '' &&
+      !parsedDataFinalizare
+    ) {
+      throw new BadRequestException('Data finalizării devizului nu este validă.');
+    }
+
+    if (data.mecanicResponsabil || data.observatii !== undefined || hasDateUpdate) {
       await this.prisma.comandaLucru.update({
         where: { id: comandaId },
         data: {
           ...(data.mecanicResponsabil ? { mecanicResponsabil: data.mecanicResponsabil } : {}),
           ...(data.observatii !== undefined ? { observatii: data.observatii } : {}),
+          ...(parsedDataDeschidere ? { dataDeschidere: parsedDataDeschidere } : {}),
+          ...(parsedDataFinalizare !== undefined ? { dataFinalizare: parsedDataFinalizare } : {}),
         },
+      });
+    }
+
+    // Dacă s-a modificat data unui deviz FINALIZAT, sincronizăm automat și data completărilor/schimburilor de fluide asociate
+    if (comanda.stare === 'FINALIZAT' && hasDateUpdate) {
+      await syncFluidCompletariForComanda(this.prisma, comandaId);
+      return this.prisma.comandaLucru.findUnique({
+        where: { id: comandaId },
+        include: { elementeComanda: true, vehicul: true },
       });
     }
 
@@ -2983,7 +3038,7 @@ export class MentenantaService {
     });
   }
 
-  async creeazaDevizDinNota(id: string, body?: { mecanicResponsabil?: string }) {
+  async creeazaDevizDinNota(id: string, body?: { mecanicResponsabil?: string; dataDeschidere?: string | Date }) {
     const nota = await this.prisma.notaAtelier.findUnique({
       where: { id },
       include: { vehicul: true },
@@ -3019,6 +3074,7 @@ export class MentenantaService {
     const comanda = await this.createComandaLucru({
       vehiculId: nota.vehiculId,
       mecanicResponsabil: body?.mecanicResponsabil || nota.mecanicAsignat || 'Atelier Intern',
+      dataDeschidere: body?.dataDeschidere,
       observatii,
       elemente: [],
     });

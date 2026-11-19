@@ -95,6 +95,24 @@ const PILON_COST_CONFIG: Record<
 
 const getWarehouseName = (item: any): string => item?.depozit?.nume || 'Magazie Centrală';
 
+const getTodayInputDate = (): string => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const toInputDateValue = (raw?: string | Date | null): string => {
+  if (!raw) return getTodayInputDate();
+  const d = raw instanceof Date ? raw : new Date(raw);
+  if (Number.isNaN(d.getTime())) return getTodayInputDate();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export default function ComenziLucruPage() {
   const { openTab } = useTabWorkspace();
 
@@ -148,10 +166,17 @@ export default function ComenziLucruPage() {
 
   // Form State Comandă Lucru Nouă
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
+  const [dataDeschidereNoua, setDataDeschidereNoua] = useState<string>(() => getTodayInputDate());
   const [valoareContorExecutie, setValoareContorExecutie] = useState<string>('0');
   const [selectedMecanici, setSelectedMecanici] = useState<string[]>([]);
   const [observatii, setObservatii] = useState('');
   const [autoFinalize, setAutoFinalize] = useState(false);
+
+  // Modal Modificare Rapidă Dată Deviz (funcționează inclusiv pe devize finalizate)
+  const [editingDateComanda, setEditingDateComanda] = useState<any>(null);
+  const [quickEditDataDeschidere, setQuickEditDataDeschidere] = useState<string>('');
+  const [quickEditDataFinalizare, setQuickEditDataFinalizare] = useState<string>('');
+  const [isSavingDateOnly, setIsSavingDateOnly] = useState<boolean>(false);
 
   // Stare Căutare & Filtrare Vehicule (Vehicle Selection)
   const [vehiculSearchQuery, setVehiculSearchQuery] = useState('');
@@ -180,6 +205,7 @@ export default function ComenziLucruPage() {
   const [telefonMecanicNou, setTelefonMecanicNou] = useState('');
 
   // Form State Editare Comandă Lucru
+  const [editDataDeschidere, setEditDataDeschidere] = useState<string>(() => getTodayInputDate());
   const [editMecanici, setEditMecanici] = useState<string[]>([]);
   const [editObservatii, setEditObservatii] = useState('');
   const [editElemente, setEditElemente] = useState<any[]>([]);
@@ -452,6 +478,11 @@ export default function ComenziLucruPage() {
       }
     }
 
+    if (!dataDeschidereNoua) {
+      alert('Vă rugăm să selectați data devizului!');
+      return;
+    }
+
     const mecanicFinal = selectedMecanici.join(', ');
     const elemente: any[] = [];
 
@@ -467,6 +498,7 @@ export default function ComenziLucruPage() {
           vehiculId: selectedVehiculId,
           mecanicResponsabil: mecanicFinal,
           valoareContorLaExecutie: contorNum,
+          dataDeschidere: dataDeschidereNoua,
           observatii,
           elemente,
         }),
@@ -911,6 +943,7 @@ export default function ComenziLucruPage() {
   const openEditModal = (cl: any) => {
     setShowEditModal(cl);
     const mecArr = cl.mecanicResponsabil ? cl.mecanicResponsabil.split(',').map((s: string) => s.trim()) : [];
+    setEditDataDeschidere(toInputDateValue(cl.dataDeschidere));
     setEditMecanici(mecArr);
     setEditObservatii(cl.observatii || '');
     setEditElemente((cl.elementeComanda || []).map((el: any) => ({ ...el })));
@@ -926,16 +959,57 @@ export default function ComenziLucruPage() {
     setIsSearchDropdownOpen(false);
   };
 
+  const openQuickEditDateModal = (cl: any) => {
+    setEditingDateComanda(cl);
+    setQuickEditDataDeschidere(toInputDateValue(cl.dataDeschidere));
+    setQuickEditDataFinalizare(cl.dataFinalizare ? toInputDateValue(cl.dataFinalizare) : '');
+  };
+
+  const handleSaveQuickDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDateComanda || !quickEditDataDeschidere) return;
+    setIsSavingDateOnly(true);
+    try {
+      const payload: Record<string, any> = {
+        dataDeschidere: quickEditDataDeschidere,
+      };
+      if (editingDateComanda.stare === 'FINALIZAT' && quickEditDataFinalizare) {
+        payload.dataFinalizare = quickEditDataFinalizare;
+      }
+      const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${editingDateComanda.id}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditingDateComanda(null);
+        await fetchData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la actualizarea datei: ${err.message || 'Verificați datele introduse.'}`);
+      }
+    } catch {
+      alert('Eroare de rețea la actualizarea datei devizului.');
+    } finally {
+      setIsSavingDateOnly(false);
+    }
+  };
+
   // Save Edit Work Order
   const handleSaveEdit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!showEditModal) return;
+    if (!editDataDeschidere) {
+      alert('Data devizului este obligatorie.');
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE_URL}/mentenanta/comanda-lucru/${showEditModal.id}/update`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          dataDeschidere: editDataDeschidere,
           mecanicResponsabil: editMecanici.join(', '),
           observatii: editObservatii,
           elementeComanda: editElemente.map((el) => ({
@@ -1215,6 +1289,7 @@ export default function ComenziLucruPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          dataDeschidere: editDataDeschidere || undefined,
           mecanicResponsabil: editMecanici.join(', '),
           observatii: editObservatii,
           elementeComanda: editElemente.map((el) => ({
@@ -1483,6 +1558,7 @@ export default function ComenziLucruPage() {
           <button
             onClick={() => {
               setValoareContorExecutie('0');
+              setDataDeschidereNoua(getTodayInputDate());
               setShowAddModal(true);
               setVehiculSearchQuery('');
               setVehiculCategoryFilter('TOATE');
@@ -1884,7 +1960,17 @@ export default function ComenziLucruPage() {
                     </td>
 
                     <td className="p-3 text-sage-700 text-[11px] whitespace-nowrap">
-                      <div><strong>Deschidere:</strong> {new Date(cl.dataDeschidere).toLocaleDateString('ro-RO')}</div>
+                      <div className="flex items-center space-x-1.5">
+                        <span><strong>Deschidere:</strong> {new Date(cl.dataDeschidere).toLocaleDateString('ro-RO')}</span>
+                        <button
+                          type="button"
+                          onClick={() => openQuickEditDateModal(cl)}
+                          title="Modifică data devizului (inclusiv retroactiv sau viitor)"
+                          className="p-1 rounded-md text-sage-500 hover:text-sapphire-700 hover:bg-morning-200 transition cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                      </div>
                       {cl.dataFinalizare ? (
                         <div className="text-sapphire-600 font-semibold mt-0.5"><strong>Finalizat:</strong> {new Date(cl.dataFinalizare).toLocaleDateString('ro-RO')}</div>
                       ) : cl.stare === 'DEVALIDAT' ? (
@@ -2181,6 +2267,7 @@ export default function ComenziLucruPage() {
                   onClick={() => {
                     setShowViewModal({
                       ...showEditModal,
+                      dataDeschidere: editDataDeschidere || showEditModal.dataDeschidere,
                       mecanicResponsabil: editMecanici.join(', '),
                       observatii: editObservatii,
                       elementeComanda: editElemente,
@@ -2261,11 +2348,30 @@ export default function ComenziLucruPage() {
                 </div>
               </div>
 
-              {/* OBSERVAȚII */}
-              <div className="lg:col-span-7 lg:pl-4 space-y-1.5">
-                <label className="text-sapphire-900 font-black text-xs block">
-                  Descriere Lucrare / Observații Intervenție
-                </label>
+              {/* OBSERVAȚII & DATA DEVIZULUI */}
+              <div className="lg:col-span-7 lg:pl-4 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-sapphire-900 font-black text-xs block">
+                    Descriere Lucrare / Observații Intervenție
+                  </label>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <label
+                      htmlFor="editDataDeschidereInput"
+                      className="text-[11px] font-bold text-sage-700 flex items-center space-x-1"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-sapphire-500" />
+                      <span>Data Deviz:</span>
+                    </label>
+                    <input
+                      id="editDataDeschidereInput"
+                      type="date"
+                      required
+                      value={editDataDeschidere}
+                      onChange={(e) => setEditDataDeschidere(e.target.value)}
+                      className="bg-morning-100 border border-morning-200 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400/40 focus:border-sapphire-400"
+                    />
+                  </div>
+                </div>
                 <textarea
                   rows={2}
                   value={editObservatii}
@@ -3374,6 +3480,30 @@ export default function ComenziLucruPage() {
                 );
               })()}
 
+              {/* DATA DEVIZULUI (OBLIGATORIU — RETROACTIV, AZI SAU ÎN AVANS) */}
+              <div className="p-3 bg-morning-100 border border-morning-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div>
+                  <label
+                    htmlFor="createDataDeschidereInput"
+                    className="text-sapphire-900 font-extrabold flex items-center space-x-1.5 text-xs"
+                  >
+                    <Calendar className="w-4 h-4 text-sapphire-500" />
+                    <span>Data Devizului: <span className="text-terracotta-600">*</span></span>
+                  </label>
+                  <p className="text-[10px] text-sage-600 font-medium mt-0.5">
+                    Poate fi data curentă, o dată retroactivă sau o dată viitoare (modificabilă și ulterior).
+                  </p>
+                </div>
+                <input
+                  id="createDataDeschidereInput"
+                  type="date"
+                  required
+                  value={dataDeschidereNoua}
+                  onChange={(e) => setDataDeschidereNoua(e.target.value)}
+                  className="bg-white border border-morning-300 rounded-xl px-3 py-2 text-xs font-mono font-extrabold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400/40 focus:border-sapphire-400 shrink-0"
+                />
+              </div>
+
               {/* INDEX KM / ORE FUNCȚIONARE (OPȚIONAL — 0 NU ÎNREGISTREAZĂ KM) */}
               {(() => {
                 const selV = vehicule.find((v) => v.id === selectedVehiculId);
@@ -3563,6 +3693,88 @@ export default function ComenziLucruPage() {
               </div>
             </form>
         </DraggableModal>
+      )}
+
+      {/* Modal Modificare Rapidă Dată Deviz (inclusiv devize finalizate) */}
+      {editingDateComanda && (
+        <div
+          className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setEditingDateComanda(null)}
+        >
+          <div
+            className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl border border-morning-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
+                  <Calendar className="w-5 h-5 text-sapphire-600" />
+                  <span>Modificare Dată Deviz {editingDateComanda.numarComanda}</span>
+                </h3>
+                <p className="text-[11px] text-sage-600 font-medium mt-0.5">
+                  {editingDateComanda.vehiculNumarIntern || editingDateComanda.vehiculInmatriculare}
+                  {editingDateComanda.stare === 'FINALIZAT' ? ' · Deviz Finalizat' : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingDateComanda(null)}
+                className="text-sage-500 hover:text-sapphire-900 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickDate} className="space-y-4 text-xs">
+              <div>
+                <label className="text-sage-700 block mb-1 font-bold">
+                  Data Devizului (Deschidere): <span className="text-terracotta-600">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={quickEditDataDeschidere}
+                  onChange={(e) => setQuickEditDataDeschidere(e.target.value)}
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                />
+              </div>
+
+              {editingDateComanda.stare === 'FINALIZAT' && (
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    Data Finalizării:
+                  </label>
+                  <input
+                    type="date"
+                    value={quickEditDataFinalizare}
+                    onChange={(e) => setQuickEditDataFinalizare(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                  <p className="text-[10px] text-sage-600 mt-1">
+                    Dacă devizul conține schimburi de ulei/fluide, data lor se actualizează automat.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingDateComanda(null)}
+                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold cursor-pointer"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDateOnly || !quickEditDataDeschidere}
+                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingDateOnly ? 'Se salvează...' : 'Salvează Data'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal Adaugă Mecanic Nou */}

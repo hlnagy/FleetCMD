@@ -1188,6 +1188,73 @@ export class StocuriGarantiiService {
     };
   }
 
+  // Restituire stoc în depozitul original + refacere cantitateRamasa pe loturile FIFO
+  async restituieStocFIFO(
+    articolStocId: string,
+    cantitateDeRestituit: number,
+    numarFacturaHint?: string | null,
+  ) {
+    const cantitate = Number(cantitateDeRestituit || 0);
+    if (cantitate <= 0) return null;
+
+    const articol = await this.prisma.articolStoc.findUnique({ where: { id: articolStocId } });
+    if (!articol) return null;
+
+    const loturi = await this.prisma.intrareStoc.findMany({
+      where: { articolStocId },
+      orderBy: [
+        { dataFactura: 'desc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    const facturiHint = new Set(
+      String(numarFacturaHint || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    // Prioritizăm loturile de pe factura consumată (dacă există), apoi cele mai recente loturi consumate
+    const loturiOrdonate = [...loturi].sort((a, b) => {
+      const aMatch = facturiHint.has(String(a.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
+      const bMatch = facturiHint.has(String(b.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      return new Date(b.dataFactura).getTime() - new Date(a.dataFactura).getTime();
+    });
+
+    let ramasDeRestituit = cantitate;
+    for (const lot of loturiOrdonate) {
+      if (ramasDeRestituit <= 0) break;
+      const intrata = Number(lot.cantitateIntrata || 0);
+      const ramasa = lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+        ? Number(lot.cantitateRamasa)
+        : intrata;
+      const capacitateRestituire = Math.max(0, Number((intrata - ramasa).toFixed(2)));
+      if (capacitateRestituire <= 0) continue;
+
+      const deAdaugat = Math.min(ramasDeRestituit, capacitateRestituire);
+      await this.prisma.intrareStoc.update({
+        where: { id: lot.id },
+        data: { cantitateRamasa: Number((ramasa + deAdaugat).toFixed(2)) },
+      });
+      ramasDeRestituit = Number((ramasDeRestituit - deAdaugat).toFixed(2));
+    }
+
+    const noulStocCurent = Number((Number(articol.stocCurent || 0) + cantitate).toFixed(2));
+    await this.prisma.articolStoc.update({
+      where: { id: articolStocId },
+      data: { stocCurent: noulStocCurent },
+    });
+
+    return {
+      articolId: articol.id,
+      depozitId: articol.depozitId,
+      cantitateRestituita: cantitate,
+      stocCurentNou: noulStocCurent,
+    };
+  }
+
   // Obține loturile active FIFO pentru un articol de stoc
   async getLoturiArticol(articolStocId: string) {
     return this.prisma.intrareStoc.findMany({
