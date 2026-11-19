@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
@@ -9,7 +9,7 @@ import {
   PackageCheck, Trash2, ChevronRight, Eye, Code, ExternalLink, Calendar, Zap,
   HelpCircle, BookOpen, Key, CheckCircle, Shield, ArrowUpDown, ArrowUp, ArrowDown,
   ShoppingCart, History, Tag, ShieldAlert, Droplets, Sparkles,
-  Truck, Database, Wrench
+  Truck, Database, Wrench, RotateCcw
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
@@ -361,6 +361,9 @@ function EFacturaContent() {
   const [selectedZile, setSelectedZile] = useState(60);
 
   // STARE PENTRU RECEPȚIE MANUALĂ & ISTORIC FACTURI
+  const MANUAL_INVOICE_STORAGE_KEY = 'fleetcmd_manual_reception_last_invoice';
+  const MANUAL_SUPPLIERS_STORAGE_KEY = 'fleetcmd_manual_reception_suppliers_history';
+  const manualInvoiceHydratedRef = useRef(false);
   const [bevDepozitId, setBevDepozitId] = useState('');
   const [bevCodArticol, setBevCodArticol] = useState('');
   const [bevDenumire, setBevDenumire] = useState('');
@@ -370,17 +373,149 @@ function EFacturaContent() {
   const [bevMarcaUlei, setBevMarcaUlei] = useState('');
   const [bevFurnizor, setBevFurnizor] = useState('');
   const [bevNumarFactura, setBevNumarFactura] = useState('');
-  const [bevDataFactura, setBevDataFactura] = useState(new Date().toISOString().split('T')[0]);
+  const [bevDataFactura, setBevDataFactura] = useState(() => new Date().toISOString().split('T')[0]);
+  const [bevMotivManual, setBevMotivManual] = useState('');
   const [bevUM, setBevUM] = useState('buc');
-  const [bevPretTotal, setBevPretTotal] = useState(1500);
-  const [bevCantitate, setBevCantitate] = useState(10);
+  const [bevPretTotal, setBevPretTotal] = useState<string>('0');
+  const [bevCantitate, setBevCantitate] = useState<string>('1');
   const [bevAreGarantie, setBevAreGarantie] = useState(false);
   const [bevSerieUnica, setBevSerieUnica] = useState('');
   const [bevDurataGarantieLuni, setBevDurataGarantieLuni] = useState(24);
   const [bevDurataGarantieRulaj, setBevDurataGarantieRulaj] = useState(2000);
   const [bevObservatii, setBevObservatii] = useState('');
-  const [intrariHistory, setIntrariHistory] = useState<any[]>([]);
+  const [intrariHistory, setIntrariHistory] = useState<any[]>(() => efacturaCache.intrariHistory || []);
   const [searchQueryHistory, setSearchQueryHistory] = useState('');
+
+  // Autocomplete Furnizor (Recepție Manuală)
+  const [savedManualSuppliers, setSavedManualSuppliers] = useState<string[]>([]);
+  const [furnizorDropdownOpen, setFurnizorDropdownOpen] = useState(false);
+  const [furnizorActiveIdx, setFurnizorActiveIdx] = useState(0);
+
+  // Restaurează datele ultimei facturi manuale + istoricul local al furnizorilor din localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(MANUAL_INVOICE_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.furnizor === 'string') setBevFurnizor(parsed.furnizor);
+        if (typeof parsed?.numarFactura === 'string') setBevNumarFactura(parsed.numarFactura);
+        if (typeof parsed?.dataFactura === 'string' && parsed.dataFactura.trim()) {
+          setBevDataFactura(parsed.dataFactura);
+        }
+        if (typeof parsed?.motivManual === 'string') setBevMotivManual(parsed.motivManual);
+      }
+      const rawSuppliers = localStorage.getItem(MANUAL_SUPPLIERS_STORAGE_KEY);
+      if (rawSuppliers) {
+        const parsedList = JSON.parse(rawSuppliers);
+        if (Array.isArray(parsedList)) {
+          setSavedManualSuppliers(parsedList.filter((s) => typeof s === 'string' && s.trim().length > 0));
+        }
+      }
+    } catch {
+      // ignoră erorile de citire localStorage
+    } finally {
+      manualInvoiceHydratedRef.current = true;
+    }
+  }, []);
+
+  // Memorare automată a ultimului Furnizor, Nr. Factură, Dată Factură și Motiv Recepție Manuală
+  useEffect(() => {
+    if (!manualInvoiceHydratedRef.current) return;
+    try {
+      localStorage.setItem(
+        MANUAL_INVOICE_STORAGE_KEY,
+        JSON.stringify({
+          furnizor: bevFurnizor,
+          numarFactura: bevNumarFactura,
+          dataFactura: bevDataFactura,
+          motivManual: bevMotivManual,
+        }),
+      );
+    } catch {
+      // ignoră erorile de scriere localStorage
+    }
+  }, [bevFurnizor, bevNumarFactura, bevDataFactura, bevMotivManual]);
+
+  // Aliniază categoria selectată la o categorie validă din nomenclator când se încarcă categoriile
+  useEffect(() => {
+    if (categoriiStoc.length > 0 && !categoriiStoc.some((c: any) => c.nume === bevCategorie)) {
+      setBevCategorie(categoriiStoc[0].nume);
+    }
+  }, [categoriiStoc, bevCategorie]);
+
+  const addManualSupplierToHistory = (rawName: string) => {
+    const clean = rawName.trim();
+    if (!clean) return;
+    setSavedManualSuppliers((prev) => {
+      const next = [clean, ...prev.filter((item) => item.trim().toLowerCase() !== clean.toLowerCase())].slice(0, 200);
+      try {
+        localStorage.setItem(MANUAL_SUPPLIERS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const normalizeSupplierSearch = (val: string) =>
+    val
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  // Lista completă și deduplicată de firme/furnizori introduși anterior (Recepții Manuale + Istoric Stoc + e-Factura SPV)
+  const manualSupplierOptions = useMemo(() => {
+    const map = new Map<string, { nume: string; source: 'Istoric' | 'e-Factura' }>();
+    const addEntry = (raw?: string | null, source: 'Istoric' | 'e-Factura' = 'Istoric') => {
+      const clean = String(raw || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      const key = normalizeSupplierSearch(clean);
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { nume: clean, source });
+      }
+    };
+    savedManualSuppliers.forEach((s) => addEntry(s, 'Istoric'));
+    (intrariHistory || []).forEach((i: any) => addEntry(i?.furnizor, 'Istoric'));
+    (facturi || []).forEach((f: any) => addEntry(f?.numeVanzator, 'e-Factura'));
+    return Array.from(map.values()).sort((a, b) =>
+      a.nume.localeCompare(b.nume, 'ro', { sensitivity: 'base' }),
+    );
+  }, [savedManualSuppliers, intrariHistory, facturi]);
+
+  const filteredManualSuppliers = useMemo(() => {
+    const qNorm = normalizeSupplierSearch(bevFurnizor);
+    if (!qNorm) return manualSupplierOptions.slice(0, 12);
+    const matches = manualSupplierOptions.filter((opt) =>
+      normalizeSupplierSearch(opt.nume).includes(qNorm),
+    );
+    // Prioritizează potrivirile care încep cu textul tastat
+    matches.sort((a, b) => {
+      const aStarts = normalizeSupplierSearch(a.nume).startsWith(qNorm) ? 0 : 1;
+      const bStarts = normalizeSupplierSearch(b.nume).startsWith(qNorm) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.nume.localeCompare(b.nume, 'ro', { sensitivity: 'base' });
+    });
+    // Dacă există o singură potrivire exact identică cu textul curent, nu mai deranjăm utilizatorul
+    if (matches.length === 1 && normalizeSupplierSearch(matches[0].nume) === qNorm) {
+      return [];
+    }
+    return matches.slice(0, 12);
+  }, [manualSupplierOptions, bevFurnizor]);
+
+  const handleResetManualInvoice = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setBevFurnizor('');
+    setBevNumarFactura('');
+    setBevDataFactura(today);
+    setBevMotivManual('');
+    try {
+      localStorage.removeItem(MANUAL_INVOICE_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   // SORTING STATE (Alapértelmezett: Data Emiterii desc)
   const [sortKey, setSortKey] = useState<'furnizor' | 'numarFactura' | 'dataFactura' | 'valoareTotala'>('dataFactura');
@@ -898,6 +1033,21 @@ function EFacturaContent() {
 
   const handleManualBevetelez = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cantitateNum = Number(bevCantitate);
+    const pretTotalNum = Number(bevPretTotal === '' ? 0 : bevPretTotal);
+    const motivClean = bevMotivManual.trim();
+    if (!motivClean) {
+      alert('Motivul recepției manuale este obligatoriu! Specificați motivul (ex: factură externă fără SPV, factură pe altă firmă din grup).');
+      return;
+    }
+    if (!Number.isFinite(cantitateNum) || cantitateNum <= 0) {
+      alert('Cantitatea recepționată trebuie să fie mai mare ca 0.');
+      return;
+    }
+    if (!Number.isFinite(pretTotalNum) || pretTotalNum < 0) {
+      alert('Prețul total al facturii nu poate fi negativ.');
+      return;
+    }
     try {
       const res = await authFetch(`${API_BASE_URL}/stocuri-garantii/intrare-stoc`, {
         method: 'POST',
@@ -910,13 +1060,15 @@ function EFacturaContent() {
           depozitId: bevDepozitId || (depozite[0]?.id || ''),
           tipLichid: bevTipLichid !== 'NICIUNUL' ? bevTipLichid : undefined,
           marcaUlei: bevMarcaUlei || undefined,
-          furnizor: bevFurnizor,
-          numarFactura: bevNumarFactura,
+          furnizor: bevFurnizor.trim(),
+          numarFactura: bevNumarFactura.trim(),
           dataFactura: bevDataFactura,
-          cantitate: Number(bevCantitate),
-          pretTotal: Number(bevPretTotal),
+          cantitate: cantitateNum,
+          pretTotal: pretTotalNum,
           unitateMasura: bevUM,
           observatii: bevObservatii,
+          motivReceptieManuala: motivClean,
+          esteReceptieManuala: true,
 
           areGarantie: bevAreGarantie,
           serieUnica: bevSerieUnica || undefined,
@@ -927,14 +1079,29 @@ function EFacturaContent() {
 
       if (res.ok) {
         const data = await res.json();
+        addManualSupplierToHistory(bevFurnizor);
+        try {
+          localStorage.setItem(
+            MANUAL_INVOICE_STORAGE_KEY,
+            JSON.stringify({
+              furnizor: bevFurnizor.trim(),
+              numarFactura: bevNumarFactura.trim(),
+              dataFactura: bevDataFactura,
+              motivManual: motivClean,
+            }),
+          );
+        } catch {
+          // ignore
+        }
         alert(data.mesaj || 'Recepție marfă salvată cu succes în stoc!');
         fetchData();
         setBevCodArticol('');
         setBevDenumire('');
-        setBevFurnizor('');
-        setBevNumarFactura('');
+        setBevPretTotal('0');
+        setBevCantitate('1');
         setBevSerieUnica('');
         setBevAreGarantie(false);
+        setBevObservatii('');
       } else {
         const errMsg = await extractApiErrorMessage(res, 'Eroare necunoscută');
         alert(`Eroare la recepție: ${errMsg}`);
@@ -1791,8 +1958,8 @@ function EFacturaContent() {
     });
   }, [targetCategorie, targetDepozitId, importingItem, codArticolCalculat, stocuriFlota]);
 
-  // QUICK CREATE CATEGORY HANDLER (shared between Depozit & Direct pe Mașină)
-  const handleQuickCreateCategory = async (mode: 'DEPOZIT' | 'DIRECT' = 'DEPOZIT') => {
+  // QUICK CREATE CATEGORY HANDLER (shared between Depozit, Direct pe Mașină & Recepție Manuală)
+  const handleQuickCreateCategory = async (mode: 'DEPOZIT' | 'DIRECT' | 'MANUAL' = 'DEPOZIT') => {
     const cleanName = newCatNume.trim();
     if (!cleanName) return;
     setSavingNewCat(true);
@@ -1815,6 +1982,9 @@ function EFacturaContent() {
         if (mode === 'DIRECT') {
           setTargetCategorieDirect(newName);
           setTargetSubcategorieDirect('');
+        } else if (mode === 'MANUAL') {
+          setBevCategorie(newName);
+          setBevSubcategorie('');
         } else {
           setTargetCategorie(newName);
           setTargetSubcategorie('');
@@ -1834,11 +2004,16 @@ function EFacturaContent() {
     }
   };
 
-  // QUICK CREATE SUBCATEGORY HANDLER (shared between Depozit & Direct pe Mașină)
-  const handleQuickCreateSubcategory = async (mode: 'DEPOZIT' | 'DIRECT' = 'DEPOZIT') => {
+  // QUICK CREATE SUBCATEGORY HANDLER (shared between Depozit, Direct pe Mașină & Recepție Manuală)
+  const handleQuickCreateSubcategory = async (mode: 'DEPOZIT' | 'DIRECT' | 'MANUAL' = 'DEPOZIT') => {
     const cleanSubName = newSubcatNume.trim();
     if (!cleanSubName) return;
-    const parentCatName = mode === 'DIRECT' ? targetCategorieDirect : targetCategorie;
+    const parentCatName =
+      mode === 'DIRECT'
+        ? targetCategorieDirect
+        : mode === 'MANUAL'
+        ? bevCategorie
+        : targetCategorie;
     if (!parentCatName) {
       showToast('Selectați mai întâi o categorie principală.', 'warning');
       return;
@@ -1846,6 +2021,13 @@ function EFacturaContent() {
     const parentCatObj = categoriiStoc.find(
       (c: any) => String(c.nume || '').toLowerCase() === parentCatName.trim().toLowerCase(),
     );
+
+    const resolvedTipLichid =
+      mode === 'DIRECT'
+        ? targetTipLichidDirect
+        : mode === 'MANUAL'
+        ? (bevTipLichid !== 'NICIUNUL' ? bevTipLichid : undefined)
+        : targetTipLichid;
 
     setSavingNewSubcat(true);
     try {
@@ -1856,7 +2038,7 @@ function EFacturaContent() {
           categorieStocId: parentCatObj?.id,
           categorieNume: parentCatName,
           nume: cleanSubName,
-          tipLichid: (mode === 'DIRECT' ? targetTipLichidDirect : targetTipLichid) || undefined,
+          tipLichid: resolvedTipLichid || undefined,
         }),
       });
       if (res.ok) {
@@ -1872,6 +2054,8 @@ function EFacturaContent() {
         );
         if (mode === 'DIRECT') {
           setTargetSubcategorieDirect(newSubName);
+        } else if (mode === 'MANUAL') {
+          setBevSubcategorie(newSubName);
         } else {
           setTargetSubcategorie(newSubName);
         }
@@ -4225,11 +4409,28 @@ function EFacturaContent() {
       {/* TAB 2: RECEPȚIE MANUALĂ PE FACTURĂ NOUĂ */}
       {activeTab === 'manual' && (
         <div className="pleasant-card p-6 rounded-2xl space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
-            <ShoppingCart className="w-5 h-5 text-sapphire-500" />
-            <span>Recepție Manuală Factură (Piese, Consumabile &amp; Uleiuri)</span>
-          </h2>
-          <p className="text-xs text-sage-700 font-medium">Introduceți Prețul Total al Facturii și Cantitatea, iar sistemul va calcula automat Prețul Unitar (RON/unitate)!</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
+                <ShoppingCart className="w-5 h-5 text-sapphire-500" />
+                <span>Recepție Manuală Factură (Piese, Consumabile &amp; Uleiuri)</span>
+              </h2>
+              <p className="text-xs text-sage-700 font-medium mt-1">
+                Introduceți Prețul Total al Facturii și Cantitatea, iar sistemul va calcula automat Prețul Unitar (RON/unitate)!
+              </p>
+            </div>
+            {(bevFurnizor.trim() || bevNumarFactura.trim() || bevMotivManual.trim()) && (
+              <button
+                type="button"
+                onClick={handleResetManualInvoice}
+                className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold inline-flex items-center space-x-1.5 self-start sm:self-auto transition cursor-pointer shrink-0"
+                title="Golește furnizorul, numărul, data și motivul facturii memorate pentru a începe o factură nouă"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-sapphire-600" />
+                <span>Factură nouă</span>
+              </button>
+            )}
+          </div>
 
           <form onSubmit={handleManualBevetelez} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -4269,53 +4470,232 @@ function EFacturaContent() {
               </div>
 
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc:</label>
-                <select
-                  value={bevCategorie}
-                  onChange={(e) => {
-                    setBevCategorie(e.target.value);
-                    setBevSubcategorie('');
-                  }}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  {categoriiStoc.map((c, idx) => (
-                    <option key={idx} value={c.nume}>{c.nume}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <label className="text-sage-700 font-bold">Categorie Stoc:</label>
+                  {!isAddingNewCat && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewCat(true);
+                        setIsAddingNewSubcat(false);
+                        setNewCatNume('');
+                      }}
+                      className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center space-x-0.5 cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Categorie Nouă</span>
+                    </button>
+                  )}
+                </div>
+
+                {isAddingNewCat ? (
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-300 rounded-xl space-y-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCatNume}
+                      onChange={(e) => setNewCatNume(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleQuickCreateCategory('MANUAL');
+                        } else if (e.key === 'Escape') {
+                          setIsAddingNewCat(false);
+                        }
+                      }}
+                      placeholder="Nume categorie nouă..."
+                      className="w-full bg-white border border-emerald-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewCat(false)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                      >
+                        Anulează
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickCreateCategory('MANUAL')}
+                        disabled={savingNewCat || !newCatNume.trim()}
+                        className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {savingNewCat ? 'Se salvează...' : 'Salvează'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={bevCategorie}
+                    onChange={(e) => {
+                      setBevCategorie(e.target.value);
+                      setBevSubcategorie('');
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    {categoriiStoc.map((c, idx) => (
+                      <option key={c.id || idx} value={c.nume}>{c.nume}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Subcategorie Stoc:</label>
-                <select
-                  value={bevSubcategorie}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setBevSubcategorie(val);
-                    const subObj = getSubcategoriiPentruCategorie(bevCategorie).find((s: any) => s.nume === val);
-                    if (subObj?.tipLichid) {
-                      setBevTipLichid(subObj.tipLichid);
-                    }
-                  }}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                >
-                  <option value="">-- Fără Subcategorie --</option>
-                  {getSubcategoriiPentruCategorie(bevCategorie).map((sub: any, idx: number) => (
-                    <option key={idx} value={sub.nume}>{sub.nume}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <label className="text-sage-700 font-bold">Subcategorie Stoc:</label>
+                  {!isAddingNewSubcat && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewSubcat(true);
+                        setIsAddingNewCat(false);
+                        setNewSubcatNume('');
+                      }}
+                      className="text-sapphire-700 hover:text-sapphire-800 font-bold text-[11px] flex items-center space-x-0.5 cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Subcategorie Nouă</span>
+                    </button>
+                  )}
+                </div>
+
+                {isAddingNewSubcat ? (
+                  <div className="p-2.5 bg-sapphire-50/70 border border-sapphire-300 rounded-xl space-y-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newSubcatNume}
+                      onChange={(e) => setNewSubcatNume(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleQuickCreateSubcategory('MANUAL');
+                        } else if (e.key === 'Escape') {
+                          setIsAddingNewSubcat(false);
+                        }
+                      }}
+                      placeholder={`Subcategorie pentru "${bevCategorie}"...`}
+                      className="w-full bg-white border border-sapphire-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
+                    />
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewSubcat(false)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-morning-200 text-slate-700 text-[11px] font-semibold cursor-pointer"
+                      >
+                        Anulează
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickCreateSubcategory('MANUAL')}
+                        disabled={savingNewSubcat || !newSubcatNume.trim()}
+                        className="px-3 py-1 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] shadow-xs disabled:opacity-50 cursor-pointer"
+                      >
+                        {savingNewSubcat ? 'Se salvează...' : 'Salvează'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <select
+                    value={bevSubcategorie}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBevSubcategorie(val);
+                      const subObj = getSubcategoriiPentruCategorie(bevCategorie).find((s: any) => s.nume === val);
+                      if (subObj?.tipLichid) {
+                        setBevTipLichid(subObj.tipLichid);
+                      }
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="">Fără subcategorie</option>
+                    {getSubcategoriiPentruCategorie(bevCategorie).map((sub: any, idx: number) => (
+                      <option key={sub.id || idx} value={sub.nume}>{sub.nume}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="text-sage-700 block mb-1 font-bold">Furnizor (Companie / Producător):</label>
                 <input
                   required
+                  autoComplete="off"
                   value={bevFurnizor}
-                  onChange={(e) => setBevFurnizor(e.target.value)}
+                  onFocus={() => {
+                    setFurnizorDropdownOpen(true);
+                    setFurnizorActiveIdx(0);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setFurnizorDropdownOpen(false), 140);
+                  }}
+                  onChange={(e) => {
+                    setBevFurnizor(e.target.value);
+                    setFurnizorDropdownOpen(true);
+                    setFurnizorActiveIdx(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!furnizorDropdownOpen || filteredManualSuppliers.length === 0) return;
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setFurnizorActiveIdx((prev) => (prev + 1) % filteredManualSuppliers.length);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setFurnizorActiveIdx((prev) =>
+                        prev - 1 < 0 ? filteredManualSuppliers.length - 1 : prev - 1,
+                      );
+                    } else if (e.key === 'Enter') {
+                      const chosen = filteredManualSuppliers[furnizorActiveIdx];
+                      if (chosen) {
+                        e.preventDefault();
+                        setBevFurnizor(chosen.nume);
+                        setFurnizorDropdownOpen(false);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setFurnizorDropdownOpen(false);
+                    }
+                  }}
                   placeholder="ex: AUTONET SRL / LUBRICANTS ROMANIA"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 />
+
+                {furnizorDropdownOpen && filteredManualSuppliers.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-morning-300 rounded-xl shadow-xl max-h-56 overflow-y-auto py-1">
+                    <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-sage-500 border-b border-morning-200">
+                      Firme introduse anterior ({filteredManualSuppliers.length})
+                    </div>
+                    {filteredManualSuppliers.map((opt, idx) => {
+                      const isHighlighted = idx === furnizorActiveIdx;
+                      return (
+                        <button
+                          key={`${opt.nume}-${idx}`}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setBevFurnizor(opt.nume);
+                            setFurnizorDropdownOpen(false);
+                          }}
+                          onMouseEnter={() => setFurnizorActiveIdx(idx)}
+                          className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                            isHighlighted
+                              ? 'bg-sapphire-50 text-sapphire-900'
+                              : 'text-slate-700 hover:bg-morning-50'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Building2 className="w-3.5 h-3.5 text-sapphire-500 shrink-0" />
+                            <span className="font-bold text-xs truncate">{opt.nume}</span>
+                          </div>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-morning-100 border border-morning-200 text-sage-600 shrink-0">
+                            {opt.source}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -4353,6 +4733,29 @@ function EFacturaContent() {
               </div>
             </div>
 
+            {/* MOTIV RECEPȚIE MANUALĂ (OBLIGATORIU PENTRU AUDIT) */}
+            <div className="p-4 bg-amber-50/70 border border-amber-300 rounded-2xl space-y-1.5">
+              <label
+                htmlFor="motivReceptieManualaInput"
+                className="text-amber-900 font-extrabold text-xs flex items-center space-x-1.5"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Motiv Recepție Manuală (Obligatoriu): *</span>
+              </label>
+              <input
+                id="motivReceptieManualaInput"
+                type="text"
+                required
+                value={bevMotivManual}
+                onChange={(e) => setBevMotivManual(e.target.value)}
+                placeholder="ex: Factură externă (nu intră în ANAF SPV), factură emisă pe altă firmă din grup, bon fiscal..."
+                className="w-full bg-white border border-amber-300 rounded-xl p-2.5 text-sapphire-900 font-semibold focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[11px] text-amber-800 font-medium">
+                Specificați motivul introducerii manuale a facturii (rămâne memorat pentru pozițiile următoare ale aceleiași facturi și apare în istoric).
+              </p>
+            </div>
+
             {/* Suport Special Achiziție Uleiuri */}
             <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -4388,10 +4791,13 @@ function EFacturaContent() {
                 <label className="text-periwinkle-700 block mb-1 font-extrabold">1. Preț Total Factură (RON):</label>
                 <input
                   type="number"
+                  min="0"
+                  step="any"
                   required
                   value={bevPretTotal}
-                  onChange={(e) => setBevPretTotal(Number(e.target.value))}
-                  placeholder="ex: 1500 RON"
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setBevPretTotal(e.target.value)}
+                  placeholder="0"
                   className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
                 />
               </div>
@@ -4400,10 +4806,13 @@ function EFacturaContent() {
                 <label className="text-periwinkle-700 block mb-1 font-extrabold">2. Cantitate Recepționată:</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0.01"
+                  step="any"
                   required
                   value={bevCantitate}
-                  onChange={(e) => setBevCantitate(Number(e.target.value))}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setBevCantitate(e.target.value)}
+                  placeholder="1"
                   className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
                 />
               </div>
@@ -4412,7 +4821,7 @@ function EFacturaContent() {
                 <label className="text-periwinkle-700 block mb-1 font-extrabold">3. Calcul Automat Preț Unitar:</label>
                 <input
                   disabled
-                  value={`${(bevPretTotal / Math.max(1, bevCantitate)).toFixed(2)} RON / ${bevUM}`}
+                  value={`${((Number(bevPretTotal) || 0) / (Number(bevCantitate) > 0 ? Number(bevCantitate) : 1)).toFixed(2)} RON / ${bevUM}`}
                   className="w-full bg-white border border-periwinkle-300 rounded-xl p-2.5 text-sapphire-600 font-mono font-extrabold text-sm opacity-95"
                 />
               </div>
@@ -4482,7 +4891,7 @@ function EFacturaContent() {
             <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                className="px-6 py-3 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20"
+                className="px-6 py-3 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-md shadow-sapphire-500/20 cursor-pointer"
               >
                 Salvează Recepție Marfă pe Factură
               </button>
@@ -4506,7 +4915,7 @@ function EFacturaContent() {
                 type="text"
                 value={searchQueryHistory}
                 onChange={(e) => setSearchQueryHistory(e.target.value)}
-                placeholder="Căutare după furnizor, număr factură..."
+                placeholder="Căutare după furnizor, factură, motiv..."
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-4 py-2 text-xs text-sapphire-900 font-bold"
               />
             </div>
@@ -4518,7 +4927,7 @@ function EFacturaContent() {
                 <tr>
                   <th className="p-3">Data Recepției</th>
                   <th className="p-3">Furnizor</th>
-                  <th className="p-3">Număr Factură</th>
+                  <th className="p-3">Număr Factură &amp; Motiv</th>
                   <th className="p-3">Articol Achiziționat</th>
                   <th className="p-3 font-mono">Cantitate</th>
                   <th className="p-3 font-mono">Preț Unitar</th>
@@ -4533,6 +4942,7 @@ function EFacturaContent() {
                     return (
                       i.furnizor?.toLowerCase().includes(q) ||
                       i.numarFactura?.toLowerCase().includes(q) ||
+                      i.motivReceptieManuala?.toLowerCase().includes(q) ||
                       i.articolStoc?.denumire?.toLowerCase().includes(q) ||
                       i.articolStoc?.codArticol?.toLowerCase().includes(q)
                     );
@@ -4541,7 +4951,17 @@ function EFacturaContent() {
                     <tr key={i.id} className="hover:bg-morning-50 transition">
                       <td className="p-3 font-semibold text-sage-700">{new Date(i.dataFactura).toLocaleDateString('ro-RO')}</td>
                       <td className="p-3 font-bold text-sapphire-900">{i.furnizor}</td>
-                      <td className="p-3 font-mono font-bold text-sapphire-600">{i.numarFactura}</td>
+                      <td className="p-3">
+                        <div className="font-mono font-bold text-sapphire-600">{i.numarFactura}</div>
+                        {i.motivReceptieManuala && (
+                          <div
+                            className="mt-1 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 border border-amber-300 text-amber-800 text-[10px] font-bold max-w-[260px] truncate"
+                            title={`Motiv recepție manuală: ${i.motivReceptieManuala}`}
+                          >
+                            Manual: {i.motivReceptieManuala}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-3 font-medium text-slate-800">{i.articolStoc?.denumire}</td>
                       <td className="p-3 font-mono font-bold text-sage-700">{i.cantitateIntrata} {i.articolStoc?.unitateMasura}</td>
                       <td className="p-3 font-mono text-slate-700">{Number(i.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON</td>

@@ -549,10 +549,11 @@ model IntrareStoc {
   dataFactura        DateTime     @default(now())
   cantitateIntrata   Float
   cantitateRamasa    Float?
-  pretUnitar         Float
-  pretTotal          Float
-  observatii         String?
-  createdAt          DateTime     @default(now())
+  pretUnitar           Float
+  pretTotal            Float
+  observatii           String?
+  motivReceptieManuala String?
+  createdAt            DateTime     @default(now())
 
   @@index([furnizor])
   @@index([numarFactura])

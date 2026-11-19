@@ -936,6 +936,8 @@ export class StocuriGarantiiService {
     tipLichid?: string;
     marcaUlei?: string;
     observatii?: string;
+    motivReceptieManuala?: string;
+    esteReceptieManuala?: boolean;
     articolStocId?: string;
 
     areGarantie?: boolean;
@@ -946,6 +948,12 @@ export class StocuriGarantiiService {
     const cantitate = Number(data.cantitate);
     const pretTotal = Number(data.pretTotal);
     if (cantitate <= 0) throw new BadRequestException('Cantitatea trebuie să fie mai mare ca 0.');
+    const motivManual = data.motivReceptieManuala ? String(data.motivReceptieManuala).trim() : null;
+    if (data.esteReceptieManuala && !motivManual) {
+      throw new BadRequestException(
+        'Motivul recepției manuale este obligatoriu (ex: factură externă fără SPV, factură pe altă firmă din grup).',
+      );
+    }
 
     const pretUnitar = Number((pretTotal / cantitate).toFixed(2));
 
@@ -1048,6 +1056,7 @@ export class StocuriGarantiiService {
         pretUnitar,
         pretTotal,
         observatii: data.observatii,
+        motivReceptieManuala: motivManual,
       },
     });
 
@@ -1200,6 +1209,7 @@ export class StocuriGarantiiService {
                 { furnizor: { contains: token, mode: 'insensitive' } },
                 { numarFactura: { contains: token, mode: 'insensitive' } },
                 { observatii: { contains: token, mode: 'insensitive' } },
+                { motivReceptieManuala: { contains: token, mode: 'insensitive' } },
                 { marcaUlei: { contains: token, mode: 'insensitive' } },
                 { articolStoc: { denumire: { contains: token, mode: 'insensitive' } } },
                 { articolStoc: { codArticol: { contains: token, mode: 'insensitive' } } },
