@@ -6,9 +6,12 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
-  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog, Link2
+  Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog, Link2,
+  LayoutGrid, LayoutList, RotateCcw
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
+import FluidStatusMatrix from '@/components/FluidStatusMatrix';
+import { getCategoryColor } from '@/lib/categoryColors';
 import { showConfirm } from '@/lib/swal';
 import {
   FALLBACK_TIPURI_FLUIDE,
@@ -63,12 +66,14 @@ export default function FluidePage() {
   const [mecaniciList, setMecaniciList] = useState<any[]>([]);
   const [isAlerteCollapsed, setIsAlerteCollapsed] = useState<boolean>(false);
 
-  // Filtre Tab Status Flotă & Schimburi
+  // Filtre & Mod Vizualizare Tab Status Flotă & Schimburi
+  const [flotaViewMode, setFlotaViewMode] = useState<'matrice' | 'lista'>('matrice');
+  const [flotaMatrixColMode, setFlotaMatrixColMode] = useState<'GROUPED' | 'EXACT'>('GROUPED');
   const [searchFlota, setSearchFlota] = useState<string>('');
   const [filterFlotaStatus, setFilterFlotaStatus] = useState<'TOATE' | 'PROBLEME' | 'DEPASIT' | 'AVERTIZARE' | 'OPTIM'>('TOATE');
   const [filterFlotaTip, setFilterFlotaTip] = useState<string>('TOATE');
   const [filterFlotaCategorie, setFilterFlotaCategorie] = useState<string>('TOATE');
-  const [filterFlotaUnit, setFilterFlotaUnit] = useState<'TOATE' | 'KM' | 'MTH'>('TOATE');
+  const [filterFlotaUnit, setFilterFlotaUnit] = useState<'TOATE' | 'KM' | 'MTH' | 'LUNI'>('TOATE');
 
   // Istoric Completări & Schimburi Fluide
   const [istoricCompletari, setIstoricCompletari] = useState<any[]>([]);
@@ -422,7 +427,7 @@ export default function FluidePage() {
     }
   };
 
-  // Ascultăm schimbarea tab-ului din URL (?tab=stocuri)
+  // Ascultăm schimbarea tab-ului și a vizualizării din URL (?tab=stocuri&view=matrice|lista) + localStorage
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -431,9 +436,25 @@ export default function FluidePage() {
         if (t === 'flota' || t === 'stocuri' || t === 'istoric' || t === 'config' || t === 'anomalii') {
           setActiveTab(t);
         }
+        const v = params.get('view');
+        if (v === 'matrice' || v === 'lista') {
+          setFlotaViewMode(v);
+        } else {
+          const savedView = localStorage.getItem('fleetcmd_fluide_flota_view_mode');
+          if (savedView === 'matrice' || savedView === 'lista') {
+            setFlotaViewMode(savedView);
+          }
+        }
       }
     } catch (e) {}
   }, []);
+
+  const handleChangeFlotaViewMode = (mode: 'matrice' | 'lista') => {
+    setFlotaViewMode(mode);
+    try {
+      localStorage.setItem('fleetcmd_fluide_flota_view_mode', mode);
+    } catch (e) {}
+  };
 
   // Handlers Modificare Prag Alertă per Articol
   const handleOpenEditAlert = (art: any) => {
@@ -1214,15 +1235,51 @@ export default function FluidePage() {
   const fluideCriticeCount = stocUleiuri.filter((s) => (Number(s.stocMinim) || 0) > 0 && (Number(s.stocCurent) || 0) < (Number(s.stocMinim) || 0)).length;
   const totalSubcategoriiFluide = categoriiFluide.reduce((acc, c) => acc + (c.subcategorii?.length || 0), 0);
 
-  // Calcule & Filtrare Status Flotă (Matrice Schimburi)
+  // Calcule & Filtrare Status Flotă (Matrice & Listă Schimburi)
   const flotaDepasiteCount = flotaFluide.filter((f) => f.esteDepasit).length;
   const flotaAvertCount = flotaFluide.filter((f) => !f.esteDepasit && f.esteInPragAvertizare).length;
   const flotaOptimeCount = Math.max(0, flotaFluide.length - flotaDepasiteCount - flotaAvertCount);
 
-  const flotaAvailableCategories = useMemo(
-    () => Array.from(new Set(flotaFluide.map((f) => f.vehiculCategorie).filter(Boolean))).sort(),
+  const flotaTotalVehiclesCount = useMemo(
+    () => new Set(flotaFluide.map((f) => f.vehiculId)).size,
     [flotaFluide],
   );
+
+  const flotaCategorySummary = useMemo(() => {
+    const map = new Map<string, { vehIds: Set<string>; overdue: number; warn: number }>();
+    flotaFluide.forEach((f) => {
+      const cat = f.vehiculCategorie;
+      if (!cat) return;
+      if (!map.has(cat)) {
+        map.set(cat, { vehIds: new Set(), overdue: 0, warn: 0 });
+      }
+      const entry = map.get(cat)!;
+      entry.vehIds.add(f.vehiculId);
+      if (f.esteDepasit) entry.overdue++;
+      else if (f.esteInPragAvertizare) entry.warn++;
+    });
+    return Array.from(map.entries())
+      .map(([cat, info]) => ({
+        cat,
+        vehicleCount: info.vehIds.size,
+        overdue: info.overdue,
+        warn: info.warn,
+      }))
+      .sort((a, b) => a.cat.localeCompare(b.cat, 'ro', { numeric: true, sensitivity: 'base' }));
+  }, [flotaFluide]);
+
+  const matchesFlotaUnitFilter = (f: any, unitFilter: 'TOATE' | 'KM' | 'MTH' | 'LUNI') => {
+    if (unitFilter === 'MTH') {
+      return f.trackingMode === 'MTH' || ((f.unitateMasura || '').toUpperCase() === 'MTH' && f.trackingMode !== 'LUNI');
+    }
+    if (unitFilter === 'KM') {
+      return f.trackingMode === 'KM' || ((f.unitateMasura || '').toUpperCase() === 'KM' && f.trackingMode !== 'LUNI');
+    }
+    if (unitFilter === 'LUNI') {
+      return f.trackingMode === 'LUNI';
+    }
+    return true;
+  };
 
   const flotaFluideFiltrate = useMemo(() => {
     const q = searchFlota.trim().toLowerCase();
@@ -1245,8 +1302,7 @@ export default function FluidePage() {
         if (filterFlotaStatus === 'PROBLEME' && !f.esteDepasit && !f.esteInPragAvertizare) return false;
         if (filterFlotaTip !== 'TOATE' && f.tipLichid !== filterFlotaTip) return false;
         if (filterFlotaCategorie !== 'TOATE' && f.vehiculCategorie !== filterFlotaCategorie) return false;
-        if (filterFlotaUnit === 'MTH' && (f.unitateMasura || '').toUpperCase() !== 'MTH') return false;
-        if (filterFlotaUnit === 'KM' && (f.unitateMasura || '').toUpperCase() === 'MTH') return false;
+        if (!matchesFlotaUnitFilter(f, filterFlotaUnit)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -1257,7 +1313,64 @@ export default function FluidePage() {
         if (pDiff !== 0) return pDiff;
         return String(a.vehiculNumarIntern || '').localeCompare(String(b.vehiculNumarIntern || ''), undefined, { numeric: true });
       });
-  }, [flotaFluide, searchFlota, filterFlotaStatus, filterFlotaTip, filterFlotaCategorie, filterFlotaUnit]);
+  }, [flotaFluide, searchFlota, filterFlotaStatus, filterFlotaTip, filterFlotaCategorie, filterFlotaUnit, tipLichidLabels]);
+
+  const flotaMatrixVehicleCount = useMemo(() => {
+    const byVeh = new Map<string, any[]>();
+    flotaFluide.forEach((f) => {
+      if (!byVeh.has(f.vehiculId)) byVeh.set(f.vehiculId, []);
+      byVeh.get(f.vehiculId)!.push(f);
+    });
+    const q = searchFlota.trim().toLowerCase();
+    let count = 0;
+    byVeh.forEach((norms) => {
+      const sample = norms[0];
+      if (!sample) return;
+      if (filterFlotaCategorie !== 'TOATE' && sample.vehiculCategorie !== filterFlotaCategorie) return;
+      const visible = norms.filter(
+        (n) => (filterFlotaTip === 'TOATE' || n.tipLichid === filterFlotaTip) && matchesFlotaUnitFilter(n, filterFlotaUnit),
+      );
+      if (visible.length === 0) return;
+      if (q) {
+        const haystack = [
+          sample.vehiculNumarIntern,
+          sample.vehiculInmatriculare,
+          sample.vehiculMarca,
+          sample.vehiculModel,
+          sample.vehiculCategorie,
+          ...visible.map((n) => tipLichidLabels[n.tipLichid] || n.tipLichid),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return;
+      }
+      const hasOver = visible.some((n) => n.esteDepasit);
+      const hasWarn = visible.some((n) => !n.esteDepasit && n.esteInPragAvertizare);
+      if (filterFlotaStatus === 'DEPASIT' && !hasOver) return;
+      if (filterFlotaStatus === 'AVERTIZARE' && !hasWarn) return;
+      if (filterFlotaStatus === 'PROBLEME' && !hasOver && !hasWarn) return;
+      if (filterFlotaStatus === 'OPTIM' && (hasOver || hasWarn)) return;
+      count++;
+    });
+    return count;
+  }, [flotaFluide, searchFlota, filterFlotaStatus, filterFlotaTip, filterFlotaCategorie, filterFlotaUnit, tipLichidLabels]);
+
+  const hasActiveFlotaFilters = Boolean(
+    searchFlota.trim() ||
+    filterFlotaStatus !== 'TOATE' ||
+    filterFlotaTip !== 'TOATE' ||
+    filterFlotaCategorie !== 'TOATE' ||
+    filterFlotaUnit !== 'TOATE',
+  );
+
+  const resetFlotaFilters = () => {
+    setSearchFlota('');
+    setFilterFlotaStatus('TOATE');
+    setFilterFlotaTip('TOATE');
+    setFilterFlotaCategorie('TOATE');
+    setFilterFlotaUnit('TOATE');
+  };
 
   // Filtrare Istoric Intervenții Fluide
   const istoricCompletariFiltrat = useMemo(() => {
@@ -1344,11 +1457,12 @@ export default function FluidePage() {
           </a>
 
           <button
+            type="button"
             onClick={() => handleOpenCompletare()}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Înregistrează Intervenție</span>
+            <span>Înregistrează Intervenție</span>
           </button>
         </div>
       </div>
@@ -1536,144 +1650,357 @@ export default function FluidePage() {
       {/* TAB 0: STATUS FLOTĂ & PROXIMĂ REVIZIE FLUIDE */}
       {/* ========================================================================= */}
       {activeTab === 'flota' && (
-        <div className="space-y-6">
-          {/* KPI STATUS FLOTĂ FLUIDE */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="pleasant-card p-5 rounded-2xl border border-morning-200 shadow-2xs space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-sage-600 uppercase tracking-wider">Norme Monitorizate</span>
-                <div className="p-2 rounded-xl bg-sapphire-100 text-sapphire-700"><Gauge className="w-5 h-5" /></div>
-              </div>
-              <p className="text-2xl font-black text-sapphire-900 font-mono">{flotaFluide.length}</p>
-              <p className="text-[11px] text-sage-600">Vehicule × fluide cu interval activ</p>
-            </div>
-
-            <div className={`pleasant-card p-5 rounded-2xl border shadow-2xs space-y-1.5 ${flotaDepasiteCount > 0 ? 'bg-roseash-50 border-roseash-300' : 'border-morning-200'}`}>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold uppercase tracking-wider ${flotaDepasiteCount > 0 ? 'text-terracotta-700' : 'text-sage-600'}`}>Schimburi Depășite</span>
-                <div className="p-2 rounded-xl bg-roseash-200 text-terracotta-700"><AlertTriangle className="w-5 h-5" /></div>
-              </div>
-              <p className={`text-2xl font-black font-mono ${flotaDepasiteCount > 0 ? 'text-terracotta-700' : 'text-sapphire-900'}`}>{flotaDepasiteCount}</p>
-              <p className="text-[11px] text-sage-600">Necesită schimb imediat</p>
-            </div>
-
-            <div className="pleasant-card p-5 rounded-2xl border border-morning-200 shadow-2xs space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Aproape de Limită</span>
-                <div className="p-2 rounded-xl bg-amber-100 text-amber-700"><Clock className="w-5 h-5" /></div>
-              </div>
-              <p className="text-2xl font-black text-amber-700 font-mono">{flotaAvertCount}</p>
-              <p className="text-[11px] text-sage-600">În pragul de avertizare configurat</p>
-            </div>
-
-            <div className="pleasant-card p-5 rounded-2xl border border-morning-200 shadow-2xs space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">În Parametri Optimi</span>
-                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700"><CheckCircle2 className="w-5 h-5" /></div>
-              </div>
-              <p className="text-2xl font-black text-emerald-700 font-mono">{flotaOptimeCount}</p>
-              <p className="text-[11px] text-sage-600">Interval normal de funcționare</p>
-            </div>
-          </div>
-
-          <div className="pleasant-card rounded-2xl p-6 space-y-4 shadow-sm border border-morning-200">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-morning-200 pb-3">
+        <div className="space-y-4">
+          {/* KPI INTERACTIVE STATUS FLOTĂ FLUIDE (UNIFICAT CU DOCUMENTE) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setFilterFlotaStatus('TOATE')}
+              className={`pleasant-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-sapphire-500 text-left transition hover:shadow-md cursor-pointer ${
+                filterFlotaStatus === 'TOATE' ? 'ring-1 ring-sapphire-400/50' : ''
+              }`}
+            >
               <div>
-                <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
-                  <Gauge className="w-5 h-5 text-sapphire-600" />
-                  <span>Matrice Schimburi Ulei &amp; Fluide Flotă ({flotaFluideFiltrate.length} / {flotaFluide.length})</span>
-                </h3>
-                <p className="text-xs text-sage-600 font-medium mt-0.5">
-                  Progresul rulajului și al timpului de la ultimul schimb pentru fiecare utilaj cu normă configurată (ordonat după urgență).
+                <p className="text-[10px] uppercase font-black text-sapphire-700 tracking-wider">Norme Monitorizate</p>
+                <p className="text-3xl font-black text-sapphire-900 font-mono tabular-nums mt-0.5">{flotaFluide.length}</p>
+                <p className="text-[11px] text-sage-600 font-semibold">{flotaTotalVehiclesCount} utilaje active</p>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-sapphire-50 border border-sapphire-200 flex items-center justify-center text-sapphire-600 shrink-0">
+                <Gauge className="w-5 h-5" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterFlotaStatus(filterFlotaStatus === 'DEPASIT' ? 'TOATE' : 'DEPASIT')}
+              className={`pleasant-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-terracotta-500 text-left transition hover:shadow-md cursor-pointer ${
+                filterFlotaStatus === 'DEPASIT' ? 'ring-2 ring-terracotta-500' : ''
+              }`}
+            >
+              <div>
+                <p className="text-[10px] uppercase font-black text-terracotta-600 tracking-wider">Schimburi Depășite</p>
+                <p className="text-3xl font-black text-terracotta-600 font-mono tabular-nums mt-0.5">{flotaDepasiteCount}</p>
+                <p className="text-[11px] text-sage-600 font-semibold">necesită schimb imediat</p>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-roseash-100 border border-roseash-300 flex items-center justify-center text-terracotta-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterFlotaStatus(filterFlotaStatus === 'AVERTIZARE' ? 'TOATE' : 'AVERTIZARE')}
+              className={`pleasant-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-amber-400 text-left transition hover:shadow-md cursor-pointer ${
+                filterFlotaStatus === 'AVERTIZARE' ? 'ring-2 ring-amber-500' : ''
+              }`}
+            >
+              <div>
+                <p className="text-[10px] uppercase font-black text-amber-700 tracking-wider">Aproape de Limită</p>
+                <p className="text-3xl font-black text-amber-700 font-mono tabular-nums mt-0.5">{flotaAvertCount}</p>
+                <p className="text-[11px] text-sage-600 font-semibold">în prag de avertizare</p>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-600 shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterFlotaStatus(filterFlotaStatus === 'OPTIM' ? 'TOATE' : 'OPTIM')}
+              className={`pleasant-card p-4 rounded-2xl flex items-center justify-between border-l-4 border-l-emerald-500 text-left transition hover:shadow-md cursor-pointer ${
+                filterFlotaStatus === 'OPTIM' ? 'ring-2 ring-emerald-500' : ''
+              }`}
+            >
+              <div>
+                <p className="text-[10px] uppercase font-black text-emerald-700 tracking-wider">În Parametri Optimi</p>
+                <p className="text-3xl font-black text-emerald-800 font-mono tabular-nums mt-0.5">{flotaOptimeCount}</p>
+                <p className="text-[11px] text-sage-600 font-semibold">
+                  {flotaFluide.length > 0 ? `${Math.round((flotaOptimeCount / flotaFluide.length) * 100)}% din norme` : '0%'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('config')}
-                className="px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold flex items-center space-x-1.5 self-start md:self-auto"
-              >
-                <Sliders className="w-3.5 h-3.5 text-sapphire-600" />
-                <span>Configurează Norme Categorii</span>
-              </button>
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            </button>
+          </div>
+
+          {/* COMUTATOR VIZUALIZARE & PANOU FILTRE UNIFICAT (MATRICE ⟷ LISTĂ DETALIATĂ) */}
+          <div className="pleasant-card rounded-2xl p-4 bg-white border border-morning-200 space-y-3.5 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Switcher Tabel Matrice vs Listă Detaliată */}
+              <div className="flex items-center flex-wrap gap-1.5 p-1 bg-morning-100 rounded-xl border border-morning-200 self-start">
+                <button
+                  type="button"
+                  onClick={() => handleChangeFlotaViewMode('matrice')}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                    flotaViewMode === 'matrice'
+                      ? 'bg-sapphire-500 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Tabel Matrice ({flotaMatrixVehicleCount} utilaje)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleChangeFlotaViewMode('lista')}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer ${
+                    flotaViewMode === 'lista'
+                      ? 'bg-sapphire-500 text-white shadow-xs'
+                      : 'text-sage-700 hover:text-sapphire-900 hover:bg-morning-200'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>Listă Detaliată ({flotaFluideFiltrate.length} norme)</span>
+                </button>
+              </div>
+
+              {/* Acțiuni & Mod Coloane Matrice */}
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-sage-600">
+                {flotaViewMode === 'matrice' && filterFlotaCategorie === 'TOATE' && filterFlotaTip === 'TOATE' && (
+                  <div
+                    className="inline-flex items-center p-0.5 bg-morning-100 rounded-lg border border-morning-200"
+                    title="Comută între 5 coloane funcționale compacte sau toate tipurile exacte de ulei"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setFlotaMatrixColMode('GROUPED')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-extrabold transition cursor-pointer ${
+                        flotaMatrixColMode === 'GROUPED'
+                          ? 'bg-white text-sapphire-900 shadow-2xs'
+                          : 'text-sage-600 hover:text-sapphire-900'
+                      }`}
+                    >
+                      Coloane Grupate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFlotaMatrixColMode('EXACT')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-extrabold transition cursor-pointer ${
+                        flotaMatrixColMode === 'EXACT'
+                          ? 'bg-white text-sapphire-900 shadow-2xs'
+                          : 'text-sage-600 hover:text-sapphire-900'
+                      }`}
+                    >
+                      Toate Uleiurile
+                    </button>
+                  </div>
+                )}
+
+                {hasActiveFlotaFilters && (
+                  <button
+                    type="button"
+                    onClick={resetFlotaFilters}
+                    className="text-xs font-bold text-terracotta-600 hover:underline flex items-center space-x-1 px-2 py-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Resetează Filtrele</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('config')}
+                  className="px-3 py-1.5 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-200 text-sapphire-900 text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-sapphire-600" />
+                  <span>Norme Categorii</span>
+                </button>
+              </div>
             </div>
 
-            {/* BARĂ FILTRE FLOTĂ */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-2.5 p-3.5 bg-morning-100 rounded-2xl border border-morning-200 text-xs">
+            {/* Rând Căutare + Selector Fluid & Contor */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 pt-2 border-t border-morning-200 items-center text-xs">
               <div className="md:col-span-2 relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
+                <Search className="w-3.5 h-3.5 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchFlota}
                   onChange={(e) => setSearchFlota(e.target.value)}
-                  placeholder="Caută utilaj, înmatriculare, marcă, fluid..."
-                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-morning-300 text-sapphire-900 font-medium focus:outline-none focus:border-sapphire-500"
+                  placeholder="Caută utilaj, înmatriculare, marcă, categorie sau ulei..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-7 py-2 text-xs text-sapphire-900 font-bold focus:bg-white transition"
                 />
+                {searchFlota && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchFlota('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-sage-400 hover:text-sapphire-900 font-bold cursor-pointer"
+                    aria-label="Șterge căutarea"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
-
-              <select
-                value={filterFlotaStatus}
-                onChange={(e) => setFilterFlotaStatus(e.target.value as any)}
-                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
-              >
-                <option value="TOATE">Stare: Toate</option>
-                <option value="PROBLEME">Atenție (Depășite + Avertizări)</option>
-                <option value="DEPASIT">Doar Depășite</option>
-                <option value="AVERTIZARE">Doar Aproape de Limită</option>
-                <option value="OPTIM">Doar Optime</option>
-              </select>
 
               <select
                 value={filterFlotaTip}
                 onChange={(e) => setFilterFlotaTip(e.target.value)}
-                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
               >
-                <option value="TOATE">Fluid: Toate Tipurile</option>
+                <option value="TOATE">Fluid: Toate Tipurile ({tipuriFluide.length})</option>
                 {tipuriFluide.map((tf) => (
                   <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
               </select>
 
               <select
-                value={filterFlotaCategorie}
-                onChange={(e) => setFilterFlotaCategorie(e.target.value)}
-                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
-              >
-                <option value="TOATE">Categorie: Toate</option>
-                {flotaAvailableCategories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-
-              <select
                 value={filterFlotaUnit}
                 onChange={(e) => setFilterFlotaUnit(e.target.value as any)}
-                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+                className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
               >
-                <option value="TOATE">Contor: KM &amp; mTH</option>
-                <option value="KM">Doar Rutier (KM)</option>
-                <option value="MTH">Doar Utilaje (mTH)</option>
+                <option value="TOATE">Contor: KM, mTH &amp; Luni</option>
+                <option value="MTH">Doar Ore (mTH)</option>
+                <option value="KM">Doar Kilometri (KM)</option>
+                <option value="LUNI">Doar Calendaristic (Luni)</option>
               </select>
             </div>
 
-            {flotaFluide.length === 0 ? (
-              <div className="p-8 text-center bg-morning-100 rounded-2xl border border-morning-200 space-y-2">
-                <Sliders className="w-8 h-8 text-sapphire-500 mx-auto" />
-                <p className="font-extrabold text-sapphire-900 text-sm">Nu există norme de schimb fluid configurate încă</p>
-                <p className="text-xs text-sage-600">
-                  Accesați tab-ul <strong>Norme &amp; Configurare Intervale</strong> pentru a defini intervalele per categorie de utilaje (ex: 15.000 KM sau 250 mTH).
+            {/* Pilule Categorii Flotă (Click = filtrează instant + afișează coloanele exacte ale categoriei) */}
+            {flotaCategorySummary.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black text-sage-500 uppercase tracking-wider">
+                  Categorie Flotă
                 </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFilterFlotaCategorie('TOATE')}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition select-none cursor-pointer ${
+                      filterFlotaCategorie === 'TOATE'
+                        ? 'bg-sapphire-600 text-white border-sapphire-600 shadow-xs'
+                        : 'bg-white text-slate-600 border-morning-200 hover:border-morning-300 hover:bg-morning-50'
+                    }`}
+                  >
+                    <span>Toate</span>
+                    <span
+                      className={`px-1.5 rounded-full text-[10px] font-black leading-4 ${
+                        filterFlotaCategorie === 'TOATE'
+                          ? 'bg-white/25 text-white'
+                          : 'bg-morning-100 text-slate-500'
+                      }`}
+                    >
+                      {flotaTotalVehiclesCount}
+                    </span>
+                  </button>
+
+                  {flotaCategorySummary.map((item) => {
+                    const catColor = getCategoryColor(item.cat);
+                    const isActive = filterFlotaCategorie === item.cat;
+                    return (
+                      <button
+                        key={item.cat}
+                        type="button"
+                        onClick={() =>
+                          setFilterFlotaCategorie(isActive ? 'TOATE' : item.cat)
+                        }
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition select-none cursor-pointer ${
+                          isActive ? catColor.chipActive : catColor.chipInactive
+                        }`}
+                      >
+                        {item.overdue > 0 ? (
+                          <span
+                            className="w-2 h-2 rounded-full bg-terracotta-500 shrink-0"
+                            title={`${item.overdue} depășite`}
+                          />
+                        ) : item.warn > 0 ? (
+                          <span
+                            className="w-2 h-2 rounded-full bg-amber-500 shrink-0"
+                            title={`${item.warn} în avertizare`}
+                          />
+                        ) : null}
+                        <span>{item.cat.replace(/_/g, ' ')}</span>
+                        <span
+                          className={`px-1.5 rounded-full text-[10px] font-black leading-4 ${
+                            isActive ? catColor.countActive : catColor.countInactive
+                          }`}
+                        >
+                          {item.vehicleCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ) : (
-              <div className="overflow-x-auto rounded-2xl border border-morning-200">
-                <table className="w-full text-left border-collapse text-xs min-w-[960px]">
-                  <thead>
-                    <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
-                      <th className="p-3">Utilaj / Categorie</th>
-                      <th className="p-3">Tip Fluid</th>
-                      <th className="p-3">Ultimul Schimb &amp; Contor</th>
-                      <th className="p-3 min-w-[230px]">Progres Interval &amp; Rămas</th>
-                      <th className="p-3 text-center">Status</th>
-                      <th className="p-3 text-right">Acțiuni Rapide</th>
+            )}
+
+            {/* Pilule Stare Schimburi */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-black text-sage-500 uppercase tracking-wider">Stare Schimb</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'TOATE', label: 'Toate Stările', count: flotaFluide.length, bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300' },
+                  { id: 'PROBLEME', label: 'Necesită Atenție', count: flotaDepasiteCount + flotaAvertCount, bg: 'bg-roseash-100', text: 'text-terracotta-800', border: 'border-roseash-300' },
+                  { id: 'DEPASIT', label: 'Depășite', count: flotaDepasiteCount, bg: 'bg-roseash-100', text: 'text-terracotta-800', border: 'border-roseash-300' },
+                  { id: 'AVERTIZARE', label: 'Aproape de Limită', count: flotaAvertCount, bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300' },
+                  { id: 'OPTIM', label: 'În Parametri Optimi', count: flotaOptimeCount, bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300' },
+                ].map((st) => {
+                  const isActive = filterFlotaStatus === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setFilterFlotaStatus(st.id as any)}
+                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition select-none cursor-pointer ${
+                        isActive
+                          ? `${st.bg} ${st.text} ${st.border} shadow-xs ring-1 ring-current`
+                          : 'bg-white text-slate-600 border-morning-200 hover:border-morning-300 hover:bg-morning-50'
+                      }`}
+                    >
+                      <span>{st.label}</span>
+                      {st.count > 0 && (
+                        <span className={`px-1.5 rounded-full text-[10px] font-black leading-4 ${isActive ? 'bg-white/50' : 'bg-morning-100 text-slate-500'}`}>
+                          {st.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* CONȚINUT PRINCIPAL TAB FLOTĂ */}
+          {flotaFluide.length === 0 ? (
+            <div className="pleasant-card p-10 text-center rounded-2xl border border-morning-200 space-y-2">
+              <Sliders className="w-8 h-8 text-sapphire-500 mx-auto" />
+              <p className="font-extrabold text-sapphire-900 text-sm">Nu există norme de schimb fluid configurate încă</p>
+              <p className="text-xs text-sage-600">
+                Accesați tab-ul <strong>Norme &amp; Configurare Intervale</strong> pentru a defini intervalele per categorie de utilaje (ex: 15.000 KM sau 500 mTH).
+              </p>
+            </div>
+          ) : flotaViewMode === 'matrice' ? (
+            /* ================================================================= */
+            /* VIZUALIZARE 1: TABEL MATRICE FLOTĂ (STIL DOCUMENTE)               */
+            /* ================================================================= */
+            <FluidStatusMatrix
+              flotaFluide={flotaFluide}
+              tipuriFluide={tipuriFluide}
+              tipLichidLabels={tipLichidLabels}
+              searchQuery={searchFlota}
+              filterStatus={filterFlotaStatus}
+              filterTip={filterFlotaTip}
+              filterCategorie={filterFlotaCategorie}
+              filterUnit={filterFlotaUnit}
+              columnMode={flotaMatrixColMode}
+              onOpenCompletare={(opts) => handleOpenCompletare(opts)}
+              onOpenBaseline={(row) => handleOpenVehicleBaseline(row)}
+            />
+          ) : (
+            /* ================================================================= */
+            /* VIZUALIZARE 2: LISTĂ DETALIATĂ NORME (PĂSTRATĂ + ANTET FIX)       */
+            /* ================================================================= */
+            <div className="pleasant-card rounded-2xl border border-morning-200 overflow-hidden shadow-xs">
+              <div className="overflow-auto max-h-[calc(100vh-140px)] relative">
+                <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[960px]">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Utilaj / Categorie</th>
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Tip Fluid</th>
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Ultimul Schimb &amp; Contor</th>
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 min-w-[230px]">Progres Interval &amp; Rămas</th>
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-center">Status</th>
+                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-right">Acțiuni Rapide</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-morning-200 text-slate-700">
@@ -1692,6 +2019,11 @@ export default function FluidePage() {
                         const tipLabel = tipLichidLabels[f.tipLichid] || f.tipLichid?.replace(/_/g, ' ');
                         const opDefault = String(f.tipLichid || '').includes('ANTIGEL') ? 'SCHIMB_ANTIGEL' : 'SCHIMB_ULEI';
                         const opTopUp = String(f.tipLichid || '').includes('ANTIGEL') ? 'COMPLETARE_ANTIGEL' : 'COMPLETARE_ULEI';
+                        const catColor = getCategoryColor(f.vehiculCategorie);
+                        const showPlate =
+                          f.vehiculInmatriculare &&
+                          String(f.vehiculInmatriculare).trim().toUpperCase() !==
+                            String(f.vehiculNumarIntern || '').trim().toUpperCase();
 
                         return (
                           <tr
@@ -1704,25 +2036,38 @@ export default function FluidePage() {
                                 : 'hover:bg-morning-50'
                             }`}
                           >
-                            <td className="p-3">
-                              <div className="font-extrabold text-sapphire-900">{f.vehiculNumarIntern}</div>
-                              <div className="text-[11px] text-sage-600">
-                                {f.vehiculInmatriculare} {f.vehiculCategorie ? `· ${f.vehiculCategorie}` : ''}
+                            <td className="p-3 border-b border-morning-200">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-mono font-extrabold text-sapphire-900">
+                                  {f.vehiculNumarIntern || f.vehiculInmatriculare}
+                                </span>
+                                {showPlate && (
+                                  <span className="font-mono text-[11px] text-sage-600">
+                                    ({f.vehiculInmatriculare})
+                                  </span>
+                                )}
                               </div>
-                              {f.areContorDualMth && (
-                                <div className="text-[10px] font-mono text-amber-700 dark:text-amber-300 font-bold mt-0.5">
-                                  Dual: {Number(f.valoareContorCurent || 0).toLocaleString('ro-RO')} KM · {Number(f.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH
-                                </div>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {f.vehiculCategorie && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${catColor.badge}`}>
+                                    {f.vehiculCategorie}
+                                  </span>
+                                )}
+                                {f.areContorDualMth && (
+                                  <span className="text-[10px] font-mono text-amber-700 dark:text-amber-300 font-bold">
+                                    Dual: {Number(f.valoareContorCurent || 0).toLocaleString('ro-RO')} KM · {Number(f.oreFunctionareCurent || 0).toLocaleString('ro-RO')} mTH
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
-                            <td className="p-3">
+                            <td className="p-3 border-b border-morning-200">
                               <span className="px-2.5 py-1 rounded-lg bg-sapphire-50 border border-sapphire-200 text-sapphire-800 font-bold text-[11px] inline-block">
                                 {tipLabel}
                               </span>
                             </td>
 
-                            <td className="p-3 font-mono text-[11px]">
+                            <td className="p-3 border-b border-morning-200 font-mono text-[11px]">
                               {f.trackingMode === 'LUNI' ? (
                                 <div className="font-bold text-sapphire-900">
                                   Schimb: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.intervalLuni} luni)
@@ -1738,7 +2083,7 @@ export default function FluidePage() {
                               </div>
                             </td>
 
-                            <td className="p-3 space-y-1">
+                            <td className="p-3 border-b border-morning-200 space-y-1">
                               <div className="flex items-center justify-between font-mono text-[11px]">
                                 <span className="font-bold text-sapphire-900">
                                   {f.trackingMode === 'LUNI'
@@ -1767,7 +2112,7 @@ export default function FluidePage() {
                               </div>
                             </td>
 
-                            <td className="p-3 text-center whitespace-nowrap">
+                            <td className="p-3 border-b border-morning-200 text-center whitespace-nowrap">
                               {isOver ? (
                                 <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-terracotta-600 text-white inline-flex items-center space-x-1">
                                   <AlertTriangle className="w-3 h-3" />
@@ -1786,13 +2131,13 @@ export default function FluidePage() {
                               )}
                             </td>
 
-                            <td className="p-3 text-right whitespace-nowrap">
+                            <td className="p-3 border-b border-morning-200 text-right whitespace-nowrap">
                               <div className="inline-flex items-center space-x-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleOpenVehicleBaseline(f)}
                                   title={f.areContorDualMth ? 'Actualizează orele mTH și/sau ultimul schimb' : 'Editează ultimul schimb (bază de pornire)'}
-                                  className="px-2 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-800 font-bold text-[11px] transition inline-flex items-center space-x-1"
+                                  className="px-2 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-800 font-bold text-[11px] transition inline-flex items-center space-x-1 cursor-pointer"
                                 >
                                   <Edit3 className="w-3 h-3" />
                                   {f.areContorDualMth && <span>mTH</span>}
@@ -1806,7 +2151,7 @@ export default function FluidePage() {
                                       tipOperatiune: opDefault,
                                     })
                                   }
-                                  className="px-2.5 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] transition"
+                                  className="px-2.5 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-[11px] transition cursor-pointer"
                                 >
                                   Schimb
                                 </button>
@@ -1819,7 +2164,7 @@ export default function FluidePage() {
                                       tipOperatiune: opTopUp,
                                     })
                                   }
-                                  className="px-2.5 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 font-bold text-[11px] transition"
+                                  className="px-2.5 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 font-bold text-[11px] transition cursor-pointer"
                                 >
                                   + Completare
                                 </button>
@@ -1832,8 +2177,8 @@ export default function FluidePage() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
