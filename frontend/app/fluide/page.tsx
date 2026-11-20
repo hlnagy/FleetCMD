@@ -7,7 +7,7 @@ import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
   Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog, Link2,
-  LayoutGrid, LayoutList, RotateCcw
+  LayoutGrid, LayoutList, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import FluidStatusMatrix from '@/components/FluidStatusMatrix';
@@ -74,6 +74,8 @@ export default function FluidePage() {
   const [filterFlotaTip, setFilterFlotaTip] = useState<string>('TOATE');
   const [filterFlotaCategorie, setFilterFlotaCategorie] = useState<string>('TOATE');
   const [filterFlotaUnit, setFilterFlotaUnit] = useState<'TOATE' | 'KM' | 'MTH' | 'LUNI'>('TOATE');
+  const [flotaListSortCol, setFlotaListSortCol] = useState<'progres' | 'utilaj' | 'tip' | 'ultimulSchimb'>('progres');
+  const [flotaListSortDir, setFlotaListSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Istoric Completări & Schimburi Fluide
   const [istoricCompletari, setIstoricCompletari] = useState<any[]>([]);
@@ -1290,8 +1292,43 @@ export default function FluidePage() {
     return true;
   };
 
+  const handleFlotaListSort = (col: 'progres' | 'utilaj' | 'tip' | 'ultimulSchimb') => {
+    if (flotaListSortCol === col) {
+      setFlotaListSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setFlotaListSortCol(col);
+    setFlotaListSortDir(col === 'progres' || col === 'ultimulSchimb' ? 'desc' : 'asc');
+  };
+
   const flotaFluideFiltrate = useMemo(() => {
     const q = searchFlota.trim().toLowerCase();
+    const natCmp = (a?: string | null, b?: string | null) =>
+      String(a || '').localeCompare(String(b || ''), 'ro', { numeric: true, sensitivity: 'base' });
+
+    const getProgressRatio = (x: any): number => {
+      if (x.trackingMode === 'LUNI' && x.intervalLuni && Number(x.intervalLuni) > 0) {
+        return Number(x.luniTrecute || 0) / Number(x.intervalLuni);
+      }
+      if (x.intervalPrincipal && Number(x.intervalPrincipal) > 0) {
+        return Number(x.rulajEfectiv || 0) / Number(x.intervalPrincipal);
+      }
+      return Number(x.procentConsum || 0) / 100;
+    };
+
+    const compareByProgressDesc = (a: any, b: any): number => {
+      const rank = (x: any) => (x.esteDepasit ? 0 : x.esteInPragAvertizare ? 1 : 2);
+      const rDiff = rank(a) - rank(b);
+      if (rDiff !== 0) return rDiff;
+      const ratioDiff = getProgressRatio(b) - getProgressRatio(a);
+      if (Math.abs(ratioDiff) > 1e-6) return ratioDiff;
+      const pDiff = Number(b.procentConsum || 0) - Number(a.procentConsum || 0);
+      if (pDiff !== 0) return pDiff;
+      return natCmp(a.vehiculNumarIntern || a.vehiculInmatriculare, b.vehiculNumarIntern || b.vehiculInmatriculare);
+    };
+
+    const dir = flotaListSortDir === 'asc' ? 1 : -1;
+
     return [...flotaFluide]
       .filter((f) => {
         if (q) {
@@ -1315,14 +1352,56 @@ export default function FluidePage() {
         return true;
       })
       .sort((a, b) => {
-        const rank = (x: any) => (x.esteDepasit ? 0 : x.esteInPragAvertizare ? 1 : 2);
-        const rDiff = rank(a) - rank(b);
-        if (rDiff !== 0) return rDiff;
-        const pDiff = (b.procentConsum || 0) - (a.procentConsum || 0);
-        if (pDiff !== 0) return pDiff;
-        return String(a.vehiculNumarIntern || '').localeCompare(String(b.vehiculNumarIntern || ''), undefined, { numeric: true });
+        if (flotaListSortCol === 'progres') {
+          const base = compareByProgressDesc(a, b);
+          return flotaListSortDir === 'desc' ? base : -base;
+        }
+
+        if (flotaListSortCol === 'utilaj') {
+          const vDiff = natCmp(a.vehiculNumarIntern || a.vehiculInmatriculare, b.vehiculNumarIntern || b.vehiculInmatriculare);
+          if (vDiff !== 0) return vDiff * dir;
+          const cDiff = natCmp(a.vehiculCategorie, b.vehiculCategorie);
+          if (cDiff !== 0) return cDiff * dir;
+          return natCmp(tipLichidLabels[a.tipLichid] || a.tipLichid, tipLichidLabels[b.tipLichid] || b.tipLichid);
+        }
+
+        if (flotaListSortCol === 'tip') {
+          const tDiff = natCmp(tipLichidLabels[a.tipLichid] || a.tipLichid, tipLichidLabels[b.tipLichid] || b.tipLichid);
+          if (tDiff !== 0) return tDiff * dir;
+          return compareByProgressDesc(a, b);
+        }
+
+        if (flotaListSortCol === 'ultimulSchimb') {
+          // Normele estimate (fără schimb real anterior) rămân grupate curat la final
+          const aEst = Boolean(a.ultimulSchimbEstimat);
+          const bEst = Boolean(b.ultimulSchimbEstimat);
+          if (aEst !== bEst) return aEst ? 1 : -1;
+          if (!aEst) {
+            const aTime = a.ultimulSchimbData ? new Date(a.ultimulSchimbData).getTime() : 0;
+            const bTime = b.ultimulSchimbData ? new Date(b.ultimulSchimbData).getTime() : 0;
+            if (aTime !== bTime) return (aTime - bTime) * dir;
+            const cDiff = Number(a.ultimulSchimbContor || 0) - Number(b.ultimulSchimbContor || 0);
+            if (cDiff !== 0) return cDiff * dir;
+          } else {
+            const curDiff = Number(a.currentContor ?? a.valoareContorCurent ?? 0) - Number(b.currentContor ?? b.valoareContorCurent ?? 0);
+            if (curDiff !== 0) return curDiff * dir;
+          }
+          return natCmp(a.vehiculNumarIntern || a.vehiculInmatriculare, b.vehiculNumarIntern || b.vehiculInmatriculare);
+        }
+
+        return compareByProgressDesc(a, b);
       });
-  }, [flotaFluide, searchFlota, filterFlotaStatus, filterFlotaTip, filterFlotaCategorie, filterFlotaUnit, tipLichidLabels]);
+  }, [
+    flotaFluide,
+    searchFlota,
+    filterFlotaStatus,
+    filterFlotaTip,
+    filterFlotaCategorie,
+    filterFlotaUnit,
+    tipLichidLabels,
+    flotaListSortCol,
+    flotaListSortDir,
+  ]);
 
   const flotaMatrixVehicleCount = useMemo(() => {
     const byVeh = new Map<string, any[]>();
@@ -2004,10 +2083,42 @@ export default function FluidePage() {
                 <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[960px]">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
-                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Utilaj / Categorie</th>
-                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Tip Fluid</th>
-                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">Ultimul Schimb &amp; Contor</th>
-                      <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 min-w-[230px]">Progres Interval &amp; Rămas</th>
+                      {([
+                        { key: 'utilaj', label: 'Utilaj / Categorie', extraClass: '' },
+                        { key: 'tip', label: 'Tip Fluid', extraClass: '' },
+                        { key: 'ultimulSchimb', label: 'Ultimul Schimb & Contor', extraClass: '' },
+                        { key: 'progres', label: 'Progres Interval & Rămas', extraClass: 'min-w-[230px]' },
+                      ] as const).map((col) => {
+                        const isActive = flotaListSortCol === col.key;
+                        return (
+                          <th
+                            key={col.key}
+                            onClick={() => handleFlotaListSort(col.key)}
+                            aria-sort={isActive ? (flotaListSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                            className={`p-3.5 sticky top-0 z-20 border-b cursor-pointer select-none transition group ${col.extraClass} ${
+                              isActive
+                                ? 'bg-sapphire-100 text-sapphire-950 border-b-2 border-b-sapphire-500 font-black'
+                                : 'bg-morning-100 border-morning-200 hover:bg-morning-200 hover:text-sapphire-900'
+                            }`}
+                            title={`Sortează după ${col.label}`}
+                          >
+                            <div className="inline-flex items-center space-x-1.5">
+                              <span>{col.label}</span>
+                              {isActive ? (
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-sapphire-600 text-white shrink-0">
+                                  {flotaListSortDir === 'asc' ? (
+                                    <ArrowUp className="w-3 h-3" />
+                                  ) : (
+                                    <ArrowDown className="w-3 h-3" />
+                                  )}
+                                </span>
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-sage-400 opacity-50 group-hover:opacity-100 transition shrink-0" />
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                       <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-center">Status</th>
                       <th className="p-3.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-right">Acțiuni Rapide</th>
                     </tr>
