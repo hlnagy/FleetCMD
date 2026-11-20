@@ -123,6 +123,34 @@ function parseOreFunctionareInput(val: string | number): {
   return { numericValue: 0, isTimeFormat: false, hours: 0, minutes: 0 };
 }
 
+function toIsoDateOnly(input?: string | Date | null): string {
+  if (!input) return '';
+  if (typeof input === 'string') {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(input.trim());
+    if (m) return m[1];
+  }
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function addDaysToIsoDate(input?: string | Date | null, days = 1): string {
+  const iso = toIsoDateOnly(input);
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+}
+
+function formatRoDateShort(input?: string | Date | null): string {
+  const iso = toIsoDateOnly(input);
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
 export default function OreFunctionarePage() {
   const { user } = useAuth();
 
@@ -215,18 +243,20 @@ export default function OreFunctionarePage() {
         setPerioade(data.perioade || []);
         setStatisticiVehicul(data.statistici || null);
 
-        // Pre-completare inteligentă a datei de start cu ziua următoare ultimei perioade
+        // Pre-completare inteligentă a datei de start cu ziua următoare ultimei perioade sau a bazei inițiale
         if (data.perioade && data.perioade.length > 0) {
           const ultima = data.perioade[0]; // sortate desc
-          const lastEndDate = new Date(ultima.dataEnd);
-          const nextDay = new Date(lastEndDate);
-          nextDay.setDate(nextDay.getDate() + 1);
-          setDataStart(nextDay.toISOString().split('T')[0]);
+          setDataStart(addDaysToIsoDate(ultima.dataEnd, 1));
+        } else if (
+          data.vehicul?.dataInregistrareContor &&
+          (Number(data.vehicul?.valoareContorCurent || 0) > 0 || Number(data.vehicul?.valoareContorInitial || 0) > 0)
+        ) {
+          setDataStart(addDaysToIsoDate(data.vehicul.dataInregistrareContor, 1));
         } else {
-          // Prima înregistrare - data de început de lună curentă
+          // Prima înregistrare fără bază datată — ziua 1 a lunii curente (fără decalaj UTC)
           const today = new Date();
-          const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-          setDataStart(firstOfMonth.toISOString().split('T')[0]);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          setDataStart(`${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`);
         }
         setDataEnd('');
         setOreFunctionare('');
@@ -647,7 +677,11 @@ export default function OreFunctionarePage() {
                         <span className="text-[10px] font-normal text-slate-400 ml-1">mTH</span>
                       </div>
                       <div className="text-[10px] text-slate-400">
-                        {u.numarPerioade} {u.numarPerioade === 1 ? 'perioadă' : 'perioade'}
+                        {u.ultimaPerioada?.dataEnd
+                          ? `până la ${formatRoDateShort(u.ultimaPerioada.dataEnd)} · ${u.numarPerioade} per.`
+                          : (Number(u.valoareContorCurent || 0) > 0 || Number(u.valoareContorInitial || 0) > 0) && u.dataInregistrareContor
+                          ? `la ${formatRoDateShort(u.dataInregistrareContor)}`
+                          : `${u.numarPerioade} ${u.numarPerioade === 1 ? 'perioadă' : 'perioade'}`}
                       </div>
                     </div>
                   </button>
@@ -687,6 +721,14 @@ export default function OreFunctionarePage() {
                     {Number(selectedVehicul.valoareContorCurent || 0).toLocaleString('ro-RO')}
                     <span className="text-sm font-bold text-indigo-500 ml-1.5">mTH</span>
                   </div>
+                  {(selectedVehicul.ultimaPerioada?.dataEnd || selectedVehicul.dataInregistrareContor) && (
+                    <div className="text-[11px] font-semibold text-indigo-600/90 dark:text-indigo-300/90 mt-1 flex items-center justify-end gap-1">
+                      <Calendar className="w-3 h-3" />
+                      <span>
+                        Valabil la: {formatRoDateShort(selectedVehicul.ultimaPerioada?.dataEnd || selectedVehicul.dataInregistrareContor)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -709,14 +751,22 @@ export default function OreFunctionarePage() {
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
-                  <div className="text-xs text-slate-500 font-medium">Ultima Perioadă</div>
+                  <div className="text-xs text-slate-500 font-medium">
+                    {selectedVehicul.ultimaPerioada ? 'Ultima Perioadă' : 'Ultima Dată Contor'}
+                  </div>
                   <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-1 truncate">
                     {selectedVehicul.ultimaPerioada
-                      ? `${new Date(selectedVehicul.ultimaPerioada.dataStart).toLocaleDateString('ro-RO')} - ${new Date(selectedVehicul.ultimaPerioada.dataEnd).toLocaleDateString('ro-RO')}`
+                      ? `${formatRoDateShort(selectedVehicul.ultimaPerioada.dataStart)} - ${formatRoDateShort(selectedVehicul.ultimaPerioada.dataEnd)}`
+                      : (Number(selectedVehicul.valoareContorCurent || 0) > 0 || Number(selectedVehicul.valoareContorInitial || 0) > 0) && selectedVehicul.dataInregistrareContor
+                      ? `Până la ${formatRoDateShort(selectedVehicul.dataInregistrareContor)}`
                       : 'Nicio înregistrare'}
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    {selectedVehicul.ultimaPerioada ? `${selectedVehicul.ultimaPerioada.oreFunctionare} ore raportate` : 'N/A'}
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                    {selectedVehicul.ultimaPerioada
+                      ? `${selectedVehicul.ultimaPerioada.oreFunctionare} ore · continuă din ${formatRoDateShort(addDaysToIsoDate(selectedVehicul.ultimaPerioada.dataEnd, 1))}`
+                      : (Number(selectedVehicul.valoareContorCurent || 0) > 0 || Number(selectedVehicul.valoareContorInitial || 0) > 0) && selectedVehicul.dataInregistrareContor
+                      ? `Continuă înregistrarea din: ${formatRoDateShort(addDaysToIsoDate(selectedVehicul.dataInregistrareContor, 1))}`
+                      : 'N/A'}
                   </div>
                 </div>
 
@@ -727,7 +777,7 @@ export default function OreFunctionarePage() {
                       type="button"
                       onClick={() => {
                         setValoareBazaInput(String(selectedVehicul.valoareContorInitial || 0));
-                        setDataBazaInput('');
+                        setDataBazaInput(toIsoDateOnly(selectedVehicul.dataInregistrareContor));
                         setModalBazaOpen(true);
                       }}
                       className="px-2 py-0.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-md transition border border-indigo-200 dark:border-indigo-800"
@@ -739,7 +789,11 @@ export default function OreFunctionarePage() {
                     {Number(selectedVehicul.valoareContorInitial || 0).toLocaleString('ro-RO')}
                     <span className="text-xs font-normal text-slate-400 ml-1">mTH</span>
                   </div>
-                  <div className="text-[10px] text-slate-400">contor bord la punere în funcțiune</div>
+                  <div className="text-[10px] text-slate-400">
+                    {selectedVehicul.valoareContorInitial > 0 && selectedVehicul.dataInregistrareContor && !selectedVehicul.ultimaPerioada
+                      ? `înregistrat la data ${formatRoDateShort(selectedVehicul.dataInregistrareContor)}`
+                      : 'contor bord la punere în funcțiune'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -872,14 +926,24 @@ export default function OreFunctionarePage() {
                 <div className="flex items-center gap-2">
                   <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
                   <span>
-                    Bază contor inițial stabilită la <strong>{Number(selectedVehicul.valoareContorInitial).toLocaleString('ro-RO')} mTH</strong>. Perioadele GPS introduse se adaugă cumulativ la acest index de pornire.
+                    Bază contor inițial stabilită la <strong>{Number(selectedVehicul.valoareContorInitial).toLocaleString('ro-RO')} mTH</strong>
+                    {selectedVehicul.dataInregistrareContor && !selectedVehicul.ultimaPerioada ? (
+                      <>
+                        {' '}
+                        (valabilă până la <strong>{formatRoDateShort(selectedVehicul.dataInregistrareContor)}</strong>).
+                        Continuați înregistrarea perioadelor GPS începând din{' '}
+                        <strong>{formatRoDateShort(addDaysToIsoDate(selectedVehicul.dataInregistrareContor, 1))}</strong>.
+                      </>
+                    ) : (
+                      '. Perioadele GPS introduse se adaugă cumulativ la acest index de pornire.'
+                    )}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     setValoareBazaInput(String(selectedVehicul.valoareContorInitial || 0));
-                    setDataBazaInput('');
+                    setDataBazaInput(toIsoDateOnly(selectedVehicul.dataInregistrareContor));
                     setModalBazaOpen(true);
                   }}
                   className="px-3 py-1.5 font-bold bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-300 dark:border-indigo-700 rounded-lg hover:bg-indigo-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5 self-start sm:self-auto shadow-sm"
@@ -1014,6 +1078,24 @@ export default function OreFunctionarePage() {
                   </div>
                 )}
 
+                {validare.status === 'PRIMA_INREGISTRARE' &&
+                  validare.sugestieDataStart &&
+                  dataStart !== validare.sugestieDataStart && (
+                    <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-slate-700 dark:text-slate-300">
+                        Data recomandată după baza inițială:{' '}
+                        <strong className="font-mono">{formatRoDateShort(validare.sugestieDataStart)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDataStart(validare.sugestieDataStart!)}
+                        className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition cursor-pointer"
+                      >
+                        Setează începutul la {formatRoDateShort(validare.sugestieDataStart)}
+                      </button>
+                    </div>
+                  )}
+
                 {validare.status === 'SUPRAPUNERE' && validare.sugestieDataStart && (
                   <div className="mt-3 pt-3 border-t border-rose-200 dark:border-rose-800 flex items-center justify-between">
                     <span className="text-xs text-rose-800 dark:text-rose-300">
@@ -1111,8 +1193,27 @@ export default function OreFunctionarePage() {
                   </tr>
                 ) : perioade.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 text-sm">
-                      Nicio perioadă de funcționare înregistrată încă pentru acest utilaj.
+                    <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                      {(Number(selectedVehicul.valoareContorCurent || 0) > 0 || Number(selectedVehicul.valoareContorInitial || 0) > 0) &&
+                      selectedVehicul.dataInregistrareContor ? (
+                        <span>
+                          Nicio perioadă GPS adăugată încă. Bază contor curent:{' '}
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            {Number(selectedVehicul.valoareContorCurent || selectedVehicul.valoareContorInitial).toLocaleString('ro-RO')} mTH
+                          </strong>{' '}
+                          la data{' '}
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            {formatRoDateShort(selectedVehicul.dataInregistrareContor)}
+                          </strong>{' '}
+                          — continuați înregistrarea începând cu{' '}
+                          <strong className="text-indigo-600 dark:text-indigo-400">
+                            {formatRoDateShort(addDaysToIsoDate(selectedVehicul.dataInregistrareContor, 1))}
+                          </strong>
+                          .
+                        </span>
+                      ) : (
+                        'Nicio perioadă de funcționare înregistrată încă pentru acest utilaj.'
+                      )}
                     </td>
                   </tr>
                 ) : (

@@ -1679,6 +1679,9 @@ export class VehiculeService {
     return vehicule.map((v) => {
       const ultimaPerioada = v.perioadeMth[0] || null;
       const dualMth = isDualMthVehicle(v);
+      const mthCurent = dualMth ? Number(v.oreFunctionareCurent || 0) : Number(v.valoareContorCurent || 0);
+      const mthInitial = dualMth ? Number(v.oreFunctionareInitial || 0) : Number(v.valoareContorInitial || 0);
+      const hasMthData = mthCurent > 0 || mthInitial > 0 || Boolean(ultimaPerioada);
       return {
         id: v.id,
         numarIntern: v.numarIntern,
@@ -1689,12 +1692,14 @@ export class VehiculeService {
         categorieEnum: v.categorieEnum,
         tipMasurare: v.tipMasurare,
         areContorDualMth: dualMth,
-        valoareContorCurent: dualMth ? Number(v.oreFunctionareCurent || 0) : Number(v.valoareContorCurent || 0),
-        valoareContorInitial: dualMth ? Number(v.oreFunctionareInitial || 0) : Number(v.valoareContorInitial || 0),
+        valoareContorCurent: mthCurent,
+        valoareContorInitial: mthInitial,
         valoareKmCurent: !isMthTipMasurare(v.tipMasurare) ? Number(v.valoareContorCurent || 0) : null,
         oreFunctionareCurent: Number(v.oreFunctionareCurent || 0),
         oreFunctionareInitial: Number(v.oreFunctionareInitial || 0),
-        dataInregistrareContor: dualMth ? (v.dataInregistrareMth || v.dataInregistrareContor) : v.dataInregistrareContor,
+        dataInregistrareContor: dualMth
+          ? (v.dataInregistrareMth || null)
+          : (hasMthData ? v.dataInregistrareContor : null),
         stare: v.stare,
         numarPerioade: v._count.perioadeMth,
         ultimaPerioada: ultimaPerioada
@@ -1729,6 +1734,9 @@ export class VehiculeService {
 
     const totalOre = perioade.reduce((acc, p) => acc + p.oreFunctionare, 0);
     const dualMth = isDualMthVehicle(vehicul);
+    const mthCurent = dualMth ? Number(vehicul.oreFunctionareCurent || 0) : Number(vehicul.valoareContorCurent || 0);
+    const mthInitial = dualMth ? Number(vehicul.oreFunctionareInitial || 0) : Number(vehicul.valoareContorInitial || 0);
+    const hasMthData = mthCurent > 0 || mthInitial > 0 || perioade.length > 0;
 
     return {
       vehicul: {
@@ -1740,10 +1748,12 @@ export class VehiculeService {
         categorieEnum: vehicul.categorieEnum,
         tipMasurare: vehicul.tipMasurare,
         areContorDualMth: dualMth,
-        valoareContorCurent: dualMth ? Number(vehicul.oreFunctionareCurent || 0) : Number(vehicul.valoareContorCurent || 0),
-        valoareContorInitial: dualMth ? Number(vehicul.oreFunctionareInitial || 0) : Number(vehicul.valoareContorInitial || 0),
+        valoareContorCurent: mthCurent,
+        valoareContorInitial: mthInitial,
         valoareKmCurent: !isMthTipMasurare(vehicul.tipMasurare) ? Number(vehicul.valoareContorCurent || 0) : null,
-        dataInregistrareContor: dualMth ? (vehicul.dataInregistrareMth || vehicul.dataInregistrareContor) : vehicul.dataInregistrareContor,
+        dataInregistrareContor: dualMth
+          ? (vehicul.dataInregistrareMth || null)
+          : (hasMthData ? vehicul.dataInregistrareContor : null),
       },
       statistici: {
         numarPerioade: perioade.length,
@@ -1874,13 +1884,41 @@ export class VehiculeService {
 
     // 3. Verificare CONTINUITATE sau GOL (Gap)
     if (!prevPeriod) {
-      // Este prima perioadă înregistrată (sau cea mai timpurie)
+      // Este prima perioadă înregistrată — verificăm continuitatea față de data bazei inițiale (dacă există)
+      const rawBaseDate = dualMth
+        ? vehicul.dataInregistrareMth
+        : (activeMthBase > 0 ? vehicul.dataInregistrareContor : null);
+
+      let mesaj = 'Aceasta este prima perioadă înregistrată pe acest utilaj.';
+      let sugestieDataStart: string | undefined = undefined;
+
+      if (existing.length === 0 && activeMthBase > 0 && rawBaseDate) {
+        const bDate = new Date(rawBaseDate);
+        const baseDay = new Date(bDate.getFullYear(), bDate.getMonth(), bDate.getDate());
+        const diffDaysFromBase = Math.round((dStartDay.getTime() - baseDay.getTime()) / (1000 * 60 * 60 * 24));
+        const nextAfterBase = new Date(baseDay);
+        nextAfterBase.setDate(nextAfterBase.getDate() + 1);
+        const pad2 = (n: number) => String(n).padStart(2, '0');
+        sugestieDataStart = `${nextAfterBase.getFullYear()}-${pad2(nextAfterBase.getMonth() + 1)}-${pad2(nextAfterBase.getDate())}`;
+        const baseRo = `${pad2(baseDay.getDate())}.${pad2(baseDay.getMonth() + 1)}.${baseDay.getFullYear()}`;
+        const nextRo = `${pad2(nextAfterBase.getDate())}.${pad2(nextAfterBase.getMonth() + 1)}.${nextAfterBase.getFullYear()}`;
+
+        if (diffDaysFromBase === 1) {
+          mesaj = `Continuitate perfectă! Perioada pornește exact a doua zi (${nextRo}) după baza inițială înregistrată la ${baseRo}.`;
+        } else if (diffDaysFromBase <= 0) {
+          mesaj = `Atenție: Baza inițială (${activeMthBase} mTH) este valabilă până la ${baseRo}. Pentru a nu dubla orele deja incluse, este recomandat să începeți din ${nextRo}.`;
+        } else {
+          mesaj = `Notă: Între baza inițială (${baseRo}) și data aleasă există ${diffDaysFromBase - 1} zile neacoperite. Data recomandată de pornire este ${nextRo}.`;
+        }
+      }
+
       return {
         valid: true,
         status: 'PRIMA_INREGISTRARE',
         nrZile,
         medieOrePeZi,
-        mesaj: 'Aceasta este prima perioadă înregistrată pe acest utilaj.',
+        mesaj,
+        sugestieDataStart,
         indexContorStartEstimat: startContorEstimat,
         indexContorEndEstimat: endContorEstimat,
         estePrimaPerioada: true,
