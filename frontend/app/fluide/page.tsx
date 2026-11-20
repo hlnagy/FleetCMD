@@ -1202,7 +1202,15 @@ export default function FluidePage() {
         }
       }
 
-      // 2. Actualizăm valoarea de bază a ultimului schimb pentru norma selectată
+      // 2. Actualizăm valoarea de bază a ultimului schimb pentru norma selectată (păstrăm flag-ul estimat dacă s-a modificat doar mTH-ul curent)
+      const origContor = Number(editingBaselineRow.ultimulSchimbContor || 0);
+      const origDate = editingBaselineRow.ultimulSchimbData
+        ? new Date(editingBaselineRow.ultimulSchimbData).toISOString().split('T')[0]
+        : '';
+      const baselineChanged =
+        Number(baselineSchimbContor || 0) !== origContor ||
+        (baselineSchimbData || '') !== origDate;
+
       const resCfg = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1211,6 +1219,7 @@ export default function FluidePage() {
           tipLichid: editingBaselineRow.tipLichid,
           ultimulSchimbContor: Number(baselineSchimbContor || 0),
           ultimulSchimbData: baselineSchimbData || undefined,
+          ultimulSchimbEstimat: baselineChanged ? false : Boolean(editingBaselineRow.ultimulSchimbEstimat),
         }),
       });
       if (!resCfg.ok) {
@@ -2068,19 +2077,34 @@ export default function FluidePage() {
                             </td>
 
                             <td className="p-3 border-b border-morning-200 font-mono text-[11px]">
-                              {f.trackingMode === 'LUNI' ? (
-                                <div className="font-bold text-sapphire-900">
-                                  Schimb: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.intervalLuni} luni)
-                                </div>
+                              {f.ultimulSchimbEstimat ? (
+                                <>
+                                  <div className="font-bold text-periwinkle-900">
+                                    Estimat (50% din normă)
+                                  </div>
+                                  <div className="text-sage-600">
+                                    {f.trackingMode === 'LUNI'
+                                      ? `Fără schimb anterior · normă ${f.intervalLuni} luni`
+                                      : `Contor curent: ${Number(f.currentContor ?? f.valoareContorCurent ?? 0).toLocaleString('ro-RO')} ${unit} · fără istoric`}
+                                  </div>
+                                </>
                               ) : (
-                                <div className="font-bold text-sapphire-900">
-                                  {Number(f.ultimulSchimbContor || 0).toLocaleString('ro-RO')} → {Number(f.currentContor ?? f.valoareContorCurent ?? 0).toLocaleString('ro-RO')} {unit}
-                                </div>
+                                <>
+                                  {f.trackingMode === 'LUNI' ? (
+                                    <div className="font-bold text-sapphire-900">
+                                      Schimb: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.intervalLuni} luni)
+                                    </div>
+                                  ) : (
+                                    <div className="font-bold text-sapphire-900">
+                                      {Number(f.ultimulSchimbContor || 0).toLocaleString('ro-RO')} → {Number(f.currentContor ?? f.valoareContorCurent ?? 0).toLocaleString('ro-RO')} {unit}
+                                    </div>
+                                  )}
+                                  <div className="text-sage-600">
+                                    Data: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.luniTrecute} luni)
+                                    {f.totalLitriCompletati > 0 ? ` · +${f.totalLitriCompletati}L completări` : ''}
+                                  </div>
+                                </>
                               )}
-                              <div className="text-sage-600">
-                                Data: {new Date(f.ultimulSchimbData).toLocaleDateString('ro-RO')} ({f.luniTrecute} luni)
-                                {f.totalLitriCompletati > 0 ? ` · +${f.totalLitriCompletati}L completări` : ''}
-                              </div>
                             </td>
 
                             <td className="p-3 border-b border-morning-200 space-y-1">
@@ -2090,7 +2114,7 @@ export default function FluidePage() {
                                     ? `${f.luniTrecute} / ${f.intervalLuni || '—'} luni`
                                     : `${Number(f.rulajEfectiv || 0).toLocaleString('ro-RO')}${f.intervalPrincipal ? ` / ${Number(f.intervalPrincipal).toLocaleString('ro-RO')} ${unit}` : ` ${unit}`}`}
                                 </span>
-                                <span className={`font-extrabold ${isOver ? 'text-terracotta-700' : isWarn ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                <span className={`font-extrabold ${isOver ? 'text-terracotta-700' : isWarn ? 'text-amber-700' : f.ultimulSchimbEstimat ? 'text-periwinkle-800' : 'text-emerald-700'}`}>
                                   {f.rulajRamas !== null
                                     ? f.rulajRamas <= 0
                                       ? `Depășit +${Math.abs(f.rulajRamas).toLocaleString('ro-RO')} ${unit}`
@@ -2105,7 +2129,7 @@ export default function FluidePage() {
                               <div className="w-full h-2 rounded-full bg-morning-200 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    isOver ? 'bg-terracotta-600' : isWarn ? 'bg-amber-500' : 'bg-emerald-500'
+                                    isOver ? 'bg-terracotta-600' : isWarn ? 'bg-amber-500' : f.ultimulSchimbEstimat ? 'bg-periwinkle-600' : 'bg-emerald-500'
                                   }`}
                                   style={{ width: `${Math.max(4, pct)}%` }}
                                 />
@@ -2113,22 +2137,39 @@ export default function FluidePage() {
                             </td>
 
                             <td className="p-3 border-b border-morning-200 text-center whitespace-nowrap">
-                              {isOver ? (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-terracotta-600 text-white inline-flex items-center space-x-1">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  <span>DEPĂȘIT</span>
-                                </span>
-                              ) : isWarn ? (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center space-x-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>AVERTIZARE</span>
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>OPTIM</span>
-                                </span>
-                              )}
+                              <div className="inline-flex flex-col items-center gap-1">
+                                {isOver ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-terracotta-600 text-white inline-flex items-center space-x-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    <span>DEPĂȘIT</span>
+                                  </span>
+                                ) : isWarn ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center space-x-1">
+                                    <Clock className="w-3 h-3" />
+                                    <span>AVERTIZARE</span>
+                                  </span>
+                                ) : f.ultimulSchimbEstimat ? (
+                                  <span
+                                    className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-periwinkle-50 text-periwinkle-900 border border-dashed border-periwinkle-300 inline-flex items-center space-x-1"
+                                    title="Fără dată de schimb în evidența anterioară — setat la 50% din interval până la primul schimb real"
+                                  >
+                                    <span>ESTIMAT 50%</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>OPTIM</span>
+                                  </span>
+                                )}
+                                {f.ultimulSchimbEstimat && (isOver || isWarn) && (
+                                  <span
+                                    className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-periwinkle-50 text-periwinkle-900 border border-dashed border-periwinkle-300"
+                                    title="Fără dată de schimb în evidența anterioară — rămâne activ până la primul schimb real"
+                                  >
+                                    FĂRĂ ISTORIC (EST.)
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             <td className="p-3 border-b border-morning-200 text-right whitespace-nowrap">
@@ -3598,13 +3639,19 @@ export default function FluidePage() {
                   >
                     <div>
                       <span className="font-extrabold">Normă {tipLichidLabels[iesireTipLichid] || iesireTipLichid}:</span>{' '}
-                      <span>
-                        Ultimul schimb la{' '}
-                        <strong className="font-mono">
-                          {Number(activeNormForModal.ultimulSchimbContor || 0).toLocaleString('ro-RO')} {unitLabel}
-                        </strong>{' '}
-                        ({new Date(activeNormForModal.ultimulSchimbData).toLocaleDateString('ro-RO')})
-                      </span>
+                      {activeNormForModal.ultimulSchimbEstimat ? (
+                        <span className="font-semibold text-periwinkle-900">
+                          Estimat la 50% (fără istoric real — se va confirma automat la salvarea acestui schimb)
+                        </span>
+                      ) : (
+                        <span>
+                          Ultimul schimb la{' '}
+                          <strong className="font-mono">
+                            {Number(activeNormForModal.ultimulSchimbContor || 0).toLocaleString('ro-RO')} {unitLabel}
+                          </strong>{' '}
+                          ({new Date(activeNormForModal.ultimulSchimbData).toLocaleDateString('ro-RO')})
+                        </span>
+                      )}
                     </div>
                     <span className="font-mono font-black">
                       Rulaj curent: {Number(activeNormForModal.rulajEfectiv || 0).toLocaleString('ro-RO')}

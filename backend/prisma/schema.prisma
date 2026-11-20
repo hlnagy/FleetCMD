@@ -158,6 +158,7 @@ model ConfigurareUleiVehicul {
 
   ultimulSchimbContor  Float     @default(0)
   ultimulSchimbData    DateTime  @default(now())
+  ultimulSchimbEstimat Boolean   @default(false)
 
   @@unique([vehiculId, tipLichid])
 }

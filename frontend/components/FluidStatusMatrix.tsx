@@ -12,6 +12,7 @@ import {
   Droplets,
   Edit3,
   Gauge,
+  Info,
   Layers,
   Plus,
   Wrench,
@@ -37,6 +38,7 @@ export interface FlotaFluidRow {
   currentContor?: number | null;
   ultimulSchimbContor?: number | null;
   ultimulSchimbData?: string | null;
+  ultimulSchimbEstimat?: boolean;
   intervalPrincipal?: number | null;
   intervalKm?: number | null;
   intervalMth?: number | null;
@@ -500,6 +502,7 @@ export default function FluidStatusMatrix({
     const isOver = Boolean(row.esteDepasit);
     const isWarn = !isOver && Boolean(row.esteInPragAvertizare);
     const isUnsetMth = isUnsetDualMth(row);
+    const isEstimated = Boolean(row.ultimulSchimbEstimat) && !isUnsetMth;
     const isCalendar = row.trackingMode === 'LUNI';
     const unit = row.unitateMasura || 'KM';
     const pct = Math.min(100, Math.max(0, Number(row.procentConsum ?? 0)));
@@ -550,23 +553,30 @@ export default function FluidStatusMatrix({
     }
 
     const badgeClasses = isOver
-      ? 'bg-roseash-50 text-terracotta-700 border-terracotta-300 hover:bg-roseash-100'
+      ? `bg-roseash-50 text-terracotta-700 border-terracotta-300 hover:bg-roseash-100${isEstimated ? ' border-dashed' : ''}`
       : isWarn
-      ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+      ? `bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100${isEstimated ? ' border-dashed' : ''}`
       : isUnsetMth
       ? 'bg-morning-50 text-sage-700 border-dashed border-morning-300 hover:border-sapphire-400 hover:bg-sapphire-50 hover:text-sapphire-800'
+      : isEstimated
+      ? 'bg-periwinkle-50 text-periwinkle-900 border-dashed border-periwinkle-300 hover:bg-periwinkle-100'
       : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100';
 
     const barColor = isOver
       ? 'bg-terracotta-600'
       : isWarn
       ? 'bg-amber-500'
+      : isEstimated
+      ? 'bg-periwinkle-600'
       : 'bg-emerald-500';
 
     const tooltipLines = [
       `${oilFullLabel}`,
+      isEstimated
+        ? 'ESTIMAT (50% din normă) — fără schimb anterior în evidență; indicatorul rămâne activ până la primul schimb real'
+        : '',
       isCalendar
-        ? `Interval: ${row.intervalLuni || '—'} luni · Ultimul schimb: ${formatRoDate(row.ultimulSchimbData)}`
+        ? `Interval: ${row.intervalLuni || '—'} luni${isEstimated ? '' : ` · Ultimul schimb: ${formatRoDate(row.ultimulSchimbData)}`}`
         : `Interval: ${formatNumberRo(row.intervalPrincipal, 0)} ${unit} · Rulaj: ${formatNumberRo(row.rulajEfectiv, 0)} ${unit} · Curent: ${formatNumberRo(row.currentContor, 0)} ${unit}`,
       Number(row.totalLitriCompletati || 0) > 0 ? `Completări: +${row.totalLitriCompletati} L` : '',
       'Click pentru detalii, înregistrare schimb sau actualizare mTH',
@@ -587,7 +597,10 @@ export default function FluidStatusMatrix({
             {isOver && <AlertTriangle className="w-3.5 h-3.5 text-terracotta-600 shrink-0" />}
             {isWarn && <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
             {!isOver && !isWarn && isUnsetMth && <Gauge className="w-3.5 h-3.5 text-sage-500 group-hover/cell:text-sapphire-600 shrink-0" />}
-            {!isOver && !isWarn && !isUnsetMth && (
+            {!isOver && !isWarn && !isUnsetMth && isEstimated && (
+              <Info className="w-3 h-3 text-periwinkle-700 shrink-0" />
+            )}
+            {!isOver && !isWarn && !isUnsetMth && !isEstimated && (
               isCalendar ? (
                 <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
               ) : (
@@ -600,8 +613,8 @@ export default function FluidStatusMatrix({
           </div>
 
           {!isUnsetMth && (
-            <span className="font-mono text-[9px] font-black tabular-nums opacity-80 shrink-0">
-              {rawPct}%
+            <span className="font-mono text-[9px] font-black tabular-nums opacity-85 shrink-0">
+              {isEstimated ? `Est. ${rawPct}%` : `${rawPct}%`}
             </span>
           )}
         </div>
@@ -880,6 +893,10 @@ export default function FluidStatusMatrix({
             <span>În parametri optimi</span>
           </span>
           <span className="inline-flex items-center space-x-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-periwinkle-500 border border-dashed border-periwinkle-700" />
+            <span>Estimat 50% (fără istoric — până la primul schimb)</span>
+          </span>
+          <span className="inline-flex items-center space-x-1.5">
             <span className="w-2.5 h-2.5 rounded-full border border-dashed border-sage-400" />
             <span>mTH neinițializat</span>
           </span>
@@ -894,6 +911,7 @@ export default function FluidStatusMatrix({
         const isOver = Boolean(inspectedRow.esteDepasit);
         const isWarn = !isOver && Boolean(inspectedRow.esteInPragAvertizare);
         const isUnsetMth = isUnsetDualMth(inspectedRow);
+        const isEstimated = Boolean(inspectedRow.ultimulSchimbEstimat) && !isUnsetMth;
         const isCalendar = inspectedRow.trackingMode === 'LUNI';
         const unit = inspectedRow.unitateMasura || 'KM';
         const pct = Math.min(100, Math.max(0, Number(inspectedRow.procentConsum ?? 0)));
@@ -943,6 +961,12 @@ export default function FluidStatusMatrix({
                 </div>
 
                 <div className="flex items-center space-x-2 shrink-0">
+                  {isEstimated && (
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-periwinkle-50 text-periwinkle-900 border border-dashed border-periwinkle-300 inline-flex items-center space-x-1">
+                      <Info className="w-3 h-3" />
+                      <span>ESTIMAT</span>
+                    </span>
+                  )}
                   {isOver ? (
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-terracotta-600 text-white inline-flex items-center space-x-1">
                       <AlertTriangle className="w-3 h-3" />
@@ -1035,6 +1059,17 @@ export default function FluidStatusMatrix({
                 )}
               </div>
 
+              {isEstimated && (
+                <div className="p-3 rounded-xl bg-periwinkle-50 border border-dashed border-periwinkle-300 text-periwinkle-900 text-xs flex items-start space-x-2.5">
+                  <Info className="w-4 h-4 text-periwinkle-700 shrink-0 mt-0.5" />
+                  <p className="leading-snug font-semibold">
+                    Nu a existat o dată de schimb în evidența anterioară — norma a fost inițializată estimativ la{' '}
+                    <span className="font-black">50% din interval</span>. Această notificare rămâne activă până la
+                    înregistrarea primului schimb real.
+                  </p>
+                </div>
+              )}
+
               {/* Grid Telemetrie 2x2 */}
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 space-y-0.5">
@@ -1061,12 +1096,16 @@ export default function FluidStatusMatrix({
                     Ultimul Schimb
                   </span>
                   <p className="font-mono font-black text-sapphire-900 text-sm tabular-nums">
-                    {isCalendar
+                    {isEstimated
+                      ? 'Estimat (50% normă)'
+                      : isCalendar
                       ? formatRoDate(inspectedRow.ultimulSchimbData)
                       : `${formatNumberRo(inspectedRow.ultimulSchimbContor, 0)} ${unit}`}
                   </p>
                   <p className="text-[10px] text-sage-600 font-mono">
-                    {isCalendar
+                    {isEstimated
+                      ? 'Fără schimb înregistrat anterior'
+                      : isCalendar
                       ? `${formatNumberRo(inspectedRow.luniTrecute, 1)} luni scurse`
                       : `Dată: ${formatRoDate(inspectedRow.ultimulSchimbData)}`}
                   </p>

@@ -334,6 +334,7 @@ export class AnomaliiService {
           pragAvertizareLuni: cn.pragAvertizareLuni,
           ultimulSchimbContor: defaultBaseline,
           ultimulSchimbData: vehicul.createdAt || acum,
+          ultimulSchimbEstimat: false,
         });
       }
     }
@@ -394,6 +395,7 @@ export class AnomaliiService {
 
       return {
         ...cfg,
+        ultimulSchimbEstimat: Boolean(cfg.ultimulSchimbEstimat),
         trackingMode,
         unitateMasura,
         currentContor,
@@ -594,12 +596,14 @@ export class AnomaliiService {
         update: {
           ultimulSchimbContor: effectiveContor,
           ultimulSchimbData: dataOp,
+          ultimulSchimbEstimat: false,
         },
         create: {
           vehiculId: vehicul.id,
           tipLichid: data.tipLichid,
           ultimulSchimbContor: effectiveContor,
           ultimulSchimbData: dataOp,
+          ultimulSchimbEstimat: false,
           intervalMth: catNorm?.intervalMth ?? (useMthCounter ? 500 : null),
           intervalKm: catNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
           intervalLuni: catNorm?.intervalLuni ?? null,
@@ -738,6 +742,7 @@ export class AnomaliiService {
     pragAvertizareLuni?: number | null;
     ultimulSchimbContor?: number;
     ultimulSchimbData?: string | Date;
+    ultimulSchimbEstimat?: boolean;
   }) {
     const vehicul = await this.prisma.vehicul.findUnique({ where: { id: data.vehiculId } });
     if (!vehicul) throw new NotFoundException('Vehicul negăsit.');
@@ -751,6 +756,11 @@ export class AnomaliiService {
     if (data.pragAvertizareLuni !== undefined) updateData.pragAvertizareLuni = data.pragAvertizareLuni !== null ? Number(data.pragAvertizareLuni) : null;
     if (data.ultimulSchimbContor !== undefined) updateData.ultimulSchimbContor = Number(data.ultimulSchimbContor);
     if (data.ultimulSchimbData !== undefined) updateData.ultimulSchimbData = new Date(data.ultimulSchimbData);
+    if (data.ultimulSchimbEstimat !== undefined) {
+      updateData.ultimulSchimbEstimat = Boolean(data.ultimulSchimbEstimat);
+    } else if (data.ultimulSchimbContor !== undefined || data.ultimulSchimbData !== undefined) {
+      updateData.ultimulSchimbEstimat = false;
+    }
 
     return this.prisma.configurareUleiVehicul.upsert({
       where: { vehiculId_tipLichid: { vehiculId: data.vehiculId, tipLichid: data.tipLichid } },
@@ -766,6 +776,7 @@ export class AnomaliiService {
         pragAvertizareLuni: data.pragAvertizareLuni ? Number(data.pragAvertizareLuni) : (data.intervalLuni ? 1 : null),
         ultimulSchimbContor: data.ultimulSchimbContor !== undefined ? Number(data.ultimulSchimbContor) : Number(vehicul.valoareContorCurent || 0),
         ultimulSchimbData: data.ultimulSchimbData ? new Date(data.ultimulSchimbData) : new Date(),
+        ultimulSchimbEstimat: data.ultimulSchimbEstimat !== undefined ? Boolean(data.ultimulSchimbEstimat) : false,
       },
     });
   }
@@ -1132,12 +1143,14 @@ export class AnomaliiService {
         update: {
           ultimulSchimbContor: resetContor,
           ultimulSchimbData: new Date(),
+          ultimulSchimbEstimat: false,
         },
         create: {
           vehiculId: vehicul.id,
           tipLichid: targetTip,
           ultimulSchimbContor: resetContor,
           ultimulSchimbData: new Date(),
+          ultimulSchimbEstimat: false,
           intervalMth: existingCatNorm?.intervalMth ?? (isMthRule ? 500 : null),
           intervalKm: existingCatNorm?.intervalKm ?? (!isMthRule ? 15000 : null),
           intervalLuni: existingCatNorm?.intervalLuni ?? null,
@@ -2309,9 +2322,14 @@ export class AnomaliiService {
           urgenta: st.esteDepasit ? 'CRITIC' : 'AVERTIZARE',
           mesaj: st.motivAvertisment,
           dataReferinta: st.ultimulSchimbData,
-          modCalcul: st.trackingMode === 'LUNI'
-            ? `Ultimul schimb: ${new Date(st.ultimulSchimbData).toLocaleDateString('ro-RO')} (normă la ${st.intervalLuni} luni)`
-            : `Ultimul schimb la ${Number(st.ultimulSchimbContor || 0).toLocaleString('ro-RO')} ${st.unitateMasura} (${new Date(st.ultimulSchimbData).toLocaleDateString('ro-RO')}) · Contor curent: ${Number(st.currentContor || 0).toLocaleString('ro-RO')} ${st.unitateMasura}`,
+          ultimulSchimbEstimat: Boolean(st.ultimulSchimbEstimat),
+          modCalcul: `${
+            st.ultimulSchimbEstimat
+              ? `Estimare inițială 50% (fără schimb anterior înregistrat) · Contor curent: ${Number(st.currentContor || 0).toLocaleString('ro-RO')} ${st.unitateMasura}`
+              : st.trackingMode === 'LUNI'
+              ? `Ultimul schimb: ${new Date(st.ultimulSchimbData).toLocaleDateString('ro-RO')} (normă la ${st.intervalLuni} luni)`
+              : `Ultimul schimb la ${Number(st.ultimulSchimbContor || 0).toLocaleString('ro-RO')} ${st.unitateMasura} (${new Date(st.ultimulSchimbData).toLocaleDateString('ro-RO')}) · Contor curent: ${Number(st.currentContor || 0).toLocaleString('ro-RO')} ${st.unitateMasura}`
+          }`,
           linkDirect: '/fluide?tab=flota',
         });
       }

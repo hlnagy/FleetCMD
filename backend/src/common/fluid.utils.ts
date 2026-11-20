@@ -609,12 +609,14 @@ export async function syncFluidCompletariForComanda(
         update: {
           ultimulSchimbContor: effectiveContor,
           ultimulSchimbData: opDate,
+          ultimulSchimbEstimat: false,
         },
         create: {
           vehiculId: comanda.vehiculId,
           tipLichid,
           ultimulSchimbContor: effectiveContor,
           ultimulSchimbData: opDate,
+          ultimulSchimbEstimat: false,
           intervalMth: matchingCatNorm?.intervalMth ?? (useMthCounter ? 500 : null),
           intervalKm: matchingCatNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
           intervalLuni: matchingCatNorm?.intervalLuni ?? null,

@@ -8,6 +8,7 @@ import {
   detectTipLichidFromText,
   syncFluidCompletariForComanda,
   removeFluidCompletariForComanda,
+  resolveFluidRuleCounterConfig,
 } from '../common/fluid.utils';
 
 @Injectable()
@@ -2763,30 +2764,54 @@ export class MentenantaService {
       .filter((d) => d.zileRamase <= 60)
       .sort((a, b) => a.zileRamase - b.zileRamase);
 
-    // Revizii și schimburi ulei preconizate
+    // Revizii și schimburi ulei preconizate (inclusiv dual KM+mTH și norme calendaristice pe luni)
     const reviziiPreconizate: any[] = [];
     configurariUlei.forEach((cfg) => {
       if (!cfg.vehicul) return;
-      const currentContor = cfg.vehicul.valoareContorCurent || 0;
-      const lastContor = cfg.ultimulSchimbContor || 0;
-      const isKm = cfg.vehicul.tipMasurare === 'KM';
-      const interval = isKm ? (cfg.intervalKm || 30000) : (cfg.intervalMth || 500);
-      const nextDue = lastContor + interval;
-      const ramase = nextDue - currentContor;
-      const pragAvertizare = isKm ? (cfg.pragAvertizareKm || 2500) : (cfg.pragAvertizareMth || 50);
+      const counterMeta = resolveFluidRuleCounterConfig(cfg.vehicul, cfg);
+      const { trackingMode, unitateMasura, currentContor, intervalPrincipal, pragPrincipal } = counterMeta;
+      const lastContor = Number(cfg.ultimulSchimbContor || 0);
 
-      if (ramase <= pragAvertizare) {
+      if (trackingMode === 'LUNI' && cfg.intervalLuni) {
+        const diffMs = Math.max(0, now.getTime() - new Date(cfg.ultimulSchimbData).getTime());
+        const luniTrecute = Number((diffMs / (1000 * 60 * 60 * 24 * 30.44)).toFixed(1));
+        const luniRamase = Number((cfg.intervalLuni - luniTrecute).toFixed(1));
+        const pragLuni = cfg.pragAvertizareLuni || 1;
+        if (luniRamase <= pragLuni) {
+          reviziiPreconizate.push({
+            vehiculId: cfg.vehicul.id,
+            vehicul: cfg.vehicul,
+            tipLichid: cfg.tipLichid,
+            interval: cfg.intervalLuni,
+            ultimulSchimbContor: lastContor,
+            ultimulSchimbEstimat: Boolean(cfg.ultimulSchimbEstimat),
+            contorCurent: currentContor,
+            contorScadent: cfg.intervalLuni,
+            unitate: 'LUNI',
+            ramase: luniRamase,
+            status: luniRamase <= 0 ? 'DEPASIT' : (luniRamase <= pragLuni / 2 ? 'CRITIC' : 'ATENTIE'),
+          });
+        }
+        return;
+      }
+
+      if (!intervalPrincipal) return;
+      const nextDue = lastContor + intervalPrincipal;
+      const ramase = Number((nextDue - currentContor).toFixed(1));
+
+      if (ramase <= pragPrincipal) {
         reviziiPreconizate.push({
           vehiculId: cfg.vehicul.id,
           vehicul: cfg.vehicul,
           tipLichid: cfg.tipLichid,
-          interval,
+          interval: intervalPrincipal,
           ultimulSchimbContor: lastContor,
+          ultimulSchimbEstimat: Boolean(cfg.ultimulSchimbEstimat),
           contorCurent: currentContor,
           contorScadent: nextDue,
-          unitate: cfg.vehicul.tipMasurare,
+          unitate: unitateMasura,
           ramase,
-          status: ramase <= 0 ? 'DEPASIT' : (ramase <= pragAvertizare / 2 ? 'CRITIC' : 'ATENTIE'),
+          status: ramase <= 0 ? 'DEPASIT' : (ramase <= pragPrincipal / 2 ? 'CRITIC' : 'ATENTIE'),
         });
       }
     });
