@@ -20,12 +20,15 @@ export class AnvelopeService {
     // 1. Anvelope individuale în stoc (din tabela Anvelopa cu stare 'IN_STOC')
     const anvelopeStoc = await this.prisma.anvelopa.findMany({
       where: { stare: 'IN_STOC' },
-      include: { depozit: true },
+      include: { depozit: true, _count: { select: { istoricPermutari: true } } },
       orderBy: { updatedAt: 'desc' },
     });
 
     const listaIndividuale = anvelopeStoc.map((a) => {
-      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+      const hasRulaj = Number(a.rulajTotalKm || 0) > 0;
+      const wasMountedBefore = Number(a._count?.istoricPermutari || 0) > 0;
+      const wornDepth = Number(a.adancimeCurentaMm || 0) > 0 && Number(a.adancimeCurentaMm) < 15;
+      const isNoua = !hasRulaj && !wasMountedBefore && !wornDepth;
       const tag = isNoua ? 'NOUĂ' : 'RULATĂ / REZERVĂ';
       return {
         id: a.id,
@@ -1187,7 +1190,7 @@ export class AnvelopeService {
   async getDepozitStoc() {
     return this.prisma.anvelopa.findMany({
       where: { stare: 'IN_STOC' },
-      include: { depozit: true },
+      include: { depozit: true, _count: { select: { istoricPermutari: true } } },
       orderBy: { updatedAt: 'desc' },
     });
   }

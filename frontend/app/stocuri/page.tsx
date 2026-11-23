@@ -1365,10 +1365,19 @@ function StocuriGarantiiContent() {
     setAnvelopeStocMarcaFilter('');
   };
 
+  // o anvelopă este NOUĂ doar dacă nu a rulat (rulajTotalKm === 0), nu a fost montată/demontată anterior și nu are adâncime uzată (<15mm)
+  const isAnvelopaNoua = (a: any): boolean => {
+    if (Number(a?.rulajTotalKm || 0) > 0) return false;
+    if (Number(a?._count?.istoricPermutari || 0) > 0) return false;
+    const depth = Number(a?.adancimeCurentaMm || 0);
+    if (depth > 0 && depth < 15) return false;
+    return true;
+  };
+
   // Filtrare + Sortare anvelope serializate din magazie
   const anvelopeStocFiltrate = anvelopeStocList
     .filter((a) => {
-      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+      const isNoua = isAnvelopaNoua(a);
       if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
       if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
       if (anvelopeStocDepozitFilter) {
@@ -1465,7 +1474,7 @@ function StocuriGarantiiContent() {
       const modelKey = String(a.model || '').trim().toUpperCase();
       const depKey = String(a.depozitId || 'DEFAULT');
       const gKey = `${dimKey}__${marcaKey}__${modelKey}__${depKey}`;
-      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+      const isNoua = isAnvelopaNoua(a);
       const pret = Number(a.pretAchizitie || 0);
 
       if (!groups.has(gKey)) {
@@ -1502,11 +1511,11 @@ function StocuriGarantiiContent() {
   })();
 
   const totalValoareAnvelopeStoc = anvelopeStocList.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
-  const countAnvelopeNoi = anvelopeStocList.filter((a) => (a.adancimeCurentaMm || 16) >= 15).length;
+  const countAnvelopeNoi = anvelopeStocList.filter((a) => isAnvelopaNoua(a)).length;
   const countAnvelopeRulate = anvelopeStocList.length - countAnvelopeNoi;
 
   const totalValoareAnvelopeFiltrate = anvelopeStocFiltrate.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
-  const countAnvelopeNoiFiltrate = anvelopeStocFiltrate.filter((a) => (a.adancimeCurentaMm || 16) >= 15).length;
+  const countAnvelopeNoiFiltrate = anvelopeStocFiltrate.filter((a) => isAnvelopaNoua(a)).length;
   const countAnvelopeRulateFiltrate = anvelopeStocFiltrate.length - countAnvelopeNoiFiltrate;
 
   return (
@@ -2589,7 +2598,7 @@ function StocuriGarantiiContent() {
                   </thead>
                   <tbody className="divide-y divide-morning-200 text-slate-700">
                     {anvelopeStocFiltrate.map((a: any) => {
-                      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+                      const isNoua = isAnvelopaNoua(a);
                       const isHighlighted = !!(
                         highlightedTireSerie &&
                         String(a.serieAnvelopa || '').trim().toLowerCase() ===
@@ -2876,7 +2885,7 @@ function StocuriGarantiiContent() {
             /* =============================================================== */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {anvelopeStocFiltrate.map((a: any) => {
-                const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+                const isNoua = isAnvelopaNoua(a);
                 const isHighlighted = !!(
                   highlightedTireSerie &&
                   String(a.serieAnvelopa || '').trim().toLowerCase() === highlightedTireSerie.trim().toLowerCase()
