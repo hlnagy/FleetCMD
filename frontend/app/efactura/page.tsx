@@ -9,7 +9,7 @@ import {
   PackageCheck, Trash2, ChevronRight, Eye, Code, ExternalLink, Calendar, Zap,
   HelpCircle, BookOpen, Key, CheckCircle, Shield, ArrowUpDown, ArrowUp, ArrowDown,
   ShoppingCart, History, Tag, ShieldAlert, Droplets, Sparkles,
-  Truck, Database, Wrench, RotateCcw
+  Truck, Database, Wrench, RotateCcw, CircleDot
 } from 'lucide-react';
 
 import { API_BASE_URL } from '@/lib/api';
@@ -24,6 +24,7 @@ import {
   isFluidCategoryOrItem,
   normalizeTipuriFluideList,
 } from '@/lib/fluids';
+import { isTireItem } from '@/lib/tires';
 
 function detectFluidPackaging(descriere?: string, unitateMasura?: string): {
   isPackagedFluid: boolean;
@@ -156,7 +157,7 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
   const isFluidGeneral = isMotorOil || isHydraulicOil || isTransmisieOil || isVaselina || isAntigel || isAdblue || /ulei|oil|lubrifian/i.test(desc);
 
   // 3. ANVELOPE
-  const isAnvelopa = /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(desc);
+  const isAnvelopa = isTireItem({ denumire: descriere });
 
   // 4. FRÂNE & SUSPENSIE
   const isFrana = /placut|placute|disc frana|etrier|tambur|sabot|frana|cama frana|perna aer|bucsa|bucse/i.test(desc);
@@ -1240,35 +1241,14 @@ function EFacturaContent() {
     );
   };
 
-  const isAnvelopaItemHelper = (art: any, categorieNume?: string): boolean => {
-    if (!art && !categorieNume) return false;
-    const desc = String(art?.descrierePiesa || '').trim();
-    const dLow = desc.toLowerCase();
-    const code = String(art?.codArticolFurnizor || '').trim().toUpperCase();
-    if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
-    if (code === 'ECO' && /eco/i.test(desc)) return false;
-    if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
-    const hasDim = /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc);
-    if (
-      /\b(?:vopsea|t\*vop|kober|diluant|grund|email|amorsa|spray|ulei|lubrifiant|antigel|adblue|vaselina|surub|piulita|tabla|teava|tevi|profil|electrod)\b/i.test(desc) &&
-      !hasDim &&
-      !dLow.includes('anvelop') &&
-      !dLow.includes('cauciuc')
-    ) {
-      return false;
-    }
-
-    return (
-      /anvelop/i.test(String(categorieNume || '')) ||
-      hasDim ||
-      dLow.includes('anvelop') ||
-      dLow.includes('cauciuc') ||
-      dLow.includes('r22.5') ||
-      dLow.includes('r17.5') ||
-      dLow.includes('r20') ||
-      dLow.includes('r24') ||
-      code.startsWith('ANV')
-    );
+  const isAnvelopaItemHelper = (art: any, categorieNume?: string, subcategorieNume?: string): boolean => {
+    if (!art && !categorieNume && !subcategorieNume) return false;
+    return isTireItem({
+      denumire: art?.descrierePiesa,
+      codArticol: art?.codArticolFurnizor,
+      categorie: categorieNume,
+      subcategorie: subcategorieNume,
+    });
   };
 
   const isEcoValoareItemHelper = (art: any, facturaArticole: any[] = []): boolean => {
@@ -1816,7 +1796,16 @@ function EFacturaContent() {
     setSeriiList(initialSerii);
 
     // Inițializare parametri Alocare Directă pe Mașină / Comandă de Lucru
-    setTipDestinatieImport(startAsDirectMasina ? 'DIRECT_MASINA' : 'DEPOZIT');
+    if (startAsDirectMasina && isAnvelopaText) {
+      showToast(
+        'Anvelopele se recepționează mai întâi în Magazie Anvelope, apoi se montează pe vehicul din Anvelope & Harta Axe.',
+        'warning',
+        4500
+      );
+      setTipDestinatieImport('DEPOZIT');
+    } else {
+      setTipDestinatieImport(startAsDirectMasina ? 'DIRECT_MASINA' : 'DEPOZIT');
+    }
     setDataComandaDirect(new Date().toISOString().slice(0, 10));
     setValoareContorDirectText('');
     setSelectedMecaniciList(mecaniciFlota.length > 0 ? [mecaniciFlota[0].nume] : ['Ion Popescu (Atelier)']);
@@ -2360,14 +2349,12 @@ function EFacturaContent() {
   const handleConfirmAlocareDirecta = async () => {
     if (!importingItem) return;
 
-    const isItemTire =
-      /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
-      /anvelop|cauciuc|pneu/i.test(targetCategorieDirect || '');
+    const isItemTire = isAnvelopaItemHelper(importingItem, targetCategorieDirect, targetSubcategorieDirect);
     if (isItemTire) {
       showToast(
-        'Anvelopele se montează exclusiv din meniul Anvelope & Siguranță!',
+        'Anvelopele se recepționează exclusiv în Magazie Anvelope și se montează din meniul Anvelope & Siguranță!',
         'warning',
-        3500
+        4000
       );
       return;
     }
@@ -2507,6 +2494,27 @@ function EFacturaContent() {
     }
   };
 
+  const getActiveSerialCount = (qty: number): number => Math.max(1, Math.round(Number(qty || 1)));
+
+  const handleCantitateDepozitChange = (nextQty: number) => {
+    setCantitateDepozitImport(nextQty);
+    const targetCount = getActiveSerialCount(nextQty);
+    setSeriiList((prev) => {
+      if (prev.length >= targetCount) return prev;
+      const prefix = codArticolCalculat || 'SN';
+      const ts = Date.now().toString().slice(-4);
+      const extended = [...prev];
+      for (let i = prev.length + 1; i <= targetCount; i++) {
+        extended.push({
+          id: i,
+          serie: `${prefix}-${ts}-${String(i).padStart(2, '0')}`,
+          dot: '',
+        });
+      }
+      return extended;
+    });
+  };
+
   // EXECUTE ITEM IMPORT INTO INVENTORY (DEPOZITFLOTA)
   const handleConfirmImportItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2551,13 +2559,17 @@ function EFacturaContent() {
           luniGarantie: areGarantieProducator ? Number(durataGarantieLuni) : undefined,
           kilometriGarantie: areGarantieProducator ? Number(durataGarantieKm) : undefined,
           serieUnica: areGarantieProducator ? serieUnicaCustom.trim() : undefined,
-          esteAnvelopa: /anvelop/i.test(targetCategorie) || isAnvelopaItemHelper(importingItem),
+          esteAnvelopa: isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie),
           includeEcovalor: !isGarantieGratuita && ecovalorPerBuc > 0 ? includeEcovalor : false,
           includeFeeItemIds:
             !isGarantieGratuita && includeCostSuplimentar && extraFeeInfo.feeItems.length > 0
               ? extraFeeInfo.feeItems.map((f: any) => f.id)
               : undefined,
-          seriiIndividuale: isImportSerializat ? seriiList.map((s) => ({ serie: s.serie, dot: s.dot })) : undefined,
+          seriiIndividuale: isImportSerializat
+            ? seriiList
+                .slice(0, Math.max(1, Math.round(cantitateFacturaDeImportat)))
+                .map((s) => ({ serie: s.serie, dot: s.dot }))
+            : undefined,
         }),
       });
 
@@ -4331,33 +4343,44 @@ function EFacturaContent() {
                           ) : (
                             <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap">
                               {art.stare !== 'IMPORTAT' && (
-                                <>
-                                  <button
-                                    onClick={() => openImportItemModal(art, false, true)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
-                                    title="Alocă piesa direct pe mașină / comandă de lucru deschisă sau nouă"
-                                  >
-                                    <Truck className="w-3.5 h-3.5" />
-                                    <span>Direct pe Mașină</span>
-                                  </button>
-
-                                  <button
-                                    onClick={() => openImportItemModal(art, false, false)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
-                                    title="Recepționează cantitatea în depozit / magazie"
-                                  >
-                                    <Database className="w-3.5 h-3.5" />
-                                    <span>În Depozit</span>
-                                  </button>
-
+                                isAnvelopaItemHelper(art) ? (
                                   <button
                                     onClick={() => openImportItemModal(art, true, false)}
-                                    className="px-2 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-700 border border-morning-200 font-bold text-xs transition cursor-pointer flex items-center space-x-1"
-                                    title="Importă bucată cu bucată cu introducerea seriilor unice (anvelope, baterii, garanții)"
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
+                                    title="Recepționează anvelopele direct în Magazie Anvelope (fără duplicare în stocul de piese atelier)"
                                   >
-                                    <span>Cu Serii</span>
+                                    <CircleDot className="w-3.5 h-3.5" />
+                                    <span>În Magazie Anvelope</span>
                                   </button>
-                                </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => openImportItemModal(art, false, true)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
+                                      title="Alocă piesa direct pe mașină / comandă de lucru deschisă sau nouă"
+                                    >
+                                      <Truck className="w-3.5 h-3.5" />
+                                      <span>Direct pe Mașină</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => openImportItemModal(art, false, false)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center space-x-1"
+                                      title="Recepționează cantitatea în depozit / magazie"
+                                    >
+                                      <Database className="w-3.5 h-3.5" />
+                                      <span>În Depozit</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => openImportItemModal(art, true, false)}
+                                      className="px-2 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-700 border border-morning-200 font-bold text-xs transition cursor-pointer flex items-center space-x-1"
+                                      title="Importă bucată cu bucată cu introducerea seriilor unice (baterii, garanții)"
+                                    >
+                                      <span>Cu Serii</span>
+                                    </button>
+                                  </>
+                                )
                               )}
                               {art.stare === 'NEPROCESAT' && (
                                 <button
@@ -5020,19 +5043,21 @@ function EFacturaContent() {
                     }`}
                   >
                     <Database className="w-4 h-4" />
-                    <span>1. În Depozit Stoc (Magazie)</span>
+                    <span>
+                      {isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie)
+                        ? '1. În Magazie Anvelope'
+                        : '1. În Depozit Stoc (Magazie)'}
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      const isItemTire =
-                        /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
-                        /anvelop|cauciuc|pneu/i.test(targetCategorie || '');
+                      const isItemTire = isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie);
                       if (isItemTire) {
                         alert(
                           '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
-                          'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
+                          'Anvelopele din factură se recepționează direct în Magazie Anvelope (fără a intra în stocul de piese atelier), iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
                         );
                         return;
                       }
@@ -5054,6 +5079,17 @@ function EFacturaContent() {
 
                 {tipDestinatieImport === 'DEPOZIT' ? (
                   <div className="space-y-4">
+                    {isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie) && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-start space-x-2.5 text-xs text-emerald-950">
+                        <CircleDot className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+                        <div className="space-y-0.5">
+                          <p className="font-extrabold">Recepție dedicată în Magazie Anvelope</p>
+                          <p className="text-[11px] text-emerald-800 leading-snug">
+                            Articolul este identificat ca anvelopă și va fi înregistrat direct în <strong>Magazie Anvelope</strong> (cu furnizor, factură și serii individuale/auto-generate), fără a dubla stocul de piese din atelier.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {/* TAB SELECTOR: IMPORT STANDARD VS CU SERII PER BUCATĂ */}
                     <div className="flex items-center space-x-2 bg-morning-100 p-1.5 rounded-xl border border-morning-200 shrink-0">
                       <button
@@ -5073,7 +5109,7 @@ function EFacturaContent() {
                           isImportSerializat ? 'bg-sapphire-600 text-white shadow-xs' : 'text-sage-700 hover:bg-morning-200'
                         }`}
                       >
-                         Import cu Serii / Bucată ({seriiList.length} buc)
+                         Import cu Serii / Bucată ({getActiveSerialCount(cantitateDepozitImport)} buc)
                       </button>
                     </div>
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
@@ -5144,7 +5180,7 @@ function EFacturaContent() {
                         max={Math.max(0, Number((importingItem.cantitate - Number(importingItem.cantitateProcesata || 0)).toFixed(4))) || importingItem.cantitate}
                         required
                         value={cantitateDepozitImport}
-                        onChange={(e) => setCantitateDepozitImport(Number(e.target.value))}
+                        onChange={(e) => handleCantitateDepozitChange(Number(e.target.value))}
                         className="flex-1 bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-black text-sm focus:ring-2 focus:ring-emerald-500/20"
                       />
                       <span className="px-3 py-2.5 bg-morning-200 border border-morning-300 rounded-xl font-bold text-slate-700 text-xs">
@@ -5155,7 +5191,7 @@ function EFacturaContent() {
                         onClick={() => {
                           const cantProc = Number(importingItem.cantitateProcesata || 0);
                           const cantRamasa = Math.max(0, Number((importingItem.cantitate - cantProc).toFixed(4)));
-                          setCantitateDepozitImport(cantRamasa || 1);
+                          handleCantitateDepozitChange(cantRamasa || 1);
                         }}
                         className="px-2.5 py-2 bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-700 rounded-xl text-xs font-bold transition cursor-pointer"
                         title="Setează cantitatea maximă rămasă"
@@ -5190,13 +5226,11 @@ function EFacturaContent() {
                       value={targetDepozitId}
                       onChange={(e) => {
                         if (e.target.value === 'DIRECT_PE_MASINA') {
-                          const isItemTire =
-                            /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(importingItem?.descrierePiesa || '') ||
-                            /anvelop|cauciuc|pneu/i.test(targetCategorie || '');
+                          const isItemTire = isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie);
                           if (isItemTire) {
                             alert(
                               '🚫 Anvelopele nu pot fi montate direct pe Comandă de Lucru!\n\n' +
-                              'Anvelopele din factură trebuie recepționate în stoc/depozit (Magazie Anvelope), iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
+                              'Anvelopele din factură se recepționează direct în Magazie Anvelope, iar montarea pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe pe poziția corespunzătoare.'
                             );
                             return;
                           }
@@ -5208,9 +5242,11 @@ function EFacturaContent() {
                       }}
                       className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                     >
-                      <option value="DIRECT_PE_MASINA" className="text-sapphire-700 font-extrabold bg-sapphire-50">
-                        🚗 [Import Direct pe Mașină / Comandă de Lucru] (Fără stocare în depozit)
-                      </option>
+                      {!isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie) && (
+                        <option value="DIRECT_PE_MASINA" className="text-sapphire-700 font-extrabold bg-sapphire-50">
+                          🚗 [Import Direct pe Mașină / Comandă de Lucru] (Fără stocare în depozit)
+                        </option>
+                      )}
                       {depozite.map((d) => (
                         <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                       ))}
@@ -5395,13 +5431,24 @@ function EFacturaContent() {
               </div>
 
               {/* SECȚIUNE SERII INDIVIDUALE DACĂ ESTE ACTIVAT IMPORTUL SERIALIZAT */}
-              {isImportSerializat ? (
+              {isImportSerializat ? (() => {
+                const activeSeriiCount = getActiveSerialCount(cantitateDepozitImport);
+                const displayedSerii = Array.from({ length: activeSeriiCount }, (_, idx) => {
+                  const existing = seriiList[idx];
+                  if (existing) return existing;
+                  return {
+                    id: idx + 1,
+                    serie: `${codArticolCalculat || 'SN'}-${String(idx + 1).padStart(2, '0')}`,
+                    dot: '',
+                  };
+                });
+                return (
                 <div className="p-3.5 bg-gradient-to-br from-sapphire-50/90 via-morning-50 to-morning-50 border border-sapphire-300 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Tag className="w-4 h-4 text-sapphire-600" />
                       <p className="font-extrabold text-sapphire-900 text-xs">
-                        Serii Unice per Bucată ({seriiList.length} bucăți în factură)
+                        Serii Unice per Bucată ({activeSeriiCount} {activeSeriiCount === 1 ? 'bucată de recepționat' : 'bucăți de recepționat'})
                       </p>
                     </div>
                     <button
@@ -5410,7 +5457,7 @@ function EFacturaContent() {
                         const prefix = codArticolCalculat || 'SN';
                         const timestamp = Date.now().toString().slice(-4);
                         setSeriiList(
-                          seriiList.map((s, idx) => ({
+                          displayedSerii.map((s, idx) => ({
                             ...s,
                             serie: `${prefix}-${timestamp}-${String(idx + 1).padStart(2, '0')}`,
                             dot: s.dot || 'DOT-2026',
@@ -5424,11 +5471,13 @@ function EFacturaContent() {
                   </div>
 
                   <p className="text-[11px] text-sage-700 font-medium">
-                    Introduceți seria fizică / codul de bare pentru fiecare bucată. Pentru anvelope, acestea vor apărea direct în gestiunea roților.
+                    {isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie)
+                      ? 'Introduceți seria fizică / codul DOT pentru fiecare bucată. Anvelopele vor fi înregistrate direct în Magazie Anvelope (nu în stocul de piese atelier) și pot fi montate din Harta Axe.'
+                      : 'Introduceți seria fizică / codul de bare pentru fiecare bucată serializată cu garanție.'}
                   </p>
 
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    {seriiList.map((item, index) => (
+                    {displayedSerii.map((item, index) => (
                       <div key={item.id} className="p-2.5 bg-white border border-morning-200 rounded-xl flex items-center space-x-2 shadow-2xs">
                         <span className="w-6 h-6 rounded-lg bg-sapphire-100 text-sapphire-900 font-mono font-black text-[10px] flex items-center justify-center shrink-0">
                           #{index + 1}
@@ -5440,9 +5489,13 @@ function EFacturaContent() {
                             required
                             value={item.serie}
                             onChange={(e) => {
-                              const updated = [...seriiList];
+                              const updated = [...displayedSerii];
                               updated[index] = { ...updated[index], serie: e.target.value };
-                              setSeriiList(updated);
+                              setSeriiList((prev) => {
+                                const merged = prev.length > updated.length ? [...prev] : [...updated];
+                                merged[index] = updated[index];
+                                return merged;
+                              });
                             }}
                             className="w-full bg-morning-100 border border-morning-200 rounded-lg p-1.5 font-mono font-bold text-sapphire-900 text-xs"
                           />
@@ -5453,9 +5506,13 @@ function EFacturaContent() {
                             type="text"
                             value={item.dot}
                             onChange={(e) => {
-                              const updated = [...seriiList];
+                              const updated = [...displayedSerii];
                               updated[index] = { ...updated[index], dot: e.target.value };
-                              setSeriiList(updated);
+                              setSeriiList((prev) => {
+                                const merged = prev.length > updated.length ? [...prev] : [...updated];
+                                merged[index] = updated[index];
+                                return merged;
+                              });
                             }}
                             placeholder="DOT-2026"
                             className="w-full bg-morning-100 border border-morning-200 rounded-lg p-1.5 font-mono text-sapphire-900 text-xs"
@@ -5465,7 +5522,8 @@ function EFacturaContent() {
                     ))}
                   </div>
                 </div>
-              ) : (
+                );
+              })() : (
                 /* SECȚIUNE GARANȚIE PRODUCĂTOR SIMPLĂ */
                 <div className="p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl space-y-2">
                   <div className="flex items-center justify-between">
@@ -6162,7 +6220,11 @@ function EFacturaContent() {
                   ) : (
                     <>
                       <PackageCheck className="w-4 h-4" />
-                      <span>Confirmă Importul în Stoc</span>
+                      <span>
+                        {isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie)
+                          ? 'Confirmă Recepția în Magazie Anvelope'
+                          : 'Confirmă Importul în Stoc'}
+                      </span>
                     </>
                   )}
                 </button>

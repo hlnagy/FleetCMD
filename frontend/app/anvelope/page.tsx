@@ -7,13 +7,25 @@ import Link from 'next/link';
 import {
   CircleDot, AlertTriangle, RefreshCw, Ruler, BarChart2, Repeat, Layers, Search, Plus,
   CheckCircle2, X, ArrowLeftRight, Wrench, ShieldAlert, History, Calendar, UserCheck, Trash2, Truck, ChevronDown, Check, Settings, PackageCheck,
-  ExternalLink, Building2
+  ExternalLink, Building2, FileText
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import { getLabelPozitie } from '@/lib/tirePositions';
 import { getCategoryColor } from '@/lib/categoryColors';
+import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
 
 export default function AnvelopePage() {
+  const { openTab } = useTabWorkspace();
+
+  const handleOpenFacturaInEfactura = (numarFactura?: string | null) => {
+    if (!numarFactura || numarFactura === 'Fără Număr' || numarFactura === '-') return;
+    openTab({
+      id: '/efactura?tab=efactura',
+      title: `Factură: ${numarFactura}`,
+      href: `/efactura?tab=efactura&search=${encodeURIComponent(numarFactura)}`,
+      iconName: 'FileText',
+    });
+  };
   const [vehicule, setVehicule] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [hartaAxe, setHartaAxe] = useState<any>(null);
@@ -205,6 +217,23 @@ export default function AnvelopePage() {
     }
   };
 
+  const refreshAllTireViews = async (targetVehiculId?: string) => {
+    const vehicleToRefresh = targetVehiculId || selectedId;
+    const tasks: Array<Promise<any>> = [
+      fetchFlotaAnvelope(),
+      fetchIstoricPermutari(),
+      fetchTCO(),
+      fetchVehicule(),
+    ];
+    if (vehicleToRefresh) {
+      tasks.push(fetchHartaAxe(vehicleToRefresh));
+    }
+    if (selectedId && vehicleToRefresh && selectedId !== vehicleToRefresh) {
+      tasks.push(fetchHartaAxe(selectedId));
+    }
+    await Promise.all(tasks);
+  };
+
   useEffect(() => {
     fetchVehicule();
     fetchFlotaAnvelope();
@@ -287,9 +316,7 @@ export default function AnvelopePage() {
         alert(data.mesaj);
         setShowDemountModal(false);
         setDemountPozitie(null);
-        fetchHartaAxe(selectedId);
-        fetchFlotaAnvelope();
-        fetchIstoricPermutari();
+        await refreshAllTireViews(selectedId);
       } else {
         const err = await res.json();
         alert(`Eroare: ${err.message}`);
@@ -339,8 +366,7 @@ export default function AnvelopePage() {
         setPozitieA(null);
         setPozitieB(null);
         setPermutareObservatii('');
-        fetchHartaAxe(selectedId);
-        fetchIstoricPermutari();
+        await refreshAllTireViews(selectedId);
       } else {
         const err = await res.json();
         alert(`Eroare: ${err.message}`);
@@ -392,8 +418,7 @@ export default function AnvelopePage() {
       if (res.ok) {
         alert('Configurația axelor și a roților a fost actualizată cu succes!');
         setShowConfigAxeModal(false);
-        fetchVehicule();
-        fetchHartaAxe(selectedId);
+        await refreshAllTireViews(selectedId);
       } else {
         alert('Nu s-a putut actualiza configurația axelor.');
       }
@@ -438,9 +463,7 @@ export default function AnvelopePage() {
         setNewSerie('');
         setNewMountPositionId('');
         setSelectedAxNumar('');
-        fetchHartaAxe(selectedId);
-        fetchFlotaAnvelope();
-        fetchIstoricPermutari();
+        await refreshAllTireViews(selectedVehiculForAdd || selectedId);
       } else {
         const err = await res.json();
         alert(`Eroare la înregistrare: ${err.message}`);
@@ -462,17 +485,19 @@ export default function AnvelopePage() {
     }
 
     const selectedItem = stocAnvelope.find((s) => s.id === selectedAnvelopaDinStocId);
+    const cleanedSerie = newSerie.trim();
+    const cleanedDot = newCodDot.trim();
 
     try {
       const res = await fetch(`${API_BASE_URL}/anvelope/monteaza`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          anvelopaId: selectedItem?.anvelopaId || undefined,
+          anvelopaId: selectedItem?.anvelopaId || selectedItem?.id || undefined,
           articolStocId: selectedItem?.articolStocId || undefined,
           pozitieAxId: newMountPositionId,
-          serieAnvelopa: newSerie || undefined,
-          codDot: newCodDot || undefined,
+          serieAnvelopa: cleanedSerie || undefined,
+          codDot: cleanedDot || undefined,
           marca: newMarca || undefined,
           model: newModel || undefined,
           dimensiune: newDimensiune || undefined,
@@ -491,9 +516,10 @@ export default function AnvelopePage() {
         alert('Anvelopa din stoc a fost montată pe vehicul! Stocul a fost actualizat.');
         setShowAddAnvelopaModal(false);
         setSelectedAnvelopaDinStocId('');
-        fetchHartaAxe(selectedId);
-        fetchFlotaAnvelope();
-        fetchIstoricPermutari();
+        setNewSerie('');
+        setNewMountPositionId('');
+        setSelectedAxNumar('');
+        await refreshAllTireViews(selectedVehiculForAdd || selectedId);
       } else {
         const err = await res.json();
         alert(`Eroare la montare: ${err.message}`);
@@ -529,6 +555,8 @@ export default function AnvelopePage() {
       (item.dimensiune || '').toLowerCase().includes(q) ||
       (item.depozitNume || '').toLowerCase().includes(q) ||
       (item.codDot || '').toLowerCase().includes(q) ||
+      (item.furnizor || '').toLowerCase().includes(q) ||
+      (item.numarFactura || '').toLowerCase().includes(q) ||
       (item.eticheta || '').toLowerCase().includes(q)
     );
   });
@@ -931,7 +959,34 @@ export default function AnvelopePage() {
                   return (
                     <tr key={a.id} className="hover:bg-morning-50 transition">
                       <td className="p-3 font-extrabold text-sapphire-900 font-mono">{a.serieAnvelopa}</td>
-                      <td className="p-3 font-bold text-slate-800">{a.marca} {a.model}</td>
+                      <td className="p-3 font-bold text-slate-800">
+                        <div>{a.marca} {a.model}</div>
+                        {(a.furnizor || a.numarFactura) && (
+                          <div className="mt-1 flex items-center flex-wrap gap-1.5 text-[10px] font-normal">
+                            {a.furnizor && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold">
+                                {a.furnizor}
+                              </span>
+                            )}
+                            {a.numarFactura && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFacturaInEfactura(a.numarFactura)}
+                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-morning-100 hover:bg-sapphire-100 border border-morning-300 text-slate-700 hover:text-sapphire-800 font-mono font-semibold transition cursor-pointer"
+                                title="Click pentru a deschide factura în ANAF e-Factura"
+                              >
+                                <FileText className="w-3 h-3 text-sapphire-600 shrink-0" />
+                                <span className="underline decoration-dotted">{a.numarFactura}</span>
+                                {a.dataFactura && (
+                                  <span className="text-sage-600 font-normal">
+                                    ({new Date(a.dataFactura).toLocaleDateString('ro-RO')})
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-3 font-mono text-sage-700 font-semibold">{a.dimensiune}</td>
                       <td className="p-3">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1208,7 +1263,7 @@ export default function AnvelopePage() {
                 <div>
                   <label className="text-sage-700 block mb-1 font-extrabold text-sapphire-900 flex items-center space-x-1">
                     <Ruler className="w-3.5 h-3.5 text-sapphire-500" />
-                    <span>Index Contor la Montare ({targetVehiculObj?.tipMasurare === 'ORE_MTH' ? 'Ore mTH' : 'KM'}): *
+                    <span>Index Contor la Montare ({['MTH', 'ORE', 'ORE_MTH'].includes(String(targetVehiculObj?.tipMasurare || '').toUpperCase()) ? 'Ore mTH' : 'KM'}): *
                     </span>
                   </label>
                   <input
@@ -1380,6 +1435,17 @@ export default function AnvelopePage() {
                                   {a.depozitNume || 'Depozit Central'}
                                 </span>
                               </div>
+                              {(a.furnizor || a.numarFactura) && (
+                                <div className={`mt-1 flex items-center flex-wrap gap-x-2 gap-y-0.5 text-[10px] ${isSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
+                                  {a.furnizor && <span className="font-semibold truncate max-w-[200px]">{a.furnizor}</span>}
+                                  {a.numarFactura && (
+                                    <span className="font-mono">
+                                      Fact. {a.numarFactura}
+                                      {a.dataFactura ? ` (${new Date(a.dataFactura).toLocaleDateString('ro-RO')})` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })
@@ -1737,18 +1803,51 @@ export default function AnvelopePage() {
                       <span>•</span>
                       <span><strong>Serie:</strong> {historyTireData.anvelopa?.serieAnvelopa}</span>
                       <span>•</span>
-                      <span><strong>DOT:</strong> {historyTireData.anvelopa?.codDot}</span>
+                      <span><strong>DOT:</strong> {historyTireData.anvelopa?.codDot || 'Nespecificat'}</span>
                     </div>
+                    {(historyTireData.anvelopa?.furnizor || historyTireData.anvelopa?.numarFactura) && (
+                      <div className="flex items-center flex-wrap gap-2 mt-1.5 text-[11px]">
+                        {historyTireData.anvelopa?.furnizor && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold">
+                            Furnizor: {historyTireData.anvelopa.furnizor}
+                          </span>
+                        )}
+                        {historyTireData.anvelopa?.numarFactura && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFacturaInEfactura(historyTireData.anvelopa.numarFactura)}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded bg-white hover:bg-sapphire-100 border border-morning-300 text-slate-700 hover:text-sapphire-800 font-mono font-semibold transition cursor-pointer"
+                            title="Deschide factura în ANAF e-Factura"
+                          >
+                            <FileText className="w-3 h-3 text-sapphire-600" />
+                            <span className="underline decoration-dotted">{historyTireData.anvelopa.numarFactura}</span>
+                            {historyTireData.anvelopa?.dataFactura && (
+                              <span className="text-sage-600 font-normal">
+                                ({new Date(historyTireData.anvelopa.dataFactura).toLocaleDateString('ro-RO')})
+                              </span>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <span className={`px-3 py-1 rounded-full text-xs font-bold self-start sm:self-center ${
                     historyTireData.anvelopa?.stare === 'MONTATA'
                       ? 'bg-sapphire-500 text-white shadow-xs'
-                      : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      : historyTireData.anvelopa?.stare === 'CASATA'
+                        ? 'bg-rose-50 text-rose-700 border border-rose-300'
+                        : historyTireData.anvelopa?.stare === 'RESAPATA'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                   }`}>
                     {historyTireData.anvelopa?.stare === 'MONTATA'
                       ? `MONTATĂ pe ${historyTireData.anvelopa?.vehicul?.numarIntern || ''} (${getLabelPozitie(historyTireData.anvelopa?.pozitieAx).titlu})`
-                      : ' ÎN STOC DEPOZIT'}
+                      : historyTireData.anvelopa?.stare === 'CASATA'
+                        ? 'CASATĂ / DEȘEU'
+                        : historyTireData.anvelopa?.stare === 'RESAPATA'
+                          ? 'ÎN REȘAPARE'
+                          : `ÎN STOC (${historyTireData.anvelopa?.depozit?.nume || 'Depozit'})`}
                   </span>
                 </div>
 

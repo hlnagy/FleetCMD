@@ -9,6 +9,15 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { showConfirm } from '@/lib/swal';
+import { isTireItem } from '@/lib/tires';
+
+const getAvailableStockQty = (item: any): number => {
+  if (!item) return 0;
+  if (item.stocDisponibil !== undefined && item.stocDisponibil !== null) {
+    return Math.max(0, Number(item.stocDisponibil));
+  }
+  return Math.max(0, Number(item.stocCurent || 0) - Number(item.stocRezervat || 0));
+};
 
 export default function MentenantaPage() {
   const [toateSarcinile, setToateSarcinile] = useState<any[]>([]);
@@ -58,11 +67,16 @@ export default function MentenantaPage() {
 
       const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
-        const stData = await resStoc.json();
+        const rawStData = await resStoc.json();
+        const stData = Array.isArray(rawStData)
+          ? rawStData.filter((st: any) => !isTireItem(st) && Number(st.stocCurent || 0) > 0 && getAvailableStockQty(st) > 0)
+          : [];
         setStocuri(stData);
         if (stData.length > 0 && !selectedArticolId) {
           setSelectedArticolId(stData[0].id);
           setPretUnitarBontott(stData[0].pretUnitar || 0);
+        } else if (selectedArticolId && !stData.some((st: any) => st.id === selectedArticolId)) {
+          setSelectedArticolId(stData[0]?.id || '');
         }
       }
 
@@ -117,8 +131,16 @@ export default function MentenantaPage() {
 
     if (!esteBontott && selectedArticolId) {
       const itemStoc = stocuri.find((s) => s.id === selectedArticolId);
-      if (itemStoc && Number(cantitate) > itemStoc.stocCurent) {
-        alert(` Stoc Insuficient!\n\nNu puteți folosi ${cantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
+      if (itemStoc && isTireItem(itemStoc)) {
+        alert('Anvelopele nu se pot monta din Mentenanță / Comandă de Lucru! Folosiți modulul dedicat Anvelope & Harta Axe.');
+        return;
+      }
+      const avail = getAvailableStockQty(itemStoc);
+      if (itemStoc && (Number(itemStoc.stocCurent || 0) <= 0 || Number(cantitate) > avail)) {
+        const reserved = Number(itemStoc.stocRezervat || 0);
+        alert(
+          `Stoc Insuficient!\n\nNu puteți folosi ${cantitate} ${itemStoc.unitateMasura || 'buc'} din articolul "${itemStoc.denumire}".\nStocul disponibil în magazie este: ${avail} ${itemStoc.unitateMasura || 'buc'}${reserved > 0 ? ` (stoc fizic ${itemStoc.stocCurent}, rezervat alte comenzi ${reserved})` : ''}.`
+        );
         return;
       }
     }
@@ -518,11 +540,17 @@ export default function MentenantaPage() {
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
                     <option value="">Fără piesă inițială (Adăugați mai târziu în Comenzi de Lucru)</option>
-                    {stocuri.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON/buc)
-                      </option>
-                    ))}
+                    {stocuri
+                      .filter((st) => !isTireItem(st) && Number(st.stocCurent || 0) > 0 && getAvailableStockQty(st) > 0)
+                      .map((st) => {
+                        const avail = getAvailableStockQty(st);
+                        const reserved = Number(st.stocRezervat || 0);
+                        return (
+                          <option key={st.id} value={st.id}>
+                            {st.denumire} (Disponibil: {avail} {st.unitateMasura || 'buc'}{reserved > 0 ? `, rezervat: ${reserved}` : ''} - {st.pretUnitar} RON/{st.unitateMasura || 'buc'})
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
               ) : (

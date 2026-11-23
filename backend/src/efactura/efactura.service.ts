@@ -1,6 +1,13 @@
 import { Injectable, Logger, BadRequestException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { syncFluidCompletariForComanda } from '../common/fluid.utils';
+import {
+  isTireItem,
+  hasExplicitTireDimension as sharedHasExplicitTireDimension,
+  parseTireDimensiune,
+  parseTireMarca,
+  parseTireModel,
+} from '../common/tire.utils';
 import { XMLParser } from 'fast-xml-parser';
 import * as AdmZip from 'adm-zip';
 import axios from 'axios';
@@ -131,121 +138,27 @@ const NON_TIRE_PRODUCT_REGEX =
   /\b(?:vopsea|t\*vop|kober|diluant|grund|email|amorsa|chit|adeziv|silicon|spray|ulei|lubrifiant|antigel|adblue|vaselina|surub|piulita|saiba|tabla|teava|tevi|profil|electrod|bec|proiector)\b/i;
 
 export function hasExplicitTireDimension(desc: string): boolean {
-  return /\b\d{2,3}(?:\/\d{2,3})?\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(String(desc || ''));
+  return sharedHasExplicitTireDimension(desc);
 }
 
 export function parseDimensiune(desc: string): string {
-  const match = desc.match(/\b\d{2,3}(?:\/\d{2,3})?\s*R\s*\d{2}(?:\.\d+)?C?\b/i);
-  return match ? match[0].replace(/\s+/g, '') : '315/80R22.5';
+  return parseTireDimensiune(desc, '315/80R22.5');
 }
 
 export function parseMarca(desc: string): string {
-  const d = String(desc || '').toUpperCase();
-  const brandAliases: Array<[string, string]> = [
-    ['MICHELIN', 'MICHELIN'],
-    ['BRIDGESTONE', 'BRIDGESTONE'],
-    ['CONTINENTAL', 'CONTINENTAL'],
-    ['GOODYEAR', 'GOODYEAR'],
-    ['PIRELLI', 'PIRELLI'],
-    ['BENCHMARK', 'BENCHMARK'],
-    ['INFINITY', 'INFINITY'],
-    ['TBBTIRES', 'TBBTIRES'],
-    ['TBB', 'TBBTIRES'],
-    ['HANKOOK', 'HANKOOK'],
-    ['SAVA', 'SAVA'],
-    ['KORMORAN', 'KORMORAN'],
-    ['BARUM', 'BARUM'],
-    ['MATADOR', 'MATADOR'],
-    ['TRIANGLE', 'TRIANGLE'],
-    ['WESTLAKE', 'WESTLAKE'],
-    ['SAILUN', 'SAILUN'],
-    ['LINGLONG', 'LINGLONG'],
-    ['AEOLUS', 'AEOLUS'],
-    ['DOUBLE COIN', 'DOUBLE COIN'],
-    ['CORDIANT', 'CORDIANT'],
-    ['OTANI', 'OTANI'],
-    ['KAMA', 'KAMA'],
-    ['FULDA', 'FULDA'],
-    ['FIRESTONE', 'FIRESTONE'],
-    ['DUNLOP', 'DUNLOP'],
-    ['NOKIAN', 'NOKIAN'],
-    ['FALKEN', 'FALKEN'],
-    ['SEMPERIT', 'SEMPERIT'],
-    ['KLEBER', 'KLEBER'],
-    ['DEBICA', 'DEBICA'],
-    ['TAURUS', 'TAURUS'],
-    ['ORIUM', 'ORIUM'],
-    ['RIKEN', 'RIKEN'],
-    ['TIGAR', 'TIGAR'],
-    ['UNIROYAL', 'UNIROYAL'],
-    ['TOYO', 'TOYO'],
-    ['YOKOHAMA', 'YOKOHAMA'],
-    ['KUMHO', 'KUMHO'],
-    ['NEXEN', 'NEXEN'],
-    ['GT RADIAL', 'GT RADIAL'],
-    ['PETLAS', 'PETLAS'],
-    ['LASSA', 'LASSA'],
-    ['GISLAVED', 'GISLAVED'],
-    ['VREDESTEIN', 'VREDESTEIN'],
-    ['BFGOODRICH', 'BFGOODRICH'],
-    ['KENDA', 'KENDA'],
-    ['MAXXIS', 'MAXXIS'],
-    ['GITI', 'GITI'],
-    ['DAYTON', 'DAYTON'],
-    ['LAUFENN', 'LAUFENN'],
-    ['COOPER', 'COOPER'],
-    ['APOLLO', 'APOLLO'],
-    ['OVATION', 'OVATION'],
-    ['SUNFULL', 'SUNFULL'],
-    ['HIFLY', 'HIFLY'],
-    ['WINDPOWER', 'WINDPOWER'],
-    ['LONGMARCH', 'LONGMARCH'],
-    ['ADVANCE', 'ADVANCE'],
-    ['BKT', 'BKT'],
-    ['ALLIANCE', 'ALLIANCE'],
-    ['MITAS', 'MITAS'],
-    ['TRELLEBORG', 'TRELLEBORG'],
-  ];
-  for (const [needle, label] of brandAliases) {
-    if (needle.length <= 3) {
-      if (new RegExp(`\\b${needle}\\b`, 'i').test(d)) return label;
-    } else if (d.includes(needle)) {
-      return label;
-    }
-  }
-  return 'Marcă Nespecificată';
+  return parseTireMarca(desc, 'Marcă Nespecificată');
 }
 
 export function parseModel(desc: string): string {
-  const d = desc.replace(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/gi, '').trim();
-  return d.length > 45 ? d.substring(0, 45) : d || 'Standard';
+  return parseTireModel(desc, 'Standard');
 }
 
 export function isTireDescription(descriere?: string, cod?: string, categorie?: string): boolean {
-  const desc = String(descriere || '').trim();
-  const dLow = desc.toLowerCase();
-  const code = String(cod || '').trim().toUpperCase();
-  if (!desc && !code && !categorie) return false;
-  if (/^(?:eco\s*-?\s*val(?:oare|or|ue)|ecotaxa|eco\s*-?\s*taxa|taxa\s*eco|taxa\s*mediu)/i.test(desc)) return false;
-  if (code === 'ECO' && /eco/i.test(desc)) return false;
-  if (/servicii\s+curierat|curierat\s+anvelop|transport\s+anvelop/i.test(desc)) return false;
-
-  const hasExplicitDim = hasExplicitTireDimension(desc);
-  if (NON_TIRE_PRODUCT_REGEX.test(desc) && !hasExplicitDim && !dLow.includes('anvelop') && !dLow.includes('cauciuc')) {
-    return false;
-  }
-
-  return (
-    /anvelop/i.test(String(categorie || '')) ||
-    /\b\d{2,3}\s*\/\s*\d{2,3}\s*R\s*\d{2}(?:\.\d+)?C?\b/i.test(desc) ||
-    dLow.includes('anvelop') ||
-    dLow.includes('cauciuc') ||
-    dLow.includes('r22.5') ||
-    dLow.includes('r17.5') ||
-    dLow.includes('r20') ||
-    dLow.includes('r24') ||
-    code.startsWith('ANV')
-  );
+  return isTireItem({
+    denumire: descriere,
+    codArticol: cod,
+    categorie,
+  });
 }
 
 export function isEcoValoareLine(descriere?: string, cod?: string, hasTireOnInvoice = false): boolean {
@@ -1339,7 +1252,6 @@ export class EFacturaService implements OnModuleInit {
 
     const codArticol = data.codArticolCalculat || item.codArticolFurnizor || `ART-${Math.floor(1000 + Math.random() * 9000)}`;
     const catName = data.categorieNume || 'Alte';
-    await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume, data.tipLichid);
     const normalizedUM = normalizeUnitateMasura(item.unitateMasura || 'buc');
     const isExplicitNonTire =
       NON_TIRE_PRODUCT_REGEX.test(item.descrierePiesa || '') &&
@@ -1347,8 +1259,18 @@ export class EFacturaService implements OnModuleInit {
       !/anvelop|cauciuc/i.test(item.descrierePiesa || '');
     const esteAnvelopa =
       !isExplicitNonTire &&
+      !isEcoValoareLine(item.descrierePiesa, item.codArticolFurnizor, true) &&
       (data.esteAnvelopa === true ||
-        isTireDescription(item.descrierePiesa, codArticol, catName));
+        isTireItem({
+          categorie: catName,
+          subcategorie: data.subcategorieNume,
+          denumire: item.descrierePiesa,
+          codArticol,
+        }));
+
+    if (!esteAnvelopa) {
+      await this.ensureCategoryAndSubcategoryInDb(catName, data.subcategorieNume, data.tipLichid);
+    }
 
     const isFluid =
       Boolean(data.tipLichid && data.tipLichid.trim()) ||
@@ -1497,7 +1419,170 @@ export class EFacturaService implements OnModuleInit {
 
     const effectiveUM = data.unitateMasuraCustom || (isFluid ? 'L' : normalizedUM);
 
-    // 2. Căutare Inteligentă sau Creare ArticolStoc în Depozit
+    // =========================================================================
+    // SEPARARE STRICTĂ ANVELOPE: Single Source of Truth = tabela `Anvelopa`
+    // Nu creăm ArticolStoc, IntrareStoc sau ComponentaSerializata pentru anvelope!
+    // =========================================================================
+    if (esteAnvelopa) {
+      const tireCount = Math.max(1, Math.round(effectiveCantitate));
+      const providedSerials = Array.isArray(data.seriiIndividuale)
+        ? data.seriiIndividuale.slice(0, tireCount)
+        : [];
+      const totalTiresToCreate = tireCount;
+      const serialOffset = Math.max(0, Math.round(cantitateProcesataAnterior));
+      const cleanCode = codArticol.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) || 'ANV';
+      const cleanFacturaNr = (item.factura?.numarFactura || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+      const lineTag = `L${item.numarLinie || 1}`;
+      const tsSuffix = Date.now().toString().slice(-6);
+
+      const nouaCantitateProcesata = Number((cantitateProcesataAnterior + cantitateFacturaConsumata).toFixed(4));
+      const esteComplet = nouaCantitateProcesata >= item.cantitate - 0.0001;
+
+      const { anvelopeCreate, updatedItem } = await this.prisma.$transaction(async (tx) => {
+        const createdList: any[] = [];
+        for (let i = 0; i < totalTiresToCreate; i++) {
+          const s = providedSerials[i];
+          const batchIdx = serialOffset + i + 1;
+          const serieText =
+            String(s?.serie || '').trim() ||
+            `SN-${cleanCode}-${cleanFacturaNr || tsSuffix}-${lineTag}-${String(batchIdx).padStart(2, '0')}`;
+          const dim = s?.dimensiune || parseDimensiune(item.descrierePiesa);
+          const mrc = s?.marca || parseMarca(item.descrierePiesa);
+          const mdl = s?.model || parseModel(item.descrierePiesa);
+          const dot = s?.dot || data.codDot || 'DOT-2026';
+
+          const anvelopa = await tx.anvelopa.create({
+            data: {
+              serieAnvelopa: serieText,
+              codDot: dot,
+              marca: mrc,
+              model: mdl,
+              dimensiune: dim,
+              adancimeInitialaMm: 16,
+              adancimeCurentaMm: 16,
+              pretAchizitie: effectivePretUnitar,
+              furnizor: item.factura.numeVanzator || null,
+              numarFactura: item.factura.numarFactura || null,
+              dataFactura: item.factura.dataFactura || new Date(),
+              stare: 'IN_STOC',
+              depozitId: targetDepozitId,
+            },
+          });
+          createdList.push(anvelopa);
+        }
+
+        const ecoNote =
+          ecoPerTire > 0 && effectivePretUnitar > 0
+            ? ` • ECOVALOARE +${ecoPerTire.toFixed(2)} RON/buc`
+            : '';
+        const baseObs = data.observatiiIntern?.trim() || item.observatiiIntern || '';
+        const tireImportObs = baseObs
+          ? baseObs
+          : `Recepționat în Magazie Anvelope (${createdList.length} buc)${ecoNote}`;
+
+        const updItem = await tx.eFacturaItem.update({
+          where: { id: itemId },
+          data: {
+            cantitateProcesata: Math.min(item.cantitate, nouaCantitateProcesata),
+            stare: esteComplet ? 'IMPORTAT' : 'NEPROCESAT',
+            articolStocId: null,
+            observatiiIntern: tireImportObs,
+          },
+        });
+
+        // Închidere / consum automat al liniilor de ECOVALOARE aferente anvelopelor importate
+        if (ecoConsumptions.length > 0 && effectivePretUnitar > 0) {
+          for (const { ecoItem, take } of ecoConsumptions) {
+            const prevProc = Number(ecoItem.cantitateProcesata || 0);
+            const newProc = Math.min(ecoItem.cantitate, Number((prevProc + take).toFixed(4)));
+            const ecoComplete = newProc >= ecoItem.cantitate - 0.0001;
+            await tx.eFacturaItem.update({
+              where: { id: ecoItem.id },
+              data: {
+                cantitateProcesata: newProc,
+                stare: ecoComplete ? 'IMPORTAT' : 'NEPROCESAT',
+                articolStocId: null,
+                observatiiIntern: ecoComplete
+                  ? `Inclus automat în prețul anvelopelor (+${ecoPerTire.toFixed(2)} RON/buc)`
+                  : `Inclus parțial în prețul anvelopelor (${newProc}/${ecoItem.cantitate} ${ecoItem.unitateMasura || 'buc'})`,
+              },
+            });
+          }
+        }
+
+        // Închidere / consum automat al liniilor de costuri suplimentare incluse pe anvelope
+        if (feeConsumptions.length > 0 && effectivePretUnitar > 0) {
+          for (const { feeItem, takeQty } of feeConsumptions) {
+            const prevProc = Number(feeItem.cantitateProcesata || 0);
+            const newProc = Math.min(feeItem.cantitate, Number((prevProc + takeQty).toFixed(4)));
+            const feeComplete = newProc >= feeItem.cantitate - 0.0001;
+            await tx.eFacturaItem.update({
+              where: { id: feeItem.id },
+              data: {
+                cantitateProcesata: newProc,
+                stare: feeComplete ? 'IMPORTAT' : 'NEPROCESAT',
+                articolStocId: null,
+                observatiiIntern: feeComplete
+                  ? `Inclus automat în costul anvelopelor "${item.descrierePiesa}"`
+                  : `Inclus parțial în anvelopele "${item.descrierePiesa}" (${newProc}/${feeItem.cantitate} ${feeItem.unitateMasura || 'buc'})`,
+              },
+            });
+          }
+        }
+
+        if (effectivePretUnitar === 0 || (item.factura && item.factura.valoareTotala === 0)) {
+          const remainingItems = await tx.eFacturaItem.findMany({
+            where: { facturaId: item.facturaId, stare: 'NEPROCESAT' },
+          });
+          for (const rem of remainingItems) {
+            const isReducere =
+              rem.cantitate < 0 ||
+              rem.valoareFaraTVA < 0 ||
+              /reducere|discount|discont|storno|bonificatie|garantie/i.test(rem.descrierePiesa);
+            if (isReducere) {
+              await tx.eFacturaItem.update({
+                where: { id: rem.id },
+                data: { stare: 'ELIMINAT' },
+              });
+            }
+          }
+        }
+
+        return { anvelopeCreate: createdList, updatedItem: updItem };
+      });
+
+      const cantRamasaDupa = Math.max(0, Number((item.cantitate - nouaCantitateProcesata).toFixed(2)));
+      const ecoMesajSuffix =
+        ecoPerTire > 0 && effectivePretUnitar > 0
+          ? ` (+${ecoPerTire.toFixed(2)} RON/buc ECOVALOARE inclusă automat)`
+          : '';
+      const mesajSucces = `Anvelopele "${item.descrierePiesa}" (${anvelopeCreate.length} buc) au fost recepționate direct în Magazie Anvelope${ecoMesajSuffix}!${!esteComplet ? ` (Au rămas ${cantRamasaDupa} ${item.unitateMasura} de recepționat)` : ''}`;
+
+      await this.recalculeazaStareFactura(item.facturaId);
+
+      const [updatedArticole, updatedFactura] = await Promise.all([
+        this.prisma.eFacturaItem.findMany({
+          where: { facturaId: item.facturaId },
+          orderBy: { numarLinie: 'asc' },
+        }),
+        this.prisma.eFacturaFactura.findUnique({
+          where: { id: item.facturaId },
+          select: { id: true, stare: true },
+        }),
+      ]);
+
+      return {
+        mesaj: mesajSucces,
+        item: updatedItem,
+        articolStoc: null,
+        anvelopeCreate,
+        ecoValoareInclusaPerBuc: ecoPerTire,
+        articole: updatedArticole,
+        facturaStare: updatedFactura?.stare,
+      };
+    }
+
+    // 2. Căutare Inteligentă sau Creare ArticolStoc în Depozit (doar piese/fluide non-anvelopă)
     // Pentru fluide: căutăm și după Depozit + Categorie + Subcategorie identice!
     let articol: any = null;
 
@@ -1597,35 +1682,13 @@ export class EFacturaService implements OnModuleInit {
       },
     });
 
-    // 4. Înregistrare Serii Individuale (pentru anvelope sau componente serializate)
+    // 4. Înregistrare Serii Individuale (exclusiv pentru componente serializate non-anvelopă)
     if (Array.isArray(data.seriiIndividuale) && data.seriiIndividuale.length > 0) {
-      for (const s of data.seriiIndividuale) {
+      const maxSerials = Math.max(1, Math.round(effectiveCantitate));
+      for (const s of data.seriiIndividuale.slice(0, maxSerials)) {
         const serieText = String(s.serie || '').trim();
         if (!serieText) continue;
 
-        if (esteAnvelopa) {
-          const dim = s.dimensiune || parseDimensiune(item.descrierePiesa);
-          const mrc = s.marca || parseMarca(item.descrierePiesa);
-          const mdl = s.model || parseModel(item.descrierePiesa);
-          const dot = s.dot || data.codDot || 'DOT-2026';
-
-          await this.prisma.anvelopa.create({
-            data: {
-              serieAnvelopa: serieText,
-              codDot: dot,
-              marca: mrc,
-              model: mdl,
-              dimensiune: dim,
-              adancimeInitialaMm: 16,
-              adancimeCurentaMm: 16,
-              pretAchizitie: effectivePretUnitar,
-              stare: 'IN_STOC',
-              depozitId: targetDepozitId,
-            },
-          });
-        }
-
-        // De asemenea înregistrare în ComponentaSerializata pentru trasabilitate și garanții
         await this.prisma.componentaSerializata.upsert({
           where: { serieUnica: serieText },
           update: {
@@ -1646,29 +1709,39 @@ export class EFacturaService implements OnModuleInit {
       }
     } else if (data.areGarantie) {
       const cleanNumar = (item.factura?.numarFactura || '').replace(/[^a-zA-Z0-9]/g, '');
-      const serieUnicaFinal =
-        data.serieUnica?.trim() ||
-        `SN-${codArticol}-${cleanNumar}-${item.numarLinie || 1}`;
+      const isBulkUnit = isFluid || ['l', 'kg', 'm', 'mp', 'mc'].includes(effectiveUM.toLowerCase());
+      const serialCount = isBulkUnit ? 1 : Math.max(1, Math.round(effectiveCantitate));
+      const serialOffset = Math.max(0, Math.round(cantitateProcesataAnterior));
+      for (let i = 0; i < serialCount; i++) {
+        const baseSerial =
+          data.serieUnica?.trim() ||
+          `SN-${codArticol}-${cleanNumar}-L${item.numarLinie || 1}`;
+        const batchIdx = serialOffset + i + 1;
+        const serieUnicaFinal =
+          serialCount > 1 || serialOffset > 0
+            ? `${baseSerial}-${String(batchIdx).padStart(2, '0')}`
+            : baseSerial;
 
-      await this.prisma.componentaSerializata.upsert({
-        where: { serieUnica: serieUnicaFinal },
-        update: {
-          luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
-          kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
-          oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
-          dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
-          stare: 'IN_STOC',
-        },
-        create: {
-          articolStocId: articol.id,
-          serieUnica: serieUnicaFinal,
-          luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
-          kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
-          oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
-          dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
-          stare: 'IN_STOC',
-        },
-      });
+        await this.prisma.componentaSerializata.upsert({
+          where: { serieUnica: serieUnicaFinal },
+          update: {
+            luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+            kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+            oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
+            dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+            stare: 'IN_STOC',
+          },
+          create: {
+            articolStocId: articol.id,
+            serieUnica: serieUnicaFinal,
+            luniGarantie: data.luniGarantie ? Number(data.luniGarantie) : 24,
+            kilometriGarantie: data.kilometriGarantie ? Number(data.kilometriGarantie) : 2000,
+            oreGarantie: data.oreGarantie ? Number(data.oreGarantie) : null,
+            dataAchizitie: item.factura?.dataFactura ? new Date(item.factura.dataFactura) : new Date(),
+            stare: 'IN_STOC',
+          },
+        });
+      }
     }
 
     // 5. Actualizare stare EFacturaItem (Suport cantități parțiale)
@@ -2892,82 +2965,187 @@ export class EFacturaService implements OnModuleInit {
 
         mesajSucces = `Prețul articolului "${articol.denumire}" din depozit a fost redus cu -${absValFaraTVA.toFixed(2)} RON (cantitatea în stoc a rămas neschimbată: ${articol.stocCurent} ${articol.unitateMasura}).`;
       } else if (tip === 'STOC_RETUR_FIZIC') {
-        if (!data.articolStocId) {
-          throw new BadRequestException('Selectați articolul din depozit pentru returul fizic.');
-        }
-        const articol = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
-        if (!articol) throw new NotFoundException('Articolul selectat din depozit nu există.');
-
         const qtyReturn = Number(
           data.cantitateRetur && data.cantitateRetur > 0
             ? data.cantitateRetur
             : Math.abs(Number(item.cantitate || 1)) || 1,
         );
-
-        if (articol.stocCurent < qtyReturn - 0.0001) {
-          throw new BadRequestException(
-            `Stoc insuficient în depozit pentru "${articol.denumire}" (disponibil: ${articol.stocCurent} ${articol.unitateMasura}, retur cerut: ${qtyReturn}).`,
-          );
-        }
-
-        const newStoc = Math.max(0, Number((articol.stocCurent - qtyReturn).toFixed(4)));
-        await tx.articolStoc.update({
-          where: { id: articol.id },
-          data: { stocCurent: newStoc },
+        const isTireReturn = isTireItem({
+          denumire: item.descrierePiesa,
+          codArticol: item.codArticolFurnizor,
         });
 
-        // Scădem cantitatea din loturile active (prioritar cele de la același furnizor)
-        const lots = await tx.intrareStoc.findMany({
-          where: { articolStocId: articol.id, cantitateRamasa: { gt: 0 } },
-          orderBy: { dataFactura: 'desc' },
-        });
-        const sortedLots = [...lots].sort((a, b) => {
-          const aMatch = (a.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
-          const bMatch = (b.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
-          return aMatch - bMatch;
-        });
+        const articol = data.articolStocId
+          ? await tx.articolStoc.findUnique({ where: { id: data.articolStocId } })
+          : null;
 
-        let qtyLeft = qtyReturn;
-        for (const lot of sortedLots) {
-          if (qtyLeft <= 0.0001) break;
-          const lotRem = Number(lot.cantitateRamasa || 0);
-          const take = Math.min(lotRem, qtyLeft);
-          await tx.intrareStoc.update({
-            where: { id: lot.id },
+        // Retur fizic anvelope direct din tabela `Anvelopa` (stare: IN_STOC)
+        if (!articol && isTireReturn) {
+          const tiresNeeded = Math.max(1, Math.round(qtyReturn));
+          const targetDim = parseTireDimensiune(item.descrierePiesa, '').toUpperCase();
+          const targetMarca = parseMarca(item.descrierePiesa).toUpperCase();
+          const furnizorLower = String(factura.numeVanzator || '').trim().toLowerCase();
+
+          const inStockTires = await tx.anvelopa.findMany({
+            where: { stare: 'IN_STOC' },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          const scored = inStockTires
+            .map((t) => {
+              let score = 0;
+              if (data.articolStocId && t.id === data.articolStocId) score += 100;
+              if (furnizorLower && String(t.furnizor || '').trim().toLowerCase() === furnizorLower) score += 10;
+              if (targetDim && String(t.dimensiune || '').replace(/\s+/g, '').toUpperCase() === targetDim) score += 5;
+              if (
+                targetMarca &&
+                targetMarca !== 'MARCĂ NESPECIFICATĂ' &&
+                String(t.marca || '').toUpperCase().includes(targetMarca)
+              ) {
+                score += 3;
+              }
+              return { tire: t, score };
+            })
+            .filter((entry) => entry.score > 0)
+            .sort((a, b) => b.score - a.score);
+
+          if (scored.length < tiresNeeded) {
+            throw new BadRequestException(
+              `Nu există suficiente anvelope compatibile în stoc (IN_STOC) pentru returul fizic "${item.descrierePiesa}" (găsite: ${scored.length}, cerute: ${tiresNeeded}). Verificați dacă anvelopele nu au fost deja montate pe vehicule.`,
+            );
+          }
+
+          const toRemove = scored.slice(0, tiresNeeded).map((e) => e.tire);
+          await tx.anvelopa.deleteMany({
+            where: { id: { in: toRemove.map((t) => t.id) } },
+          });
+
+          const removedSerials = toRemove.map((t) => t.serieAnvelopa).join(', ');
+          await tx.eFacturaItem.update({
+            where: { id: itemId },
             data: {
-              cantitateRamasa: Math.max(0, Number((lotRem - take).toFixed(4))),
+              stare: 'IMPORTAT',
+              cantitateProcesata: item.cantitate,
+              articolStocId: null,
+              observatiiIntern: `Retur fizic anvelope din Magazie Anvelope (-${tiresNeeded} buc: ${removedSerials}, -${absValFaraTVA.toFixed(2)} RON)${userNote ? ` • ${userNote}` : ''}`,
             },
           });
-          qtyLeft = Number((qtyLeft - take).toFixed(4));
+
+          mesajSucces = `Retur fizic anvelope înregistrat: eliminate ${tiresNeeded} buc IN_STOC din Magazie Anvelope (${removedSerials}).`;
+        } else {
+          if (!data.articolStocId) {
+            throw new BadRequestException('Selectați articolul din depozit pentru returul fizic.');
+          }
+          if (!articol) throw new NotFoundException('Articolul selectat din depozit nu există.');
+
+          if (articol.stocCurent < qtyReturn - 0.0001) {
+            throw new BadRequestException(
+              `Stoc insuficient în depozit pentru "${articol.denumire}" (disponibil: ${articol.stocCurent} ${articol.unitateMasura}, retur cerut: ${qtyReturn}).`,
+            );
+          }
+
+          const newStoc = Math.max(0, Number((articol.stocCurent - qtyReturn).toFixed(4)));
+          await tx.articolStoc.update({
+            where: { id: articol.id },
+            data: { stocCurent: newStoc },
+          });
+
+          // Scădem cantitatea din loturile active (prioritar cele de la același furnizor)
+          const lots = await tx.intrareStoc.findMany({
+            where: { articolStocId: articol.id, cantitateRamasa: { gt: 0 } },
+            orderBy: { dataFactura: 'desc' },
+          });
+          const sortedLots = [...lots].sort((a, b) => {
+            const aMatch = (a.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
+            const bMatch = (b.furnizor || '').toLowerCase() === (factura.numeVanzator || '').toLowerCase() ? 0 : 1;
+            return aMatch - bMatch;
+          });
+
+          let qtyLeft = qtyReturn;
+          for (const lot of sortedLots) {
+            if (qtyLeft <= 0.0001) break;
+            const lotRem = Number(lot.cantitateRamasa || 0);
+            const take = Math.min(lotRem, qtyLeft);
+            await tx.intrareStoc.update({
+              where: { id: lot.id },
+              data: {
+                cantitateRamasa: Math.max(0, Number((lotRem - take).toFixed(4))),
+              },
+            });
+            qtyLeft = Number((qtyLeft - take).toFixed(4));
+          }
+
+          // Dacă articolul returnat este serializat, eliminăm și componentele IN_STOC aferente
+          if (articol.esteSerializat) {
+            const serialsToRemove = await tx.componentaSerializata.findMany({
+              where: { articolStocId: articol.id, stare: 'IN_STOC' },
+              orderBy: { createdAt: 'desc' },
+              take: Math.max(1, Math.round(qtyReturn)),
+            });
+            if (serialsToRemove.length > 0) {
+              await tx.componentaSerializata.deleteMany({
+                where: { id: { in: serialsToRemove.map((s) => s.id) } },
+              });
+            }
+          }
+
+          // Dacă linia/articolul este anvelopă (caz legacy), eliminăm și rândurile Anvelopa IN_STOC corespunzătoare
+          if (
+            isTireReturn ||
+            isTireItem({
+              categorie: articol.categorie,
+              subcategorie: articol.subcategorie,
+              denumire: articol.denumire,
+              codArticol: articol.codArticol,
+            })
+          ) {
+            const legacyDim = parseTireDimensiune(`${articol.denumire || ''} ${item.descrierePiesa || ''}`, '');
+            const tiresToDelete = legacyDim
+              ? await tx.anvelopa.findMany({
+                  where: {
+                    stare: 'IN_STOC',
+                    ...(articol.depozitId ? { depozitId: articol.depozitId } : {}),
+                    dimensiune: { equals: legacyDim, mode: 'insensitive' },
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: Math.max(1, Math.round(qtyReturn)),
+                })
+              : [];
+            if (tiresToDelete.length > 0) {
+              await tx.anvelopa.deleteMany({
+                where: { id: { in: tiresToDelete.map((t) => t.id) } },
+              });
+            }
+          }
+
+          // Înregistrare mișcare de stornare în istoricul intrărilor pentru trasabilitate completă
+          await tx.intrareStoc.create({
+            data: {
+              articolStocId: articol.id,
+              depozitId: articol.depozitId,
+              furnizor: factura.numeVanzator,
+              numarFactura: factura.numarFactura,
+              dataFactura: factura.dataFactura,
+              cantitateIntrata: -qtyReturn,
+              cantitateRamasa: 0,
+              pretUnitar: -Number((absValFaraTVA / qtyReturn).toFixed(2)),
+              pretTotal: -absValFaraTVA,
+              observatii: `Storno / Retur fizic e-Factura ${factura.numarFactura}${userNote ? ` • ${userNote}` : ''}`,
+            },
+          });
+
+          await tx.eFacturaItem.update({
+            where: { id: itemId },
+            data: {
+              stare: 'IMPORTAT',
+              cantitateProcesata: item.cantitate,
+              articolStocId: articol.id,
+              observatiiIntern: `Retur fizic din depozit (-${qtyReturn} ${articol.unitateMasura}, -${absValFaraTVA.toFixed(2)} RON)${userNote ? ` • ${userNote}` : ''}`,
+            },
+          });
+
+          mesajSucces = `Retur fizic înregistrat: -${qtyReturn} ${articol.unitateMasura} din "${articol.denumire}" (stoc rămas: ${newStoc} ${articol.unitateMasura}).`;
         }
-
-        // Înregistrare mișcare de stornare în istoricul intrărilor pentru trasabilitate completă
-        await tx.intrareStoc.create({
-          data: {
-            articolStocId: articol.id,
-            depozitId: articol.depozitId,
-            furnizor: factura.numeVanzator,
-            numarFactura: factura.numarFactura,
-            dataFactura: factura.dataFactura,
-            cantitateIntrata: -qtyReturn,
-            cantitateRamasa: 0,
-            pretUnitar: -Number((absValFaraTVA / qtyReturn).toFixed(2)),
-            pretTotal: -absValFaraTVA,
-            observatii: `Storno / Retur fizic e-Factura ${factura.numarFactura}${userNote ? ` • ${userNote}` : ''}`,
-          },
-        });
-
-        await tx.eFacturaItem.update({
-          where: { id: itemId },
-          data: {
-            stare: 'IMPORTAT',
-            cantitateProcesata: item.cantitate,
-            articolStocId: articol.id,
-            observatiiIntern: `Retur fizic din depozit (-${qtyReturn} ${articol.unitateMasura}, -${absValFaraTVA.toFixed(2)} RON)${userNote ? ` • ${userNote}` : ''}`,
-          },
-        });
-
-        mesajSucces = `Retur fizic înregistrat: -${qtyReturn} ${articol.unitateMasura} din "${articol.denumire}" (stoc rămas: ${newStoc} ${articol.unitateMasura}).`;
       } else if (tip === 'REDUCERE_FURNIZOR') {
         await tx.eFacturaItem.update({
           where: { id: itemId },

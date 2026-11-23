@@ -12,6 +12,25 @@ import {
 import { showConfirm } from '@/lib/swal';
 import DraggableModal from '@/components/DraggableModal';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
+import { isTireCategoryName, isTireItem } from '@/lib/tires';
+
+const serializeWorkOrderElement = (el: any) => ({
+  ...(el.id ? { id: el.id } : {}),
+  pilonCost: el.pilonCost || 'PIESA_STOC',
+  descriere: el.descriere || 'Piesă / Serviciu',
+  cantitate: Number(el.cantitate || 1),
+  pretUnitar: Number(el.pretUnitar || 0),
+  articolStocId: el.articolStocId || null,
+  provenienta: el.provenienta || undefined,
+  furnizor: el.furnizor || null,
+  numarFactura: el.numarFactura || null,
+  sarcinaMentenantaId: el.sarcinaMentenantaId || null,
+  serieUnicaPiesa: el.serieUnicaPiesa || null,
+  categorie: el.categorie || null,
+  subcategorie: el.subcategorie || null,
+  observatiiIntern: el.observatiiIntern || null,
+  tipLichid: el.tipLichid || null,
+});
 
 // Module-level persistent cache across tab switching
 interface ComenziLucruCache {
@@ -383,24 +402,13 @@ export default function ComenziLucruPage() {
     }
   };
 
-  const isTireCategory = (catName: string) => {
-    if (!catName) return false;
-    const c = String(catName).toLowerCase();
-    return c.includes('anvelop') || c.includes('cauciuc') || c.includes('pneu');
-  };
-
-  const isTireItem = (item: any) => {
-    if (!item) return false;
-    const cat = String(item.categorie || '').toLowerCase();
-    const sub = String(item.subcategorie || '').toLowerCase();
-    const cod = String(item.codArticol || '').toUpperCase();
-    const den = String(item.denumire || '').toLowerCase();
-    return (
-      isTireCategory(cat) ||
-      isTireCategory(sub) ||
-      cod.startsWith('ANV') ||
-      /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(den)
-    );
+  /** Stoc disponibil ne-rezervat de alte comenzi deschise (IN_LUCRU / DEVALIDAT). */
+  const getItemFreeStock = (item: any): number => {
+    if (!item) return 0;
+    if (item.stocDisponibil !== undefined && item.stocDisponibil !== null) {
+      return Math.max(0, Number(item.stocDisponibil));
+    }
+    return Math.max(0, Number(item.stocCurent || 0) - Number(item.stocRezervat || 0));
   };
 
   const handleSelectElemArticolStoc = (articolId: string) => {
@@ -553,11 +561,15 @@ export default function ComenziLucruPage() {
         );
         return;
       }
-      if (itemStoc && Number(elemCantitate) > itemStoc.stocCurent) {
-        alert(` Stoc Insuficient!\n\nNu puteți adăuga ${elemCantitate} bucăți din articolul "${itemStoc.denumire}".\nStocul maxim disponibil în magazie este: ${itemStoc.stocCurent} ${itemStoc.unitateMasura || 'buc'}.`);
+      const freeStock = getItemFreeStock(itemStoc);
+      if (itemStoc && Number(elemCantitate) > freeStock) {
+        const reserved = Number(itemStoc.stocRezervat || 0);
+        alert(
+          `Stoc Insuficient!\n\nNu puteți adăuga ${elemCantitate} ${itemStoc.unitateMasura || 'buc'} din articolul "${itemStoc.denumire}".\nStoc disponibil (ne-rezervat): ${freeStock} ${itemStoc.unitateMasura || 'buc'}${reserved > 0 ? ` (stoc fizic ${itemStoc.stocCurent}, rezervat în comenzi deschise ${reserved})` : ''}.`
+        );
         return;
       }
-    } else if ((elemPilonCost === 'PIESA_DIRECTA' || elemPilonCost === 'PIESA_DEZMEMBRATA') && /anvelop|cauciuc|pneu\b|pneuri/i.test(elemDescriere)) {
+    } else if ((elemPilonCost === 'PIESA_DIRECTA' || elemPilonCost === 'PIESA_DEZMEMBRATA') && isTireItem({ denumire: elemDescriere })) {
       alert(
         '🚫 Montarea anvelopelor NU este permisă din Comanda de Lucru!\n\n' +
         'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe).'
@@ -583,6 +595,9 @@ export default function ComenziLucruPage() {
         setShowAddElementModal(null);
         fetchData();
         alert('Element / piesă adăugată pe comanda de lucru!');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(`Nu s-a putut adăuga piesa pe comandă: ${err.message || res.statusText}`);
       }
     } catch (e) {
       alert('Eroare la adăugarea piesei pe comandă.');
@@ -1012,13 +1027,7 @@ export default function ComenziLucruPage() {
           dataDeschidere: editDataDeschidere,
           mecanicResponsabil: editMecanici.join(', '),
           observatii: editObservatii,
-          elementeComanda: editElemente.map((el) => ({
-            pilonCost: el.pilonCost || 'PIESA_STOC',
-            descriere: el.descriere || 'Piesă / Serviciu',
-            cantitate: Number(el.cantitate || 1),
-            pretUnitar: Number(el.pretUnitar || 0),
-            articolStocId: el.articolStocId || null,
-          })),
+          elementeComanda: editElemente.map(serializeWorkOrderElement),
         }),
       });
 
@@ -1027,11 +1036,40 @@ export default function ComenziLucruPage() {
         await fetchData();
         alert('Modificările pe comanda de lucru au fost salvate cu succes!');
       } else {
-        alert('Eroare la salvarea modificărilor.');
+        const err = await res.json().catch(() => ({}));
+        alert(`Eroare la salvarea modificărilor: ${err.message || res.statusText}`);
       }
     } catch (e) {
       alert('Eroare la salvarea modificărilor.');
     }
+  };
+
+  // Helper: cantități deja salvate în DB pe comanda curentă (incluse deja în `stocRezervat` din backend)
+  const getSavedOrderAllocation = (): Map<string, number> => {
+    const map = new Map<string, number>();
+    if (!showEditModal || !['IN_LUCRU', 'DEVALIDAT'].includes(String(showEditModal.stare || ''))) {
+      return map;
+    }
+    (showEditModal.elementeComanda || []).forEach((el: any) => {
+      if (el.pilonCost === 'PIESA_STOC' && el.articolStocId) {
+        map.set(el.articolStocId, (map.get(el.articolStocId) || 0) + (Number(el.cantitate) || 0));
+      }
+    });
+    return map;
+  };
+
+  const savedOrderAllocation = getSavedOrderAllocation();
+
+  const getReservedByOtherOrders = (item: any): number => {
+    if (!item) return 0;
+    const savedOnCurrent = savedOrderAllocation.get(item.id) || 0;
+    return Math.max(0, Number(item.stocRezervat || 0) - savedOnCurrent);
+  };
+
+  /** Stocul maxim pe care îl poate aloca comanda curentă (stocCurent - rezervările ALTOR comenzi deschise). */
+  const getMaxAllowedForCurrentOrder = (item: any): number => {
+    if (!item) return 0;
+    return Math.max(0, Number(item.stocCurent || 0) - getReservedByOtherOrders(item));
   };
 
   // Helper: cantitate deja alocată pe ciorna curentă a comenzii (nescăzută încă din DB)
@@ -1052,7 +1090,7 @@ export default function ComenziLucruPage() {
   ): number => {
     if (!item) return 0;
     const allocated = allocationMap.get(item.id) || 0;
-    return Math.max(0, Number(item.stocCurent || 0) - allocated);
+    return Math.max(0, getMaxAllowedForCurrentOrder(item) - allocated);
   };
 
   const selectQuickStockItem = (st: any) => {
@@ -1126,9 +1164,11 @@ export default function ComenziLucruPage() {
       }
       const remainingAvailable = getRemainingStockForItem(quickSelectedArticol);
       if (Number(quickCantitate) > remainingAvailable) {
-        const allocatedInDraft = Number(quickSelectedArticol.stocCurent || 0) - remainingAvailable;
+        const maxForOrder = getMaxAllowedForCurrentOrder(quickSelectedArticol);
+        const reservedElsewhere = getReservedByOtherOrders(quickSelectedArticol);
+        const allocatedInDraft = Math.max(0, maxForOrder - remainingAvailable);
         alert(
-          `Stoc Insuficient!\n\nArticolul "${quickSelectedArticol.denumire}" mai are doar ${remainingAvailable} ${quickSelectedArticol.unitateMasura || 'buc'} disponibile (${allocatedInDraft > 0 ? `stoc total ${quickSelectedArticol.stocCurent}, deja pe comandă ${allocatedInDraft}` : `stoc disponibil ${quickSelectedArticol.stocCurent}`}).`
+          `Stoc Insuficient!\n\nArticolul "${quickSelectedArticol.denumire}" mai are doar ${remainingAvailable} ${quickSelectedArticol.unitateMasura || 'buc'} disponibile (stoc fizic ${quickSelectedArticol.stocCurent}${reservedElsewhere > 0 ? `, rezervat alte comenzi ${reservedElsewhere}` : ''}${allocatedInDraft > 0 ? `, deja pe comanda curentă ${allocatedInDraft}` : ''}).`
         );
         return;
       }
@@ -1143,6 +1183,9 @@ export default function ComenziLucruPage() {
           codArticol: quickSelectedArticol.codArticol,
           unitateMasura: quickSelectedArticol.unitateMasura || 'buc',
           provenienta: quickSelectedArticol.depozit?.nume || 'Magazie Centrală',
+          categorie: quickSelectedArticol.categorie || null,
+          subcategorie: quickSelectedArticol.subcategorie || null,
+          tipLichid: quickSelectedArticol.tipLichid || null,
         },
       ]);
     } else if (quickPilonCost === 'PIESA_DEZMEMBRATA') {
@@ -1150,7 +1193,7 @@ export default function ComenziLucruPage() {
         alert('Vă rugăm să introduceți denumirea piesei din dezmembrări!');
         return;
       }
-      if (/anvelop|cauciuc|pneu\b|pneuri|r22\.5|r17\.5|315\/80|385\/65/i.test(quickDescriere)) {
+      if (isTireItem({ denumire: quickDescriere })) {
         alert(
           '🚫 MONTAREA ANVELOPELOR NU ESTE PERMISĂ DIN COMANDA DE LUCRU!\n\n' +
           'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe)!'
@@ -1174,7 +1217,7 @@ export default function ComenziLucruPage() {
         alert('Vă rugăm să introduceți denumirea piesei sau a operațiunii de manoperă!');
         return;
       }
-      if (quickPilonCost === 'PIESA_DIRECTA' && /anvelop|cauciuc|pneu\b|pneuri|r22\.5|r17\.5|315\/80|385\/65/i.test(quickDescriere)) {
+      if (quickPilonCost === 'PIESA_DIRECTA' && isTireItem({ denumire: quickDescriere })) {
         alert(
           '🚫 MONTAREA ANVELOPELOR NU ESTE PERMISĂ DIN COMANDA DE LUCRU!\n\n' +
           'Anvelopele se gestionează și se montează pe vehicul exclusiv din meniul: "Anvelope & Siguranță" (Harta Axe)!'
@@ -1220,10 +1263,12 @@ export default function ComenziLucruPage() {
       const item = stocuri.find((s) => s.id === row.articolStocId);
       if (item) {
         const maxForRow = getRemainingStockForItem(item, getDraftStockAllocation(idx));
+        const maxForOrder = getMaxAllowedForCurrentOrder(item);
+        const reservedElsewhere = getReservedByOtherOrders(item);
         if (next > maxForRow) {
           if (alertOnExceed) {
             alert(
-              `Atenție: Stocul maxim disponibil pentru "${item.denumire}" este ${item.stocCurent} ${item.unitateMasura || 'buc'} (disponibil pentru acest rând: ${maxForRow}).`
+              `Atenție: Stocul maxim disponibil pentru "${item.denumire}" pe această comandă este ${maxForOrder} ${item.unitateMasura || 'buc'}${reservedElsewhere > 0 ? ` (stoc fizic ${item.stocCurent}, rezervat alte comenzi ${reservedElsewhere})` : ''} — disponibil pentru acest rând: ${maxForRow}.`
             );
             return;
           }
@@ -1266,9 +1311,11 @@ export default function ComenziLucruPage() {
     const draftAllocation = getDraftStockAllocation();
     for (const [articolId, totalSolicitat] of Array.from(draftAllocation.entries())) {
       const item = stocuri.find((s) => s.id === articolId);
-      if (item && totalSolicitat > Number(item.stocCurent || 0)) {
+      const maxForOrder = item ? getMaxAllowedForCurrentOrder(item) : 0;
+      if (item && totalSolicitat > maxForOrder) {
+        const reservedElsewhere = getReservedByOtherOrders(item);
         alert(
-          `Nu se poate finaliza comanda!\n\nPiesa "${item.denumire}" depășește stocul disponibil: solicitat cumulat ${totalSolicitat}, disponibil în magazie ${item.stocCurent} ${item.unitateMasura || 'buc'}.`
+          `Nu se poate finaliza comanda!\n\nPiesa "${item.denumire}" depășește stocul disponibil: solicitat cumulat ${totalSolicitat}, disponibil pentru această comandă ${maxForOrder} ${item.unitateMasura || 'buc'}${reservedElsewhere > 0 ? ` (stoc fizic ${item.stocCurent}, rezervat alte comenzi ${reservedElsewhere})` : ''}.`
         );
         return;
       }
@@ -1292,18 +1339,13 @@ export default function ComenziLucruPage() {
           dataDeschidere: editDataDeschidere || undefined,
           mecanicResponsabil: editMecanici.join(', '),
           observatii: editObservatii,
-          elementeComanda: editElemente.map((el) => ({
-            pilonCost: el.pilonCost || 'PIESA_STOC',
-            descriere: el.descriere || 'Piesă / Serviciu',
-            cantitate: Number(el.cantitate || 1),
-            pretUnitar: Number(el.pretUnitar || 0),
-            articolStocId: el.articolStocId || null,
-          })),
+          elementeComanda: editElemente.map(serializeWorkOrderElement),
         }),
       });
 
       if (!resUpdate.ok) {
-        alert('Eroare la salvarea modificărilor comenzii.');
+        const errUpd = await resUpdate.json().catch(() => ({}));
+        alert(`Eroare la salvarea modificărilor comenzii: ${errUpd.message || resUpdate.statusText}`);
         setIsSavingAndFinalizing(false);
         return;
       }
@@ -1409,7 +1451,7 @@ export default function ComenziLucruPage() {
 
   const categoryCounts = new Map<string, number>();
   warehouseScopedStock.forEach((s: any) => {
-    if (s.categorie && !isTireCategory(s.categorie)) {
+    if (s.categorie && !isTireCategoryName(s.categorie)) {
       categoryCounts.set(s.categorie, (categoryCounts.get(s.categorie) || 0) + 1);
     }
   });
@@ -2594,6 +2636,7 @@ export default function ComenziLucruPage() {
                             {filteredStockList.length > 0 ? (
                               filteredStockList.slice(0, 30).map((st) => {
                                 const remainingStock = getRemainingStockForItem(st, draftStockAllocation);
+                                const reservedOthers = getReservedByOtherOrders(st);
                                 const isSelected = quickSelectedArticol?.id === st.id;
                                 return (
                                   <div
@@ -2620,6 +2663,11 @@ export default function ComenziLucruPage() {
                                           <Building2 className="w-3 h-3 text-sapphire-500" />
                                           <span>{getWarehouseName(st)}</span>
                                         </span>
+                                        {reservedOthers > 0 && (
+                                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                                            Rezervat alte comenzi: {reservedOthers}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
 
@@ -2777,8 +2825,10 @@ export default function ComenziLucruPage() {
                       editElemente.map((el, idx) => {
                         const stockItem = el.articolStocId ? stocuri.find((s) => s.id === el.articolStocId) : null;
                         const totalDraftForStock = stockItem ? (draftStockAllocation.get(stockItem.id) || 0) : 0;
-                        const isExceeded = el.pilonCost === 'PIESA_STOC' && stockItem && totalDraftForStock > Number(stockItem.stocCurent || 0);
-                        const remainingAfterDraft = stockItem ? Math.max(0, Number(stockItem.stocCurent || 0) - totalDraftForStock) : 0;
+                        const maxAllowedForOrder = stockItem ? getMaxAllowedForCurrentOrder(stockItem) : 0;
+                        const reservedElsewhere = stockItem ? getReservedByOtherOrders(stockItem) : 0;
+                        const isExceeded = el.pilonCost === 'PIESA_STOC' && stockItem && totalDraftForStock > maxAllowedForOrder;
+                        const remainingAfterDraft = stockItem ? Math.max(0, maxAllowedForOrder - totalDraftForStock) : 0;
                         const rowTotal = (Number(el.cantitate) || 0) * (Number(el.pretUnitar) || 0);
                         const pilonCfg = PILON_COST_CONFIG[el.pilonCost as keyof typeof PILON_COST_CONFIG] || PILON_COST_CONFIG.PIESA_DIRECTA;
 
@@ -2820,13 +2870,18 @@ export default function ComenziLucruPage() {
                                       <span>{getWarehouseName(stockItem)}</span>
                                     </span>
                                     <span className={remainingAfterDraft > 0 ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
-                                      · Stoc: {stockItem.stocCurent} {stockItem.unitateMasura || 'buc'} (rămas: {remainingAfterDraft})
+                                      · Disponibil: {maxAllowedForOrder} {stockItem.unitateMasura || 'buc'} (rămas: {remainingAfterDraft})
                                     </span>
+                                    {reservedElsewhere > 0 && (
+                                      <span className="text-amber-800 font-semibold">
+                                        · Rezervat alte comenzi: {reservedElsewhere}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                                 {isExceeded && (
                                   <p className="text-[10px] text-rose-600 font-extrabold">
-                                    Atenție: Cantitatea totală solicitată ({totalDraftForStock}) depășește stocul disponibil ({stockItem?.stocCurent})!
+                                    Atenție: Cantitatea totală solicitată ({totalDraftForStock}) depășește stocul disponibil ({maxAllowedForOrder})!
                                   </p>
                                 )}
                               </div>
@@ -3227,11 +3282,15 @@ export default function ComenziLucruPage() {
                     onChange={(e) => handleSelectElemArticolStoc(e.target.value)}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
-                    {stocuri.filter((st) => !isTireItem(st) && Number(st.stocCurent || 0) > 0).map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON)
-                      </option>
-                    ))}
+                    {stocuri.filter((st) => !isTireItem(st) && getItemFreeStock(st) > 0).map((st) => {
+                      const freeStock = getItemFreeStock(st);
+                      const reservedQty = Number(st.stocRezervat || 0);
+                      return (
+                        <option key={st.id} value={st.id}>
+                          {st.denumire} (Disponibil: {freeStock} {st.unitateMasura || 'buc'}{reservedQty > 0 ? `, rezervat: ${reservedQty}` : ''} - {st.pretUnitar} RON)
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
@@ -3251,14 +3310,15 @@ export default function ComenziLucruPage() {
                 <div>
                   {(() => {
                     const currentElemStockItem = stocuri.find((st) => st.id === elemArticolStocId);
-                    const isElemExceeded = elemPilonCost === 'PIESA_STOC' && currentElemStockItem && elemCantitate > currentElemStockItem.stocCurent;
+                    const freeStock = currentElemStockItem ? getItemFreeStock(currentElemStockItem) : 0;
+                    const isElemExceeded = elemPilonCost === 'PIESA_STOC' && currentElemStockItem && elemCantitate > freeStock;
                     return (
                       <>
                         <label className="text-sage-700 block mb-1 font-bold">Cantitate:</label>
                         <input
                           type="number"
                           min="1"
-                          max={elemPilonCost === 'PIESA_STOC' && currentElemStockItem ? currentElemStockItem.stocCurent : undefined}
+                          max={elemPilonCost === 'PIESA_STOC' && currentElemStockItem ? freeStock : undefined}
                           value={elemCantitate}
                           onChange={(e) => setElemCantitate(Number(e.target.value))}
                           className={`w-full border rounded-xl p-2.5 text-sapphire-900 font-mono font-bold ${
@@ -3267,7 +3327,7 @@ export default function ComenziLucruPage() {
                         />
                         {isElemExceeded && (
                           <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center space-x-1">
-                            <span>Stoc insuficient! Disponibil: {currentElemStockItem.stocCurent} {currentElemStockItem.unitateMasura || 'buc'}</span>
+                            <span>Stoc insuficient! Disponibil: {freeStock} {currentElemStockItem.unitateMasura || 'buc'}</span>
                           </p>
                         )}
                       </>

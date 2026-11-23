@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
+import { isTireItem } from '../common/tire.utils';
 import {
   isActualFluidItem,
   mapFluidCategoryReport,
@@ -364,29 +366,290 @@ export class MentenantaService {
   // COMENZI DE LUCRU CU MULTIPLE ELEMENTE & CICLU DE VIAȚĂ
   // ==========================================
 
-  private isTireItemOrDescription(articol: any, descriere?: string): boolean {
-    if (articol) {
-      const cat = (articol.categorie || '').toLowerCase();
-      const sub = (articol.subcategorie || '').toLowerCase();
-      const cod = (articol.codArticol || '').toUpperCase();
-      const den = (articol.denumire || '').toLowerCase();
-      if (
-        cat.includes('anvelop') ||
-        cat.includes('cauciuc') ||
-        cat.includes('pneu') ||
-        sub.includes('anvelop') ||
-        cod.startsWith('ANV') ||
-        /anvelop|cauciuc|r22\.5|r17\.5|r20|r24|315\/80|385\/65/i.test(den)
-      ) {
-        return true;
-      }
+  private isTireItemOrDescription(
+    articol: any,
+    descriere?: string,
+    meta?: { categorie?: string | null; subcategorie?: string | null },
+  ): boolean {
+    if (
+      articol &&
+      isTireItem({
+        categorie: articol.categorie,
+        subcategorie: articol.subcategorie,
+        denumire: articol.denumire,
+        codArticol: articol.codArticol,
+      })
+    ) {
+      return true;
     }
-    if (descriere) {
-      if (/anvelop|cauciuc|pneu\b|pneuri/i.test(descriere)) {
-        return true;
-      }
+    if (
+      (descriere || meta?.categorie || meta?.subcategorie) &&
+      isTireItem({
+        categorie: meta?.categorie,
+        subcategorie: meta?.subcategorie,
+        denumire: descriere,
+      })
+    ) {
+      return true;
     }
     return false;
+  }
+
+  /**
+   * Validare strictă anti-supra-alocare stoc (cumulativ pe toate liniile comenzii + rezervări din alte comenzi deschise)
+   * și blocare absolută anvelope pe Comenzi de Lucru (anvelopele se montează exclusiv din /anvelope).
+   */
+  private async validateOrderElementsStockAndTires(
+    elemente: Array<{
+      pilonCost?: string;
+      descriere?: string;
+      cantitate?: number;
+      articolStocId?: string | null;
+      categorie?: string | null;
+      subcategorie?: string | null;
+    }>,
+    options?: {
+      excludeComandaId?: string;
+      existingOrderLines?: Array<{
+        pilonCost?: string;
+        articolStocId?: string | null;
+        cantitate?: number;
+      }>;
+      tx?: Prisma.TransactionClient;
+    },
+  ) {
+    const db = options?.tx || this.prisma;
+
+    const touchedStockIds = Array.from(
+      new Set(
+        elemente
+          .filter((el) => (el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId)
+          .map((el) => String(el.articolStocId).trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const articoleList =
+      touchedStockIds.length > 0
+        ? await db.articolStoc.findMany({
+            where: { id: { in: touchedStockIds } },
+          })
+        : [];
+    const articolMap = new Map(articoleList.map((a) => [a.id, a]));
+    const touchedSet = new Set(touchedStockIds);
+
+    const requestedByArticol = new Map<string, number>();
+
+    // Adăugăm liniile existente de pe aceeași comandă DOAR pentru articolele atinse de operațiunea curentă (ex: adaugaElementComanda)
+    for (const line of options?.existingOrderLines || []) {
+      if ((line.pilonCost === 'PIESA_STOC' || line.articolStocId) && line.articolStocId && touchedSet.has(line.articolStocId)) {
+        const qty = Number(line.cantitate || 0);
+        if (qty > 0) {
+          requestedByArticol.set(
+            line.articolStocId,
+            Number(((requestedByArticol.get(line.articolStocId) || 0) + qty).toFixed(4)),
+          );
+        }
+      }
+    }
+
+    for (const el of elemente) {
+      const isStockLine = Boolean((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId);
+      if (isStockLine && el.articolStocId) {
+        const articol = articolMap.get(el.articolStocId);
+        if (!articol) {
+          throw new NotFoundException(`Articolul de stoc (${el.articolStocId}) nu a fost găsit în depozit.`);
+        }
+        if (
+          this.isTireItemOrDescription(articol, el.descriere, {
+            categorie: el.categorie,
+            subcategorie: el.subcategorie,
+          })
+        ) {
+          throw new BadRequestException(
+            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.',
+          );
+        }
+        const requestedQty = Number(el.cantitate ?? 1);
+        if (!Number.isFinite(requestedQty) || requestedQty <= 0) {
+          throw new BadRequestException(
+            `Cantitatea pentru articolul "${articol.denumire}" trebuie să fie mai mare ca 0.`,
+          );
+        }
+        requestedByArticol.set(
+          el.articolStocId,
+          Number(((requestedByArticol.get(el.articolStocId) || 0) + requestedQty).toFixed(4)),
+        );
+      } else if (
+        el.pilonCost === 'PIESA_DIRECTA' ||
+        el.pilonCost === 'PIESA_DEZMEMBRATA' ||
+        el.pilonCost === 'PIESA_STOC'
+      ) {
+        if (
+          this.isTireItemOrDescription(null, el.descriere, {
+            categorie: el.categorie,
+            subcategorie: el.subcategorie,
+          })
+        ) {
+          throw new BadRequestException(
+            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.',
+          );
+        }
+      }
+    }
+
+    if (requestedByArticol.size > 0) {
+      const reservedMap = await this.stocuriGarantiiService.getReservedStockMap(
+        options?.excludeComandaId,
+        options?.tx,
+      );
+
+      for (const [articolId, totalRequested] of requestedByArticol.entries()) {
+        const articol = articolMap.get(articolId);
+        if (!articol) continue;
+        const stocFizic = Number(articol.stocCurent || 0);
+        const reservedOther = Number(reservedMap.get(articolId) || 0);
+        const available = Number(Math.max(0, stocFizic - reservedOther).toFixed(4));
+        if (totalRequested > available + 1e-6) {
+          const um = articol.unitateMasura || 'buc';
+          const rezervatInfo =
+            reservedOther > 0
+              ? ` (stoc fizic: ${stocFizic} ${um}, rezervat în alte comenzi deschise: ${reservedOther} ${um})`
+              : '';
+          throw new BadRequestException(
+            `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${available} ${um}${rezervatInfo}, dar ați solicitat: ${totalRequested} ${um}.`,
+          );
+        }
+      }
+    }
+
+    return articolMap;
+  }
+
+  private async mountSerializedComponentsForElement(
+    tx: Prisma.TransactionClient,
+    comanda: { numarComanda: string; vehiculId: string },
+    elem: {
+      id: string;
+      articolStocId: string | null;
+      cantitate: number;
+      serieUnicaPiesa: string | null;
+    },
+    articol: { id: string; esteSerializat: boolean },
+  ): Promise<string | null> {
+    const orderTag = `Comandă Lucru ${comanda.numarComanda}`;
+    const qtyToMount = Math.max(1, Math.round(Number(elem.cantitate || 1)));
+    const explicitSerials = Array.from(
+      new Set(
+        String(elem.serieUnicaPiesa || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const mountedIds: string[] = [];
+    const mountedSerials: string[] = [];
+
+    for (const serie of explicitSerials) {
+      if (mountedSerials.length >= qtyToMount) break;
+      const comp = await tx.componentaSerializata.findUnique({
+        where: { serieUnica: serie },
+      });
+      if (!comp) continue;
+      if (comp.articolStocId !== articol.id) {
+        throw new BadRequestException(
+          `Componenta serializată "${serie}" aparține altui articol din stoc și nu poate fi montată pe această poziție.`,
+        );
+      }
+      if (comp.stare !== 'IN_STOC') {
+        throw new BadRequestException(
+          `Componenta serializată "${serie}" nu este disponibilă în stoc (stare curentă: ${comp.stare}).`,
+        );
+      }
+      await tx.componentaSerializata.update({
+        where: { id: comp.id },
+        data: {
+          stare: 'MONTAT',
+          vehiculId: comanda.vehiculId,
+          pozitieMontaj: orderTag,
+        },
+      });
+      mountedIds.push(comp.id);
+      mountedSerials.push(comp.serieUnica);
+    }
+
+    if (articol.esteSerializat && mountedSerials.length < qtyToMount) {
+      const remaining = qtyToMount - mountedSerials.length;
+      const inStockComponents = await tx.componentaSerializata.findMany({
+        where: {
+          articolStocId: articol.id,
+          stare: 'IN_STOC',
+          ...(mountedIds.length > 0 ? { id: { notIn: mountedIds } } : {}),
+        },
+        orderBy: [{ dataAchizitie: 'asc' }, { createdAt: 'asc' }],
+        take: remaining,
+      });
+
+      if (inStockComponents.length > 0) {
+        await tx.componentaSerializata.updateMany({
+          where: { id: { in: inStockComponents.map((c) => c.id) } },
+          data: {
+            stare: 'MONTAT',
+            vehiculId: comanda.vehiculId,
+            pozitieMontaj: orderTag,
+          },
+        });
+        for (const comp of inStockComponents) {
+          mountedIds.push(comp.id);
+          mountedSerials.push(comp.serieUnica);
+        }
+      }
+    }
+
+    return mountedSerials.length > 0 ? mountedSerials.join(', ') : elem.serieUnicaPiesa;
+  }
+
+  private async revertOrderSerializedComponents(
+    tx: Prisma.TransactionClient,
+    comanda: {
+      numarComanda: string;
+      vehiculId: string;
+      elementeComanda: Array<{
+        pilonCost: string;
+        serieUnicaPiesa: string | null;
+      }>;
+    },
+  ) {
+    const serials = comanda.elementeComanda
+      .filter((el) => el.pilonCost === 'PIESA_STOC' && el.serieUnicaPiesa)
+      .flatMap((el) =>
+        String(el.serieUnicaPiesa || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+
+    const orderTag = `Comandă Lucru ${comanda.numarComanda}`;
+    const orConditions: Prisma.ComponentaSerializataWhereInput[] = [
+      { pozitieMontaj: orderTag, vehiculId: comanda.vehiculId, stare: 'MONTAT' },
+    ];
+    if (serials.length > 0) {
+      orConditions.push({
+        serieUnica: { in: Array.from(new Set(serials)) },
+        vehiculId: comanda.vehiculId,
+        stare: 'MONTAT',
+      });
+    }
+
+    await tx.componentaSerializata.updateMany({
+      where: { OR: orConditions },
+      data: {
+        stare: 'IN_STOC',
+        vehiculId: null,
+        pozitieMontaj: null,
+      },
+    });
   }
 
   private parseDevizDateInput(raw?: string | Date | null): Date | null {
@@ -423,6 +686,10 @@ export class MentenantaService {
       serieUnicaPiesa?: string;
       furnizor?: string;
       numarFactura?: string;
+      categorie?: string;
+      subcategorie?: string;
+      tipLichid?: string;
+      observatiiIntern?: string;
     }>;
   }) {
     const vehicul = await this.prisma.vehicul.findUnique({ where: { id: data.vehiculId } });
@@ -438,139 +705,129 @@ export class MentenantaService {
         : 0;
     const contorVal = !isNaN(parsedContor) && parsedContor > 0 ? parsedContor : 0;
 
-    // Înregistrăm KM / mTH pe vehicul și în istoric EXCLUSIV dacă utilizatorul a introdus o valoare > 0
-    if (contorVal > 0) {
-      await this.prisma.vehicul.update({
-        where: { id: data.vehiculId },
-        data: {
-          valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorVal),
-          dataInregistrareContor: dataDeschidereFinal,
-        },
-      });
-
-      await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: data.vehiculId,
-          valoareContor: contorVal,
-          dataInregistrare: dataDeschidereFinal,
-          sursa: 'SERVICE',
-          operator: data.mecanicResponsabil || 'Atelier Intern',
-          observatii: data.observatii || `Deschidere Comandă de Lucru (${contorVal} ${vehicul.tipMasurare})`,
-        },
-      });
-    }
-
-    // Generare număr comandă fără riscul de coliziune cu numere existente
-    const allComenzi = await this.prisma.comandaLucru.findMany({
-      select: { numarComanda: true },
-    });
-    let maxNum = 0;
-    for (const c of allComenzi) {
-      const match = c.numarComanda?.match(/CL-(\d+)/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    }
-    let nextNum = maxNum + 1;
-    let numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
-    while (await this.prisma.comandaLucru.findUnique({ where: { numarComanda } })) {
-      nextNum++;
-      numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
-    }
-
     const elementeData = data.elemente || [];
 
-    // ENFORCE STRICT STOCK LIMIT VALIDATION & EXCLUDE TIRES (Tires must be mounted only via Anvelope / Axe)
-    for (const el of elementeData) {
-      if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
-        const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
-        if (articol) {
-          if (this.isTireItemOrDescription(articol, el.descriere)) {
-            throw new BadRequestException(
-              'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-            );
-          }
-          const requestedQty = Number(el.cantitate || 1);
-          if (requestedQty > articol.stocCurent) {
-            throw new BadRequestException(
-              `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
-            );
-          }
-        }
-      } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
-        if (this.isTireItemOrDescription(null, el.descriere)) {
-          throw new BadRequestException(
-            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-          );
-        }
-      }
-    }
+    return this.prisma.$transaction(
+      async (tx) => {
+        // 1. Validăm STRICT anvelopele și stocul cumulativ (incl. rezervările din alte comenzi deschise) ÎNAINTE de orice scriere
+        const articolMap = await this.validateOrderElementsStockAndTires(elementeData, { tx });
 
-    const processedElemente = await Promise.all(
-      elementeData.map(async (el) => {
-        let furnizor = el.furnizor || null;
-        let numarFactura = el.numarFactura || null;
-        let pretUnitar = Number(el.pretUnitar || 0);
-
-        if (el.articolStocId && (!furnizor || !numarFactura)) {
-          const latestLot = await this.prisma.intrareStoc.findFirst({
-            where: { articolStocId: el.articolStocId },
-            orderBy: { dataFactura: 'desc' },
+        // 2. Înregistrăm KM / mTH pe vehicul și în istoric EXCLUSIV dacă utilizatorul a introdus o valoare > 0
+        if (contorVal > 0) {
+          await tx.vehicul.update({
+            where: { id: data.vehiculId },
+            data: {
+              valoareContorCurent: Math.max(vehicul.valoareContorCurent, contorVal),
+              dataInregistrareContor: dataDeschidereFinal,
+            },
           });
-          if (latestLot) {
-            if (!furnizor) furnizor = latestLot.furnizor;
-            if (!numarFactura) numarFactura = latestLot.numarFactura;
-            if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
-          }
+
+          await tx.istoricContorVehicul.create({
+            data: {
+              vehiculId: data.vehiculId,
+              valoareContor: contorVal,
+              dataInregistrare: dataDeschidereFinal,
+              sursa: 'SERVICE',
+              operator: data.mecanicResponsabil || 'Atelier Intern',
+              observatii: data.observatii || `Deschidere Comandă de Lucru (${contorVal} ${vehicul.tipMasurare})`,
+            },
+          });
         }
 
-        return {
-          sarcinaMentenantaId: el.sarcinaMentenantaId || null,
-          pilonCost: el.pilonCost,
-          descriere: el.descriere,
-          cantitate: Number(el.cantitate || 1),
-          pretUnitar,
-          costTotal: Number(el.cantitate || 1) * pretUnitar,
-          provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
-          articolStocId: el.articolStocId || null,
-          serieUnicaPiesa: el.serieUnicaPiesa || null,
-          furnizor,
-          numarFactura,
-        };
-      })
-    );
+        // 3. Generare număr comandă fără riscul de coliziune cu numere existente
+        const allComenzi = await tx.comandaLucru.findMany({
+          select: { numarComanda: true },
+        });
+        let maxNum = 0;
+        for (const c of allComenzi) {
+          const match = c.numarComanda?.match(/CL-(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+        let nextNum = maxNum + 1;
+        let numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
+        while (await tx.comandaLucru.findUnique({ where: { numarComanda } })) {
+          nextNum++;
+          numarComanda = `CL-${nextNum.toString().padStart(5, '0')}`;
+        }
 
-    const comanda = await this.prisma.comandaLucru.create({
-      data: {
-        numarComanda,
-        vehiculId: data.vehiculId,
-        mecanicResponsabil: data.mecanicResponsabil,
-        observatii: data.observatii,
-        valoareContorLaExecutie: contorVal,
-        stare: 'IN_LUCRU',
-        dataDeschidere: dataDeschidereFinal,
-        elementeComanda: {
-          create: processedElemente,
-        },
-      },
-      include: {
-        elementeComanda: {
+        const processedElemente = await Promise.all(
+          elementeData.map(async (el) => {
+            const artInfo = el.articolStocId ? articolMap.get(el.articolStocId) : undefined;
+            let furnizor = el.furnizor || null;
+            let numarFactura = el.numarFactura || null;
+            let pretUnitar = Number(el.pretUnitar || 0);
+            const tipLichid = el.tipLichid || artInfo?.tipLichid || null;
+            const categorie = el.categorie || artInfo?.categorie || null;
+            const subcategorie = el.subcategorie || artInfo?.subcategorie || null;
+
+            if (el.articolStocId && (!furnizor || !numarFactura || !pretUnitar)) {
+              const latestLot = await tx.intrareStoc.findFirst({
+                where: { articolStocId: el.articolStocId },
+                orderBy: { dataFactura: 'desc' },
+              });
+              if (latestLot) {
+                if (!furnizor) furnizor = latestLot.furnizor;
+                if (!numarFactura) numarFactura = latestLot.numarFactura;
+                if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+              }
+            }
+
+            return {
+              sarcinaMentenantaId: el.sarcinaMentenantaId || null,
+              pilonCost: el.pilonCost,
+              descriere: el.descriere,
+              cantitate: Number(el.cantitate || 1),
+              pretUnitar,
+              costTotal: Number(el.cantitate || 1) * pretUnitar,
+              provenienta:
+                el.provenienta ||
+                (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
+              articolStocId: el.articolStocId || null,
+              serieUnicaPiesa: el.serieUnicaPiesa || null,
+              categorie,
+              subcategorie,
+              tipLichid,
+              observatiiIntern: el.observatiiIntern || null,
+              furnizor,
+              numarFactura,
+            };
+          }),
+        );
+
+        return tx.comandaLucru.create({
+          data: {
+            numarComanda,
+            vehiculId: data.vehiculId,
+            mecanicResponsabil: data.mecanicResponsabil,
+            observatii: data.observatii,
+            valoareContorLaExecutie: contorVal,
+            stare: 'IN_LUCRU',
+            dataDeschidere: dataDeschidereFinal,
+            elementeComanda: {
+              create: processedElemente,
+            },
+          },
           include: {
-            articolStoc: {
+            elementeComanda: {
               include: {
-                intrariStoc: {
-                  orderBy: { dataFactura: 'desc' },
+                articolStoc: {
+                  include: {
+                    intrariStoc: {
+                      orderBy: { dataFactura: 'desc' },
+                    },
+                  },
                 },
               },
             },
+            vehicul: true,
           },
-        },
-        vehicul: true,
+        });
       },
-    });
-
-    return comanda;
+      { timeout: 20000 },
+    );
   }
 
   // Adaugă Element / Piesă suplimentară pe o Comandă de Lucru Deschisă
@@ -582,304 +839,412 @@ export class MentenantaService {
     pretUnitar: number;
     provenienta?: string;
     articolStocId?: string;
+    serieUnicaPiesa?: string;
+    categorie?: string;
+    subcategorie?: string;
+    tipLichid?: string;
+    observatiiIntern?: string;
     furnizor?: string;
     numarFactura?: string;
   }) {
-    const comanda = await this.prisma.comandaLucru.findUnique({ where: { id: comandaId } });
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
-    if (comanda.stare !== 'IN_LUCRU') throw new BadRequestException('Nu se pot adăuga piese pe o comandă finalizată sau anulată.');
-
-    // ENFORCE STRICT STOCK LIMIT VALIDATION & EXCLUDE TIRES (Tires must be mounted only via Anvelope / Axe)
-    if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
-      const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
-      if (articol) {
-        if (this.isTireItemOrDescription(articol, el.descriere)) {
-          throw new BadRequestException(
-            'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-          );
-        }
-        const requestedQty = Number(el.cantitate || 1);
-        if (requestedQty > articol.stocCurent) {
-          throw new BadRequestException(
-            `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
-          );
-        }
-      }
-    } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
-      if (this.isTireItemOrDescription(null, el.descriere)) {
-        throw new BadRequestException(
-          'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-        );
-      }
-    }
-
-    let furnizor = el.furnizor || null;
-    let numarFactura = el.numarFactura || null;
-    let pretUnitar = Number(el.pretUnitar || 0);
-    let articolTipLichid: string | null = (el as any).tipLichid || null;
-
-    if (el.articolStocId) {
-      const artInfo = await this.prisma.articolStoc.findUnique({
-        where: { id: el.articolStocId },
-        select: { tipLichid: true },
-      });
-      if (!articolTipLichid && artInfo?.tipLichid) {
-        articolTipLichid = artInfo.tipLichid;
-      }
-      if (!furnizor || !numarFactura) {
-        const latestLot = await this.prisma.intrareStoc.findFirst({
-          where: { articolStocId: el.articolStocId },
-          orderBy: { dataFactura: 'desc' },
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true },
         });
-        if (latestLot) {
-          if (!furnizor) furnizor = latestLot.furnizor;
-          if (!numarFactura) numarFactura = latestLot.numarFactura;
-          if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
+        if (comanda.stare === 'FINALIZAT' || comanda.stare === 'ANULAT') {
+          throw new BadRequestException('Nu se pot adăuga piese pe o comandă finalizată sau anulată.');
         }
-      }
-    }
 
-    return this.prisma.elementComandaLucru.create({
-      data: {
-        comandaLucruId: comandaId,
-        sarcinaMentenantaId: el.sarcinaMentenantaId || null,
-        pilonCost: el.pilonCost,
-        descriere: el.descriere,
-        cantitate: Number(el.cantitate || 1),
-        pretUnitar,
-        costTotal: Number(el.cantitate || 1) * pretUnitar,
-        provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
-        articolStocId: el.articolStocId || null,
-        tipLichid: articolTipLichid,
-        furnizor,
-        numarFactura,
-      },
-      include: {
-        articolStoc: {
+        // Validare cumulativă (linii existente pe această comandă + linia nouă + rezervări alte comenzi) & blocare anvelope
+        const articolMap = await this.validateOrderElementsStockAndTires([el], {
+          excludeComandaId: comandaId,
+          existingOrderLines: comanda.elementeComanda,
+          tx,
+        });
+
+        const artInfo = el.articolStocId ? articolMap.get(el.articolStocId) : undefined;
+        let furnizor = el.furnizor || null;
+        let numarFactura = el.numarFactura || null;
+        let pretUnitar = Number(el.pretUnitar || 0);
+        const articolTipLichid: string | null = el.tipLichid || artInfo?.tipLichid || null;
+        const categorie: string | null = el.categorie || artInfo?.categorie || null;
+        const subcategorie: string | null = el.subcategorie || artInfo?.subcategorie || null;
+
+        if (el.articolStocId && (!furnizor || !numarFactura || !pretUnitar)) {
+          const latestLot = await tx.intrareStoc.findFirst({
+            where: { articolStocId: el.articolStocId },
+            orderBy: { dataFactura: 'desc' },
+          });
+          if (latestLot) {
+            if (!furnizor) furnizor = latestLot.furnizor;
+            if (!numarFactura) numarFactura = latestLot.numarFactura;
+            if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+          }
+        }
+
+        return tx.elementComandaLucru.create({
+          data: {
+            comandaLucruId: comandaId,
+            sarcinaMentenantaId: el.sarcinaMentenantaId || null,
+            pilonCost: el.pilonCost,
+            descriere: el.descriere,
+            cantitate: Number(el.cantitate || 1),
+            pretUnitar,
+            costTotal: Number(el.cantitate || 1) * pretUnitar,
+            provenienta:
+              el.provenienta ||
+              (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : 'Stoc Intern'),
+            articolStocId: el.articolStocId || null,
+            serieUnicaPiesa: el.serieUnicaPiesa || null,
+            categorie,
+            subcategorie,
+            tipLichid: articolTipLichid,
+            observatiiIntern: el.observatiiIntern || null,
+            furnizor,
+            numarFactura,
+          },
           include: {
-            intrariStoc: {
-              orderBy: { dataFactura: 'desc' },
+            articolStoc: {
+              include: {
+                intrariStoc: {
+                  orderBy: { dataFactura: 'desc' },
+                },
+              },
             },
           },
-        },
+        });
       },
-    });
+      { timeout: 15000 },
+    );
   }
 
   async finalizeazaComandaLucru(comandaId: string) {
-    const comanda = await this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: {
-        vehicul: true,
-        elementeComanda: { include: { sarcinaMentenanta: { include: { sarciniSubordonate: true } } } },
-      },
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: {
+            vehicul: true,
+            elementeComanda: { include: { sarcinaMentenanta: { include: { sarciniSubordonate: true } } } },
+          },
+        });
 
-    if (!comanda) throw new NotFoundException('Comanda de lucru nu există.');
-    if (comanda.stare === 'FINALIZAT') throw new BadRequestException('Comanda de lucru este deja finalizată.');
+        if (!comanda) throw new NotFoundException('Comanda de lucru nu există.');
+        if (comanda.stare === 'FINALIZAT') {
+          throw new BadRequestException('Comanda de lucru este deja finalizată.');
+        }
+        if (comanda.stare === 'ANULAT') {
+          throw new BadRequestException(
+            'O comandă de lucru ANULATĂ nu poate fi finalizată! Redeschideți-o mai întâi în stare ÎN LUCRU.',
+          );
+        }
 
-    const comandaContor = Number(comanda.valoareContorLaExecutie || 0);
-
-    for (const elem of comanda.elementeComanda) {
-      if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-        const articol = await this.prisma.articolStoc.findUnique({ where: { id: elem.articolStocId } });
-        if (articol) {
-          if (articol.stocCurent < elem.cantitate) {
-            throw new BadRequestException(`Stoc insuficient pentru ${articol.denumire}. Disponibil: ${articol.stocCurent}`);
+        // 1. Validare cumulativă upfront pentru toate liniile din stoc ÎNAINTE de orice deducere FIFO
+        const stockNeeded = new Map<string, number>();
+        for (const elem of comanda.elementeComanda) {
+          if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+            const qty = Number(elem.cantitate || 0);
+            if (!Number.isFinite(qty) || qty <= 0) {
+              throw new BadRequestException(
+                `Cantitatea pentru "${elem.descriere}" trebuie să fie mai mare ca 0.`,
+              );
+            }
+            stockNeeded.set(
+              elem.articolStocId,
+              Number(((stockNeeded.get(elem.articolStocId) || 0) + qty).toFixed(4)),
+            );
           }
-          try {
-            const fifoRes = await this.stocuriGarantiiService.consumaStocFIFO(elem.articolStocId, elem.cantitate);
+        }
+
+        const stockIds = Array.from(stockNeeded.keys());
+        const articoleList =
+          stockIds.length > 0
+            ? await tx.articolStoc.findMany({ where: { id: { in: stockIds } } })
+            : [];
+        const articolMap = new Map(articoleList.map((a) => [a.id, a]));
+
+        for (const [articolId, totalNeeded] of stockNeeded.entries()) {
+          const articol = articolMap.get(articolId);
+          if (!articol) {
+            throw new NotFoundException(`Articolul de stoc (${articolId}) nu mai există în depozit.`);
+          }
+          if (this.isTireItemOrDescription(articol)) {
+            throw new BadRequestException(
+              `Articolul "${articol.denumire}" este o anvelopă și nu poate fi consumat prin Comandă de Lucru! Folosiți modulul Anvelope / Harta Axe.`,
+            );
+          }
+          if (Number(articol.stocCurent || 0) + 1e-6 < totalNeeded) {
+            throw new BadRequestException(
+              `Stoc insuficient pentru "${articol.denumire}". Disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, solicitat pe comandă: ${totalNeeded} ${articol.unitateMasura || 'buc'}.`,
+            );
+          }
+        }
+
+        const comandaContor = Number(comanda.valoareContorLaExecutie || 0);
+
+        // 2. Deducere atomică FIFO + sincronizare ComponentaSerializata (IN_STOC -> MONTAT) + reset sarcini
+        for (const elem of comanda.elementeComanda) {
+          if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+            const articol = articolMap.get(elem.articolStocId)!;
+
+            // Consum atomic FIFO în aceeași tranzacție — fără fallback silențios care ar desincroniza IntrareStoc
+            const fifoRes = await this.stocuriGarantiiService.consumaStocFIFO(
+              elem.articolStocId,
+              elem.cantitate,
+              tx,
+            );
             const furnizoriFIFO = fifoRes.loturiConsumate?.map((l: any) => l.furnizor).filter(Boolean);
             const facturiFIFO = fifoRes.loturiConsumate?.map((l: any) => l.numarFactura).filter(Boolean);
-            const furnizorFinal = furnizoriFIFO && furnizoriFIFO.length > 0 ? Array.from(new Set(furnizoriFIFO)).join(', ') : elem.furnizor;
-            const facturaFinal = facturiFIFO && facturiFIFO.length > 0 ? Array.from(new Set(facturiFIFO)).join(', ') : elem.numarFactura;
+            const furnizorFinal =
+              furnizoriFIFO && furnizoriFIFO.length > 0
+                ? Array.from(new Set(furnizoriFIFO)).join(', ')
+                : elem.furnizor;
+            const facturaFinal =
+              facturiFIFO && facturiFIFO.length > 0
+                ? Array.from(new Set(facturiFIFO)).join(', ')
+                : elem.numarFactura;
 
-            await this.prisma.elementComandaLucru.update({
+            const mountedSerials = await this.mountSerializedComponentsForElement(
+              tx,
+              comanda,
+              elem,
+              articol,
+            );
+
+            await tx.elementComandaLucru.update({
               where: { id: elem.id },
               data: {
                 costTotal: fifoRes.costTotal,
                 pretUnitar: fifoRes.pretUnitarMediu,
                 furnizor: furnizorFinal,
                 numarFactura: facturaFinal,
+                ...(mountedSerials && mountedSerials !== elem.serieUnicaPiesa
+                  ? { serieUnicaPiesa: mountedSerials }
+                  : {}),
               },
             });
-          } catch (err) {
-            await this.prisma.articolStoc.update({
-              where: { id: elem.articolStocId },
-              data: { stocCurent: Math.max(0, articol.stocCurent - elem.cantitate) },
-            });
           }
-        }
-      }
 
-      if (elem.sarcinaMentenanta && comandaContor > 0) {
-        const sarcina = elem.sarcinaMentenanta;
+          if (elem.sarcinaMentenanta && comandaContor > 0) {
+            const sarcina = elem.sarcinaMentenanta;
 
-        await this.prisma.sarcinaMentenanta.update({
-          where: { id: sarcina.id },
-          data: { ultimulRulajExecutie: comandaContor },
-        });
-
-        if (sarcina.tipSarcina === 'SCHIMB_PIESA' && sarcina.sarciniSubordonate.length > 0) {
-          for (const subordonata of sarcina.sarciniSubordonate) {
-            await this.prisma.sarcinaMentenanta.update({
-              where: { id: subordonata.id },
+            await tx.sarcinaMentenanta.update({
+              where: { id: sarcina.id },
               data: { ultimulRulajExecutie: comandaContor },
             });
+
+            if (sarcina.tipSarcina === 'SCHIMB_PIESA' && sarcina.sarciniSubordonate.length > 0) {
+              for (const subordonata of sarcina.sarciniSubordonate) {
+                await tx.sarcinaMentenanta.update({
+                  where: { id: subordonata.id },
+                  data: { ultimulRulajExecutie: comandaContor },
+                });
+              }
+            }
           }
         }
-      }
-    }
 
-    // AUTOMATIC ALERT BASELINE RESET: Match work order elements with RegulaAlertaMentenanta rules
-    const reguli = await this.prisma.regulaAlertaMentenanta.findMany({ where: { stare: 'ACTIV' } });
-    for (const elem of comanda.elementeComanda) {
-      const descLower = elem.descriere.toLowerCase();
-      for (const reg of reguli) {
-        if (
-          descLower.includes(reg.denumireOperatiune.toLowerCase()) ||
-          reg.denumireOperatiune.toLowerCase().includes(descLower)
-        ) {
-          const fallbackContor = comandaContor > 0 ? comandaContor : (comanda.vehicul?.valoareContorCurent || 0);
-          await this.prisma.executieRegulaVehicul.upsert({
-            where: {
-              vehiculId_regulaAlertaId: {
-                vehiculId: comanda.vehiculId,
-                regulaAlertaId: reg.id,
-              },
-            },
-            update: {
-              ...(comandaContor > 0 ? { ultimulSchimbContor: comandaContor } : {}),
-              ultimulSchimbData: new Date(),
-              observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
-            },
-            create: {
-              vehiculId: comanda.vehiculId,
-              regulaAlertaId: reg.id,
-              ultimulSchimbContor: fallbackContor,
-              ultimulSchimbData: new Date(),
-              observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
-            },
-          });
+        // 3. AUTOMATIC ALERT BASELINE RESET: Match work order elements with RegulaAlertaMentenanta rules
+        const reguli = await tx.regulaAlertaMentenanta.findMany({ where: { stare: 'ACTIV' } });
+        for (const elem of comanda.elementeComanda) {
+          const descLower = elem.descriere.toLowerCase();
+          for (const reg of reguli) {
+            if (
+              descLower.includes(reg.denumireOperatiune.toLowerCase()) ||
+              reg.denumireOperatiune.toLowerCase().includes(descLower)
+            ) {
+              const fallbackContor =
+                comandaContor > 0 ? comandaContor : comanda.vehicul?.valoareContorCurent || 0;
+              await tx.executieRegulaVehicul.upsert({
+                where: {
+                  vehiculId_regulaAlertaId: {
+                    vehiculId: comanda.vehiculId,
+                    regulaAlertaId: reg.id,
+                  },
+                },
+                update: {
+                  ...(comandaContor > 0 ? { ultimulSchimbContor: comandaContor } : {}),
+                  ultimulSchimbData: new Date(),
+                  observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
+                },
+                create: {
+                  vehiculId: comanda.vehiculId,
+                  regulaAlertaId: reg.id,
+                  ultimulSchimbContor: fallbackContor,
+                  ultimulSchimbData: new Date(),
+                  observatii: `Resetat automat prin finalizare Comandă de Lucru ${comanda.numarComanda}`,
+                },
+              });
+            }
+          }
         }
-      }
-    }
 
-    const updatedComanda = await this.prisma.comandaLucru.update({
-      where: { id: comandaId },
-      data: {
-        stare: 'FINALIZAT',
-        dataFinalizare: new Date(),
+        // 4. Marcăm comanda FINALIZAT și sincronizăm înregistrările de fluide în aceeași tranzacție
+        const updatedComanda = await tx.comandaLucru.update({
+          where: { id: comandaId },
+          data: {
+            stare: 'FINALIZAT',
+            dataFinalizare: new Date(),
+          },
+        });
+
+        await syncFluidCompletariForComanda(tx, comandaId);
+        return updatedComanda;
       },
-    });
-
-    await syncFluidCompletariForComanda(this.prisma, comandaId);
-    return updatedComanda;
+      { timeout: 20000 },
+    );
   }
 
   async anuleazaSauStergeComanda(comandaId: string) {
-    const comanda = await this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: { elementeComanda: true },
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true },
+        });
 
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
 
-    if (comanda.stare === 'FINALIZAT') {
-      for (const elem of comanda.elementeComanda) {
-        if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          await this.stocuriGarantiiService.restituieStocFIFO(
-            elem.articolStocId,
-            elem.cantitate,
-            elem.numarFactura,
-          );
+        if (comanda.stare === 'FINALIZAT') {
+          for (const elem of comanda.elementeComanda) {
+            if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+              await this.stocuriGarantiiService.restituieStocFIFO(
+                elem.articolStocId,
+                elem.cantitate,
+                elem.numarFactura,
+                tx,
+              );
+            }
+          }
+          await this.revertOrderSerializedComponents(tx, comanda);
         }
-      }
-    }
 
-    await removeFluidCompletariForComanda(this.prisma, comandaId);
-    return this.prisma.comandaLucru.update({
-      where: { id: comandaId },
-      data: { stare: 'ANULAT' },
-    });
+        await removeFluidCompletariForComanda(tx, comandaId);
+        return tx.comandaLucru.update({
+          where: { id: comandaId },
+          data: { stare: 'ANULAT' },
+        });
+      },
+      { timeout: 20000 },
+    );
   }
 
-  // REDESCHIDERE COMANDĂ DE LUCRU ANULATĂ (Reactivare în stare IN_LUCRU)
+  // REDESCHIDERE COMANDĂ DE LUCRU ANULATĂ (Reactivare în stare IN_LUCRU — permisă EXCLUSIV din ANULAT, cu validare stoc rezervat)
   async redeschideComandaLucru(comandaId: string) {
-    const comanda = await this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: { elementeComanda: true, vehicul: true },
-    });
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true, vehicul: true },
+        });
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
+        if (comanda.stare !== 'ANULAT') {
+          throw new BadRequestException(
+            comanda.stare === 'FINALIZAT'
+              ? 'O comandă FINALIZATĂ nu poate fi redeschisă direct (ar produce dublă deducere de stoc)! Folosiți acțiunea DEVALIDEAZĂ.'
+              : `Doar comenzile ANULATE pot fi redeschise (starea curentă este ${comanda.stare}).`,
+          );
+        }
 
-    return this.prisma.comandaLucru.update({
-      where: { id: comandaId },
-      data: {
-        stare: 'IN_LUCRU',
-        dataFinalizare: null,
+        // Validăm că articolele PIESA_STOC nu depășesc stocul disponibil (incl. rezervările din alte comenzi deschise)
+        await this.validateOrderElementsStockAndTires(comanda.elementeComanda, {
+          excludeComandaId: comandaId,
+          tx,
+        });
+
+        return tx.comandaLucru.update({
+          where: { id: comandaId },
+          data: {
+            stare: 'IN_LUCRU',
+            dataFinalizare: null,
+          },
+          include: { elementeComanda: true, vehicul: true },
+        });
       },
-      include: { elementeComanda: true, vehicul: true },
-    });
+      { timeout: 15000 },
+    );
   }
 
-  // ȘTERGERE DEFINITIVĂ COMANDĂ DE LUCRU (pentru comenzi anulate)
+  // ȘTERGERE DEFINITIVĂ COMANDĂ DE LUCRU (pentru comenzi anulate sau active, cu restaurare atomică FIFO & serializate)
   async deleteComandaLucru(comandaId: string) {
-    const comanda = await this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: { elementeComanda: true },
-    });
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true },
+        });
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
 
-    if (comanda.stare === 'FINALIZAT') {
-      for (const elem of comanda.elementeComanda) {
-        if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          await this.stocuriGarantiiService.restituieStocFIFO(
-            elem.articolStocId,
-            elem.cantitate,
-            elem.numarFactura,
-          );
+        if (comanda.stare === 'FINALIZAT') {
+          for (const elem of comanda.elementeComanda) {
+            if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+              await this.stocuriGarantiiService.restituieStocFIFO(
+                elem.articolStocId,
+                elem.cantitate,
+                elem.numarFactura,
+                tx,
+              );
+            }
+          }
+          await this.revertOrderSerializedComponents(tx, comanda);
         }
-      }
-    }
 
-    await removeFluidCompletariForComanda(this.prisma, comandaId);
-    await this.prisma.notaAtelier.updateMany({
-      where: { comandaLucruId: comandaId },
-      data: { comandaLucruId: null, comandaLucruNumar: null },
-    });
-    return this.prisma.comandaLucru.delete({ where: { id: comandaId } });
+        await removeFluidCompletariForComanda(tx, comandaId);
+        await tx.notaAtelier.updateMany({
+          where: { comandaLucruId: comandaId },
+          data: { comandaLucruId: null, comandaLucruNumar: null },
+        });
+        return tx.comandaLucru.delete({ where: { id: comandaId } });
+      },
+      { timeout: 20000 },
+    );
   }
 
-  // DEVALIDARE COMANDĂ DE LUCRU: Trecere din FINALIZAT în DEVALIDAT, restaurare stoc pentru re-editare
+  // DEVALIDARE COMANDĂ DE LUCRU: Trecere din FINALIZAT în DEVALIDAT, restaurare atomică FIFO & serializate pentru re-editare
   async devalideazaComandaLucru(comandaId: string) {
-    const comanda = await this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: { elementeComanda: true },
-    });
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true },
+        });
 
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
-
-    if (comanda.stare === 'FINALIZAT') {
-      for (const elem of comanda.elementeComanda) {
-        if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
-          await this.stocuriGarantiiService.restituieStocFIFO(
-            elem.articolStocId,
-            elem.cantitate,
-            elem.numarFactura,
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
+        if (comanda.stare === 'ANULAT') {
+          throw new BadRequestException(
+            'O comandă ANULATĂ nu poate fi devalidată! Folosiți acțiunea Redeschide.',
           );
         }
-      }
-    }
 
-    await removeFluidCompletariForComanda(this.prisma, comandaId);
+        if (comanda.stare === 'FINALIZAT') {
+          for (const elem of comanda.elementeComanda) {
+            if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
+              await this.stocuriGarantiiService.restituieStocFIFO(
+                elem.articolStocId,
+                elem.cantitate,
+                elem.numarFactura,
+                tx,
+              );
+            }
+          }
+          await this.revertOrderSerializedComponents(tx, comanda);
+        }
 
-    return this.prisma.comandaLucru.update({
-      where: { id: comandaId },
-      data: {
-        stare: 'DEVALIDAT',
-        dataFinalizare: null,
+        await removeFluidCompletariForComanda(tx, comandaId);
+
+        return tx.comandaLucru.update({
+          where: { id: comandaId },
+          data: {
+            stare: 'DEVALIDAT',
+            dataFinalizare: null,
+          },
+        });
       },
-    });
+      { timeout: 20000 },
+    );
   }
 
   // UPDATE COMANDĂ DE LUCRU: Editare (dată deviz, mecanic, observații, elemente)
@@ -890,26 +1255,22 @@ export class MentenantaService {
     dataFinalizare?: string | Date | null;
     elementeComanda?: Array<{
       id?: string;
+      sarcinaMentenantaId?: string | null;
       pilonCost: string;
       descriere: string;
       cantitate: number;
       pretUnitar: number;
-      articolStocId?: string;
+      provenienta?: string | null;
+      articolStocId?: string | null;
+      serieUnicaPiesa?: string | null;
+      furnizor?: string | null;
+      numarFactura?: string | null;
+      categorie?: string | null;
+      subcategorie?: string | null;
+      tipLichid?: string | null;
+      observatiiIntern?: string | null;
     }>;
   }) {
-    const comanda = await this.prisma.comandaLucru.findUnique({ where: { id: comandaId } });
-    if (!comanda) throw new NotFoundException('Comanda nu există.');
-
-    const hasDateUpdate = data.dataDeschidere !== undefined || data.dataFinalizare !== undefined;
-    const hasContentUpdate =
-      data.mecanicResponsabil !== undefined ||
-      data.observatii !== undefined ||
-      data.elementeComanda !== undefined;
-
-    if (comanda.stare === 'FINALIZAT' && hasContentUpdate) {
-      throw new BadRequestException('Comanda finalizată trebuie mai întâi DEVALIDATĂ pentru a putea fi editată!');
-    }
-
     const parsedDataDeschidere =
       data.dataDeschidere !== undefined ? this.parseDevizDateInput(data.dataDeschidere) : undefined;
     if (data.dataDeschidere !== undefined && !parsedDataDeschidere) {
@@ -931,119 +1292,173 @@ export class MentenantaService {
       throw new BadRequestException('Data finalizării devizului nu este validă.');
     }
 
-    if (data.mecanicResponsabil || data.observatii !== undefined || hasDateUpdate) {
-      await this.prisma.comandaLucru.update({
-        where: { id: comandaId },
-        data: {
-          ...(data.mecanicResponsabil ? { mecanicResponsabil: data.mecanicResponsabil } : {}),
-          ...(data.observatii !== undefined ? { observatii: data.observatii } : {}),
-          ...(parsedDataDeschidere ? { dataDeschidere: parsedDataDeschidere } : {}),
-          ...(parsedDataFinalizare !== undefined ? { dataFinalizare: parsedDataFinalizare } : {}),
-        },
-      });
-    }
+    const hasDateUpdate = data.dataDeschidere !== undefined || data.dataFinalizare !== undefined;
+    const hasContentUpdate =
+      data.mecanicResponsabil !== undefined ||
+      data.observatii !== undefined ||
+      data.elementeComanda !== undefined;
 
-    // Dacă s-a modificat data unui deviz FINALIZAT, sincronizăm automat și data completărilor/schimburilor de fluide asociate
-    if (comanda.stare === 'FINALIZAT' && hasDateUpdate) {
-      await syncFluidCompletariForComanda(this.prisma, comandaId);
-      return this.prisma.comandaLucru.findUnique({
-        where: { id: comandaId },
-        include: { elementeComanda: true, vehicul: true },
-      });
-    }
+    return this.prisma.$transaction(
+      async (tx) => {
+        const comanda = await tx.comandaLucru.findUnique({
+          where: { id: comandaId },
+          include: { elementeComanda: true },
+        });
+        if (!comanda) throw new NotFoundException('Comanda nu există.');
 
-    if (data.elementeComanda) {
-      for (const el of data.elementeComanda) {
-        if ((el.pilonCost === 'PIESA_STOC' || el.articolStocId) && el.articolStocId) {
-          const articol = await this.prisma.articolStoc.findUnique({ where: { id: el.articolStocId } });
-          if (articol) {
-            if (this.isTireItemOrDescription(articol, el.descriere)) {
-              throw new BadRequestException(
-                'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-              );
-            }
-            const requestedQty = Number(el.cantitate || 1);
-            if (requestedQty > articol.stocCurent) {
-              throw new BadRequestException(
-                `Stoc insuficient pentru articolul "${articol.denumire}"! Stoc disponibil: ${articol.stocCurent} ${articol.unitateMasura || 'buc'}, dar ați solicitat: ${requestedQty} ${articol.unitateMasura || 'buc'}.`
-              );
-            }
-          }
-        } else if (el.pilonCost === 'PIESA_DIRECTA' || el.pilonCost === 'PIESA_DEZMEMBRATA' || el.pilonCost === 'PIESA_STOC') {
-          if (this.isTireItemOrDescription(null, el.descriere)) {
-            throw new BadRequestException(
-              'Anvelopele nu pot fi montate din Comanda de Lucru! Montarea și gestiunea anvelopelor pe vehicul se realizează exclusiv din meniul Anvelope / Harta Axe.'
-            );
+        if (comanda.stare === 'ANULAT') {
+          throw new BadRequestException(
+            'O comandă ANULATĂ nu poate fi editată! Redeschideți-o mai întâi în stare ÎN LUCRU.',
+          );
+        }
+
+        if (comanda.stare === 'FINALIZAT' && hasContentUpdate) {
+          throw new BadRequestException(
+            'Comanda finalizată trebuie mai întâi DEVALIDATĂ pentru a putea fi editată!',
+          );
+        }
+
+        // Validăm cumulativ stocul și anvelopele ÎNAINTE de orice modificare/ștergere elemente
+        let articolMap = new Map<string, any>();
+        if (data.elementeComanda) {
+          articolMap = await this.validateOrderElementsStockAndTires(data.elementeComanda, {
+            excludeComandaId: comandaId,
+            tx,
+          });
+        }
+
+        if (data.mecanicResponsabil || data.observatii !== undefined || hasDateUpdate) {
+          await tx.comandaLucru.update({
+            where: { id: comandaId },
+            data: {
+              ...(data.mecanicResponsabil ? { mecanicResponsabil: data.mecanicResponsabil } : {}),
+              ...(data.observatii !== undefined ? { observatii: data.observatii } : {}),
+              ...(parsedDataDeschidere ? { dataDeschidere: parsedDataDeschidere } : {}),
+              ...(parsedDataFinalizare !== undefined ? { dataFinalizare: parsedDataFinalizare } : {}),
+            },
+          });
+        }
+
+        // Dacă s-a modificat data unui deviz FINALIZAT, sincronizăm automat și data completărilor/schimburilor de fluide asociate
+        if (comanda.stare === 'FINALIZAT' && hasDateUpdate) {
+          await syncFluidCompletariForComanda(tx, comandaId);
+          return tx.comandaLucru.findUnique({
+            where: { id: comandaId },
+            include: { elementeComanda: true, vehicul: true },
+          });
+        }
+
+        if (data.elementeComanda) {
+          const existingById = new Map(comanda.elementeComanda.map((e) => [e.id, e]));
+
+          const processedUpdateElemente = await Promise.all(
+            data.elementeComanda.map(async (el) => {
+              const prev = el.id ? existingById.get(el.id) : undefined;
+              const artInfo = el.articolStocId ? articolMap.get(el.articolStocId) : undefined;
+
+              let furnizor =
+                el.furnizor !== undefined ? el.furnizor || null : (prev?.furnizor ?? null);
+              let numarFactura =
+                el.numarFactura !== undefined ? el.numarFactura || null : (prev?.numarFactura ?? null);
+              let pretUnitar = Number(el.pretUnitar || 0);
+              let tipLichid: string | null =
+                el.tipLichid !== undefined ? el.tipLichid || null : (prev?.tipLichid ?? null);
+              const sarcinaMentenantaId =
+                el.sarcinaMentenantaId !== undefined
+                  ? el.sarcinaMentenantaId || null
+                  : (prev?.sarcinaMentenantaId ?? null);
+              const serieUnicaPiesa =
+                el.serieUnicaPiesa !== undefined
+                  ? el.serieUnicaPiesa || null
+                  : (prev?.serieUnicaPiesa ?? null);
+              const categorie =
+                el.categorie !== undefined
+                  ? el.categorie || null
+                  : (prev?.categorie ?? artInfo?.categorie ?? null);
+              const subcategorie =
+                el.subcategorie !== undefined
+                  ? el.subcategorie || null
+                  : (prev?.subcategorie ?? artInfo?.subcategorie ?? null);
+              const observatiiIntern =
+                el.observatiiIntern !== undefined
+                  ? el.observatiiIntern || null
+                  : (prev?.observatiiIntern ?? null);
+
+              if (el.articolStocId) {
+                if (!tipLichid && artInfo?.tipLichid) {
+                  tipLichid = artInfo.tipLichid;
+                }
+                if (!furnizor || !numarFactura || !pretUnitar) {
+                  const latestLot = await tx.intrareStoc.findFirst({
+                    where: { articolStocId: el.articolStocId },
+                    orderBy: { dataFactura: 'desc' },
+                  });
+                  if (latestLot) {
+                    if (!furnizor) furnizor = latestLot.furnizor;
+                    if (!numarFactura) numarFactura = latestLot.numarFactura;
+                    if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
+                  }
+                }
+              }
+
+              const provenienta =
+                el.provenienta !== undefined && el.provenienta
+                  ? el.provenienta
+                  : prev?.provenienta ||
+                    (el.pilonCost === 'PIESA_DEZMEMBRATA'
+                      ? 'Dezmembrări Parcul Propriu'
+                      : el.pilonCost === 'PIESA_DIRECTA'
+                      ? 'Achiziție Directă'
+                      : 'Stoc Intern');
+
+              return {
+                comandaLucruId: comandaId,
+                sarcinaMentenantaId,
+                pilonCost: el.pilonCost,
+                descriere: el.descriere,
+                cantitate: Number(el.cantitate || 1),
+                pretUnitar,
+                costTotal: Number(el.cantitate || 1) * pretUnitar,
+                provenienta,
+                articolStocId: el.articolStocId || null,
+                serieUnicaPiesa,
+                categorie,
+                subcategorie,
+                tipLichid,
+                observatiiIntern,
+                furnizor,
+                numarFactura,
+              };
+            }),
+          );
+
+          await tx.elementComandaLucru.deleteMany({ where: { comandaLucruId: comandaId } });
+          if (processedUpdateElemente.length > 0) {
+            await tx.elementComandaLucru.createMany({
+              data: processedUpdateElemente,
+            });
           }
         }
-      }
-      // Re-create elements if passed
-      await this.prisma.elementComandaLucru.deleteMany({ where: { comandaLucruId: comandaId } });
-      const processedUpdateElemente = await Promise.all(
-        data.elementeComanda.map(async (el: any) => {
-          let furnizor = el.furnizor || null;
-          let numarFactura = el.numarFactura || null;
-          let pretUnitar = Number(el.pretUnitar || 0);
-          let tipLichid: string | null = el.tipLichid || null;
 
-          if (el.articolStocId) {
-            if (!tipLichid) {
-              const artInfo = await this.prisma.articolStoc.findUnique({
-                where: { id: el.articolStocId },
-                select: { tipLichid: true },
-              });
-              if (artInfo?.tipLichid) tipLichid = artInfo.tipLichid;
-            }
-            if (!furnizor || !numarFactura) {
-              const latestLot = await this.prisma.intrareStoc.findFirst({
-                where: { articolStocId: el.articolStocId },
-                orderBy: { dataFactura: 'desc' },
-              });
-              if (latestLot) {
-                if (!furnizor) furnizor = latestLot.furnizor;
-                if (!numarFactura) numarFactura = latestLot.numarFactura;
-                if (!pretUnitar && latestLot.pretUnitar) pretUnitar = latestLot.pretUnitar;
-              }
-            }
-          }
-
-          return {
-            comandaLucruId: comandaId,
-            pilonCost: el.pilonCost,
-            descriere: el.descriere,
-            cantitate: Number(el.cantitate || 1),
-            pretUnitar,
-            costTotal: Number(el.cantitate || 1) * pretUnitar,
-            provenienta: el.provenienta || (el.pilonCost === 'PIESA_DEZMEMBRATA' ? 'Dezmembrări Parcul Propriu' : el.pilonCost === 'PIESA_DIRECTA' ? 'Achiziție Directă' : 'Stoc Intern'),
-            articolStocId: el.articolStocId || null,
-            tipLichid,
-            furnizor,
-            numarFactura,
-          };
-        })
-      );
-
-      await this.prisma.elementComandaLucru.createMany({
-        data: processedUpdateElemente,
-      });
-    }
-
-    return this.prisma.comandaLucru.findUnique({
-      where: { id: comandaId },
-      include: {
-        elementeComanda: {
+        return tx.comandaLucru.findUnique({
+          where: { id: comandaId },
           include: {
-            articolStoc: {
+            elementeComanda: {
               include: {
-                intrariStoc: {
-                  orderBy: { dataFactura: 'desc' },
+                articolStoc: {
+                  include: {
+                    intrariStoc: {
+                      orderBy: { dataFactura: 'desc' },
+                    },
+                  },
                 },
               },
             },
           },
-        },
+        });
       },
-    });
+      { timeout: 20000 },
+    );
   }
 
   // Escaladare în Atelier: Deschide Comandă de Lucru în Stare "IN_LUCRU" cu dataDeschidere
@@ -1298,6 +1713,20 @@ export class MentenantaService {
         data: { comandaLucruId: targetId, comandaLucruNumar: freshTarget.numarComanda },
       });
 
+      // Actualizăm și referința `pozitieMontaj` pe ComponentaSerializata montate prin comenzile absorbite
+      const sourceOrderTags = freshSources.map((s) => `Comandă Lucru ${s.numarComanda}`);
+      if (sourceOrderTags.length > 0) {
+        await tx.componentaSerializata.updateMany({
+          where: {
+            vehiculId: freshTarget.vehiculId,
+            pozitieMontaj: { in: sourceOrderTags },
+          },
+          data: {
+            pozitieMontaj: `Comandă Lucru ${freshTarget.numarComanda}`,
+          },
+        });
+      }
+
       const updatedTarget = await tx.comandaLucru.update({
         where: { id: targetId },
         data: {
@@ -1420,10 +1849,11 @@ export class MentenantaService {
       }
     }
 
-    // 3. Comenzi de Lucru & Elemente Comandă
+    // 3. Comenzi de Lucru & Elemente Comandă (excludem comenzile anulate din costuri)
     const comenzi = await this.prisma.comandaLucru.findMany({
       where: {
         vehiculId: { in: vehiculIds },
+        stare: { not: 'ANULAT' },
         ...dateFilterComanda,
       },
       include: {
@@ -1716,9 +2146,9 @@ export class MentenantaService {
         };
       }
 
-      // 3. Anvelope & Camere
+      // 3. Anvelope
       const matchAnvelopaDim = descriere.match(/\b\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?\b/i);
-      if (matchAnvelopaDim || /anvelop|cauciuc|pneu/i.test(d) || cod.startsWith('ANV')) {
+      if (isTireItem({ denumire: descriere, codArticol: cod })) {
         const dim = matchAnvelopaDim ? matchAnvelopaDim[0].replace(/\s+/g, '') : 'Diverse Anvelope';
         return { categorie: 'Anvelope', subcategorie: dim, unitateMasura: 'buc' };
       }
@@ -1974,7 +2404,12 @@ export class MentenantaService {
         const cost = Number(el.costTotal || (el.cantitate * el.pretUnitar) || 0);
         const cant = Number(el.cantitate || 1);
         const isManopera = el.pilonCost === 'MANOPERA_INTERNA' || el.pilonCost === 'PRESTATIE_EXTERNA';
-        const isAnvelopa = /\b(\d{2,3}\/\d{2,3}\s*R\s*\d{2}(?:\.5)?|anvelop|cauciuc|pneu)\b/i.test(el.descriere);
+        const isAnvelopa = isTireItem({
+          categorie: el.categorie || el.articolStoc?.categorie,
+          subcategorie: el.subcategorie || el.articolStoc?.subcategorie,
+          denumire: el.descriere,
+          codArticol: el.articolStoc?.codArticol,
+        });
         const explicitTip = (el as any).tipLichid || el.articolStoc?.tipLichid || null;
         const isFluid = isActualFluidItem(
           el.descriere,

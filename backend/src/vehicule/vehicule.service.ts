@@ -347,7 +347,7 @@ export class VehiculeService {
       if (!newCodes.has(pos.codPozitie)) {
         await this.prisma.anvelopa.updateMany({
           where: { pozitieAxId: pos.id },
-          data: { pozitieAxId: null, stare: 'IN_STOC' },
+          data: { pozitieAxId: null, vehiculId: null, stare: 'IN_STOC' },
         });
         await this.prisma.pozitieAx.delete({ where: { id: pos.id } });
       }

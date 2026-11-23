@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { isTireItem } from '../common/tire.utils';
 import axios from 'axios';
 
 export interface ChatMessage {
@@ -125,13 +126,14 @@ export class AiService {
         orderBy: { dataDeschidere: 'desc' },
       }),
 
-      // 4. Stocuri critice
+      // 4. Stocuri critice (piese atelier — anvelopele se urmăresc separat în tabela Anvelopa)
       this.prisma.articolStoc.findMany({
         select: {
           id: true,
           codArticol: true,
           denumire: true,
           categorie: true,
+          subcategorie: true,
           stocCurent: true,
           stocMinim: true,
           unitateMasura: true,
@@ -316,8 +318,17 @@ export class AiService {
       };
     });
 
-    // Készlethiány
-    const stocCritic = articoleStoc.filter((a) => a.stocCurent <= a.stocMinim).map((a) => ({
+    // Készlethiány (excludem anvelopele din stocul de piese atelier — gestionate exclusiv în Anvelopa)
+    const articolePieseStoc = articoleStoc.filter(
+      (a) =>
+        !isTireItem({
+          categorie: a.categorie,
+          subcategorie: a.subcategorie,
+          denumire: a.denumire,
+          codArticol: a.codArticol,
+        }),
+    );
+    const stocCritic = articolePieseStoc.filter((a) => a.stocCurent <= a.stocMinim).map((a) => ({
       cod: a.codArticol,
       denumire: a.denumire,
       stoc: a.stocCurent,

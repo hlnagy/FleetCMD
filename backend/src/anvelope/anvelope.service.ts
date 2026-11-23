@@ -1,39 +1,15 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  isTireItem,
+  parseTireDimensiune,
+  parseTireMarca,
+  parseTireModel,
+} from '../common/tire.utils';
 
-function parseDimensiune(denumire: string): string {
-  if (!denumire) return '315/80 R22.5';
-  const match = denumire.match(/\b\d{2,3}(\/\d{2,3})?\s*R\s*\d{2}(\.\d)?\b/i);
-  if (match) return match[0].toUpperCase().replace(/\s+/g, ' ');
-  return '315/80 R22.5';
-}
-
-function parseMarca(denumire: string): string {
-  if (!denumire) return 'BENCHMARK';
-  const upper = denumire.toUpperCase();
-  if (upper.includes('TBBTIRES') || /\bTBB\b/i.test(upper)) return 'TBBTIRES';
-  const brands = [
-    'MICHELIN', 'BRIDGESTONE', 'CONTINENTAL', 'GOODYEAR', 'PIRELLI', 'HANKOOK',
-    'BENCHMARK', 'INFINITY', 'KORMORAN', 'SAVA', 'MATADOR', 'CORDIANT', 'DOUBLE COIN',
-    'LINGLONG', 'TRIANGLE', 'AEOLUS', 'WESTLAKE', 'OTANI', 'SAILUN', 'KAMA', 'BARUM', 'FULDA',
-    'FIRESTONE', 'DUNLOP', 'NOKIAN', 'FALKEN', 'SEMPERIT', 'KLEBER', 'DEBICA', 'TAURUS',
-    'UNIROYAL', 'TOYO', 'YOKOHAMA', 'KUMHO', 'NEXEN', 'PETLAS', 'LASSA', 'MAXXIS', 'GITI'
-  ];
-  for (const b of brands) {
-    if (upper.includes(b)) return b;
-  }
-  return 'BENCHMARK';
-}
-
-function parseModel(denumire: string): string {
-  if (!denumire) return 'Model Universal';
-  const dim = parseDimensiune(denumire);
-  const clean = denumire
-    .replace(dim, '')
-    .replace(/385\/65R22\.5|315\/80R22\.5|315\/70R22\.5|295\/80R22\.5|13R22\.5|12R22\.5/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return clean.substring(0, 45) || 'Model Stoc';
+function isVehicleMth(tipMasurare?: string | null): boolean {
+  const tm = String(tipMasurare || '').trim().toUpperCase();
+  return tm === 'MTH' || tm === 'ORE' || tm === 'ORE_MTH' || tm === 'M_TH' || tm === 'HOUR' || tm === 'HOURS';
 }
 
 @Injectable()
@@ -65,6 +41,9 @@ export class AnvelopeService {
         adancimeInitialaMm: 0,
         adancimeCurentaMm: 0,
         pretAchizitie: Number(Number(a.pretAchizitie || 0).toFixed(2)),
+        furnizor: a.furnizor || null,
+        numarFactura: a.numarFactura || null,
+        dataFactura: a.dataFactura || null,
         stocDisponibil: 1,
         depozitId: a.depozitId,
         depozit: a.depozit,
@@ -86,6 +65,9 @@ export class AnvelopeService {
     adancimeInitialaMm?: number;
     adancimeCurentaMm?: number;
     pretAchizitie: number;
+    furnizor?: string;
+    numarFactura?: string;
+    dataFactura?: string;
     stare?: string; // "IN_STOC" | "MONTATA"
     depozitId?: string;
     vehiculId?: string;
@@ -96,126 +78,165 @@ export class AnvelopeService {
     operator?: string;
     observatii?: string;
   }) {
-    let stare = data.stare || 'IN_STOC';
-    let kilometrajMontare = 0;
-    let oreMontare = 0;
-    let pozitieTarget: any = null;
+    return this.prisma.$transaction(async (tx) => {
+      let stare = data.stare || 'IN_STOC';
+      let kilometrajMontare = 0;
+      let oreMontare = 0;
+      let pozitieTarget: any = null;
 
-    const dataMontareFinal = data.dataMontare ? new Date(data.dataMontare) : new Date();
+      const dataMontareFinal = data.dataMontare ? new Date(data.dataMontare) : new Date();
 
-    if (data.pozitieAxId) {
-      pozitieTarget = await this.prisma.pozitieAx.findUnique({
-        where: { id: data.pozitieAxId },
-        include: { vehicul: true, anvelopa: true },
-      });
+      if (data.pozitieAxId) {
+        pozitieTarget = await tx.pozitieAx.findUnique({
+          where: { id: data.pozitieAxId },
+          include: { vehicul: true, anvelopa: true },
+        });
 
-      if (pozitieTarget && pozitieTarget.vehicul) {
-        stare = 'MONTATA';
-        const contorInput = data.valoareContor !== undefined && Number(data.valoareContor) > 0
-          ? Number(data.valoareContor)
-          : pozitieTarget.vehicul.valoareContorCurent;
+        if (pozitieTarget && pozitieTarget.vehicul) {
+          stare = 'MONTATA';
+          const contorInput =
+            data.valoareContor !== undefined && Number(data.valoareContor) > 0
+              ? Number(data.valoareContor)
+              : pozitieTarget.vehicul.valoareContorCurent;
 
-        if (pozitieTarget.vehicul.tipMasurare === 'ORE_MTH') {
-          oreMontare = contorInput;
-        } else {
-          kilometrajMontare = contorInput;
+          if (isVehicleMth(pozitieTarget.vehicul.tipMasurare)) {
+            oreMontare = contorInput;
+          } else {
+            kilometrajMontare = contorInput;
+          }
+
+          if (contorInput > pozitieTarget.vehicul.valoareContorCurent) {
+            await tx.vehicul.update({
+              where: { id: pozitieTarget.vehicul.id },
+              data: {
+                valoareContorCurent: contorInput,
+                dataInregistrareContor: dataMontareFinal,
+              },
+            });
+          }
         }
+      }
 
-        if (contorInput > pozitieTarget.vehicul.valoareContorCurent) {
-          await this.prisma.vehicul.update({
-            where: { id: pozitieTarget.vehicul.id },
+      const serieUnica = data.serieAnvelopa || `SN-${Date.now().toString().slice(-6)}`;
+      const mecanic = data.operator || 'Mecanic Atelier';
+      const valoareContorFinal =
+        kilometrajMontare || oreMontare || (pozitieTarget?.vehicul?.valoareContorCurent || 0);
+
+      // Dacă poziția pe axă este deja ocupată de altă anvelopă, executăm acțiunea de înlocuire atomic
+      if (pozitieTarget && pozitieTarget.anvelopa) {
+        const vechea = pozitieTarget.anvelopa;
+        const actiune = data.actiuneAnvelopaVeche || 'DEMONTARE_IN_STOC';
+        const vehIsMth = isVehicleMth(pozitieTarget.vehicul?.tipMasurare);
+        const prevMountVeche = vehIsMth
+          ? Number(vechea.oreMontare || 0)
+          : Number(vechea.kilometrajMontare || 0);
+        const deltaVeche =
+          valoareContorFinal > prevMountVeche ? Math.round(valoareContorFinal - prevMountVeche) : 0;
+        const rulajVecheNou = (vechea.rulajTotalKm || 0) + deltaVeche;
+
+        if (actiune === 'CASARE_STOC') {
+          await tx.anvelopa.update({
+            where: { id: vechea.id },
             data: {
-              valoareContorCurent: contorInput,
-              dataInregistrareContor: dataMontareFinal,
+              stare: 'CASATA',
+              vehiculId: null,
+              pozitieAxId: null,
+              depozitId: null,
+              kilometrajMontare: null,
+              oreMontare: null,
+              rulajTotalKm: rulajVecheNou,
+            },
+          });
+
+          await tx.istoricPermutareAnvelopa.create({
+            data: {
+              anvelopaId: vechea.id,
+              vehiculId: pozitieTarget.vehiculId,
+              pozitieSursaCod: pozitieTarget.codPozitie,
+              pozitieDestCod: 'CASATĂ / DEȘEU',
+              valoareContor: valoareContorFinal,
+              dataPermutare: dataMontareFinal,
+              operator: mecanic,
+              observatii: `Demontată & casată definitiv din stoc la montarea anvelopei noi ${serieUnica}`,
+            },
+          });
+        } else {
+          await tx.anvelopa.update({
+            where: { id: vechea.id },
+            data: {
+              stare: 'IN_STOC',
+              vehiculId: null,
+              pozitieAxId: null,
+              depozitId: data.depozitId || null,
+              kilometrajMontare: null,
+              oreMontare: null,
+              rulajTotalKm: rulajVecheNou,
+            },
+          });
+
+          await tx.istoricPermutareAnvelopa.create({
+            data: {
+              anvelopaId: vechea.id,
+              vehiculId: pozitieTarget.vehiculId,
+              pozitieSursaCod: pozitieTarget.codPozitie,
+              pozitieDestCod: 'STOC_REZERVĂ',
+              valoareContor: valoareContorFinal,
+              dataPermutare: dataMontareFinal,
+              operator: mecanic,
+              observatii: `Demontată în stoc ca anvelopă de rezervă la montarea anvelopei noi ${serieUnica}`,
             },
           });
         }
       }
-    }
 
-    const serieUnica = data.serieAnvelopa || `SN-${Date.now().toString().slice(-6)}`;
-    const mecanic = data.operator || 'Mecanic Atelier';
-    const valoareContorFinal = kilometrajMontare || oreMontare || (pozitieTarget?.vehicul?.valoareContorCurent || 0);
+      const finalDepozitId =
+        stare === 'MONTATA' || stare === 'CASATA' || stare === 'RESAPATA'
+          ? null
+          : data.depozitId || null;
 
-    // Dacă poziția pe axă este deja ocupată de altă anvelopă, executăm acțiunea de înlocuire!
-    if (pozitieTarget && pozitieTarget.anvelopa) {
-      const vechea = pozitieTarget.anvelopa;
-      const actiune = data.actiuneAnvelopaVeche || 'DEMONTARE_IN_STOC';
+      const anvelopa = await tx.anvelopa.create({
+        data: {
+          codDot: data.codDot,
+          serieAnvelopa: serieUnica,
+          marca: data.marca,
+          model: data.model,
+          dimensiune: data.dimensiune,
+          adancimeInitialaMm: 0,
+          adancimeCurentaMm: 0,
+          pretAchizitie: Number(data.pretAchizitie || 0),
+          furnizor: data.furnizor?.trim() || null,
+          numarFactura: data.numarFactura?.trim() || null,
+          dataFactura: data.dataFactura ? new Date(data.dataFactura) : null,
+          stare,
+          depozitId: finalDepozitId,
+          vehiculId:
+            stare === 'MONTATA'
+              ? data.vehiculId || (pozitieTarget ? pozitieTarget.vehiculId : null)
+              : null,
+          pozitieAxId: stare === 'MONTATA' ? data.pozitieAxId || null : null,
+          kilometrajMontare,
+          oreMontare,
+        },
+      });
 
-      if (actiune === 'CASARE_STOC') {
-        await this.prisma.anvelopa.update({
-          where: { id: vechea.id },
-          data: { stare: 'CASATA', vehiculId: null, pozitieAxId: null, depozitId: null },
-        });
-
-        await this.prisma.istoricPermutareAnvelopa.create({
+      if (data.pozitieAxId && pozitieTarget) {
+        await tx.istoricPermutareAnvelopa.create({
           data: {
-            anvelopaId: vechea.id,
+            anvelopaId: anvelopa.id,
             vehiculId: pozitieTarget.vehiculId,
-            pozitieSursaCod: pozitieTarget.codPozitie,
-            pozitieDestCod: 'CASATĂ / DEȘEU',
+            pozitieSursaCod: 'ACHIZIȚIE / DEPOZIT',
+            pozitieDestCod: pozitieTarget.codPozitie,
             valoareContor: valoareContorFinal,
             dataPermutare: dataMontareFinal,
             operator: mecanic,
-            observatii: `Demontată & casată definitiv din stoc la montarea anvelopei noi ${serieUnica}`,
-          },
-        });
-      } else {
-        await this.prisma.anvelopa.update({
-          where: { id: vechea.id },
-          data: { stare: 'IN_STOC', vehiculId: null, pozitieAxId: null, depozitId: data.depozitId || null },
-        });
-
-        await this.prisma.istoricPermutareAnvelopa.create({
-          data: {
-            anvelopaId: vechea.id,
-            vehiculId: pozitieTarget.vehiculId,
-            pozitieSursaCod: pozitieTarget.codPozitie,
-            pozitieDestCod: 'STOC_REZERVĂ',
-            valoareContor: valoareContorFinal,
-            dataPermutare: dataMontareFinal,
-            operator: mecanic,
-            observatii: `Demontată în stoc ca anvelopă de rezervă la montarea anvelopei noi ${serieUnica}`,
+            observatii:
+              data.observatii || `Montată pe axa ${pozitieTarget.numarAx} poz. ${pozitieTarget.codPozitie}`,
           },
         });
       }
-    }
 
-    const anvelopa = await this.prisma.anvelopa.create({
-      data: {
-        codDot: data.codDot,
-        serieAnvelopa: serieUnica,
-        marca: data.marca,
-        model: data.model,
-        dimensiune: data.dimensiune,
-        adancimeInitialaMm: 0,
-        adancimeCurentaMm: 0,
-        pretAchizitie: Number(data.pretAchizitie || 0),
-        stare,
-        depozitId: data.depozitId || null,
-        vehiculId: data.vehiculId || (pozitieTarget ? pozitieTarget.vehiculId : null),
-        pozitieAxId: data.pozitieAxId || null,
-        kilometrajMontare,
-        oreMontare,
-      },
+      return anvelopa;
     });
-
-    if (data.pozitieAxId && pozitieTarget) {
-      await this.prisma.istoricPermutareAnvelopa.create({
-        data: {
-          anvelopaId: anvelopa.id,
-          vehiculId: pozitieTarget.vehiculId,
-          pozitieSursaCod: 'ACHIZIȚIE / DEPOZIT',
-          pozitieDestCod: pozitieTarget.codPozitie,
-          valoareContor: valoareContorFinal,
-          dataPermutare: dataMontareFinal,
-          operator: mecanic,
-          observatii: data.observatii || `Montată pe axa ${pozitieTarget.numarAx} poz. ${pozitieTarget.codPozitie}`,
-        },
-      });
-    }
-
-    return anvelopa;
   }
 
   // Centralizator Flotă Anvelope
@@ -418,180 +439,294 @@ export class AnvelopeService {
     actiuneAnvelopaVeche?: 'DEMONTARE_IN_STOC' | 'CASARE_STOC';
     operator?: string;
     observatii?: string;
+    allowMountedPermutation?: boolean;
   }) {
-    const pozitie = await this.prisma.pozitieAx.findUnique({
-      where: { id: data.pozitieAxId },
-      include: { vehicul: true, anvelopa: true },
-    });
-    if (!pozitie) throw new NotFoundException('Poziția pe axă nu există.');
-
-    const vehicul = pozitie.vehicul;
-    const dataMontareFinal = data.dataMontare ? new Date(data.dataMontare) : new Date();
-    let valoareContorFinal = data.valoareContor !== undefined && Number(data.valoareContor) > 0
-      ? Number(data.valoareContor)
-      : (vehicul?.valoareContorCurent || 0);
-
-    const mecanic = data.operator || 'Mecanic Atelier';
-
-    // Dacă s-a specificat un index contor mai mare pe vehicul, actualizăm vehiculul și salvăm în istoric
-    if (vehicul && valoareContorFinal > vehicul.valoareContorCurent) {
-      await this.prisma.vehicul.update({
-        where: { id: vehicul.id },
-        data: {
-          valoareContorCurent: valoareContorFinal,
-          dataInregistrareContor: dataMontareFinal,
-        },
-      });
-
-      await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: vehicul.id,
-          valoareContor: valoareContorFinal,
-          dataInregistrare: dataMontareFinal,
-          sursa: 'MONTARE_ANVELOPA',
-          operator: mecanic,
-          observatii: `Montare anvelopă pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
-        },
-      });
+    if (!data.anvelopaId && !data.articolStocId) {
+      throw new BadRequestException('Trebuie să specificați o anvelopă sau un articol din stoc!');
     }
 
-    // Dacă există deja o anvelopă veche pe poziție, executăm acțiunea de schimb
-    if (pozitie.anvelopa) {
-      const vechea = pozitie.anvelopa;
-      const actiune = data.actiuneAnvelopaVeche || 'DEMONTARE_IN_STOC';
+    return this.prisma.$transaction(async (tx) => {
+      const pozitie = await tx.pozitieAx.findUnique({
+        where: { id: data.pozitieAxId },
+        include: { vehicul: true, anvelopa: true },
+      });
+      if (!pozitie) throw new NotFoundException('Poziția pe axă nu există.');
 
-      if (actiune === 'CASARE_STOC') {
-        await this.prisma.anvelopa.update({
-          where: { id: vechea.id },
-          data: { stare: 'CASATA', vehiculId: null, pozitieAxId: null, depozitId: null },
+      // Validăm anvelopa / articolul sursă ÎNAINTE de a demonta eventuala anvelopă de pe poziție!
+      let anvelopaExistenta: any = null;
+      let artSursa: any = null;
+
+      if (data.anvelopaId) {
+        anvelopaExistenta = await tx.anvelopa.findUnique({
+          where: { id: data.anvelopaId },
+          include: { vehicul: true, pozitieAx: true },
         });
+        if (!anvelopaExistenta) {
+          throw new NotFoundException('Anvelopa selectată nu a fost găsită.');
+        }
+        if (!data.allowMountedPermutation && anvelopaExistenta.stare !== 'IN_STOC') {
+          throw new BadRequestException(
+            `Anvelopa "${anvelopaExistenta.serieAnvelopa}" nu este disponibilă în stoc (stare curentă: ${anvelopaExistenta.stare}${anvelopaExistenta.vehicul ? `, montată pe ${anvelopaExistenta.vehicul.numarIntern}` : ''}).`,
+          );
+        }
+        if (data.allowMountedPermutation && anvelopaExistenta.stare === 'CASATA') {
+          throw new BadRequestException('O anvelopă casată nu poate fi montată sau permutată pe axă.');
+        }
+        if (data.allowMountedPermutation && anvelopaExistenta.pozitieAxId === pozitie.id) {
+          throw new BadRequestException('Anvelopa este deja montată pe această poziție de axă.');
+        }
+      } else if (data.articolStocId) {
+        artSursa = await tx.articolStoc.findUnique({
+          where: { id: data.articolStocId },
+        });
+        if (!artSursa) throw new NotFoundException('Articolul de stoc nu a fost găsit.');
+        if (Number(artSursa.stocCurent || 0) < 1) {
+          throw new BadRequestException(`Stoc epuizat pentru articolul "${artSursa.denumire}"!`);
+        }
+      }
 
-        await this.prisma.istoricPermutareAnvelopa.create({
+      const vehicul = pozitie.vehicul;
+      const vehIsMth = isVehicleMth(vehicul?.tipMasurare);
+      const dataMontareFinal = data.dataMontare ? new Date(data.dataMontare) : new Date();
+      const valoareContorFinal =
+        data.valoareContor !== undefined && Number(data.valoareContor) > 0
+          ? Number(data.valoareContor)
+          : vehicul?.valoareContorCurent || 0;
+
+      const mecanic = data.operator || 'Mecanic Atelier';
+
+      // Dacă s-a specificat un index contor mai mare pe vehicul, actualizăm vehiculul și salvăm în istoric
+      if (vehicul && valoareContorFinal > vehicul.valoareContorCurent) {
+        await tx.vehicul.update({
+          where: { id: vehicul.id },
           data: {
-            anvelopaId: vechea.id,
-            vehiculId: pozitie.vehiculId,
-            pozitieSursaCod: pozitie.codPozitie,
-            pozitieDestCod: 'CASATĂ / DEȘEU',
-            valoareContor: valoareContorFinal,
-            dataPermutare: dataMontareFinal,
-            operator: mecanic,
-            observatii: data.observatii ? `Demontată & casată: ${data.observatii}` : 'Demontată & casată definitiv din stoc la montare anvelopă',
+            valoareContorCurent: valoareContorFinal,
+            dataInregistrareContor: dataMontareFinal,
           },
         });
-      } else {
-        await this.prisma.anvelopa.update({
-          where: { id: vechea.id },
-          data: { stare: 'IN_STOC', vehiculId: null, pozitieAxId: null, depozitId: (data as any).depozitId || null },
-        });
 
-        await this.prisma.istoricPermutareAnvelopa.create({
+        await tx.istoricContorVehicul.create({
           data: {
-            anvelopaId: vechea.id,
-            vehiculId: pozitie.vehiculId,
-            pozitieSursaCod: pozitie.codPozitie,
-            pozitieDestCod: 'STOC_REZERVĂ',
+            vehiculId: vehicul.id,
+            tipContor: vehIsMth ? 'MTH' : 'KM',
             valoareContor: valoareContorFinal,
-            dataPermutare: dataMontareFinal,
+            dataInregistrare: dataMontareFinal,
+            sursa: 'MONTARE_ANVELOPA',
             operator: mecanic,
-            observatii: data.observatii ? `Demontată în stoc: ${data.observatii}` : 'Demontată în stoc ca anvelopă de rezervă la montare anvelopă',
+            observatii: `Montare anvelopă pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
           },
         });
       }
-    }
 
-    let anvelopaFinal: any = null;
+      // Dacă există deja o anvelopă veche pe poziție (alta decât cea care se permută), executăm acțiunea de schimb
+      if (pozitie.anvelopa && pozitie.anvelopa.id !== data.anvelopaId) {
+        const vechea = pozitie.anvelopa;
+        const actiune = data.actiuneAnvelopaVeche || 'DEMONTARE_IN_STOC';
+        const prevMountVeche = vehIsMth
+          ? Number(vechea.oreMontare || 0)
+          : Number(vechea.kilometrajMontare || 0);
+        const deltaVeche =
+          valoareContorFinal > prevMountVeche ? Math.round(valoareContorFinal - prevMountVeche) : 0;
+        const rulajVecheNou = (vechea.rulajTotalKm || 0) + deltaVeche;
 
-    // Cazul 1: Montare dintr-un ArticolStoc (Anvelopă Nouă din Magazie)
-    if (data.articolStocId) {
-      const art = await this.prisma.articolStoc.findUnique({
-        where: { id: data.articolStocId },
-      });
-      if (!art) throw new NotFoundException('Articolul de stoc nu a fost găsit.');
-      if (art.stocCurent <= 0) throw new BadRequestException(`Stoc epuizat pentru articolul "${art.denumire}"!`);
+        if (actiune === 'CASARE_STOC') {
+          await tx.anvelopa.update({
+            where: { id: vechea.id },
+            data: {
+              stare: 'CASATA',
+              vehiculId: null,
+              pozitieAxId: null,
+              depozitId: null,
+              kilometrajMontare: null,
+              oreMontare: null,
+              rulajTotalKm: rulajVecheNou,
+            },
+          });
 
-      // Scădem 1 bucată din stocul articolului
-      await this.prisma.articolStoc.update({
-        where: { id: art.id },
-        data: { stocCurent: Math.max(0, art.stocCurent - 1) },
-      });
+          await tx.istoricPermutareAnvelopa.create({
+            data: {
+              anvelopaId: vechea.id,
+              vehiculId: pozitie.vehiculId,
+              pozitieSursaCod: pozitie.codPozitie,
+              pozitieDestCod: 'CASATĂ / DEȘEU',
+              valoareContor: valoareContorFinal,
+              dataPermutare: dataMontareFinal,
+              operator: mecanic,
+              observatii: data.observatii
+                ? `Demontată & casată: ${data.observatii}`
+                : 'Demontată & casată definitiv din stoc la montare anvelopă',
+            },
+          });
+        } else {
+          await tx.anvelopa.update({
+            where: { id: vechea.id },
+            data: {
+              stare: 'IN_STOC',
+              vehiculId: null,
+              pozitieAxId: null,
+              depozitId: (data as any).depozitId || null,
+              kilometrajMontare: null,
+              oreMontare: null,
+              rulajTotalKm: rulajVecheNou,
+            },
+          });
 
-      const serieGen = data.serieAnvelopa || `${art.codArticol}-${Date.now().toString().slice(-6)}`;
-      const marca = data.marca || parseMarca(art.denumire);
-      const model = data.model || parseModel(art.denumire);
-      const dimensiune = data.dimensiune || parseDimensiune(art.denumire);
+          await tx.istoricPermutareAnvelopa.create({
+            data: {
+              anvelopaId: vechea.id,
+              vehiculId: pozitie.vehiculId,
+              pozitieSursaCod: pozitie.codPozitie,
+              pozitieDestCod: 'STOC_REZERVĂ',
+              valoareContor: valoareContorFinal,
+              dataPermutare: dataMontareFinal,
+              operator: mecanic,
+              observatii: data.observatii
+                ? `Demontată în stoc: ${data.observatii}`
+                : 'Demontată în stoc ca anvelopă de rezervă la montare anvelopă',
+            },
+          });
+        }
+      }
 
-      anvelopaFinal = await this.prisma.anvelopa.create({
-        data: {
-          codDot: data.codDot || 'DOT-2026',
-          serieAnvelopa: serieGen,
-          marca,
-          model,
-          dimensiune,
-          adancimeInitialaMm: 0,
-          adancimeCurentaMm: 0,
-          pretAchizitie: Number(data.pretAchizitie || art.pretUnitar || 0),
-          stare: 'MONTATA',
-          depozitId: art.depozitId,
-          vehiculId: pozitie.vehiculId,
-          pozitieAxId: pozitie.id,
-          kilometrajMontare: vehicul?.tipMasurare === 'ORE_MTH' ? 0 : valoareContorFinal,
-          oreMontare: vehicul?.tipMasurare === 'ORE_MTH' ? valoareContorFinal : 0,
-        },
-      });
+      // Cazul 1 (fallback legacy): Montare dintr-un ArticolStoc cu scădere FIFO atomică
+      if (artSursa) {
+        const loturi = await tx.intrareStoc.findMany({
+          where: {
+            articolStocId: artSursa.id,
+            cantitateIntrata: { gt: 0 },
+            OR: [{ cantitateRamasa: { gt: 0 } }, { cantitateRamasa: null }],
+          },
+          orderBy: [{ dataFactura: 'asc' }, { createdAt: 'asc' }],
+        });
 
-      await this.prisma.istoricPermutareAnvelopa.create({
-        data: {
-          anvelopaId: anvelopaFinal.id,
-          vehiculId: pozitie.vehiculId,
-          pozitieSursaCod: `STOC: ${art.codArticol}`,
-          pozitieDestCod: pozitie.codPozitie,
-          valoareContor: valoareContorFinal,
-          dataPermutare: dataMontareFinal,
-          operator: mecanic,
-          observatii: data.observatii || `Montată din stoc marfă (${art.denumire}) pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
-        },
-      });
+        let toDeduct = 1;
+        let consumedLot: any = null;
+        for (const lot of loturi) {
+          if (toDeduct <= 0.0001) break;
+          const lotRem =
+            lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+              ? Number(lot.cantitateRamasa)
+              : Number(lot.cantitateIntrata);
+          if (lotRem <= 0) continue;
+          const take = Math.min(toDeduct, lotRem);
+          await tx.intrareStoc.update({
+            where: { id: lot.id },
+            data: { cantitateRamasa: Math.max(0, Number((lotRem - take).toFixed(4))) },
+          });
+          if (!consumedLot) consumedLot = lot;
+          toDeduct = Number((toDeduct - take).toFixed(4));
+        }
 
-      return anvelopaFinal;
-    }
+        await tx.articolStoc.update({
+          where: { id: artSursa.id },
+          data: { stocCurent: Math.max(0, Number((Number(artSursa.stocCurent) - 1).toFixed(4))) },
+        });
 
-    // Cazul 2: Montare dintr-o Anvelopă existentă în stoc (rulată / demontată)
-    if (data.anvelopaId) {
-      anvelopaFinal = await this.prisma.anvelopa.update({
-        where: { id: data.anvelopaId },
+        const serieGen = data.serieAnvelopa?.trim() || `${artSursa.codArticol}-${Date.now().toString().slice(-6)}`;
+        const marca = data.marca || parseTireMarca(artSursa.denumire, 'BENCHMARK');
+        const model = data.model || parseTireModel(artSursa.denumire, 'Model Stoc');
+        const dimensiune = data.dimensiune || parseTireDimensiune(artSursa.denumire, '315/80R22.5');
+
+        const anvelopaFinal = await tx.anvelopa.create({
+          data: {
+            codDot: data.codDot?.trim() || 'DOT-2026',
+            serieAnvelopa: serieGen,
+            marca,
+            model,
+            dimensiune,
+            adancimeInitialaMm: 0,
+            adancimeCurentaMm: 0,
+            pretAchizitie: Number(data.pretAchizitie || consumedLot?.pretUnitar || artSursa.pretUnitar || 0),
+            furnizor: consumedLot?.furnizor || null,
+            numarFactura: consumedLot?.numarFactura || null,
+            dataFactura: consumedLot?.dataFactura || null,
+            stare: 'MONTATA',
+            depozitId: null,
+            vehiculId: pozitie.vehiculId,
+            pozitieAxId: pozitie.id,
+            kilometrajMontare: vehIsMth ? 0 : valoareContorFinal,
+            oreMontare: vehIsMth ? valoareContorFinal : 0,
+          },
+        });
+
+        await tx.istoricPermutareAnvelopa.create({
+          data: {
+            anvelopaId: anvelopaFinal.id,
+            vehiculId: pozitie.vehiculId,
+            pozitieSursaCod: `STOC: ${artSursa.codArticol}`,
+            pozitieDestCod: pozitie.codPozitie,
+            valoareContor: valoareContorFinal,
+            dataPermutare: dataMontareFinal,
+            operator: mecanic,
+            observatii:
+              data.observatii ||
+              `Montată din stoc marfă (${artSursa.denumire}) pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
+          },
+        });
+
+        return anvelopaFinal;
+      }
+
+      // Cazul 2: Montare dintr-o Anvelopă existentă din Magazie Anvelope (stare IN_STOC) sau permutare montată
+      const pozitieSursaLabel =
+        anvelopaExistenta.stare === 'MONTATA' && anvelopaExistenta.pozitieAx?.codPozitie
+          ? anvelopaExistenta.pozitieAx.codPozitie
+          : 'STOC_REZERVĂ';
+
+      let rulajTotalActualizat = anvelopaExistenta.rulajTotalKm || 0;
+      if (anvelopaExistenta.stare === 'MONTATA') {
+        const prevIsMth = isVehicleMth(anvelopaExistenta.vehicul?.tipMasurare);
+        const prevMountCounter = prevIsMth
+          ? Number(anvelopaExistenta.oreMontare || 0)
+          : Number(anvelopaExistenta.kilometrajMontare || 0);
+        const endCounter =
+          anvelopaExistenta.vehiculId === pozitie.vehiculId
+            ? valoareContorFinal
+            : Number(anvelopaExistenta.vehicul?.valoareContorCurent || 0);
+        const deltaPerm =
+          endCounter > prevMountCounter ? Math.round(endCounter - prevMountCounter) : 0;
+        rulajTotalActualizat += deltaPerm;
+      }
+
+      const anvelopaFinal = await tx.anvelopa.update({
+        where: { id: anvelopaExistenta.id },
         data: {
           stare: 'MONTATA',
           vehiculId: pozitie.vehiculId,
           pozitieAxId: pozitie.id,
           depozitId: null,
-          kilometrajMontare: vehicul?.tipMasurare === 'ORE_MTH' ? 0 : valoareContorFinal,
-          oreMontare: vehicul?.tipMasurare === 'ORE_MTH' ? valoareContorFinal : 0,
+          serieAnvelopa: data.serieAnvelopa?.trim() || anvelopaExistenta.serieAnvelopa,
+          codDot: data.codDot?.trim() || anvelopaExistenta.codDot,
+          kilometrajMontare: vehIsMth ? 0 : valoareContorFinal,
+          oreMontare: vehIsMth ? valoareContorFinal : 0,
+          rulajTotalKm: rulajTotalActualizat,
         },
       });
 
-      await this.prisma.istoricPermutareAnvelopa.create({
+      await tx.istoricPermutareAnvelopa.create({
         data: {
           anvelopaId: anvelopaFinal.id,
           vehiculId: pozitie.vehiculId,
-          pozitieSursaCod: 'STOC_REZERVĂ',
+          pozitieSursaCod: pozitieSursaLabel,
           pozitieDestCod: pozitie.codPozitie,
           valoareContor: valoareContorFinal,
           dataPermutare: dataMontareFinal,
           operator: mecanic,
-          observatii: data.observatii || `Montată din stoc rezervă pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
+          observatii:
+            data.observatii ||
+            `Montată din stoc rezervă pe axa ${pozitie.numarAx} poz. ${pozitie.codPozitie}`,
         },
       });
 
       return anvelopaFinal;
-    }
-
-    throw new BadRequestException('Trebuie să specificați o anvelopă sau un articol din stoc!');
+    });
   }
 
   async permutaAnvelopa(data: { anvelopaId: string; pozitieNouaAxId: string }) {
     return this.monteazaAnvelopa({
       anvelopaId: data.anvelopaId,
       pozitieAxId: data.pozitieNouaAxId,
+      allowMountedPermutation: true,
     });
   }
 
@@ -742,7 +877,8 @@ export class AnvelopeService {
 
     const codPozitie = anvelopa.pozitieAx?.codPozitie || 'NEMONTATA';
     const vehicul = anvelopa.vehicul;
-    const kmMontare = anvelopa.kilometrajMontare || 0;
+    const vehIsMth = isVehicleMth(vehicul?.tipMasurare);
+    const kmMontare = vehIsMth ? (anvelopa.oreMontare || 0) : (anvelopa.kilometrajMontare || 0);
     
     let kmDemontare = vehicul ? vehicul.valoareContorCurent : 0;
     if (data?.valoareContor && Number(data.valoareContor) > 0) {
@@ -798,6 +934,7 @@ export class AnvelopeService {
         vehiculId: null,
         pozitieAxId: null,
         kilometrajMontare: null,
+        oreMontare: null,
         depozitId: finalDepozitId,
         rulajTotalKm: rulajTotalNou,
       },
@@ -1056,6 +1193,10 @@ export class AnvelopeService {
   }
 
   async updateAnvelopa(id: string, data: any) {
+    const nextStare = data.stare !== undefined ? data.stare : undefined;
+    const clearDepozit = nextStare === 'MONTATA' || nextStare === 'CASATA' || nextStare === 'RESAPATA';
+    const clearMountRefs = nextStare === 'IN_STOC' || nextStare === 'CASATA' || nextStare === 'RESAPATA';
+
     return this.prisma.anvelopa.update({
       where: { id },
       data: {
@@ -1067,8 +1208,19 @@ export class AnvelopeService {
         adancimeInitialaMm: data.adancimeInitialaMm !== undefined ? Number(data.adancimeInitialaMm) : undefined,
         adancimeCurentaMm: data.adancimeCurentaMm !== undefined ? Number(data.adancimeCurentaMm) : undefined,
         pretAchizitie: data.pretAchizitie !== undefined ? Number(Number(data.pretAchizitie).toFixed(2)) : undefined,
-        depozitId: data.depozitId !== undefined ? data.depozitId : undefined,
-        stare: data.stare !== undefined ? data.stare : undefined,
+        furnizor: data.furnizor !== undefined ? (data.furnizor ? String(data.furnizor).trim() : null) : undefined,
+        numarFactura: data.numarFactura !== undefined ? (data.numarFactura ? String(data.numarFactura).trim() : null) : undefined,
+        dataFactura: data.dataFactura !== undefined ? (data.dataFactura ? new Date(data.dataFactura) : null) : undefined,
+        depozitId: clearDepozit ? null : (data.depozitId !== undefined ? data.depozitId : undefined),
+        ...(clearMountRefs
+          ? {
+              vehiculId: null,
+              pozitieAxId: null,
+              kilometrajMontare: null,
+              oreMontare: null,
+            }
+          : {}),
+        stare: nextStare,
       },
       include: { depozit: true },
     });
@@ -1093,6 +1245,9 @@ export class AnvelopeService {
     const cleanCategorie = String(data.categorie || '').trim();
     if (!cleanCategorie) {
       throw new BadRequestException('Categoria este obligatorie pentru mutarea în gestiunea de piese.');
+    }
+    if (isTireItem({ categorie: cleanCategorie })) {
+      throw new BadRequestException('Alegeți o categorie de piese/materiale atelier (nu Anvelope) pentru reclasificare.');
     }
     const cleanSubcategorie = String(data.subcategorie || '').trim() || null;
 
@@ -1151,28 +1306,88 @@ export class AnvelopeService {
         .join(' ')
         .trim();
       const finalDenumire = String(data.denumire || '').trim() || rawNameFromTire || anvelopa.model || anvelopa.serieAnvelopa;
+      const pretAchizitie = Number(anvelopa.pretAchizitie || 0);
+      const lotFurnizor = anvelopa.furnizor?.trim() || 'Reclasificat din Magazie Anvelope';
+      const lotNumarFactura = anvelopa.numarFactura?.trim() || 'RECLASIFICARE';
+      const lotDataFactura = anvelopa.dataFactura || new Date();
 
-      // 3. Căutăm dacă există deja ArticolStoc asociat în depozit (ex: creat odată cu importul e-Factura)
+      // 3. Căutăm inteligent un ArticolStoc existent în depozit (evităm duplicatele)
+      const searchClauses: any[] = [
+        { codArticol: { equals: anvelopa.serieAnvelopa, mode: 'insensitive' } },
+        { denumire: { equals: finalDenumire, mode: 'insensitive' } },
+      ];
+      if (anvelopa.model && anvelopa.model.trim() && anvelopa.model.trim().toLowerCase() !== finalDenumire.toLowerCase()) {
+        searchClauses.push({ denumire: { equals: anvelopa.model.trim(), mode: 'insensitive' } });
+      }
+
       let articol = await tx.articolStoc.findFirst({
         where: {
           depozitId: targetDepozitId,
-          OR: [
-            { codArticol: anvelopa.serieAnvelopa },
-            { denumire: { equals: finalDenumire, mode: 'insensitive' } },
-          ],
+          OR: searchClauses,
+        },
+        include: {
+          intrariStoc: {
+            orderBy: { dataFactura: 'desc' },
+          },
         },
       });
 
       if (articol) {
+        const wasLegacyTireDuplicate = isTireItem({
+          categorie: articol.categorie,
+          subcategorie: articol.subcategorie,
+        });
+        const nextStoc = wasLegacyTireDuplicate
+          ? (articol.stocCurent > 0 ? articol.stocCurent : 1)
+          : Number((Number(articol.stocCurent || 0) + 1).toFixed(4));
+
         articol = await tx.articolStoc.update({
           where: { id: articol.id },
           data: {
             denumire: finalDenumire,
             categorie: canonicalCatName,
             subcategorie: canonicalSubName,
-            stocCurent: articol.stocCurent > 0 ? articol.stocCurent : 1,
+            stocCurent: nextStoc,
+            pretUnitar: pretAchizitie > 0 ? pretAchizitie : articol.pretUnitar,
+          },
+          include: {
+            intrariStoc: {
+              orderBy: { dataFactura: 'desc' },
+            },
           },
         });
+
+        // Reconciliem loturile FIFO astfel încât SUM(cantitateRamasa) să corespundă exact cu nextStoc
+        const sumRamasa = Number(
+          (articol.intrariStoc || [])
+            .filter((lot) => Number(lot.cantitateIntrata || 0) > 0)
+            .reduce(
+              (sum, lot) =>
+                sum +
+                (lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+                  ? Number(lot.cantitateRamasa)
+                  : Number(lot.cantitateIntrata || 0)),
+              0,
+            )
+            .toFixed(4),
+        );
+        const lotDelta = Number((nextStoc - sumRamasa).toFixed(4));
+        if (lotDelta > 0.0001) {
+          await tx.intrareStoc.create({
+            data: {
+              articolStocId: articol.id,
+              depozitId: targetDepozitId,
+              furnizor: lotFurnizor,
+              numarFactura: lotNumarFactura,
+              dataFactura: lotDataFactura,
+              cantitateIntrata: lotDelta,
+              cantitateRamasa: lotDelta,
+              pretUnitar: pretAchizitie,
+              pretTotal: Number((lotDelta * pretAchizitie).toFixed(2)),
+              observatii: `Reclasificat din Magazie Anvelope (${anvelopa.marca} ${anvelopa.model}) în categoria ${canonicalCatName}`,
+            },
+          });
+        }
       } else {
         articol = await tx.articolStoc.create({
           data: {
@@ -1182,9 +1397,14 @@ export class AnvelopeService {
             subcategorie: canonicalSubName,
             stocCurent: 1,
             stocMinim: cat.stocMinimImplicit ?? 5,
-            pretUnitar: Number(anvelopa.pretAchizitie || 0),
+            pretUnitar: pretAchizitie,
             unitateMasura: data.unitateMasura || 'buc',
             depozitId: targetDepozitId,
+          },
+          include: {
+            intrariStoc: {
+              orderBy: { dataFactura: 'desc' },
+            },
           },
         });
 
@@ -1192,13 +1412,13 @@ export class AnvelopeService {
           data: {
             articolStocId: articol.id,
             depozitId: targetDepozitId,
-            furnizor: 'Reclasificat din Magazie Anvelope',
-            numarFactura: 'RECLASIFICARE',
-            dataFactura: new Date(),
+            furnizor: lotFurnizor,
+            numarFactura: lotNumarFactura,
+            dataFactura: lotDataFactura,
             cantitateIntrata: 1,
             cantitateRamasa: 1,
-            pretUnitar: Number(anvelopa.pretAchizitie || 0),
-            pretTotal: Number(anvelopa.pretAchizitie || 0),
+            pretUnitar: pretAchizitie,
+            pretTotal: pretAchizitie,
             observatii: `Mutat automat din Magazie Anvelope (${anvelopa.marca} ${anvelopa.model}) în categoria ${canonicalCatName}`,
           },
         });
@@ -1224,16 +1444,18 @@ export class AnvelopeService {
     pretAchizitie: number;
     depozitId: string;
     serii?: string[];
+    furnizor?: string;
+    numarFactura?: string;
+    dataFactura?: string;
   }) {
     const depozitId = data.depozitId;
-    const adancime = data.adancimeMm || 16;
     const pret = Number(Number(data.pretAchizitie || 0).toFixed(2));
     const created = [];
     const count = data.serii && data.serii.length > 0 ? data.serii.length : (data.cantitate || 1);
 
     for (let i = 0; i < count; i++) {
-      const serie = data.serii && data.serii[i] 
-        ? data.serii[i] 
+      const serie = data.serii && data.serii[i]
+        ? data.serii[i]
         : `SN-${Date.now().toString().slice(-6)}-${i + 1}`;
       const item = await this.prisma.anvelopa.create({
         data: {
@@ -1245,6 +1467,9 @@ export class AnvelopeService {
           adancimeInitialaMm: 0,
           adancimeCurentaMm: 0,
           pretAchizitie: pret,
+          furnizor: data.furnizor?.trim() || null,
+          numarFactura: data.numarFactura?.trim() || null,
+          dataFactura: data.dataFactura ? new Date(data.dataFactura) : null,
           stare: 'IN_STOC',
           depozitId,
         },

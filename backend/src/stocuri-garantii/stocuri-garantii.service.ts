@@ -1,6 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { detectTipLichidFromText } from '../common/fluid.utils';
+import {
+  isTireItem,
+  parseTireDimensiune,
+  parseTireMarca,
+  parseTireModel,
+} from '../common/tire.utils';
 
 /** Normalizes text for case- and diacritic-insensitive search matching. */
 function normalizeSearchText(value?: string | null): string {
@@ -69,7 +76,64 @@ export class StocuriGarantiiService {
       });
     }
 
-    return depozite;
+    return depozite.map((d) => {
+      const nonTireArticole = (d.articoleStoc || []).filter(
+        (a) =>
+          !isTireItem({
+            categorie: a.categorie,
+            subcategorie: a.subcategorie,
+            denumire: a.denumire,
+            codArticol: a.codArticol,
+          }),
+      );
+      const activeNonTireCount = nonTireArticole.filter((a) => Number(a.stocCurent || 0) > 0).length;
+      const anvelopeInStocCount = (d.anvelope || []).length;
+
+      return {
+        ...d,
+        articoleStoc: nonTireArticole,
+        _count: {
+          ...d._count,
+          articoleStoc: activeNonTireCount,
+          anvelope: anvelopeInStocCount,
+        },
+      };
+    });
+  }
+
+  /**
+   * Calculează stocul rezervat în comenzile de lucru deschise (`IN_LUCRU` / `DEVALIDAT`)
+   * pentru a preveni supra-alocarea în devize, transferuri și ieșiri de fluide.
+   */
+  async getReservedStockMap(
+    excludeComandaId?: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<Map<string, number>> {
+    const db = tx || this.prisma;
+    const rows = await db.elementComandaLucru.findMany({
+      where: {
+        pilonCost: 'PIESA_STOC',
+        articolStocId: { not: null },
+        comandaLucru: {
+          stare: { in: ['IN_LUCRU', 'DEVALIDAT'] },
+          ...(excludeComandaId ? { id: { not: excludeComandaId } } : {}),
+        },
+      },
+      select: {
+        articolStocId: true,
+        cantitate: true,
+      },
+    });
+
+    const reservedMap = new Map<string, number>();
+    for (const row of rows) {
+      if (!row.articolStocId) continue;
+      const qty = Number(row.cantitate || 0);
+      if (qty <= 0) continue;
+      const prev = reservedMap.get(row.articolStocId) || 0;
+      reservedMap.set(row.articolStocId, Number((prev + qty).toFixed(4)));
+    }
+    return reservedMap;
   }
 
   async createDepozit(data: { nume: string; adresa?: string; responsabil?: string }) {
@@ -576,85 +640,175 @@ export class StocuriGarantiiService {
     observatii?: string;
   }) {
     const cantitate = Number(data.cantitate);
-    if (cantitate <= 0) throw new BadRequestException('Cantitatea de transferat trebuie să fie mai mare ca 0.');
-
-    const articolSursa = await this.prisma.articolStoc.findUnique({
-      where: { id: data.articolStocId },
-      include: { depozit: true },
-    });
-
-    if (!articolSursa) throw new NotFoundException('Articolul sursă nu a fost găsit.');
-
-    if (articolSursa.stocCurent < cantitate) {
-      throw new BadRequestException(
-        `Stoc insuficient în ${articolSursa.depozit?.nume || 'Depozitul Sursă'}! Stoc disponibil: ${articolSursa.stocCurent} ${articolSursa.unitateMasura}, ați solicitat ${cantitate} ${articolSursa.unitateMasura}.`
-      );
+    if (!Number.isFinite(cantitate) || cantitate <= 0) {
+      throw new BadRequestException('Cantitatea de transferat trebuie să fie mai mare ca 0.');
     }
 
-    if (articolSursa.depozitId === data.depozitDestinatieId) {
-      throw new BadRequestException('Depozitul destinație trebuie să fie diferit de depozitul sursă.');
-    }
-
-    const depozitDestinatie = await this.prisma.depozit.findUnique({
-      where: { id: data.depozitDestinatieId },
-    });
-    if (!depozitDestinatie) throw new NotFoundException('Depozitul destinație nu a fost găsit.');
-
-    // 1. Scădem din stocul sursă
-    await this.prisma.articolStoc.update({
-      where: { id: articolSursa.id },
-      data: { stocCurent: articolSursa.stocCurent - cantitate },
-    });
-
-    // 2. Căutăm sau creăm articolul în depozitul destinație
-    let articolDestinatie = await this.prisma.articolStoc.findFirst({
-      where: {
-        codArticol: articolSursa.codArticol,
-        depozitId: data.depozitDestinatieId,
-      },
-    });
-
-    if (articolDestinatie) {
-      articolDestinatie = await this.prisma.articolStoc.update({
-        where: { id: articolDestinatie.id },
-        data: { stocCurent: articolDestinatie.stocCurent + cantitate },
+    return this.prisma.$transaction(async (tx) => {
+      const articolSursa = await tx.articolStoc.findUnique({
+        where: { id: data.articolStocId },
+        include: { depozit: true },
       });
-    } else {
-      articolDestinatie = await this.prisma.articolStoc.create({
-        data: {
-          codArticol: articolSursa.codArticol,
-          denumire: articolSursa.denumire,
+
+      if (!articolSursa) throw new NotFoundException('Articolul sursă nu a fost găsit.');
+
+      if (
+        isTireItem({
           categorie: articolSursa.categorie,
           subcategorie: articolSursa.subcategorie,
-          tipLichid: articolSursa.tipLichid,
-          marcaUlei: articolSursa.marcaUlei,
-          pretUnitar: articolSursa.pretUnitar,
-          unitateMasura: articolSursa.unitateMasura,
-          stocMinim: articolSursa.stocMinim,
-          stocCurent: cantitate,
+          denumire: articolSursa.denumire,
+          codArticol: articolSursa.codArticol,
+        })
+      ) {
+        throw new BadRequestException(
+          'Anvelopele se gestionează și se mută între depozite exclusiv din Magazie Anvelope (/anvelope).',
+        );
+      }
+
+      if (articolSursa.depozitId === data.depozitDestinatieId) {
+        throw new BadRequestException('Depozitul destinație trebuie să fie diferit de depozitul sursă.');
+      }
+
+      const depozitDestinatie = await tx.depozit.findUnique({
+        where: { id: data.depozitDestinatieId },
+      });
+      if (!depozitDestinatie) throw new NotFoundException('Depozitul destinație nu a fost găsit.');
+
+      const reservedMap = await this.getReservedStockMap(undefined, tx);
+      const reservedQty = reservedMap.get(articolSursa.id) || 0;
+      const stocDisponibil = Number((Number(articolSursa.stocCurent || 0) - reservedQty).toFixed(4));
+
+      if (stocDisponibil < cantitate - 0.0001) {
+        throw new BadRequestException(
+          reservedQty > 0
+            ? `Stoc disponibil insuficient în ${articolSursa.depozit?.nume || 'Depozitul Sursă'}! Stoc fizic: ${articolSursa.stocCurent} ${articolSursa.unitateMasura}, rezervat în comenzi deschise: ${reservedQty} ${articolSursa.unitateMasura}, disponibil pentru transfer: ${Math.max(0, stocDisponibil)} ${articolSursa.unitateMasura}.`
+            : `Stoc insuficient în ${articolSursa.depozit?.nume || 'Depozitul Sursă'}! Stoc disponibil: ${articolSursa.stocCurent} ${articolSursa.unitateMasura}, ați solicitat ${cantitate} ${articolSursa.unitateMasura}.`,
+        );
+      }
+
+      // 1. Consumăm FIFO atomic din depozitul sursă (scade atât stocCurent cât și loturile IntrareStoc)
+      const fifoRes = await this.consumaStocFIFO(articolSursa.id, cantitate, tx);
+
+      // 2. Căutăm sau creăm articolul în depozitul destinație
+      let articolDestinatie = await tx.articolStoc.findFirst({
+        where: {
+          codArticol: articolSursa.codArticol,
           depozitId: data.depozitDestinatieId,
         },
       });
-    }
 
-    // 3. Înregistrăm log-ul de transfer
-    const transferLog = await this.prisma.transferStoc.create({
-      data: {
-        articolStocId: articolSursa.id,
-        depozitSursaId: articolSursa.depozitId || data.depozitDestinatieId,
-        depozitDestinatieId: data.depozitDestinatieId,
-        cantitateTransferata: cantitate,
-        operator: data.operator || 'Brașoveanu Virgil (Șef Atelier)',
-        observatii: data.observatii,
-      },
+      if (articolDestinatie) {
+        articolDestinatie = await tx.articolStoc.update({
+          where: { id: articolDestinatie.id },
+          data: {
+            stocCurent: Number((Number(articolDestinatie.stocCurent || 0) + cantitate).toFixed(4)),
+            pretUnitar: fifoRes.pretUnitarMediu > 0 ? fifoRes.pretUnitarMediu : articolDestinatie.pretUnitar,
+            esteSerializat: articolDestinatie.esteSerializat || articolSursa.esteSerializat,
+            subcategorie: articolDestinatie.subcategorie || articolSursa.subcategorie,
+            tipLichid: articolDestinatie.tipLichid || articolSursa.tipLichid,
+            marcaUlei: articolDestinatie.marcaUlei || articolSursa.marcaUlei,
+          },
+        });
+      } else {
+        articolDestinatie = await tx.articolStoc.create({
+          data: {
+            codArticol: articolSursa.codArticol,
+            denumire: articolSursa.denumire,
+            categorie: articolSursa.categorie,
+            subcategorie: articolSursa.subcategorie,
+            tipLichid: articolSursa.tipLichid,
+            marcaUlei: articolSursa.marcaUlei,
+            pretUnitar: fifoRes.pretUnitarMediu > 0 ? fifoRes.pretUnitarMediu : articolSursa.pretUnitar,
+            unitateMasura: articolSursa.unitateMasura,
+            stocMinim: articolSursa.stocMinim,
+            stocCurent: cantitate,
+            esteSerializat: articolSursa.esteSerializat,
+            observatiiIntern: articolSursa.observatiiIntern,
+            depozitId: data.depozitDestinatieId,
+          },
+        });
+      }
+
+      // 3. Creăm loturi FIFO corespunzătoare pe destinație, păstrând trasabilitatea (furnizor, factură, dată, preț)
+      let totalInLots = 0;
+      for (const lot of fifoRes.loturiConsumate) {
+        totalInLots = Number((totalInLots + lot.cantitateLuata).toFixed(4));
+        await tx.intrareStoc.create({
+          data: {
+            articolStocId: articolDestinatie.id,
+            depozitId: data.depozitDestinatieId,
+            tipLichid: articolSursa.tipLichid,
+            marcaUlei: articolSursa.marcaUlei,
+            furnizor: lot.furnizor,
+            numarFactura: lot.numarFactura,
+            dataFactura: lot.dataFactura,
+            cantitateIntrata: lot.cantitateLuata,
+            cantitateRamasa: lot.cantitateLuata,
+            pretUnitar: lot.pretUnitar,
+            pretTotal: Number((lot.cantitateLuata * lot.pretUnitar).toFixed(2)),
+            observatii: `Transferat din ${articolSursa.depozit?.nume || 'Depozit Sursă'}${data.observatii ? ` • ${data.observatii}` : ''}`,
+          },
+        });
+      }
+
+      const remainderUnlotted = Number((cantitate - totalInLots).toFixed(4));
+      if (remainderUnlotted > 0.0001) {
+        const fallbackPret = Number(articolSursa.pretUnitar || 0);
+        await tx.intrareStoc.create({
+          data: {
+            articolStocId: articolDestinatie.id,
+            depozitId: data.depozitDestinatieId,
+            tipLichid: articolSursa.tipLichid,
+            marcaUlei: articolSursa.marcaUlei,
+            furnizor: `Transfer din ${articolSursa.depozit?.nume || 'Depozit Sursă'}`,
+            numarFactura: 'TRANSFER-STOC',
+            dataFactura: new Date(),
+            cantitateIntrata: remainderUnlotted,
+            cantitateRamasa: remainderUnlotted,
+            pretUnitar: fallbackPret,
+            pretTotal: Number((remainderUnlotted * fallbackPret).toFixed(2)),
+            observatii: `Transfer parțial între depozite${data.observatii ? ` • ${data.observatii}` : ''}`,
+          },
+        });
+      }
+
+      // 4. Dacă articolul este serializat, migrăm componentele IN_STOC aferente către depozitul destinație
+      if (articolSursa.esteSerializat) {
+        const serialCountToMove = Math.max(0, Math.round(cantitate));
+        if (serialCountToMove > 0) {
+          const serialsToMove = await tx.componentaSerializata.findMany({
+            where: { articolStocId: articolSursa.id, stare: 'IN_STOC' },
+            orderBy: { createdAt: 'asc' },
+            take: serialCountToMove,
+          });
+          if (serialsToMove.length > 0) {
+            await tx.componentaSerializata.updateMany({
+              where: { id: { in: serialsToMove.map((s) => s.id) } },
+              data: { articolStocId: articolDestinatie.id },
+            });
+          }
+        }
+      }
+
+      // 5. Înregistrăm log-ul de transfer
+      const transferLog = await tx.transferStoc.create({
+        data: {
+          articolStocId: articolSursa.id,
+          depozitSursaId: articolSursa.depozitId || data.depozitDestinatieId,
+          depozitDestinatieId: data.depozitDestinatieId,
+          cantitateTransferata: cantitate,
+          operator: data.operator || 'Brașoveanu Virgil (Șef Atelier)',
+          observatii: data.observatii,
+        },
+      });
+
+      return {
+        mesaj: ` Transfer parțial efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
+        transferLog,
+        stocSursaNou: fifoRes.stocCurentRamas,
+        stocDestinatieNou: articolDestinatie.stocCurent,
+      };
     });
-
-    return {
-      mesaj: ` Transfer parțial efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
-      transferLog,
-      stocSursaNou: articolSursa.stocCurent - cantitate,
-      stocDestinatieNou: articolDestinatie.stocCurent,
-    };
   }
 
   async getIstoricTransferuri() {
@@ -723,6 +877,17 @@ export class StocuriGarantiiService {
       orderBy: { denumire: 'asc' },
     });
 
+    // Excludem strict orice ArticolStoc rezidual de tip anvelopă (anvelopele trăiesc exclusiv în Magazie Anvelope)
+    articole = articole.filter(
+      (a) =>
+        !isTireItem({
+          categorie: a.categorie,
+          subcategorie: a.subcategorie,
+          denumire: a.denumire,
+          codArticol: a.codArticol,
+        }),
+    );
+
     if (filters?.cautare?.trim()) {
       articole = articole.filter((a) =>
         matchesSearchTokens(
@@ -750,20 +915,40 @@ export class StocuriGarantiiService {
       );
     }
 
+    const reservedMap = await this.getReservedStockMap();
+    const enriched = articole.map((a) => {
+      const stocRezervat = Number((reservedMap.get(a.id) || 0).toFixed(4));
+      const stocDisponibil = Math.max(0, Number((Number(a.stocCurent || 0) - stocRezervat).toFixed(4)));
+      return {
+        ...a,
+        stocRezervat,
+        stocDisponibil,
+      };
+    });
+
     if (filters?.statusStoc === 'CRITIC') {
-      return articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
+      return enriched.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
     } else if (filters?.statusStoc === 'IN_STOC') {
-      return articole.filter((a) => (Number(a.stocMinim) || 0) <= 0 || a.stocCurent >= (Number(a.stocMinim) || 0));
+      return enriched.filter((a) => (Number(a.stocMinim) || 0) <= 0 || a.stocCurent >= (Number(a.stocMinim) || 0));
     }
 
-    return articole;
+    return enriched;
   }
 
   async getStocuriCritice() {
-    const articole = await this.prisma.articolStoc.findMany({
+    const articoleRaw = await this.prisma.articolStoc.findMany({
       include: { depozit: true },
     });
-    // Doar articolele care au un stoc minim configurat (> 0) și stocul este strict sub acesta
+    const articole = articoleRaw.filter(
+      (a) =>
+        !isTireItem({
+          categorie: a.categorie,
+          subcategorie: a.subcategorie,
+          denumire: a.denumire,
+          codArticol: a.codArticol,
+        }),
+    );
+    // Doar articolele non-anvelopă care au un stoc minim configurat (> 0) și stocul este strict sub acesta
     const critice = articole.filter((a) => (Number(a.stocMinim) || 0) > 0 && a.stocCurent < (Number(a.stocMinim) || 0));
     return {
       numarArticoleCritice: critice.length,
@@ -794,6 +979,24 @@ export class StocuriGarantiiService {
     depozitId?: string;
     marcaUlei?: string;
   }) {
+    if (
+      isTireItem({
+        categorie: data.categorie,
+        subcategorie: data.subcategorie,
+        denumire: data.denumire,
+        codArticol: data.codArticol,
+      })
+    ) {
+      throw new BadRequestException(
+        'Anvelopele sunt gestionate exclusiv în Magazie Anvelope (/anvelope) și nu pot fi create ca articole de stoc atelier.',
+      );
+    }
+
+    const stocInitial = Number(data.stocCurent || 0);
+    if (stocInitial < 0) {
+      throw new BadRequestException('Stocul curent nu poate fi negativ.');
+    }
+
     let stocMinimFinal = data.stocMinim;
     if (stocMinimFinal === undefined || stocMinimFinal === null) {
       const catCustom = await this.prisma.categorieStoc.findUnique({ where: { nume: data.categorie } });
@@ -810,22 +1013,47 @@ export class StocuriGarantiiService {
     const inheritedTip = !explicitTip
       ? await this.resolveSubcatTipLichid(data.categorie, data.subcategorie)
       : null;
+    const finalTipLichid = explicitTip || inheritedTip || null;
+    const pretUnitarFinal = Number(data.pretUnitar || 0);
 
-    return this.prisma.articolStoc.create({
-      data: {
-        codArticol: data.codArticol,
-        denumire: data.denumire,
-        categorie: data.categorie,
-        subcategorie: data.subcategorie,
-        tipLichid: explicitTip || inheritedTip || null,
-        stocCurent: Number(data.stocCurent),
-        stocMinim: Number(stocMinimFinal),
-        pretUnitar: Number(data.pretUnitar),
-        unitateMasura: data.unitateMasura || 'buc',
-        esteSerializat: !!data.esteSerializat,
-        depozitId: depozitIdFinal,
-        marcaUlei: data.marcaUlei,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const articol = await tx.articolStoc.create({
+        data: {
+          codArticol: data.codArticol,
+          denumire: data.denumire,
+          categorie: data.categorie,
+          subcategorie: data.subcategorie,
+          tipLichid: finalTipLichid,
+          stocCurent: stocInitial,
+          stocMinim: Number(stocMinimFinal),
+          pretUnitar: pretUnitarFinal,
+          unitateMasura: data.unitateMasura || 'buc',
+          esteSerializat: !!data.esteSerializat,
+          depozitId: depozitIdFinal,
+          marcaUlei: data.marcaUlei,
+        },
+      });
+
+      if (stocInitial > 0) {
+        await tx.intrareStoc.create({
+          data: {
+            articolStocId: articol.id,
+            depozitId: depozitIdFinal || null,
+            tipLichid: finalTipLichid,
+            marcaUlei: data.marcaUlei || null,
+            furnizor: 'Stoc Inițial / Inventar',
+            numarFactura: 'STOC-INITIAL',
+            dataFactura: new Date(),
+            cantitateIntrata: stocInitial,
+            cantitateRamasa: stocInitial,
+            pretUnitar: pretUnitarFinal,
+            pretTotal: Number((stocInitial * pretUnitarFinal).toFixed(2)),
+            observatii: 'Lot inițial FIFO creat automat la adăugarea articolului în stoc',
+          },
+        });
+      }
+
+      return articol;
     });
   }
 
@@ -870,6 +1098,9 @@ export class StocuriGarantiiService {
     if (data.stocMinim !== undefined && Number(data.stocMinim) < 0) {
       throw new BadRequestException('Pragul de alertă stoc minim nu poate fi negativ.');
     }
+    if (data.stocCurent !== undefined && (isNaN(Number(data.stocCurent)) || Number(data.stocCurent) < 0)) {
+      throw new BadRequestException('Stocul curent nu poate fi negativ.');
+    }
 
     const cleanCategorie = data.categorie !== undefined ? String(data.categorie || '').trim() : undefined;
     const cleanSubcategorie =
@@ -877,38 +1108,159 @@ export class StocuriGarantiiService {
         ? (String(data.subcategorie || '').trim() || null)
         : undefined;
 
+    if (cleanCategorie && isTireItem({ categorie: cleanCategorie })) {
+      throw new BadRequestException(
+        'Anvelopele sunt gestionate exclusiv în Magazie Anvelope (/anvelope).',
+      );
+    }
+
     if (cleanCategorie) {
       await this.ensureCategoryAndSubcategoryExist(cleanCategorie, cleanSubcategorie);
     }
 
-    return this.prisma.articolStoc.update({
-      where: { id },
-      data: {
-        codArticol: data.codArticol !== undefined ? String(data.codArticol).trim() : undefined,
-        denumire: data.denumire !== undefined ? String(data.denumire).trim() : undefined,
-        categorie: cleanCategorie !== undefined ? cleanCategorie : undefined,
-        subcategorie: cleanSubcategorie,
-        tipLichid:
-          data.tipLichid !== undefined
-            ? (data.tipLichid ? String(data.tipLichid).trim() : null)
-            : undefined,
-        stocCurent: data.stocCurent !== undefined ? Number(data.stocCurent) : undefined,
-        stocMinim: data.stocMinim !== undefined ? Math.max(0, Number(data.stocMinim)) : undefined,
-        pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
-        unitateMasura: data.unitateMasura !== undefined ? data.unitateMasura : undefined,
-        depozitId: data.depozitId !== undefined ? (data.depozitId || null) : undefined,
-        marcaUlei: data.marcaUlei !== undefined ? (String(data.marcaUlei || '').trim() || null) : undefined,
-        observatiiIntern:
-          data.observatiiIntern !== undefined
-            ? (String(data.observatiiIntern || '').trim() || null)
-            : undefined,
-      },
-      include: {
-        depozit: true,
-        intrariStoc: {
-          orderBy: { dataFactura: 'desc' },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.articolStoc.findUnique({ where: { id } });
+      if (!existing) throw new NotFoundException('Articolul din stoc nu a fost găsit.');
+
+      const nextDepozitId =
+        data.depozitId !== undefined ? (data.depozitId || null) : existing.depozitId;
+      const nextTipLichid =
+        data.tipLichid !== undefined
+          ? (data.tipLichid ? String(data.tipLichid).trim() : null)
+          : existing.tipLichid;
+      const nextMarcaUlei =
+        data.marcaUlei !== undefined
+          ? (String(data.marcaUlei || '').trim() || null)
+          : existing.marcaUlei;
+      const nextPretUnitar =
+        data.pretUnitar !== undefined ? Number(data.pretUnitar) : Number(existing.pretUnitar || 0);
+      const nextUnitateMasura =
+        data.unitateMasura !== undefined ? data.unitateMasura : existing.unitateMasura;
+
+      // 1. Dacă s-a schimbat depozitul articolului, sincronizăm și IntrareStoc.depozitId
+      if (data.depozitId !== undefined && nextDepozitId !== existing.depozitId) {
+        await tx.intrareStoc.updateMany({
+          where: { articolStocId: id },
+          data: { depozitId: nextDepozitId },
+        });
+      }
+
+      // 2. Dacă stocCurent este modificat manual, validăm rezervările active și reconciliem delta pe IntrareStoc.cantitateRamasa
+      if (data.stocCurent !== undefined) {
+        const nextStoc = Number(Number(data.stocCurent).toFixed(4));
+        const reservedMap = await this.getReservedStockMap(undefined, tx);
+        const reservedQty = reservedMap.get(id) || 0;
+        if (nextStoc < reservedQty - 0.0001) {
+          throw new BadRequestException(
+            `Stocul curent nu poate fi redus la ${nextStoc} ${nextUnitateMasura} deoarece există ${reservedQty} ${nextUnitateMasura} rezervate în comenzi de lucru deschise (IN_LUCRU / DEVALIDAT).`,
+          );
+        }
+        const existingLots = await tx.intrareStoc.findMany({
+          where: { articolStocId: id, cantitateIntrata: { gt: 0 } },
+          orderBy: [{ dataFactura: 'asc' }, { createdAt: 'asc' }],
+        });
+
+        const currentSumRamasa = Number(
+          existingLots
+            .reduce(
+              (sum, lot) =>
+                sum +
+                (lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+                  ? Number(lot.cantitateRamasa)
+                  : Number(lot.cantitateIntrata || 0)),
+              0,
+            )
+            .toFixed(4),
+        );
+
+        const fifoDiff = Number((nextStoc - currentSumRamasa).toFixed(4));
+
+        if (fifoDiff < -0.0001) {
+          let toDeduct = Math.abs(fifoDiff);
+          for (const lot of existingLots) {
+            if (toDeduct <= 0.0001) break;
+            const lotRem =
+              lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+                ? Number(lot.cantitateRamasa)
+                : Number(lot.cantitateIntrata || 0);
+            if (lotRem <= 0) continue;
+            const take = Math.min(lotRem, toDeduct);
+            await tx.intrareStoc.update({
+              where: { id: lot.id },
+              data: { cantitateRamasa: Math.max(0, Number((lotRem - take).toFixed(4))) },
+            });
+            toDeduct = Number((toDeduct - take).toFixed(4));
+          }
+        } else if (fifoDiff > 0.0001) {
+          let toAdd = fifoDiff;
+          const newestFirst = [...existingLots].reverse();
+          for (const lot of newestFirst) {
+            if (toAdd <= 0.0001) break;
+            const intrata = Number(lot.cantitateIntrata || 0);
+            const ramasa =
+              lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+                ? Number(lot.cantitateRamasa)
+                : intrata;
+            const cap = Math.max(0, Number((intrata - ramasa).toFixed(4)));
+            if (cap <= 0) continue;
+            const addHere = Math.min(cap, toAdd);
+            await tx.intrareStoc.update({
+              where: { id: lot.id },
+              data: { cantitateRamasa: Number((ramasa + addHere).toFixed(4)) },
+            });
+            toAdd = Number((toAdd - addHere).toFixed(4));
+          }
+
+          if (toAdd > 0.0001) {
+            await tx.intrareStoc.create({
+              data: {
+                articolStocId: id,
+                depozitId: nextDepozitId,
+                tipLichid: nextTipLichid,
+                marcaUlei: nextMarcaUlei,
+                furnizor: 'Ajustare Inventar',
+                numarFactura: 'AJUSTARE-STOC',
+                dataFactura: new Date(),
+                cantitateIntrata: toAdd,
+                cantitateRamasa: toAdd,
+                pretUnitar: nextPretUnitar,
+                pretTotal: Number((toAdd * nextPretUnitar).toFixed(2)),
+                observatii: `Ajustare manuală stoc (+${toAdd} ${nextUnitateMasura})`,
+              },
+            });
+          }
+        }
+      }
+
+      return tx.articolStoc.update({
+        where: { id },
+        data: {
+          codArticol: data.codArticol !== undefined ? String(data.codArticol).trim() : undefined,
+          denumire: data.denumire !== undefined ? String(data.denumire).trim() : undefined,
+          categorie: cleanCategorie !== undefined ? cleanCategorie : undefined,
+          subcategorie: cleanSubcategorie,
+          tipLichid:
+            data.tipLichid !== undefined
+              ? (data.tipLichid ? String(data.tipLichid).trim() : null)
+              : undefined,
+          stocCurent: data.stocCurent !== undefined ? Number(Number(data.stocCurent).toFixed(4)) : undefined,
+          stocMinim: data.stocMinim !== undefined ? Math.max(0, Number(data.stocMinim)) : undefined,
+          pretUnitar: data.pretUnitar !== undefined ? Number(data.pretUnitar) : undefined,
+          unitateMasura: data.unitateMasura !== undefined ? data.unitateMasura : undefined,
+          depozitId: data.depozitId !== undefined ? (data.depozitId || null) : undefined,
+          marcaUlei: data.marcaUlei !== undefined ? (String(data.marcaUlei || '').trim() || null) : undefined,
+          observatiiIntern:
+            data.observatiiIntern !== undefined
+              ? (String(data.observatiiIntern || '').trim() || null)
+              : undefined,
         },
-      },
+        include: {
+          depozit: true,
+          intrariStoc: {
+            orderBy: { dataFactura: 'desc' },
+          },
+        },
+      });
     });
   }
 
@@ -929,8 +1281,8 @@ export class StocuriGarantiiService {
     numarFactura: string;
     dataFactura?: string;
     cantitate: number;
-    pretTotal: number; 
-    pretUnitar?: number; 
+    pretTotal: number;
+    pretUnitar?: number;
     unitateMasura?: string;
     depozitId?: string;
     tipLichid?: string;
@@ -939,6 +1291,7 @@ export class StocuriGarantiiService {
     motivReceptieManuala?: string;
     esteReceptieManuala?: boolean;
     articolStocId?: string;
+    codDot?: string;
 
     areGarantie?: boolean;
     serieUnica?: string;
@@ -946,8 +1299,10 @@ export class StocuriGarantiiService {
     durataGarantieRulaj?: number;
   }) {
     const cantitate = Number(data.cantitate);
-    const pretTotal = Number(data.pretTotal);
-    if (cantitate <= 0) throw new BadRequestException('Cantitatea trebuie să fie mai mare ca 0.');
+    const pretTotal = Number(data.pretTotal || 0);
+    if (!Number.isFinite(cantitate) || cantitate <= 0) {
+      throw new BadRequestException('Cantitatea trebuie să fie mai mare ca 0.');
+    }
     const motivManual = data.motivReceptieManuala ? String(data.motivReceptieManuala).trim() : null;
     if (data.esteReceptieManuala && !motivManual) {
       throw new BadRequestException(
@@ -955,12 +1310,91 @@ export class StocuriGarantiiService {
       );
     }
 
-    const pretUnitar = Number((pretTotal / cantitate).toFixed(2));
+    const pretUnitar =
+      pretTotal > 0
+        ? Number((pretTotal / cantitate).toFixed(2))
+        : Number(Number(data.pretUnitar || 0).toFixed(2));
+    const pretTotalFinal = pretTotal > 0 ? pretTotal : Number((pretUnitar * cantitate).toFixed(2));
+    const dataFacturaDate = data.dataFactura ? new Date(data.dataFactura) : new Date();
 
     let depozitIdFinal = data.depozitId;
     if (!depozitIdFinal) {
       const depozite = await this.getDepozite();
       depozitIdFinal = depozite[0]?.id;
+    }
+
+    // SEPARARE STRICTĂ ANVELOPE: recepția de anvelope creează exclusiv rânduri Anvelopa (IN_STOC),
+    // fără ArticolStoc, fără IntrareStoc și fără ComponentaSerializata!
+    if (
+      isTireItem({
+        categorie: data.categorie,
+        subcategorie: data.subcategorie,
+        denumire: data.denumire,
+        codArticol: data.codArticol,
+      })
+    ) {
+      const tireCount = Math.max(1, Math.round(cantitate));
+      const dimensiune = parseTireDimensiune(`${data.denumire || ''} ${data.subcategorie || ''}`);
+      const marca = parseTireMarca(data.denumire);
+      const model = parseTireModel(data.denumire);
+      const codDot = String(data.codDot || 'DOT-2026').trim() || 'DOT-2026';
+      const rawSerials = String(data.serieUnica || '')
+        .split(/[\n,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const codePrefix = (data.codArticol || 'ANV').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) || 'ANV';
+      const tsSuffix = Date.now().toString().slice(-6);
+
+      const anvelopeCreate = await this.prisma.$transaction(async (tx) => {
+        const created = [];
+        for (let i = 0; i < tireCount; i++) {
+          let serie: string;
+          if (rawSerials.length >= tireCount) {
+            serie = rawSerials[i];
+          } else if (rawSerials.length === 1 && tireCount === 1) {
+            serie = rawSerials[0];
+          } else if (rawSerials.length === 1 && tireCount > 1) {
+            serie = `${rawSerials[0]}-${String(i + 1).padStart(2, '0')}`;
+          } else {
+            serie = `SN-${codePrefix}-${tsSuffix}-${String(i + 1).padStart(2, '0')}`;
+          }
+
+          const anvelopa = await tx.anvelopa.create({
+            data: {
+              serieAnvelopa: serie,
+              codDot,
+              marca,
+              model,
+              dimensiune,
+              adancimeInitialaMm: 16,
+              adancimeCurentaMm: 16,
+              pretAchizitie: pretUnitar,
+              furnizor: data.furnizor || null,
+              numarFactura: data.numarFactura || null,
+              dataFactura: dataFacturaDate,
+              stare: 'IN_STOC',
+              depozitId: depozitIdFinal || null,
+            },
+          });
+          created.push(anvelopa);
+        }
+        return created;
+      });
+
+      const depozit = depozitIdFinal
+        ? await this.prisma.depozit.findUnique({ where: { id: depozitIdFinal } })
+        : null;
+
+      return {
+        mesaj: `Recepție anvelope înregistrată direct în Magazie Anvelope! ${tireCount} buc "${marca} ${model}" (${dimensiune}, ${pretUnitar} RON/buc) adăugate în ${depozit?.nume || 'Depozit Central'}.`,
+        tip: 'ANVELOPE_STOC',
+        esteAnvelopa: true,
+        anvelopeCreate,
+        articol: null,
+        intrare: null,
+        pretUnitar,
+        componentaGarantie: null,
+      };
     }
 
     const isLiquid = this.esteCategorieLichid(data.categorie, data.subcategorie, data.unitateMasura) || Boolean(data.tipLichid);
@@ -969,144 +1403,198 @@ export class StocuriGarantiiService {
       (isLiquid ? await this.resolveSubcatTipLichid(data.categorie, data.subcategorie) : null) ||
       null;
 
-    // 1. Căutare inteligentă articol master existent:
-    // a) După ID direct (dacă a fost selectat)
-    // b) După Cod Articol în depozit
-    // c) Pentru fluide/uleiuri/antigel: după Categorie + Subcategorie identice în depozit!
-    let articol: any = null;
+    const { articol, intrare, componenteGarantie } = await this.prisma.$transaction(async (tx) => {
+      // 1. Căutare inteligentă articol master existent
+      let art: any = null;
 
-    if (data.articolStocId) {
-      articol = await this.prisma.articolStoc.findUnique({ where: { id: data.articolStocId } });
-    }
+      if (data.articolStocId) {
+        art = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
+      }
 
-    if (!articol && data.codArticol) {
-      articol = await this.prisma.articolStoc.findFirst({
-        where: { codArticol: data.codArticol, depozitId: depozitIdFinal },
-      });
-    }
+      if (!art && data.codArticol) {
+        art = await tx.articolStoc.findFirst({
+          where: { codArticol: data.codArticol, depozitId: depozitIdFinal },
+        });
+      }
 
-    if (!articol && isLiquid && data.categorie && data.subcategorie) {
-      articol = await this.prisma.articolStoc.findFirst({
-        where: {
-          depozitId: depozitIdFinal,
-          categorie: data.categorie,
-          subcategorie: data.subcategorie,
-          ...(resolvedTipLichid ? { OR: [{ tipLichid: resolvedTipLichid }, { tipLichid: null }] } : {}),
-        },
-      });
-    }
+      if (!art && isLiquid && data.categorie && data.subcategorie) {
+        art = await tx.articolStoc.findFirst({
+          where: {
+            depozitId: depozitIdFinal,
+            categorie: data.categorie,
+            subcategorie: data.subcategorie,
+            ...(resolvedTipLichid ? { OR: [{ tipLichid: resolvedTipLichid }, { tipLichid: null }] } : {}),
+          },
+        });
+      }
 
-    if (!articol && isLiquid && data.categorie && !data.subcategorie) {
-      articol = await this.prisma.articolStoc.findFirst({
-        where: {
-          depozitId: depozitIdFinal,
-          categorie: data.categorie,
-          denumire: data.denumire,
-        },
-      });
-    }
+      if (!art && isLiquid && data.categorie && !data.subcategorie) {
+        art = await tx.articolStoc.findFirst({
+          where: {
+            depozitId: depozitIdFinal,
+            categorie: data.categorie,
+            denumire: data.denumire,
+          },
+        });
+      }
 
-    if (articol) {
-      // CONSOLIDARE STOC PE CATEGORIE / SUBCATEGORIE
-      articol = await this.prisma.articolStoc.update({
-        where: { id: articol.id },
+      if (art) {
+        art = await tx.articolStoc.update({
+          where: { id: art.id },
+          data: {
+            stocCurent: Number((Number(art.stocCurent || 0) + cantitate).toFixed(4)),
+            pretUnitar,
+            subcategorie: data.subcategorie || art.subcategorie,
+            tipLichid: resolvedTipLichid || art.tipLichid,
+            marcaUlei: data.marcaUlei || art.marcaUlei,
+            esteSerializat: data.areGarantie || art.esteSerializat,
+          },
+        });
+      } else {
+        const catCustom = await tx.categorieStoc.findUnique({ where: { nume: data.categorie } });
+        const stocMinimImplicit = catCustom ? catCustom.stocMinimImplicit : (isLiquid ? 20 : 5);
+
+        art = await tx.articolStoc.create({
+          data: {
+            codArticol: data.codArticol,
+            denumire: data.denumire,
+            categorie: data.categorie,
+            subcategorie: data.subcategorie,
+            tipLichid: resolvedTipLichid,
+            stocCurent: cantitate,
+            stocMinim: stocMinimImplicit,
+            pretUnitar,
+            unitateMasura: data.unitateMasura || (isLiquid ? 'L' : 'buc'),
+            esteSerializat: !!data.areGarantie,
+            depozitId: depozitIdFinal,
+            marcaUlei: data.marcaUlei,
+          },
+        });
+      }
+
+      // 2. Înregistrăm lotul FIFO în registrul de intrări
+      const intr = await tx.intrareStoc.create({
         data: {
-          stocCurent: articol.stocCurent + cantitate,
-          pretUnitar,
-          subcategorie: data.subcategorie || articol.subcategorie,
-          tipLichid: resolvedTipLichid || articol.tipLichid,
-          marcaUlei: data.marcaUlei || articol.marcaUlei,
-          esteSerializat: data.areGarantie || articol.esteSerializat,
-        },
-      });
-    } else {
-      const catCustom = await this.prisma.categorieStoc.findUnique({ where: { nume: data.categorie } });
-      const stocMinimImplicit = catCustom ? catCustom.stocMinimImplicit : (isLiquid ? 20 : 5);
-
-      articol = await this.prisma.articolStoc.create({
-        data: {
-          codArticol: data.codArticol,
-          denumire: data.denumire,
-          categorie: data.categorie,
-          subcategorie: data.subcategorie,
+          articolStocId: art.id,
+          depozitId: depozitIdFinal,
           tipLichid: resolvedTipLichid,
-          stocCurent: cantitate,
-          stocMinim: stocMinimImplicit,
-          pretUnitar,
-          unitateMasura: data.unitateMasura || (isLiquid ? 'L' : 'buc'),
-          esteSerializat: !!data.areGarantie,
-          depozitId: depozitIdFinal,
           marcaUlei: data.marcaUlei,
+          furnizor: data.furnizor,
+          numarFactura: data.numarFactura,
+          dataFactura: dataFacturaDate,
+          cantitateIntrata: cantitate,
+          cantitateRamasa: cantitate,
+          pretUnitar,
+          pretTotal: pretTotalFinal,
+          observatii: data.observatii,
+          motivReceptieManuala: motivManual,
         },
       });
-    }
 
-    // Înregistrăm lotul FIFO în registrul de intrări
-    const intrare = await this.prisma.intrareStoc.create({
-      data: {
-        articolStocId: articol.id,
-        depozitId: depozitIdFinal,
-        tipLichid: resolvedTipLichid,
-        marcaUlei: data.marcaUlei,
-        furnizor: data.furnizor,
-        numarFactura: data.numarFactura,
-        dataFactura: data.dataFactura ? new Date(data.dataFactura) : new Date(),
-        cantitateIntrata: cantitate,
-        cantitateRamasa: cantitate,
-        pretUnitar,
-        pretTotal,
-        observatii: data.observatii,
-        motivReceptieManuala: motivManual,
-      },
+      // 3. Creare Componente Serializate (câte una per bucată pentru articole non-fluide cu cantitate > 1)
+      const compList: any[] = [];
+      if (data.areGarantie) {
+        const umNorm = String(data.unitateMasura || art.unitateMasura || 'buc').trim().toLowerCase();
+        const isBulkUnit = isLiquid || ['l', 'litri', 'litru', 'kg', 'm', 'mp', 'mc'].includes(umNorm);
+        const serialCount = isBulkUnit ? 1 : Math.max(1, Math.round(cantitate));
+        const rawSerials = String(data.serieUnica || '')
+          .split(/[\n,;]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const tsSuffix = Date.now().toString().slice(-6);
+        const luniGarantie = data.durataGarantieLuni ? Number(data.durataGarantieLuni) : 24;
+        const kilometriGarantie = data.durataGarantieRulaj ? Number(data.durataGarantieRulaj) : 2000;
+
+        for (let i = 0; i < serialCount; i++) {
+          let serieUnicaFinal: string;
+          if (rawSerials.length >= serialCount) {
+            serieUnicaFinal = rawSerials[i];
+          } else if (rawSerials.length === 1 && serialCount === 1) {
+            serieUnicaFinal = rawSerials[0];
+          } else if (rawSerials.length === 1 && serialCount > 1) {
+            serieUnicaFinal = `${rawSerials[0]}-${String(i + 1).padStart(2, '0')}`;
+          } else {
+            serieUnicaFinal =
+              serialCount > 1
+                ? `SN-${data.codArticol}-${tsSuffix}-${String(i + 1).padStart(2, '0')}`
+                : `SN-${data.codArticol}-${tsSuffix}`;
+          }
+
+          const comp = await tx.componentaSerializata.upsert({
+            where: { serieUnica: serieUnicaFinal },
+            update: {
+              articolStocId: art.id,
+              dataAchizitie: dataFacturaDate,
+              luniGarantie,
+              kilometriGarantie,
+            },
+            create: {
+              articolStocId: art.id,
+              serieUnica: serieUnicaFinal,
+              dataAchizitie: dataFacturaDate,
+              luniGarantie,
+              kilometriGarantie,
+              stare: 'IN_STOC',
+            },
+          });
+          compList.push(comp);
+        }
+      }
+
+      return { articol: art, intrare: intr, componenteGarantie: compList };
     });
 
-    let componentaGarantie = null;
-    if (data.areGarantie) {
-      const serieUnicaFinal = data.serieUnica || `SN-${data.codArticol}-${Date.now().toString().substring(6)}`;
-      componentaGarantie = await this.prisma.componentaSerializata.upsert({
-        where: { serieUnica: serieUnicaFinal },
-        update: {
-          luniGarantie: data.durataGarantieLuni ? Number(data.durataGarantieLuni) : 24,
-          kilometriGarantie: data.durataGarantieRulaj ? Number(data.durataGarantieRulaj) : 2000,
-        },
-        create: {
-          articolStocId: articol.id,
-          serieUnica: serieUnicaFinal,
-          luniGarantie: data.durataGarantieLuni ? Number(data.durataGarantieLuni) : 24,
-          kilometriGarantie: data.durataGarantieRulaj ? Number(data.durataGarantieRulaj) : 2000,
-          stare: 'IN_STOC',
-        },
-      });
-    }
-
-    const depozit = await this.prisma.depozit.findUnique({ where: { id: depozitIdFinal } });
+    const depozit = depozitIdFinal
+      ? await this.prisma.depozit.findUnique({ where: { id: depozitIdFinal } })
+      : null;
 
     return {
-      mesaj: `Recepție marfă înregistrată! ${cantitate} ${articol.unitateMasura} de "${articol.denumire}" (Preț unitar: ${pretUnitar} RON) adăugate în ${depozit?.nume || 'Depozit Central'}.${data.areGarantie ? '  Garanție producător activată în registru!' : ''}`,
+      mesaj: `Recepție marfă înregistrată! ${cantitate} ${articol.unitateMasura} de "${articol.denumire}" (Preț unitar: ${pretUnitar} RON) adăugate în ${depozit?.nume || 'Depozit Central'}.${data.areGarantie ? ` Garanție producător activată (${componenteGarantie.length} ${componenteGarantie.length === 1 ? 'serie' : 'serii'})!` : ''}`,
       articol,
       intrare,
       pretUnitar,
-      componentaGarantie,
+      componentaGarantie: componenteGarantie[0] || null,
+      componenteGarantie,
     };
   }
 
   // ==========================================
   // MOTOR DE CONSUM FIFO (FIRST-IN, FIRST-OUT)
-  // Consumă din cele mai vechi loturi de intrare și deduce stocul curent
+  // Consumă atomic din cele mai vechi loturi de intrare și deduce stocul curent
   // ==========================================
-  async consumaStocFIFO(articolStocId: string, cantitateDeConsumat: number) {
-    const cantitate = Number(cantitateDeConsumat);
-    if (cantitate <= 0) throw new BadRequestException('Cantitatea de consumat trebuie să fie mai mare ca 0.');
+  async consumaStocFIFO(
+    articolStocId: string,
+    cantitateDeConsumat: number,
+    tx?: Prisma.TransactionClient,
+  ) {
+    if (!tx) {
+      return this.prisma.$transaction((innerTx) =>
+        this.consumaStocFIFO(articolStocId, cantitateDeConsumat, innerTx),
+      );
+    }
 
-    const articol = await this.prisma.articolStoc.findUnique({
+    const cantitate = Number(cantitateDeConsumat);
+    if (!Number.isFinite(cantitate) || cantitate <= 0) {
+      throw new BadRequestException('Cantitatea de consumat trebuie să fie mai mare ca 0.');
+    }
+
+    const articol = await tx.articolStoc.findUnique({
       where: { id: articolStocId },
     });
     if (!articol) throw new NotFoundException('Articolul din stoc nu a fost găsit.');
 
+    const stocDisponibilFizic = Number(articol.stocCurent || 0);
+    if (stocDisponibilFizic + 0.0001 < cantitate) {
+      throw new BadRequestException(
+        `Stoc insuficient pentru "${articol.denumire}"! Stoc curent: ${stocDisponibilFizic} ${articol.unitateMasura}, solicitat: ${cantitate} ${articol.unitateMasura}.`,
+      );
+    }
+
     // 1. Căutăm toate loturile cu stoc disponibil pentru acest articol, ordonate FIFO (cele mai vechi primele)
-    const loturi = await this.prisma.intrareStoc.findMany({
+    const loturi = await tx.intrareStoc.findMany({
       where: {
         articolStocId,
+        cantitateIntrata: { gt: 0 },
         OR: [
           { cantitateRamasa: { gt: 0 } },
           { cantitateRamasa: null },
@@ -1122,6 +1610,7 @@ export class StocuriGarantiiService {
     let costTotalConsum = 0;
     const loturiConsumate: Array<{
       intrareId: string;
+      intrareStocId: string;
       furnizor: string;
       numarFactura: string;
       dataFactura: Date;
@@ -1131,29 +1620,31 @@ export class StocuriGarantiiService {
     }> = [];
 
     for (const lot of loturi) {
-      if (cantitateRamasaDeConsumat <= 0) break;
+      if (cantitateRamasaDeConsumat <= 0.0001) break;
 
-      const stocLot = lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
-        ? Number(lot.cantitateRamasa)
-        : Number(lot.cantitateIntrata);
+      const stocLot =
+        lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+          ? Number(lot.cantitateRamasa)
+          : Number(lot.cantitateIntrata);
 
       if (stocLot <= 0) continue;
 
-      const luamDinLot = Math.min(cantitateRamasaDeConsumat, stocLot);
+      const luamDinLot = Number(Math.min(cantitateRamasaDeConsumat, stocLot).toFixed(4));
       const costLot = Number((luamDinLot * lot.pretUnitar).toFixed(2));
 
       costTotalConsum += costLot;
-      cantitateRamasaDeConsumat -= luamDinLot;
+      cantitateRamasaDeConsumat = Number((cantitateRamasaDeConsumat - luamDinLot).toFixed(4));
 
-      const nouaCantitateRamasaLot = Number((stocLot - luamDinLot).toFixed(2));
+      const nouaCantitateRamasaLot = Math.max(0, Number((stocLot - luamDinLot).toFixed(4)));
 
-      await this.prisma.intrareStoc.update({
+      await tx.intrareStoc.update({
         where: { id: lot.id },
-        data: { cantitateRamasa: Math.max(0, nouaCantitateRamasaLot) },
+        data: { cantitateRamasa: nouaCantitateRamasaLot },
       });
 
       loturiConsumate.push({
         intrareId: lot.id,
+        intrareStocId: lot.id,
         furnizor: lot.furnizor,
         numarFactura: lot.numarFactura,
         dataFactura: lot.dataFactura,
@@ -1163,14 +1654,14 @@ export class StocuriGarantiiService {
       });
     }
 
-    if (cantitateRamasaDeConsumat > 0) {
+    if (cantitateRamasaDeConsumat > 0.0001) {
       const costExtra = Number((cantitateRamasaDeConsumat * (articol.pretUnitar || 0)).toFixed(2));
       costTotalConsum += costExtra;
     }
 
-    // 2. Scădem din stocul total al articolului
-    const noulStocCurent = Math.max(0, Number((articol.stocCurent - cantitate).toFixed(2)));
-    await this.prisma.articolStoc.update({
+    // 2. Scădem din stocul total al articolului (stocCurent >= cantitate a fost deja validat mai sus)
+    const noulStocCurent = Math.max(0, Number((stocDisponibilFizic - cantitate).toFixed(4)));
+    await tx.articolStoc.update({
       where: { id: articol.id },
       data: { stocCurent: noulStocCurent },
     });
@@ -1188,61 +1679,107 @@ export class StocuriGarantiiService {
     };
   }
 
-  // Restituire stoc în depozitul original + refacere cantitateRamasa pe loturile FIFO
+  // Restituire atomică stoc în depozitul original + refacere cantitateRamasa pe loturile FIFO
   async restituieStocFIFO(
     articolStocId: string,
     cantitateDeRestituit: number,
-    numarFacturaHint?: string | null,
+    hint?: string | number | null,
+    tx?: Prisma.TransactionClient,
   ) {
-    const cantitate = Number(cantitateDeRestituit || 0);
-    if (cantitate <= 0) return null;
+    if (!tx) {
+      return this.prisma.$transaction((innerTx) =>
+        this.restituieStocFIFO(articolStocId, cantitateDeRestituit, hint, innerTx),
+      );
+    }
 
-    const articol = await this.prisma.articolStoc.findUnique({ where: { id: articolStocId } });
+    const cantitate = Number(cantitateDeRestituit || 0);
+    if (!Number.isFinite(cantitate) || cantitate <= 0) return null;
+
+    const articol = await tx.articolStoc.findUnique({ where: { id: articolStocId } });
     if (!articol) return null;
 
-    const loturi = await this.prisma.intrareStoc.findMany({
-      where: { articolStocId },
+    const loturi = await tx.intrareStoc.findMany({
+      where: {
+        articolStocId,
+        cantitateIntrata: { gt: 0 },
+      },
       orderBy: [
         { dataFactura: 'desc' },
         { createdAt: 'desc' },
       ],
     });
 
-    const facturiHint = new Set(
-      String(numarFacturaHint || '')
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean),
-    );
+    const isStringHint = typeof hint === 'string' && hint.trim().length > 0;
+    const isPriceHint = typeof hint === 'number' && Number.isFinite(hint) && hint > 0;
 
-    // Prioritizăm loturile de pe factura consumată (dacă există), apoi cele mai recente loturi consumate
+    const facturiHint = isStringHint
+      ? new Set(
+          hint
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean),
+        )
+      : new Set<string>();
+
+    // Prioritizăm loturile care corespund facturii sau prețului unitar hint, apoi cele mai recente loturi
     const loturiOrdonate = [...loturi].sort((a, b) => {
-      const aMatch = facturiHint.has(String(a.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
-      const bMatch = facturiHint.has(String(b.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
-      if (aMatch !== bMatch) return aMatch - bMatch;
+      if (isStringHint) {
+        const aMatch = facturiHint.has(String(a.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
+        const bMatch = facturiHint.has(String(b.numarFactura || '').trim().toLowerCase()) ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+      } else if (isPriceHint) {
+        const aDiff = Math.abs(Number(a.pretUnitar || 0) - Number(hint));
+        const bDiff = Math.abs(Number(b.pretUnitar || 0) - Number(hint));
+        const aMatch = aDiff < 0.02 ? 0 : 1;
+        const bMatch = bDiff < 0.02 ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+      }
       return new Date(b.dataFactura).getTime() - new Date(a.dataFactura).getTime();
     });
 
     let ramasDeRestituit = cantitate;
     for (const lot of loturiOrdonate) {
-      if (ramasDeRestituit <= 0) break;
+      if (ramasDeRestituit <= 0.0001) break;
       const intrata = Number(lot.cantitateIntrata || 0);
-      const ramasa = lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
-        ? Number(lot.cantitateRamasa)
-        : intrata;
-      const capacitateRestituire = Math.max(0, Number((intrata - ramasa).toFixed(2)));
+      const ramasa =
+        lot.cantitateRamasa !== null && lot.cantitateRamasa !== undefined
+          ? Number(lot.cantitateRamasa)
+          : intrata;
+      const capacitateRestituire = Math.max(0, Number((intrata - ramasa).toFixed(4)));
       if (capacitateRestituire <= 0) continue;
 
-      const deAdaugat = Math.min(ramasDeRestituit, capacitateRestituire);
-      await this.prisma.intrareStoc.update({
+      const deAdaugat = Number(Math.min(ramasDeRestituit, capacitateRestituire).toFixed(4));
+      await tx.intrareStoc.update({
         where: { id: lot.id },
-        data: { cantitateRamasa: Number((ramasa + deAdaugat).toFixed(2)) },
+        data: { cantitateRamasa: Number((ramasa + deAdaugat).toFixed(4)) },
       });
-      ramasDeRestituit = Number((ramasDeRestituit - deAdaugat).toFixed(2));
+      ramasDeRestituit = Number((ramasDeRestituit - deAdaugat).toFixed(4));
     }
 
-    const noulStocCurent = Number((Number(articol.stocCurent || 0) + cantitate).toFixed(2));
-    await this.prisma.articolStoc.update({
+    // Plasă de siguranță: dacă nu au existat suficiente loturi consumate, creăm un lot de restituire
+    // pentru a păstra mereu SUM(IntrareStoc.cantitateRamasa) === ArticolStoc.stocCurent
+    if (ramasDeRestituit > 0.0001) {
+      const pretRestituire = isPriceHint ? Number(hint) : Number(articol.pretUnitar || 0);
+      await tx.intrareStoc.create({
+        data: {
+          articolStocId: articol.id,
+          depozitId: articol.depozitId,
+          tipLichid: articol.tipLichid,
+          marcaUlei: articol.marcaUlei,
+          furnizor: 'Restituire Stoc',
+          numarFactura: isStringHint ? hint.trim() : 'RESTITUIRE',
+          dataFactura: new Date(),
+          cantitateIntrata: ramasDeRestituit,
+          cantitateRamasa: ramasDeRestituit,
+          pretUnitar: pretRestituire,
+          pretTotal: Number((ramasDeRestituit * pretRestituire).toFixed(2)),
+          observatii: 'Lot creat automat la restituire stoc FIFO',
+        },
+      });
+    }
+
+    const noulStocCurent = Number((Number(articol.stocCurent || 0) + cantitate).toFixed(4));
+    await tx.articolStoc.update({
       where: { id: articolStocId },
       data: { stocCurent: noulStocCurent },
     });
@@ -1297,7 +1834,7 @@ export class StocuriGarantiiService {
   // ==========================================
 
   async getComponenteSerializate() {
-    return this.prisma.componentaSerializata.findMany({
+    const componente = await this.prisma.componentaSerializata.findMany({
       include: {
         articolStoc: {
           include: {
@@ -1311,24 +1848,121 @@ export class StocuriGarantiiService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Excludem anvelopele din registrul de garanții piese atelier
+    const nonTireComponente = componente.filter(
+      (c) =>
+        !isTireItem({
+          categorie: c.articolStoc?.categorie,
+          subcategorie: c.articolStoc?.subcategorie,
+          denumire: c.articolStoc?.denumire,
+          codArticol: c.articolStoc?.codArticol,
+        }),
+    );
+
+    const vehiculIds = Array.from(
+      new Set(nonTireComponente.map((c) => c.vehiculId).filter((id): id is string => Boolean(id))),
+    );
+
+    const vehicule =
+      vehiculIds.length > 0
+        ? await this.prisma.vehicul.findMany({
+            where: { id: { in: vehiculIds } },
+            select: {
+              id: true,
+              numarIntern: true,
+              numarInmatriculare: true,
+              categorieEnum: true,
+            },
+          })
+        : [];
+
+    const vehiculMap = new Map(vehicule.map((v) => [v.id, v]));
+
+    return nonTireComponente.map((c) => ({
+      ...c,
+      vehicul: c.vehiculId ? vehiculMap.get(c.vehiculId) || null : null,
+    }));
   }
 
-  async demonteazaComponenta(serieUnica: string, mecanic: string, motivDemontare: string) {
-    const componenta = await this.prisma.componentaSerializata.findUnique({
-      where: { serieUnica },
-      include: { articolStoc: true },
+  async demonteazaComponenta(
+    input:
+      | string
+      | {
+          componentaId?: string;
+          serieUnica?: string;
+          mecanic?: string;
+          motivDemontare?: string;
+        },
+    mecanicArg?: string,
+    motivDemontareArg?: string,
+  ) {
+    const params =
+      typeof input === 'string'
+        ? { serieUnica: input, mecanic: mecanicArg, motivDemontare: motivDemontareArg }
+        : input || {};
+
+    const componentaId = params.componentaId?.trim();
+    const serieUnica = params.serieUnica?.trim();
+    const motivDemontare = params.motivDemontare?.trim();
+
+    if (!componentaId && !serieUnica) {
+      throw new BadRequestException('Specificați componentaId sau serieUnica.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const componenta = componentaId
+        ? await tx.componentaSerializata.findUnique({
+            where: { id: componentaId },
+            include: { articolStoc: true },
+          })
+        : await tx.componentaSerializata.findUnique({
+            where: { serieUnica: serieUnica! },
+            include: { articolStoc: true },
+          });
+
+      if (!componenta) throw new NotFoundException('Componenta nu a fost găsită.');
+
+      if (componenta.stare === 'DEFECT' || componenta.stare === 'CASAT') {
+        throw new BadRequestException(`Componenta ${componenta.serieUnica} este deja marcată ca ${componenta.stare}.`);
+      }
+
+      // Dacă piesa era încă IN_STOC și este scoasă/casată ca DEFECT, verificăm rezervările active și scădem 1 buc prin FIFO atomic
+      if (componenta.stare === 'IN_STOC' && componenta.articolStocId) {
+        const reservedMap = await this.getReservedStockMap(undefined, tx);
+        const reservedQty = reservedMap.get(componenta.articolStocId) || 0;
+        const stocCurent = Number(componenta.articolStoc?.stocCurent || 0);
+        if (stocCurent - 1 < reservedQty - 0.0001) {
+          throw new BadRequestException(
+            `Componenta "${componenta.serieUnica}" nu poate fi scoasă din stoc deoarece există ${reservedQty} ${componenta.articolStoc?.unitateMasura || 'buc'} rezervate în comenzi de lucru deschise (stoc fizic: ${stocCurent}).`,
+          );
+        }
+        await this.consumaStocFIFO(componenta.articolStocId, 1, tx);
+      }
+
+      const defectNote = motivDemontare
+        ? [componenta.pozitieMontaj, `DEFECT: ${motivDemontare}`].filter(Boolean).join(' • ')
+        : componenta.pozitieMontaj;
+
+      await tx.componentaSerializata.update({
+        where: { id: componenta.id },
+        data: {
+          stare: 'DEFECT',
+          ...(defectNote ? { pozitieMontaj: defectNote } : {}),
+        },
+      });
+
+      let esteInGarantie = false;
+      if (componenta.luniGarantie && componenta.dataAchizitie) {
+        const expDate = new Date(componenta.dataAchizitie);
+        expDate.setMonth(expDate.getMonth() + Number(componenta.luniGarantie));
+        esteInGarantie = expDate.getTime() >= Date.now();
+      }
+
+      return {
+        mesaj: `Piesa ${componenta.serieUnica} marcată ca DEFECTĂ (${esteInGarantie ? 'în termen de garanție' : 'garanție expirată / neverificată'}).`,
+        esteInGarantie,
+      };
     });
-
-    if (!componenta) throw new NotFoundException('Componenta nu a fost găsită');
-
-    await this.prisma.componentaSerializata.update({
-      where: { serieUnica },
-      data: { stare: 'DEFECT' },
-    });
-
-    return {
-      mesaj: ` Piesa ${serieUnica} marcată ca DEFECTĂ (Cerere Reclamație Garanție).`,
-      esteInGarantie: true,
-    };
   }
 }

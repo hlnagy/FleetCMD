@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.service';
+import { isTireItem } from '../common/tire.utils';
 import {
   DEFAULT_TIPURI_FLUIDE,
   TIP_LICHID_LABELS,
@@ -239,6 +240,7 @@ export class AnomaliiService {
     numarFactura: string;
     dataFactura?: string;
     observatii?: string;
+    depozitId?: string;
   }) {
     const cantitate = Number(data.cantitateLitri);
     const pretTotal = Number(data.pretTotal);
@@ -248,56 +250,112 @@ export class AnomaliiService {
     const codArticol = `OIL-${data.tipLichid.replace(/_/g, '-')}-${data.marcaUlei.toUpperCase().replace(/\s+/g, '')}`;
     const denumire = `${data.tipLichid.replace(/_/g, ' ')} ${data.marcaUlei}`;
 
-    let articol = await this.prisma.articolStoc.findFirst({
-      where: {
-        OR: [
-          { codArticol },
-          { AND: [{ categorie: { contains: 'Ulei' } }, { denumire: { contains: data.marcaUlei } }] },
-        ],
-      },
-    });
+    const { articol, intrare } = await this.prisma.$transaction(
+      async (tx) => {
+        // Rezolvăm depozitul implicit (explicit > Depozit Uleiuri Budila > orice depozit cu 'Ulei' > primul depozit disponibil)
+        let resolvedDepozitId: string | null = data.depozitId?.trim() || null;
+        if (resolvedDepozitId) {
+          const existsDep = await tx.depozit.findUnique({ where: { id: resolvedDepozitId } });
+          if (!existsDep) resolvedDepozitId = null;
+        }
+        if (!resolvedDepozitId) {
+          const depozitBudila = await tx.depozit.findFirst({
+            where: { nume: { equals: 'Depozit Uleiuri Budila', mode: 'insensitive' } },
+          });
+          if (depozitBudila) {
+            resolvedDepozitId = depozitBudila.id;
+          } else {
+            const depozitUlei = await tx.depozit.findFirst({
+              where: { nume: { contains: 'Ulei', mode: 'insensitive' } },
+              orderBy: { createdAt: 'asc' },
+            });
+            if (depozitUlei) {
+              resolvedDepozitId = depozitUlei.id;
+            } else {
+              const firstDep = await tx.depozit.findFirst({ orderBy: { createdAt: 'asc' } });
+              resolvedDepozitId = firstDep?.id || null;
+            }
+          }
+        }
 
-    if (articol) {
-      articol = await this.prisma.articolStoc.update({
-        where: { id: articol.id },
-        data: {
-          stocCurent: articol.stocCurent + cantitate,
-          pretUnitar: pretPerLitru,
-          marcaUlei: data.marcaUlei,
-          tipLichid: data.tipLichid || articol.tipLichid,
-        },
-      });
-    } else {
-      articol = await this.prisma.articolStoc.create({
-        data: {
-          codArticol,
-          denumire,
-          categorie: 'Ulei Motor',
-          tipLichid: data.tipLichid || null,
-          marcaUlei: data.marcaUlei,
-          stocCurent: cantitate,
-          stocMinim: 20,
-          pretUnitar: pretPerLitru,
-          unitateMasura: 'L',
-        },
-      });
-    }
+        let articolFound = await tx.articolStoc.findFirst({
+          where: {
+            OR: [
+              { codArticol },
+              { AND: [{ categorie: { contains: 'Ulei' } }, { denumire: { contains: data.marcaUlei } }] },
+            ],
+          },
+          orderBy: [{ depozitId: 'asc' }, { createdAt: 'asc' }],
+        });
 
-    const intrare = await this.prisma.intrareStoc.create({
-      data: {
-        articolStocId: articol.id,
-        tipLichid: data.tipLichid,
-        marcaUlei: data.marcaUlei,
-        furnizor: data.furnizor,
-        numarFactura: data.numarFactura,
-        dataFactura: data.dataFactura ? new Date(data.dataFactura) : new Date(),
-        cantitateIntrata: cantitate,
-        cantitateRamasa: cantitate,
-        pretUnitar: pretPerLitru,
-        pretTotal: pretTotal,
-        observatii: data.observatii,
+        let targetDepozitId = articolFound?.depozitId || resolvedDepozitId;
+
+        if (articolFound) {
+          let shouldSetDepozit = false;
+          if (!articolFound.depozitId && targetDepozitId) {
+            const conflict = await tx.articolStoc.findUnique({
+              where: {
+                codArticol_depozitId: {
+                  codArticol: articolFound.codArticol,
+                  depozitId: targetDepozitId,
+                },
+              },
+            });
+            if (!conflict) {
+              shouldSetDepozit = true;
+            }
+          }
+
+          articolFound = await tx.articolStoc.update({
+            where: { id: articolFound.id },
+            data: {
+              stocCurent: Number((articolFound.stocCurent + cantitate).toFixed(2)),
+              pretUnitar: pretPerLitru,
+              marcaUlei: data.marcaUlei,
+              tipLichid: data.tipLichid || articolFound.tipLichid,
+              ...(shouldSetDepozit ? { depozitId: targetDepozitId } : {}),
+            },
+          });
+          targetDepozitId = articolFound.depozitId || targetDepozitId;
+        } else {
+          articolFound = await tx.articolStoc.create({
+            data: {
+              codArticol,
+              denumire,
+              categorie: 'Ulei Motor',
+              tipLichid: data.tipLichid || null,
+              marcaUlei: data.marcaUlei,
+              stocCurent: cantitate,
+              stocMinim: 20,
+              pretUnitar: pretPerLitru,
+              unitateMasura: 'L',
+              depozitId: resolvedDepozitId,
+            },
+          });
+          targetDepozitId = articolFound.depozitId || resolvedDepozitId;
+        }
+
+        const intrareCreated = await tx.intrareStoc.create({
+          data: {
+            articolStocId: articolFound.id,
+            depozitId: targetDepozitId,
+            tipLichid: data.tipLichid,
+            marcaUlei: data.marcaUlei,
+            furnizor: data.furnizor,
+            numarFactura: data.numarFactura,
+            dataFactura: data.dataFactura ? new Date(data.dataFactura) : new Date(),
+            cantitateIntrata: cantitate,
+            cantitateRamasa: cantitate,
+            pretUnitar: pretPerLitru,
+            pretTotal: pretTotal,
+            observatii: data.observatii,
+          },
+        });
+
+        return { articol: articolFound, intrare: intrareCreated };
       },
-    });
+      { timeout: 15000 },
+    );
 
     return {
       mesaj: `Intrare în stoc recepționată cu succes! S-au adăugat ${cantitate}L ${denumire} (${pretPerLitru} RON/L) la stocul curent (${articol.stocCurent}L total). Factură: ${data.numarFactura}`,
@@ -482,137 +540,149 @@ export class AnomaliiService {
     const isSchimb = String(data.tipOperatiune || '').toUpperCase().includes('SCHIMB');
     const sursaOp = isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
 
-    let pretPerLitru = 0;
-    let costTotal = 0;
-    let articolUlei: any = null;
-    let fifoResult: any = null;
+    const txResult = await this.prisma.$transaction(
+      async (tx) => {
+        let pretPerLitru = 0;
+        let costTotal = 0;
+        let articolUlei: any = null;
+        let fifoResult: any = null;
 
-    if (!data.faraDeducereStoc && data.articolStocId && String(data.articolStocId).trim() !== '') {
-      articolUlei = await this.prisma.articolStoc.findUnique({ where: { id: data.articolStocId } });
-      if (!articolUlei) {
-        throw new NotFoundException('Articolul de fluid selectat nu a fost găsit în depozit.');
-      }
-      if (Number(articolUlei.stocCurent || 0) < cantitate) {
-        throw new BadRequestException(
-          `Stoc insuficient pentru "${articolUlei.denumire}": disponibil ${articolUlei.stocCurent} ${articolUlei.unitateMasura || 'L'}, solicitat ${cantitate} L.`
-        );
-      }
+        if (!data.faraDeducereStoc && data.articolStocId && String(data.articolStocId).trim() !== '') {
+          articolUlei = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
+          if (!articolUlei) {
+            throw new NotFoundException('Articolul de fluid selectat nu a fost găsit în depozit.');
+          }
 
-      try {
-        fifoResult = await this.stocuriGarantiiService.consumaStocFIFO(articolUlei.id, cantitate);
-        costTotal = fifoResult.costTotal;
-        pretPerLitru = fifoResult.pretUnitarMediu;
-      } catch (err) {
-        pretPerLitru = Number(articolUlei.pretUnitar || 0);
-        costTotal = Number((cantitate * pretPerLitru).toFixed(2));
-        await this.prisma.articolStoc.update({
-          where: { id: articolUlei.id },
-          data: { stocCurent: Math.max(0, Number((articolUlei.stocCurent - cantitate).toFixed(2))) },
-        });
-      }
-    }
+          // Verificăm inclusiv stocul rezervat în comenzi de lucru deschise (IN_LUCRU / DEVALIDAT)
+          const reservedMap = await this.stocuriGarantiiService.getReservedStockMap(undefined, tx);
+          const reservedQty = Number(reservedMap.get(articolUlei.id) || 0);
+          const stocFizic = Number(articolUlei.stocCurent || 0);
+          const disponibil = Number(Math.max(0, stocFizic - reservedQty).toFixed(4));
+          if (cantitate > disponibil + 1e-6) {
+            const um = articolUlei.unitateMasura || 'L';
+            const rezervatInfo =
+              reservedQty > 0
+                ? ` (stoc fizic: ${stocFizic} ${um}, rezervat în comenzi deschise: ${reservedQty} ${um})`
+                : '';
+            throw new BadRequestException(
+              `Stoc insuficient pentru "${articolUlei.denumire}": disponibil ${disponibil} ${um}${rezervatInfo}, solicitat ${cantitate} L.`,
+            );
+          }
 
-    if (inputContor > 0) {
-      await this.prisma.istoricContorVehicul.create({
-        data: {
-          vehiculId: vehicul.id,
-          tipContor: unitCode,
-          valoareContor: inputContor,
-          dataInregistrare: dataOp,
-          sursa: sursaOp,
-          operator: data.mecanic,
-          observatii: `Înregistrat la ${data.tipOperatiune} (${unitLabel}): ${cantitate}L ${data.tipLichid} (${data.marcaUlei || articolUlei?.denumire || ''})`,
-        },
-      });
+          // Consum atomic FIFO în aceeași tranzacție — fără fallback silențios care ar desincroniza IntrareStoc
+          fifoResult = await this.stocuriGarantiiService.consumaStocFIFO(articolUlei.id, cantitate, tx);
+          costTotal = fifoResult.costTotal;
+          pretPerLitru = fifoResult.pretUnitarMediu;
+        }
 
-      if (useMthCounter && dualMth) {
-        if (inputContor > Number(vehicul.oreFunctionareCurent || 0)) {
-          await this.prisma.vehicul.update({
-            where: { id: vehicul.id },
+        if (inputContor > 0) {
+          await tx.istoricContorVehicul.create({
             data: {
-              oreFunctionareCurent: inputContor,
-              dataInregistrareMth: dataOp,
+              vehiculId: vehicul.id,
+              tipContor: unitCode,
+              valoareContor: inputContor,
+              dataInregistrare: dataOp,
+              sursa: sursaOp,
+              operator: data.mecanic,
+              observatii: `Înregistrat la ${data.tipOperatiune} (${unitLabel}): ${cantitate}L ${data.tipLichid} (${data.marcaUlei || articolUlei?.denumire || ''})`,
             },
           });
-        }
-      } else if (inputContor > vehicul.valoareContorCurent) {
-        if (!useMthCounter && vehicul.categorieEnum === 'CAP_TRACTOR') {
-          const delta = inputContor - vehicul.valoareContorCurent;
-          const activeCoupling = await this.prisma.istoricCuplare.findFirst({
-            where: { capTractorId: vehicul.id, esteActiv: true },
-            include: { semiremorca: true },
-          });
 
-          if (activeCoupling && activeCoupling.semiremorca) {
-            const valNouaSemi = Number((activeCoupling.semiremorca.valoareContorCurent + delta).toFixed(2));
-            await this.prisma.vehicul.update({
-              where: { id: activeCoupling.semiremorca.id },
-              data: { valoareContorCurent: valNouaSemi, dataInregistrareContor: dataOp },
-            });
+          if (useMthCounter && dualMth) {
+            if (inputContor > Number(vehicul.oreFunctionareCurent || 0)) {
+              await tx.vehicul.update({
+                where: { id: vehicul.id },
+                data: {
+                  oreFunctionareCurent: inputContor,
+                  dataInregistrareMth: dataOp,
+                },
+              });
+            }
+          } else if (inputContor > vehicul.valoareContorCurent) {
+            if (!useMthCounter && vehicul.categorieEnum === 'CAP_TRACTOR') {
+              const delta = inputContor - vehicul.valoareContorCurent;
+              const activeCoupling = await tx.istoricCuplare.findFirst({
+                where: { capTractorId: vehicul.id, esteActiv: true },
+                include: { semiremorca: true },
+              });
 
-            await this.prisma.istoricContorVehicul.create({
-              data: {
-                vehiculId: activeCoupling.semiremorca.id,
-                tipContor: 'KM',
-                valoareContor: valNouaSemi,
-                dataInregistrare: dataOp,
-                sursa: 'CUPLARE_CAP_TRACTOR',
-                operator: 'Sistem Cuplare Dinamică',
-                observatii: `Rulaj acumulat automat la ${data.tipOperatiune} Cap Tractor ${vehicul.numarIntern}: +${delta} KM`,
-              },
+              if (activeCoupling && activeCoupling.semiremorca) {
+                const valNouaSemi = Number((activeCoupling.semiremorca.valoareContorCurent + delta).toFixed(2));
+                await tx.vehicul.update({
+                  where: { id: activeCoupling.semiremorca.id },
+                  data: { valoareContorCurent: valNouaSemi, dataInregistrareContor: dataOp },
+                });
+
+                await tx.istoricContorVehicul.create({
+                  data: {
+                    vehiculId: activeCoupling.semiremorca.id,
+                    tipContor: 'KM',
+                    valoareContor: valNouaSemi,
+                    dataInregistrare: dataOp,
+                    sursa: 'CUPLARE_CAP_TRACTOR',
+                    operator: 'Sistem Cuplare Dinamică',
+                    observatii: `Rulaj acumulat automat la ${data.tipOperatiune} Cap Tractor ${vehicul.numarIntern}: +${delta} KM`,
+                  },
+                });
+              }
+            }
+
+            await tx.vehicul.update({
+              where: { id: vehicul.id },
+              data: { valoareContorCurent: inputContor, dataInregistrareContor: dataOp },
             });
           }
         }
 
-        await this.prisma.vehicul.update({
-          where: { id: vehicul.id },
-          data: { valoareContorCurent: inputContor, dataInregistrareContor: dataOp },
+        const completare = await tx.completareLichid.create({
+          data: {
+            vehiculId: vehicul.id,
+            articolStocId: articolUlei ? articolUlei.id : null,
+            tipLichid: data.tipLichid,
+            tipOperatiune: data.tipOperatiune,
+            marcaUlei: data.marcaUlei || (articolUlei ? (articolUlei.marcaUlei || articolUlei.denumire) : 'Standard'),
+            cantitateLitri: cantitate,
+            pretPerLitru,
+            costTotal,
+            valoareContor: effectiveContor,
+            unitateContor: unitCode,
+            dataCompletare: dataOp,
+            mecanic: data.mecanic || 'Atelier',
+            observatii: data.observatii,
+            stareAlerta: 'NOUA',
+          },
         });
-      }
-    }
 
-    const completare = await this.prisma.completareLichid.create({
-      data: {
-        vehiculId: vehicul.id,
-        articolStocId: articolUlei ? articolUlei.id : null,
-        tipLichid: data.tipLichid,
-        tipOperatiune: data.tipOperatiune,
-        marcaUlei: data.marcaUlei || (articolUlei ? (articolUlei.marcaUlei || articolUlei.denumire) : 'Standard'),
-        cantitateLitri: cantitate,
-        pretPerLitru,
-        costTotal,
-        valoareContor: effectiveContor,
-        unitateContor: unitCode,
-        dataCompletare: dataOp,
-        mecanic: data.mecanic || 'Atelier',
-        observatii: data.observatii,
-        stareAlerta: 'NOUA',
+        if (isSchimb) {
+          await tx.configurareUleiVehicul.upsert({
+            where: { vehiculId_tipLichid: { vehiculId: vehicul.id, tipLichid: data.tipLichid } },
+            update: {
+              ultimulSchimbContor: effectiveContor,
+              ultimulSchimbData: dataOp,
+              ultimulSchimbEstimat: false,
+            },
+            create: {
+              vehiculId: vehicul.id,
+              tipLichid: data.tipLichid,
+              ultimulSchimbContor: effectiveContor,
+              ultimulSchimbData: dataOp,
+              ultimulSchimbEstimat: false,
+              intervalMth: catNorm?.intervalMth ?? (useMthCounter ? 500 : null),
+              intervalKm: catNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
+              intervalLuni: catNorm?.intervalLuni ?? null,
+              pragAvertizareMth: catNorm?.pragAvertizareMth ?? (useMthCounter ? 50 : null),
+              pragAvertizareKm: catNorm?.pragAvertizareKm ?? (!useMthCounter ? 1000 : null),
+              pragAvertizareLuni: catNorm?.pragAvertizareLuni ?? null,
+            },
+          });
+        }
+
+        return { completare, articolUlei, fifoResult, pretPerLitru, costTotal };
       },
-    });
+      { timeout: 20000 },
+    );
 
-    if (isSchimb) {
-      await this.prisma.configurareUleiVehicul.upsert({
-        where: { vehiculId_tipLichid: { vehiculId: vehicul.id, tipLichid: data.tipLichid } },
-        update: {
-          ultimulSchimbContor: effectiveContor,
-          ultimulSchimbData: dataOp,
-          ultimulSchimbEstimat: false,
-        },
-        create: {
-          vehiculId: vehicul.id,
-          tipLichid: data.tipLichid,
-          ultimulSchimbContor: effectiveContor,
-          ultimulSchimbData: dataOp,
-          ultimulSchimbEstimat: false,
-          intervalMth: catNorm?.intervalMth ?? (useMthCounter ? 500 : null),
-          intervalKm: catNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
-          intervalLuni: catNorm?.intervalLuni ?? null,
-          pragAvertizareMth: catNorm?.pragAvertizareMth ?? (useMthCounter ? 50 : null),
-          pragAvertizareKm: catNorm?.pragAvertizareKm ?? (!useMthCounter ? 1000 : null),
-          pragAvertizareLuni: catNorm?.pragAvertizareLuni ?? null,
-        },
-      });
-    }
+    const { completare, articolUlei, fifoResult, pretPerLitru, costTotal } = txResult;
 
     let verificareScurgere = null;
     if (!isSchimb) {
@@ -640,50 +710,55 @@ export class AnomaliiService {
 
   // Anulare / ștergere intervenție fluid de sine stătătoare (doar fără comandă de lucru asociată)
   async stergeCompletareLichid(id: string) {
-    const rec = await this.prisma.completareLichid.findUnique({
-      where: { id },
-      include: { articolStoc: true },
-    });
-    if (!rec) throw new NotFoundException('Înregistrarea de fluid nu a fost găsită.');
-    if (rec.comandaLucruId) {
-      throw new BadRequestException(
-        'Această intervenție provine dintr-o Comandă de Lucru. Devalidați sau anulați comanda de lucru pentru a o elimina în siguranță.'
-      );
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      if (rec.articolStocId) {
-        await tx.articolStoc.update({
-          where: { id: rec.articolStocId },
-          data: { stocCurent: { increment: rec.cantitateLitri } },
+    await this.prisma.$transaction(
+      async (tx) => {
+        const rec = await tx.completareLichid.findUnique({
+          where: { id },
+          include: { articolStoc: true },
         });
-      }
-      await tx.completareLichid.delete({ where: { id } });
-
-      if (String(rec.tipOperatiune || '').toUpperCase().includes('SCHIMB')) {
-        const prevSchimb = await tx.completareLichid.findFirst({
-          where: {
-            vehiculId: rec.vehiculId,
-            tipLichid: rec.tipLichid,
-            tipOperatiune: { contains: 'SCHIMB' },
-          },
-          orderBy: { dataCompletare: 'desc' },
-        });
-        if (prevSchimb) {
-          await tx.configurareUleiVehicul.updateMany({
-            where: { vehiculId: rec.vehiculId, tipLichid: rec.tipLichid },
-            data: {
-              ultimulSchimbContor: prevSchimb.valoareContor,
-              ultimulSchimbData: prevSchimb.dataCompletare,
-            },
-          });
+        if (!rec) throw new NotFoundException('Înregistrarea de fluid nu a fost găsită.');
+        if (rec.comandaLucruId) {
+          throw new BadRequestException(
+            'Această intervenție provine dintr-o Comandă de Lucru. Devalidați sau anulați comanda de lucru pentru a o elimina în siguranță.',
+          );
         }
-      }
-    });
+
+        if (rec.articolStocId && Number(rec.cantitateLitri || 0) > 0) {
+          await this.stocuriGarantiiService.restituieStocFIFO(
+            rec.articolStocId,
+            rec.cantitateLitri,
+            rec.pretPerLitru,
+            tx,
+          );
+        }
+        await tx.completareLichid.delete({ where: { id } });
+
+        if (String(rec.tipOperatiune || '').toUpperCase().includes('SCHIMB')) {
+          const prevSchimb = await tx.completareLichid.findFirst({
+            where: {
+              vehiculId: rec.vehiculId,
+              tipLichid: rec.tipLichid,
+              tipOperatiune: { contains: 'SCHIMB' },
+            },
+            orderBy: { dataCompletare: 'desc' },
+          });
+          if (prevSchimb) {
+            await tx.configurareUleiVehicul.updateMany({
+              where: { vehiculId: rec.vehiculId, tipLichid: rec.tipLichid },
+              data: {
+                ultimulSchimbContor: prevSchimb.valoareContor,
+                ultimulSchimbData: prevSchimb.dataCompletare,
+              },
+            });
+          }
+        }
+      },
+      { timeout: 15000 },
+    );
 
     return {
       succes: true,
-      mesaj: 'Înregistrarea de fluid a fost eliminată și stocul restaurat.',
+      mesaj: 'Înregistrarea de fluid a fost eliminată și stocul restaurat (FIFO).',
     };
   }
 
@@ -2451,12 +2526,22 @@ export class AnomaliiService {
       }
     });
 
-    // 5. Alerte Stoc Critic & Aprovizionare Piese / Uleiuri
+    // 5. Alerte Stoc Critic & Aprovizionare Piese / Uleiuri (excludem anvelopele — gestionate separat în Magazie Anvelope)
     const articoleStoc = await this.prisma.articolStoc.findMany({
       include: { depozit: true },
     });
 
     articoleStoc.forEach((art) => {
+      if (
+        isTireItem({
+          categorie: art.categorie,
+          subcategorie: art.subcategorie,
+          denumire: art.denumire,
+          codArticol: art.codArticol,
+        })
+      ) {
+        return;
+      }
       const min = Number(art.stocMinim) || 0;
       // Alertă de stoc critic se generează DOAR dacă există un prag minim definit (> 0) și stocul scade sub acest prag!
       // Dacă stocMinim este 0, monitorizarea este dezactivată.

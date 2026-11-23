@@ -135,7 +135,15 @@ export class StocuriGarantiiController {
   }
 
   @Post('demonteaza-componenta')
-  demonteazaComponenta(@Body() body: { serieUnica: string; mecanic: string; motivDemontare: string }) {
-    return this.stocuriGarantiiService.demonteazaComponenta(body.serieUnica, body.mecanic, body.motivDemontare);
+  demonteazaComponenta(
+    @Body()
+    body: {
+      componentaId?: string;
+      serieUnica?: string;
+      mecanic?: string;
+      motivDemontare?: string;
+    },
+  ) {
+    return this.stocuriGarantiiService.demonteazaComponenta(body);
   }
 }
