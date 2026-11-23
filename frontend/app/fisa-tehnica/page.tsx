@@ -709,33 +709,6 @@ export default function FisaTehnicaPage() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => {
-              setNumarIntern('');
-              setNumarInmatriculare('');
-              setMarca('');
-              setModel('');
-              setAnFabricatie(new Date().getFullYear());
-              setSerieSasiu('');
-              setValoareContorInitial(0);
-              setValoareContorCurent(0);
-              setShowAddModal(true);
-            }}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Adaugă Vehicul</span>
-          </button>
-
-          <button
-            onClick={handleOpenContorModal}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white text-xs font-bold shadow-md shadow-terracotta-500/20 transition"
-          >
-            <Clock className="w-4 h-4" />
-            <span>Înregistrare Rapidă Contoare (KM / mTH)</span>
-          </button>
-        </div>
       </div>
 
       {/* BARĂ COMUTARE MOD VIZUALIZARE: TABEL PE CATEGORII VS FIȘĂ DEDICATĂ */}
