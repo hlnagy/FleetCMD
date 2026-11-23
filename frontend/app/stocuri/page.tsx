@@ -8,7 +8,8 @@ import { useSearchParams } from 'next/navigation';
 import {
   PackageCheck, ShieldAlert, FileText, Wrench, AlertTriangle, CheckCircle, Plus,
   Filter, Edit3, X, ShoppingCart, History, Trash2, Search, Building2, Layers, AlertCircle,
-  ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2, Check
+  ArrowRight, ShieldCheck, ArrowLeftRight, CircleDot, Tag, Truck, RotateCcw, CheckCircle2, Check,
+  LayoutList, LayoutGrid, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { showConfirm, showToast } from '@/lib/swal';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
@@ -135,6 +136,13 @@ function StocuriGarantiiContent() {
   const [anvelopeStocSearch, setAnvelopeStocSearch] = useState('');
   const [anvelopeStocFilterState, setAnvelopeStocFilterState] = useState<'ALL' | 'NOUA' | 'RULATA'>('ALL');
   const [anvelopeStocDepozitFilter, setAnvelopeStocDepozitFilter] = useState('');
+  const [anvelopeStocDimensiuneFilter, setAnvelopeStocDimensiuneFilter] = useState('');
+  const [anvelopeStocMarcaFilter, setAnvelopeStocMarcaFilter] = useState('');
+  const [anvelopeStocViewMode, setAnvelopeStocViewMode] = useState<'tabel' | 'grupate' | 'carduri'>('tabel');
+  const [anvelopeStocSortCol, setAnvelopeStocSortCol] = useState<
+    'serie' | 'marca' | 'dimensiune' | 'depozit' | 'furnizor' | 'rulaj' | 'pret'
+  >('dimensiune');
+  const [anvelopeStocSortDir, setAnvelopeStocSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingAnvelopaStoc, setEditingAnvelopaStoc] = useState<any>(null);
   const [showAddAnvelopeStocModal, setShowAddAnvelopeStocModal] = useState(false);
   const [newBatchAnv, setNewBatchAnv] = useState<any>({
@@ -463,6 +471,8 @@ function StocuriGarantiiContent() {
   const handleOpenDepozitAnvelope = (depId: string) => {
     setAnvelopeStocDepozitFilter(depId);
     setAnvelopeStocFilterState('ALL');
+    setAnvelopeStocDimensiuneFilter('');
+    setAnvelopeStocMarcaFilter('');
     setAnvelopeStocSearch('');
     setActiveTab('anvelope_stoc');
   };
@@ -1292,27 +1302,212 @@ function StocuriGarantiiContent() {
   // Componente serializate ne-anvelope (garanții piese atelier)
   const componenteAfisate = componente.filter((c) => !isTireItem(c.articolStoc));
 
-  // Filtrare anvelope serializate din magazie
-  const anvelopeStocFiltrate = anvelopeStocList.filter((a) => {
-    const isNoua = (a.adancimeCurentaMm || 16) >= 15;
-    if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
-    if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
-    if (anvelopeStocDepozitFilter) {
-      const mainDepId = depozite[0]?.id;
-      const matchesDep =
-        a.depozitId === anvelopeStocDepozitFilter ||
-        (!a.depozitId && mainDepId && anvelopeStocDepozitFilter === mainDepId);
-      if (!matchesDep) return false;
+  // Opțiuni dinamice pentru filtrele Magazie Anvelope (Dimensiune & Marcă)
+  const normalizeDimensiuneKey = (dim?: string | null) =>
+    String(dim || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '');
+
+  const anvelopeDimensiuniMap = new Map<string, { label: string; count: number }>();
+  const anvelopeMarciMap = new Map<string, { label: string; count: number }>();
+  anvelopeStocList.forEach((a) => {
+    const rawDim = String(a.dimensiune || '').trim();
+    const dimKey = normalizeDimensiuneKey(rawDim);
+    if (dimKey) {
+      const prev = anvelopeDimensiuniMap.get(dimKey);
+      anvelopeDimensiuniMap.set(dimKey, {
+        label: prev?.label || rawDim,
+        count: (prev?.count || 0) + 1,
+      });
     }
-    return matchesSearchTokens(
-      [a.serieAnvelopa, a.marca, a.model, a.dimensiune, a.codDot, a.depozit?.nume, a.furnizor, a.numarFactura],
-      anvelopeStocSearch,
-    );
+    const rawMarca = String(a.marca || '').trim();
+    const marcaKey = rawMarca.toUpperCase();
+    if (marcaKey) {
+      const prev = anvelopeMarciMap.get(marcaKey);
+      anvelopeMarciMap.set(marcaKey, {
+        label: prev?.label || rawMarca,
+        count: (prev?.count || 0) + 1,
+      });
+    }
   });
+  const anvelopeDimensiuniOptiuni = Array.from(anvelopeDimensiuniMap.entries())
+    .map(([key, val]) => ({ key, ...val }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'ro', { numeric: true, sensitivity: 'base' }));
+  const anvelopeMarciOptiuni = Array.from(anvelopeMarciMap.entries())
+    .map(([key, val]) => ({ key, ...val }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'ro', { numeric: true, sensitivity: 'base' }));
+
+  const handleAnvelopeStocSort = (
+    col: 'serie' | 'marca' | 'dimensiune' | 'depozit' | 'furnizor' | 'rulaj' | 'pret',
+  ) => {
+    if (anvelopeStocSortCol === col) {
+      setAnvelopeStocSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setAnvelopeStocSortCol(col);
+    setAnvelopeStocSortDir(col === 'pret' || col === 'rulaj' ? 'desc' : 'asc');
+  };
+
+  const hasActiveAnvelopeFilters = Boolean(
+    anvelopeStocSearch.trim() ||
+      anvelopeStocFilterState !== 'ALL' ||
+      anvelopeStocDepozitFilter ||
+      anvelopeStocDimensiuneFilter ||
+      anvelopeStocMarcaFilter,
+  );
+
+  const resetAnvelopeStocFilters = () => {
+    setAnvelopeStocSearch('');
+    setAnvelopeStocFilterState('ALL');
+    setAnvelopeStocDepozitFilter('');
+    setAnvelopeStocDimensiuneFilter('');
+    setAnvelopeStocMarcaFilter('');
+  };
+
+  // Filtrare + Sortare anvelope serializate din magazie
+  const anvelopeStocFiltrate = anvelopeStocList
+    .filter((a) => {
+      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+      if (anvelopeStocFilterState === 'NOUA' && !isNoua) return false;
+      if (anvelopeStocFilterState === 'RULATA' && isNoua) return false;
+      if (anvelopeStocDepozitFilter) {
+        const mainDepId = depozite[0]?.id;
+        const matchesDep =
+          a.depozitId === anvelopeStocDepozitFilter ||
+          (!a.depozitId && mainDepId && anvelopeStocDepozitFilter === mainDepId);
+        if (!matchesDep) return false;
+      }
+      if (
+        anvelopeStocDimensiuneFilter &&
+        normalizeDimensiuneKey(a.dimensiune) !== anvelopeStocDimensiuneFilter
+      ) {
+        return false;
+      }
+      if (
+        anvelopeStocMarcaFilter &&
+        String(a.marca || '').trim().toUpperCase() !== anvelopeStocMarcaFilter
+      ) {
+        return false;
+      }
+      return matchesSearchTokens(
+        [a.serieAnvelopa, a.marca, a.model, a.dimensiune, a.codDot, a.depozit?.nume, a.furnizor, a.numarFactura],
+        anvelopeStocSearch,
+      );
+    })
+    .sort((a, b) => {
+      const dir = anvelopeStocSortDir === 'asc' ? 1 : -1;
+      const nat = (x?: string | null, y?: string | null) =>
+        String(x || '').localeCompare(String(y || ''), 'ro', { numeric: true, sensitivity: 'base' });
+
+      if (anvelopeStocSortCol === 'serie') {
+        return nat(a.serieAnvelopa, b.serieAnvelopa) * dir;
+      }
+      if (anvelopeStocSortCol === 'marca') {
+        const mDiff = nat(`${a.marca || ''} ${a.model || ''}`, `${b.marca || ''} ${b.model || ''}`);
+        if (mDiff !== 0) return mDiff * dir;
+        return nat(a.serieAnvelopa, b.serieAnvelopa);
+      }
+      if (anvelopeStocSortCol === 'dimensiune') {
+        const dDiff = nat(a.dimensiune, b.dimensiune);
+        if (dDiff !== 0) return dDiff * dir;
+        const mDiff = nat(`${a.marca || ''} ${a.model || ''}`, `${b.marca || ''} ${b.model || ''}`);
+        if (mDiff !== 0) return mDiff;
+        return nat(a.serieAnvelopa, b.serieAnvelopa);
+      }
+      if (anvelopeStocSortCol === 'depozit') {
+        const depDiff = nat(a.depozit?.nume, b.depozit?.nume);
+        if (depDiff !== 0) return depDiff * dir;
+        return nat(a.dimensiune, b.dimensiune);
+      }
+      if (anvelopeStocSortCol === 'furnizor') {
+        const fDiff = nat(`${a.furnizor || ''} ${a.numarFactura || ''}`, `${b.furnizor || ''} ${b.numarFactura || ''}`);
+        if (fDiff !== 0) return fDiff * dir;
+        return nat(a.serieAnvelopa, b.serieAnvelopa);
+      }
+      if (anvelopeStocSortCol === 'rulaj') {
+        const rDiff = Number(a.rulajTotalKm || 0) - Number(b.rulajTotalKm || 0);
+        if (rDiff !== 0) return rDiff * dir;
+        return nat(a.serieAnvelopa, b.serieAnvelopa);
+      }
+      if (anvelopeStocSortCol === 'pret') {
+        const pDiff = Number(a.pretAchizitie || 0) - Number(b.pretAchizitie || 0);
+        if (pDiff !== 0) return pDiff * dir;
+        return nat(a.serieAnvelopa, b.serieAnvelopa);
+      }
+      return 0;
+    });
+
+  // Grupare compactă pe Dimensiune + Marcă + Model + Depozit (pentru stocuri mari de 100+ anvelope)
+  const anvelopeStocGrupate = (() => {
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        dimensiune: string;
+        marca: string;
+        model: string;
+        depozitId: string;
+        depozitNume: string;
+        furnizor: string;
+        numarFactura: string;
+        dataFactura: string | null;
+        pretUnitarMediu: number;
+        valoareTotala: number;
+        noiCount: number;
+        rulateCount: number;
+        items: any[];
+      }
+    >();
+    anvelopeStocFiltrate.forEach((a) => {
+      const dimKey = normalizeDimensiuneKey(a.dimensiune) || 'NESPECIFICAT';
+      const marcaKey = String(a.marca || '').trim().toUpperCase();
+      const modelKey = String(a.model || '').trim().toUpperCase();
+      const depKey = String(a.depozitId || 'DEFAULT');
+      const gKey = `${dimKey}__${marcaKey}__${modelKey}__${depKey}`;
+      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+      const pret = Number(a.pretAchizitie || 0);
+
+      if (!groups.has(gKey)) {
+        groups.set(gKey, {
+          key: gKey,
+          dimensiune: a.dimensiune || '—',
+          marca: a.marca || '—',
+          model: a.model || '',
+          depozitId: a.depozitId || '',
+          depozitNume: a.depozit?.nume || 'Depozit Central',
+          furnizor: a.furnizor || '',
+          numarFactura: a.numarFactura || '',
+          dataFactura: a.dataFactura || null,
+          pretUnitarMediu: pret,
+          valoareTotala: 0,
+          noiCount: 0,
+          rulateCount: 0,
+          items: [],
+        });
+      }
+      const g = groups.get(gKey)!;
+      g.items.push(a);
+      g.valoareTotala += pret;
+      g.pretUnitarMediu = g.valoareTotala / g.items.length;
+      if (isNoua) g.noiCount++;
+      else g.rulateCount++;
+      if (!g.furnizor && a.furnizor) g.furnizor = a.furnizor;
+      if (!g.numarFactura && a.numarFactura) {
+        g.numarFactura = a.numarFactura;
+        g.dataFactura = a.dataFactura || null;
+      }
+    });
+    return Array.from(groups.values());
+  })();
 
   const totalValoareAnvelopeStoc = anvelopeStocList.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
   const countAnvelopeNoi = anvelopeStocList.filter((a) => (a.adancimeCurentaMm || 16) >= 15).length;
   const countAnvelopeRulate = anvelopeStocList.length - countAnvelopeNoi;
+
+  const totalValoareAnvelopeFiltrate = anvelopeStocFiltrate.reduce((acc, a) => acc + (a.pretAchizitie || 0), 0);
+  const countAnvelopeNoiFiltrate = anvelopeStocFiltrate.filter((a) => (a.adancimeCurentaMm || 16) >= 15).length;
+  const countAnvelopeRulateFiltrate = anvelopeStocFiltrate.length - countAnvelopeNoiFiltrate;
 
   return (
     <div className="space-y-6">
@@ -2022,73 +2217,93 @@ function StocuriGarantiiContent() {
 
       {/* TAB 2: MAGAZIE CENTRALĂ ANVELOPE (SERIALIZAT & BUCATĂ CU BUCATĂ) */}
       {activeTab === 'anvelope_stoc' && (
-        <div className="space-y-4">
-          {/* Carduri KPI Statistica Magazie Anvelope */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
-              <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl">
-                <CircleDot className="w-6 h-6" />
+        <div className="space-y-3">
+          {/* Carduri KPI Compacte (reflectă selecția filtrată + totalul) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="pleasant-card bg-white p-3 rounded-xl border border-morning-200 shadow-2xs flex items-center space-x-2.5">
+              <div className="p-2 bg-emerald-100 text-emerald-800 rounded-lg shrink-0">
+                <CircleDot className="w-4 h-4" />
               </div>
-              <div>
-                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Total Anvelope în Stoc</p>
-                <p className="text-xl font-black text-sapphire-900 font-mono">{anvelopeStocList.length} buc</p>
-                <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">Disponibile pentru montaj</p>
-              </div>
-            </div>
-
-            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
-              <div className="p-3 bg-sapphire-100 text-sapphire-800 rounded-xl">
-                <Tag className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Anvelope Noi (Profil 16mm)</p>
-                <p className="text-xl font-black text-sapphire-900 font-mono">{countAnvelopeNoi} buc</p>
-                <p className="text-[10px] text-sapphire-600 font-semibold mt-0.5">Nerulate / Achiziții noi</p>
-              </div>
-            </div>
-
-            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
-              <div className="p-3 bg-amber-100 text-amber-900 rounded-xl">
-                <RotateCcw className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Rulate / Rezervă</p>
-                <p className="text-xl font-black text-sapphire-900 font-mono">{countAnvelopeRulate} buc</p>
-                <p className="text-[10px] text-amber-700 font-semibold mt-0.5">Demontate & refolosibile</p>
-              </div>
-            </div>
-
-            <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs flex items-center space-x-3">
-              <div className="p-3 bg-periwinkle-100 text-periwinkle-800 rounded-xl">
-                <Building2 className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider">Valoare Totală Stoc</p>
-                <p className="text-xl font-black text-sapphire-900 font-mono">
-                  {Number(totalValoareAnvelopeStoc).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+              <div className="min-w-0">
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider truncate">
+                  {hasActiveAnvelopeFilters ? 'Anvelope Filtrate' : 'Total Anvelope în Stoc'}
                 </p>
-                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Inventar magazie</p>
+                <p className="text-base font-black text-sapphire-900 font-mono">
+                  {anvelopeStocFiltrate.length} buc
+                  {hasActiveAnvelopeFilters && (
+                    <span className="text-[11px] font-semibold text-sage-500 ml-1">
+                      / {anvelopeStocList.length}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-3 rounded-xl border border-morning-200 shadow-2xs flex items-center space-x-2.5">
+              <div className="p-2 bg-sapphire-100 text-sapphire-800 rounded-lg shrink-0">
+                <Tag className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider truncate">
+                  Anvelope Noi (16mm)
+                </p>
+                <p className="text-base font-black text-sapphire-900 font-mono">
+                  {countAnvelopeNoiFiltrate} buc
+                </p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-3 rounded-xl border border-morning-200 shadow-2xs flex items-center space-x-2.5">
+              <div className="p-2 bg-amber-100 text-amber-900 rounded-lg shrink-0">
+                <RotateCcw className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider truncate">
+                  Rulate / Rezervă
+                </p>
+                <p className="text-base font-black text-sapphire-900 font-mono">
+                  {countAnvelopeRulateFiltrate} buc
+                </p>
+              </div>
+            </div>
+
+            <div className="pleasant-card bg-white p-3 rounded-xl border border-morning-200 shadow-2xs flex items-center space-x-2.5">
+              <div className="p-2 bg-periwinkle-100 text-periwinkle-800 rounded-lg shrink-0">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-sage-600 font-bold uppercase tracking-wider truncate">
+                  {hasActiveAnvelopeFilters ? 'Valoare Selecție' : 'Valoare Totală Stoc'}
+                </p>
+                <p className="text-base font-black text-sapphire-900 font-mono truncate">
+                  {Number(totalValoareAnvelopeFiltrate).toLocaleString('ro-RO', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  RON
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Panou Filtre & Căutare Magazie Anvelope */}
-          <div className="pleasant-card bg-white p-4 rounded-2xl border border-morning-200 shadow-xs space-y-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="relative flex-1">
+          {/* Panou Căutare Rapidă & Filtre Multi-Criteriu (scalabil la 100+ anvelope) */}
+          <div className="pleasant-card bg-white p-3.5 rounded-2xl border border-morning-200 shadow-xs space-y-2.5">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
+              {/* Căutare rapidă */}
+              <div className="relative flex-1 min-w-[240px]">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
                 <input
                   type="text"
                   value={anvelopeStocSearch}
                   onChange={(e) => setAnvelopeStocSearch(e.target.value)}
-                  placeholder="Caută anvelopă după Serie (SN), Marcă, Model, Dimensiune, DOT, Depozit..."
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-9 py-2.5 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
+                  placeholder="Căutare rapidă: Serie (SN), Marcă, Model, Dimensiune, DOT, Furnizor, Factură, Depozit..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-9 py-2 text-xs text-sapphire-900 font-bold focus:bg-white focus:border-sapphire-500 focus:outline-none"
                 />
                 {anvelopeStocSearch && (
                   <button
                     type="button"
                     onClick={() => setAnvelopeStocSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-sage-500 hover:text-sapphire-900 hover:bg-morning-200 transition"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-sage-500 hover:text-sapphire-900 hover:bg-morning-200 transition cursor-pointer"
                     title="Șterge căutarea"
                     aria-label="Șterge căutarea"
                   >
@@ -2097,43 +2312,44 @@ function StocuriGarantiiContent() {
                 )}
               </div>
 
-              <div className="flex items-center space-x-2 text-xs flex-wrap">
-                {/* Filtru Stare Anvelopă */}
-                <div className="flex items-center space-x-1 bg-morning-100 p-1 rounded-xl border border-morning-200">
-                  <button
-                    type="button"
-                    onClick={() => setAnvelopeStocFilterState('ALL')}
-                    className={`px-3 py-1 rounded-lg font-bold transition ${
-                      anvelopeStocFilterState === 'ALL' ? 'bg-white text-sapphire-900 shadow-xs' : 'text-sage-600 hover:text-sapphire-900'
-                    }`}
-                  >
-                    Toate ({anvelopeStocList.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnvelopeStocFilterState('NOUA')}
-                    className={`px-3 py-1 rounded-lg font-bold transition ${
-                      anvelopeStocFilterState === 'NOUA' ? 'bg-emerald-500 text-white shadow-xs' : 'text-sage-600 hover:text-emerald-800'
-                    }`}
-                  >
-                    Noi ({countAnvelopeNoi})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAnvelopeStocFilterState('RULATA')}
-                    className={`px-3 py-1 rounded-lg font-bold transition ${
-                      anvelopeStocFilterState === 'RULATA' ? 'bg-amber-500 text-white shadow-xs' : 'text-sage-600 hover:text-amber-800'
-                    }`}
-                  >
-                    Rulate ({countAnvelopeRulate})
-                  </button>
-                </div>
+              {/* Filtre Dropdown & Comutatoare */}
+              <div className="flex items-center gap-2 text-xs flex-wrap">
+                {/* Filtru Dimensiune */}
+                <select
+                  value={anvelopeStocDimensiuneFilter}
+                  onChange={(e) => setAnvelopeStocDimensiuneFilter(e.target.value)}
+                  className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
+                  title="Filtrează după dimensiune anvelopă"
+                >
+                  <option value="">Toate Dimensiunile ({anvelopeDimensiuniOptiuni.length})</option>
+                  {anvelopeDimensiuniOptiuni.map((dim) => (
+                    <option key={dim.key} value={dim.key}>
+                      {dim.label} ({dim.count} buc)
+                    </option>
+                  ))}
+                </select>
+
+                {/* Filtru Marcă */}
+                <select
+                  value={anvelopeStocMarcaFilter}
+                  onChange={(e) => setAnvelopeStocMarcaFilter(e.target.value)}
+                  className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
+                  title="Filtrează după marcă anvelopă"
+                >
+                  <option value="">Toate Mărcile ({anvelopeMarciOptiuni.length})</option>
+                  {anvelopeMarciOptiuni.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {m.label} ({m.count} buc)
+                    </option>
+                  ))}
+                </select>
 
                 {/* Filtru Depozit */}
                 <select
                   value={anvelopeStocDepozitFilter}
                   onChange={(e) => setAnvelopeStocDepozitFilter(e.target.value)}
-                  className="bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
+                  className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
+                  title="Filtrează după depozit"
                 >
                   <option value="">Toate Depozitele ({anvelopeStocList.length} buc)</option>
                   {depozite.map((d) => {
@@ -2146,39 +2362,521 @@ function StocuriGarantiiContent() {
                   })}
                 </select>
 
+                {/* Filtru Stare Anvelopă */}
+                <div className="flex items-center space-x-1 bg-morning-100 p-1 rounded-xl border border-morning-200">
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      anvelopeStocFilterState === 'ALL'
+                        ? 'bg-white text-sapphire-900 shadow-xs'
+                        : 'text-sage-600 hover:text-sapphire-900'
+                    }`}
+                  >
+                    Toate ({anvelopeStocList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('NOUA')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      anvelopeStocFilterState === 'NOUA'
+                        ? 'bg-emerald-500 text-white shadow-xs'
+                        : 'text-sage-600 hover:text-emerald-800'
+                    }`}
+                  >
+                    Noi ({countAnvelopeNoi})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocFilterState('RULATA')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      anvelopeStocFilterState === 'RULATA'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-sage-600 hover:text-amber-800'
+                    }`}
+                  >
+                    Rulate ({countAnvelopeRulate})
+                  </button>
+                </div>
+
+                {/* Comutator Vizualizare: Tabel Compact / Grupate / Carduri */}
+                <div
+                  className="flex items-center space-x-1 bg-morning-100 p-1 rounded-xl border border-morning-200"
+                  title="Schimbă modul de afișare (Tabel compact recomandat pentru stocuri mari)"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocViewMode('tabel')}
+                    className={`px-2.5 py-1 rounded-lg font-bold inline-flex items-center space-x-1 transition cursor-pointer ${
+                      anvelopeStocViewMode === 'tabel'
+                        ? 'bg-sapphire-600 text-white shadow-xs'
+                        : 'text-sage-600 hover:text-sapphire-900'
+                    }`}
+                  >
+                    <LayoutList className="w-3.5 h-3.5" />
+                    <span>Tabel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocViewMode('grupate')}
+                    className={`px-2.5 py-1 rounded-lg font-bold inline-flex items-center space-x-1 transition cursor-pointer ${
+                      anvelopeStocViewMode === 'grupate'
+                        ? 'bg-sapphire-600 text-white shadow-xs'
+                        : 'text-sage-600 hover:text-sapphire-900'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Grupate ({anvelopeStocGrupate.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocViewMode('carduri')}
+                    className={`px-2.5 py-1 rounded-lg font-bold inline-flex items-center space-x-1 transition cursor-pointer ${
+                      anvelopeStocViewMode === 'carduri'
+                        ? 'bg-sapphire-600 text-white shadow-xs'
+                        : 'text-sage-600 hover:text-sapphire-900'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span>Carduri</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setShowAddAnvelopeStocModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5"
+                  className="px-3 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Adaugă Anvelope Noi</span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Adaugă Anvelope</span>
                 </button>
               </div>
             </div>
 
-            {anvelopeStocDepozitFilter && (
-              <div className="flex items-center space-x-2 pt-2 border-t border-morning-200 text-xs text-sapphire-600 font-bold">
-                <span>
-                  Filtru activ Depozit: {depozite.find((d) => d.id === anvelopeStocDepozitFilter)?.nume || 'Depozit'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setAnvelopeStocDepozitFilter('')}
-                  className="underline text-terracotta-600 hover:text-terracotta-700 ml-2 cursor-pointer"
-                >
-                  Arată Toate Depozitele
-                </button>
+            {/* Rând pastile rapide Dimensiune + Filtre active */}
+            {(anvelopeDimensiuniOptiuni.length > 0 || hasActiveAnvelopeFilters) && (
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-morning-200 text-[11px]">
+                <div className="flex items-center flex-wrap gap-1.5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-sage-500 mr-1">
+                    Dimensiuni:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAnvelopeStocDimensiuneFilter('')}
+                    className={`px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                      !anvelopeStocDimensiuneFilter
+                        ? 'bg-sapphire-600 text-white border-sapphire-600'
+                        : 'bg-morning-100 text-sapphire-900 border-morning-200 hover:bg-morning-200'
+                    }`}
+                  >
+                    Toate ({anvelopeStocList.length})
+                  </button>
+                  {anvelopeDimensiuniOptiuni.map((dim) => {
+                    const isActive = anvelopeStocDimensiuneFilter === dim.key;
+                    return (
+                      <button
+                        key={dim.key}
+                        type="button"
+                        onClick={() =>
+                          setAnvelopeStocDimensiuneFilter(isActive ? '' : dim.key)
+                        }
+                        className={`px-2 py-0.5 rounded-lg font-mono font-bold border transition cursor-pointer ${
+                          isActive
+                            ? 'bg-sapphire-600 text-white border-sapphire-600'
+                            : 'bg-morning-100 text-sapphire-900 border-morning-200 hover:bg-morning-200'
+                        }`}
+                      >
+                        {dim.label} ({dim.count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {anvelopeStocDepozitFilter && (
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">
+                      Depozit: {depozite.find((d) => d.id === anvelopeStocDepozitFilter)?.nume || 'Depozit'}
+                    </span>
+                  )}
+                  {hasActiveAnvelopeFilters && (
+                    <button
+                      type="button"
+                      onClick={resetAnvelopeStocFilters}
+                      className="underline text-terracotta-600 hover:text-terracotta-700 font-bold cursor-pointer"
+                    >
+                      Resetează filtrele ({anvelopeStocFiltrate.length}/{anvelopeStocList.length})
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Grid Carduri Anvelope Serializate */}
-          {anvelopeStocFiltrate.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {/* CONȚINUT ANVELOPE: 1. TABEL COMPACT (IMPLICIT), 2. GRUPATE PE MODEL/DIMENSIUNE, 3. CARDURI */}
+          {anvelopeStocFiltrate.length === 0 ? (
+            <div className="pleasant-card bg-white p-8 rounded-2xl border border-morning-200 text-center space-y-2">
+              <CircleDot className="w-10 h-10 text-sage-300 mx-auto" />
+              <h3 className="font-bold text-sapphire-900 text-sm">Nicio anvelopă nu corespunde filtrelor selectate</h3>
+              <p className="text-xs text-sage-500">
+                Puteți reseta filtrele active sau înregistra anvelope noi folosind butonul de mai sus.
+              </p>
+              {hasActiveAnvelopeFilters && (
+                <button
+                  type="button"
+                  onClick={resetAnvelopeStocFilters}
+                  className="px-3.5 py-1.5 rounded-lg bg-morning-200 text-sapphire-900 font-bold text-xs hover:bg-morning-300 cursor-pointer"
+                >
+                  Resetează toate filtrele
+                </button>
+              )}
+            </div>
+          ) : anvelopeStocViewMode === 'tabel' ? (
+            /* =============================================================== */
+            /* MOD 1 (IMPLICIT): TABEL COMPACT DE MARE DENSITATE (100+ BUC)    */
+            /* =============================================================== */
+            <div className="pleasant-card bg-white rounded-2xl border border-morning-200 shadow-xs overflow-hidden">
+              <div className="overflow-auto max-h-[calc(100vh-220px)]">
+                <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[940px]">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-extrabold">
+                      {(
+                        [
+                          { key: 'serie', label: 'Serie (SN) & Stare', align: 'text-left' },
+                          { key: 'marca', label: 'Marcă & Model', align: 'text-left' },
+                          { key: 'dimensiune', label: 'Dimensiune & DOT', align: 'text-left' },
+                          { key: 'depozit', label: 'Depozit', align: 'text-left' },
+                          { key: 'furnizor', label: 'Furnizor & Factură', align: 'text-left' },
+                          { key: 'rulaj', label: 'Rulaj', align: 'text-right' },
+                          { key: 'pret', label: 'Preț Unitar', align: 'text-right' },
+                        ] as const
+                      ).map((col) => {
+                        const isActive = anvelopeStocSortCol === col.key;
+                        return (
+                          <th
+                            key={col.key}
+                            onClick={() => handleAnvelopeStocSort(col.key)}
+                            className={`px-3 py-2.5 sticky top-0 z-20 border-b cursor-pointer select-none transition group ${col.align} ${
+                              isActive
+                                ? 'bg-sapphire-100 text-sapphire-950 border-b-2 border-b-sapphire-500 font-black'
+                                : 'bg-morning-100 border-morning-200 hover:bg-morning-200 hover:text-sapphire-900'
+                            }`}
+                          >
+                            <div
+                              className={`inline-flex items-center space-x-1 ${
+                                col.align === 'text-right' ? 'justify-end' : ''
+                              }`}
+                            >
+                              <span>{col.label}</span>
+                              {isActive ? (
+                                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded bg-sapphire-600 text-white shrink-0">
+                                  {anvelopeStocSortDir === 'asc' ? (
+                                    <ArrowUp className="w-2.5 h-2.5" />
+                                  ) : (
+                                    <ArrowDown className="w-2.5 h-2.5" />
+                                  )}
+                                </span>
+                              ) : (
+                                <ArrowUpDown className="w-3 h-3 text-sage-400 opacity-50 group-hover:opacity-100 transition shrink-0" />
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                      <th className="px-3 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-right">
+                        Acțiuni
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 text-slate-700">
+                    {anvelopeStocFiltrate.map((a: any) => {
+                      const isNoua = (a.adancimeCurentaMm || 16) >= 15;
+                      const isHighlighted = !!(
+                        highlightedTireSerie &&
+                        String(a.serieAnvelopa || '').trim().toLowerCase() ===
+                          highlightedTireSerie.trim().toLowerCase()
+                      );
+                      const isNonTire = looksLikeNonTireEntry(a);
+
+                      return (
+                        <tr
+                          key={a.id}
+                          id={`tire-stock-card-${a.id}`}
+                          className={`transition ${
+                            isHighlighted
+                              ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-500'
+                              : 'hover:bg-morning-50'
+                          }`}
+                        >
+                          {/* Serie & Stare */}
+                          <td className="px-3 py-2 border-b border-morning-200 whitespace-nowrap">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-white font-mono font-black text-[11px]">
+                                {a.serieAnvelopa}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold ${
+                                  isNoua
+                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                }`}
+                              >
+                                {isNoua ? 'NOUĂ' : 'RULATĂ'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Marcă & Model */}
+                          <td className="px-3 py-2 border-b border-morning-200">
+                            <div className="font-extrabold text-sapphire-900 text-xs leading-snug">
+                              {a.marca} {a.model}
+                            </div>
+                            {isNonTire && (
+                              <button
+                                type="button"
+                                onClick={() => openAnvelopaEditModal(a, true)}
+                                className="mt-0.5 inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[9px] font-bold cursor-pointer"
+                              >
+                                <span>Nu e anvelopă? Mută în Piese →</span>
+                              </button>
+                            )}
+                          </td>
+
+                          {/* Dimensiune & DOT */}
+                          <td className="px-3 py-2 border-b border-morning-200 whitespace-nowrap">
+                            <div className="flex items-center space-x-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAnvelopeStocDimensiuneFilter(
+                                    normalizeDimensiuneKey(a.dimensiune),
+                                  )
+                                }
+                                className="bg-morning-100 hover:bg-sapphire-100 border border-morning-200 px-2 py-0.5 rounded-md font-mono font-bold text-[11px] text-sapphire-900 transition cursor-pointer"
+                                title="Filtrează după această dimensiune"
+                              >
+                                {a.dimensiune}
+                              </button>
+                              <span className="text-[10px] font-mono text-sage-600">
+                                DOT <strong className="text-sapphire-900">{a.codDot || '2625'}</strong>
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Depozit */}
+                          <td className="px-3 py-2 border-b border-morning-200 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                a.depozitId && setAnvelopeStocDepozitFilter(a.depozitId)
+                              }
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-200 text-[11px] font-bold text-sapphire-900 transition cursor-pointer"
+                              title="Filtrează după acest depozit"
+                            >
+                              <Building2 className="w-3 h-3 text-sapphire-500 shrink-0" />
+                              <span>{a.depozit?.nume || 'Depozit Central'}</span>
+                            </button>
+                          </td>
+
+                          {/* Furnizor & Factură */}
+                          <td className="px-3 py-2 border-b border-morning-200">
+                            {a.furnizor || a.numarFactura ? (
+                              <div className="flex items-center flex-wrap gap-1 text-[10px]">
+                                {a.furnizor && (
+                                  <span className="px-1.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold truncate max-w-[165px]">
+                                    {a.furnizor}
+                                  </span>
+                                )}
+                                {a.numarFactura && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenFacturaInEfactura(a.numarFactura)}
+                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-morning-100 hover:bg-sapphire-100 border border-morning-300 text-slate-700 hover:text-sapphire-800 font-mono font-semibold transition cursor-pointer"
+                                    title="Deschide factura în ANAF e-Factura"
+                                  >
+                                    <FileText className="w-2.5 h-2.5 text-sapphire-600 shrink-0" />
+                                    <span className="underline decoration-dotted">{a.numarFactura}</span>
+                                    {a.dataFactura && (
+                                      <span className="text-sage-600 font-normal">
+                                        ({new Date(a.dataFactura).toLocaleDateString('ro-RO')})
+                                      </span>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-sage-400">—</span>
+                            )}
+                          </td>
+
+                          {/* Rulaj */}
+                          <td className="px-3 py-2 border-b border-morning-200 text-right font-mono font-bold text-[11px] text-sapphire-900 whitespace-nowrap">
+                            {Math.round(a.rulajTotalKm || 0).toLocaleString('ro-RO')} KM
+                          </td>
+
+                          {/* Preț */}
+                          <td className="px-3 py-2 border-b border-morning-200 text-right font-mono font-black text-xs text-sapphire-900 whitespace-nowrap">
+                            {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            RON
+                          </td>
+
+                          {/* Acțiuni Rapide */}
+                          <td className="px-3 py-2 border-b border-morning-200 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center space-x-1">
+                              <Link
+                                href="/anvelope"
+                                className="px-2.5 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-[11px] shadow-2xs transition inline-flex items-center space-x-1"
+                                title="Mergi la Harta Axelor pentru montaj"
+                              >
+                                <Truck className="w-3 h-3" />
+                                <span>Montează</span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => openAnvelopaEditModal(a, false)}
+                                className="px-2 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[11px] border border-morning-200 transition cursor-pointer"
+                                title="Editează anvelopa"
+                              >
+                                Editează
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAnvelopaStoc(a.id, a.serieAnvelopa)}
+                                className="p-1 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 border border-roseash-300 transition cursor-pointer"
+                                title="Elimină din stoc"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : anvelopeStocViewMode === 'grupate' ? (
+            /* =============================================================== */
+            /* MOD 2: GRUPATE PE DIMENSIUNE / MODEL / DEPOZIT                  */
+            /* =============================================================== */
+            <div className="pleasant-card bg-white rounded-2xl border border-morning-200 shadow-xs overflow-hidden">
+              <div className="overflow-auto max-h-[calc(100vh-220px)]">
+                <table className="w-full text-left border-separate border-spacing-0 text-xs min-w-[900px]">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-extrabold">
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">
+                        Dimensiune
+                      </th>
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">
+                        Marcă &amp; Model
+                      </th>
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">
+                        Depozit &amp; Factură
+                      </th>
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-center">
+                        Cantitate
+                      </th>
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200">
+                        Serii Individuale (Click pt. editare)
+                      </th>
+                      <th className="px-3.5 py-2.5 sticky top-0 z-20 bg-morning-100 border-b border-morning-200 text-right">
+                        Preț Unitar / Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-morning-200 text-slate-700">
+                    {anvelopeStocGrupate.map((g) => (
+                      <tr key={g.key} className="hover:bg-morning-50 transition">
+                        <td className="px-3.5 py-2.5 border-b border-morning-200 whitespace-nowrap">
+                          <span className="bg-morning-100 border border-morning-200 px-2.5 py-1 rounded-lg font-mono font-black text-xs text-sapphire-900">
+                            {g.dimensiune}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-morning-200">
+                          <div className="font-extrabold text-sapphire-900 text-xs">
+                            {g.marca} {g.model}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[10px]">
+                            {g.noiCount > 0 && (
+                              <span className="text-emerald-700 font-bold">{g.noiCount} noi</span>
+                            )}
+                            {g.rulateCount > 0 && (
+                              <span className="text-amber-700 font-bold">{g.rulateCount} rulate</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-morning-200">
+                          <div className="inline-flex items-center space-x-1 font-bold text-sapphire-900 text-[11px]">
+                            <Building2 className="w-3 h-3 text-sapphire-500 shrink-0" />
+                            <span>{g.depozitNume}</span>
+                          </div>
+                          {(g.furnizor || g.numarFactura) && (
+                            <div className="flex items-center flex-wrap gap-1 mt-0.5 text-[10px]">
+                              {g.furnizor && <span className="text-sage-600">{g.furnizor}</span>}
+                              {g.numarFactura && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFacturaInEfactura(g.numarFactura)}
+                                  className="underline decoration-dotted font-mono font-bold text-sapphire-700 hover:text-sapphire-900 cursor-pointer"
+                                >
+                                  #{g.numarFactura}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-morning-200 text-center whitespace-nowrap">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-mono font-black text-xs">
+                            {g.items.length} buc
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-morning-200">
+                          <div className="flex items-center flex-wrap gap-1 max-w-md">
+                            {g.items.map((item: any) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => openAnvelopaEditModal(item, false)}
+                                className="px-2 py-0.5 rounded bg-slate-900 hover:bg-sapphire-700 text-white font-mono font-bold text-[10px] transition cursor-pointer"
+                                title={`Click pentru a edita anvelopa ${item.serieAnvelopa} (DOT ${item.codDot || '2625'})`}
+                              >
+                                {item.serieAnvelopa}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5 border-b border-morning-200 text-right whitespace-nowrap">
+                          <div className="font-mono font-black text-sapphire-900 text-xs">
+                            {Number(g.valoareTotala).toLocaleString('ro-RO', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            RON
+                          </div>
+                          <div className="font-mono text-[10px] text-sage-600">
+                            {Number(g.pretUnitarMediu).toLocaleString('ro-RO', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            RON / buc
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* =============================================================== */
+            /* MOD 3: GRID CARDURI COMPACTE (4 COLOANE PE ECRAN MARE)          */
+            /* =============================================================== */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {anvelopeStocFiltrate.map((a: any) => {
                 const isNoua = (a.adancimeCurentaMm || 16) >= 15;
-                const procentProfil = Math.min(100, Math.round(((a.adancimeCurentaMm || 16) / 16) * 100));
                 const isHighlighted = !!(
                   highlightedTireSerie &&
                   String(a.serieAnvelopa || '').trim().toLowerCase() === highlightedTireSerie.trim().toLowerCase()
@@ -2188,20 +2886,19 @@ function StocuriGarantiiContent() {
                   <div
                     key={a.id}
                     id={`tire-stock-card-${a.id}`}
-                    className={`pleasant-card bg-white p-4 rounded-2xl border transition space-y-3 text-xs ${
+                    className={`pleasant-card bg-white p-3 rounded-xl border transition space-y-2 text-xs ${
                       isHighlighted
                         ? 'border-emerald-500 ring-4 ring-emerald-400/50 shadow-lg'
                         : 'border-morning-200 hover:border-sapphire-300 hover:shadow-md'
                     }`}
                   >
-                    {/* Header Card */}
-                    <div className="flex items-center justify-between border-b border-morning-100 pb-2.5">
+                    <div className="flex items-center justify-between border-b border-morning-100 pb-2">
                       <div className="flex items-center space-x-1.5">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono font-black text-xs tracking-wide shadow-xs">
-                           {a.serieAnvelopa}
+                        <span className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-white font-mono font-black text-[11px]">
+                          {a.serieAnvelopa}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
                             isNoua
                               ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                               : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -2210,124 +2907,87 @@ function StocuriGarantiiContent() {
                           {isNoua ? 'NOUĂ' : 'RULATĂ'}
                         </span>
                       </div>
-
-                      <span className="font-mono font-black text-sapphire-900 text-xs bg-sapphire-50 px-2 py-1 rounded-lg border border-sapphire-100">
-                        {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                      <span className="font-mono font-black text-sapphire-900 text-[11px] bg-sapphire-50 px-1.5 py-0.5 rounded border border-sapphire-100">
+                        {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        RON
                       </span>
                     </div>
 
-                    {/* Detalii Anvelopă */}
-                    <div className="space-y-1.5">
-                      <p className="font-extrabold text-sapphire-900 text-sm">{a.marca} {a.model}</p>
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-sapphire-900 text-xs truncate" title={`${a.marca} ${a.model}`}>
+                        {a.marca} {a.model}
+                      </p>
                       <div className="flex items-center justify-between text-slate-700 font-semibold">
-                        <span className="bg-morning-100 px-2 py-0.5 rounded-md font-mono text-[11px] text-sapphire-800">
+                        <span className="bg-morning-100 px-1.5 py-0.5 rounded font-mono text-[10px] text-sapphire-800">
                           {a.dimensiune}
                         </span>
-                        <span className="text-[11px] font-mono text-sage-600">
+                        <span className="text-[10px] font-mono text-sage-600">
                           DOT: <strong className="text-sapphire-900">{a.codDot || '2625'}</strong>
                         </span>
                       </div>
                     </div>
 
-                    {/* Rulaj, Depozit & Proveniență Factură */}
-                    <div className="p-2.5 bg-morning-50 rounded-xl border border-morning-200 space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-sage-600 font-medium">Rulaj Acumulat:</span>
-                        <span className="font-mono font-extrabold text-sapphire-900">
+                    <div className="p-2 bg-morning-50 rounded-lg border border-morning-200 space-y-1 text-[10px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sage-600 flex items-center space-x-1 truncate">
+                          <Building2 className="w-3 h-3 text-sapphire-500 shrink-0" />
+                          <strong className="truncate">{a.depozit?.nume || 'Depozit Central'}</strong>
+                        </span>
+                        <span className="font-mono font-bold text-sapphire-900 shrink-0">
                           {Math.round(a.rulajTotalKm || 0).toLocaleString('ro-RO')} KM
                         </span>
                       </div>
-                      <p className="text-[10px] text-sage-600 font-medium flex items-center space-x-1 pt-0.5">
-                        <Building2 className="w-3 h-3 text-sapphire-500 shrink-0" />
-                        <span>Locație: <strong>{a.depozit?.nume || 'Depozit Central'}</strong></span>
-                      </p>
                       {(a.furnizor || a.numarFactura) && (
-                        <div className="pt-1 border-t border-morning-200 flex items-center flex-wrap gap-1.5 text-[10px]">
+                        <div className="pt-1 border-t border-morning-200 flex items-center flex-wrap gap-1">
                           {a.furnizor && (
-                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold truncate max-w-full">
-                              <span>{a.furnizor}</span>
+                            <span className="px-1 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold truncate max-w-[130px]">
+                              {a.furnizor}
                             </span>
                           )}
                           {a.numarFactura && (
                             <button
                               type="button"
                               onClick={() => handleOpenFacturaInEfactura(a.numarFactura)}
-                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-morning-100 hover:bg-sapphire-100 border border-morning-300 text-slate-700 hover:text-sapphire-800 font-mono font-semibold transition cursor-pointer"
-                              title="Click pentru a deschide factura în ANAF e-Factura"
+                              className="inline-flex items-center space-x-0.5 px-1 py-0.5 rounded bg-morning-100 hover:bg-sapphire-100 border border-morning-300 text-slate-700 font-mono font-semibold cursor-pointer"
                             >
-                              <FileText className="w-3 h-3 text-sapphire-600 shrink-0" />
+                              <FileText className="w-2.5 h-2.5 text-sapphire-600 shrink-0" />
                               <span className="underline decoration-dotted">{a.numarFactura}</span>
-                              {a.dataFactura && (
-                                <span className="text-sage-600 font-normal">
-                                  ({new Date(a.dataFactura).toLocaleDateString('ro-RO')})
-                                </span>
-                              )}
                             </button>
                           )}
                         </div>
                       )}
                     </div>
 
-                    {looksLikeNonTireEntry(a) && (
-                      <div className="p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 text-[10px]">
-                        <span className="text-amber-900 font-bold">Nu pare anvelopă / marcă necunoscută</span>
-                        <button
-                          type="button"
-                          onClick={() => openAnvelopaEditModal(a, true)}
-                          className="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shrink-0 transition"
-                        >
-                          Mută în Piese &amp; Categorie
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Butoane Acțiuni Rapide */}
-                    <div className="flex items-center justify-between pt-1 border-t border-morning-100 gap-1.5">
+                    <div className="flex items-center justify-between pt-1 border-t border-morning-100 gap-1">
                       <button
                         type="button"
                         onClick={() => openAnvelopaEditModal(a, false)}
-                        className="flex-1 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[11px] border border-morning-200 transition text-center"
+                        className="flex-1 py-1 rounded-lg bg-morning-100 hover:bg-morning-200 text-sapphire-900 font-bold text-[10px] border border-morning-200 transition text-center cursor-pointer"
                       >
-                         Editează
+                        Editează
                       </button>
-
                       <Link
                         href="/anvelope"
-                        className="flex-1 py-1.5 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-[11px] shadow-xs transition text-center flex items-center justify-center space-x-1"
+                        className="flex-1 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white font-bold text-[10px] shadow-2xs transition text-center flex items-center justify-center space-x-1"
                       >
-                        <Truck className="w-3.5 h-3.5" />
+                        <Truck className="w-3 h-3" />
                         <span>Montează</span>
                       </Link>
-
                       <button
                         type="button"
                         onClick={() => handleDeleteAnvelopaStoc(a.id, a.serieAnvelopa)}
-                        className="p-1.5 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 border border-roseash-300 transition"
+                        className="p-1 rounded-lg bg-roseash-100 hover:bg-roseash-200 text-terracotta-600 border border-roseash-300 transition cursor-pointer"
                         title="Elimină din stoc"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          ) : (
-            <div className="pleasant-card bg-white p-8 rounded-2xl border border-morning-200 text-center space-y-2">
-              <CircleDot className="w-10 h-10 text-sage-300 mx-auto" />
-              <h3 className="font-bold text-sapphire-900 text-sm">Nicio anvelopă nu corespunde filtrelor selectate</h3>
-              <p className="text-xs text-sage-500">
-                Puteți reseta căutarea sau înregistra anvelope noi folosind butonul de mai sus.
-              </p>
-              {anvelopeStocSearch && (
-                <button
-                  type="button"
-                  onClick={() => setAnvelopeStocSearch('')}
-                  className="px-3 py-1.5 rounded-lg bg-morning-200 text-sapphire-900 font-bold text-xs hover:bg-morning-300"
-                >
-                  Resetează căutarea
-                </button>
-              )}
             </div>
           )}
         </div>
