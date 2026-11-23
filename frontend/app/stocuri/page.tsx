@@ -1518,12 +1518,37 @@ function StocuriGarantiiContent() {
               </div>
             </div>
 
-            {selectedDepozitFilter && (
-              <div className="flex items-center space-x-2 pt-1 border-t border-morning-200 text-xs text-sapphire-600 font-bold">
-                <span>Filtru activ Depozit: {depozite.find(d => d.id === selectedDepozitFilter)?.nume}</span>
-                <button onClick={() => setSelectedDepozitFilter('')} className="underline text-terracotta-600 hover:text-terracotta-700 ml-2">Șterge Filtru Depozit</button>
-              </div>
-            )}
+            {selectedDepozitFilter && (() => {
+              const selectedDepObj = depozite.find((d) => d.id === selectedDepozitFilter);
+              const depTiresCount = selectedDepObj?._count?.anvelope || 0;
+              return (
+                <div className="flex items-center justify-between flex-wrap gap-2 pt-1.5 border-t border-morning-200 text-xs text-sapphire-600 font-bold">
+                  <div className="flex items-center space-x-2">
+                    <span>Filtru activ Depozit: {selectedDepObj?.nume}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDepozitFilter('')}
+                      className="underline text-terracotta-600 hover:text-terracotta-700 ml-2 cursor-pointer"
+                    >
+                      Șterge Filtru Depozit
+                    </button>
+                  </div>
+                  {depTiresCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDepozitAnvelope(selectedDepozitFilter)}
+                      className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-extrabold transition cursor-pointer"
+                    >
+                      <CircleDot className="w-3.5 h-3.5" />
+                      <span>
+                        {depTiresCount} {depTiresCount === 1 ? 'anvelopă' : 'anvelope'} în acest depozit — Vezi în Magazie Anvelope
+                      </span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Banner Notificare Articole cu Stoc Zero ascunse */}
@@ -1920,7 +1945,36 @@ function StocuriGarantiiContent() {
                             Există {countZeroStock} {countZeroStock === 1 ? 'articol potrivit cu stoc zero' : 'articole potrivite cu stoc zero'} ascunse momentan.
                           </p>
                         )}
+                        {selectedDepozitFilter && (() => {
+                          const depObj = depozite.find((d) => d.id === selectedDepozitFilter);
+                          const depTires = depObj?._count?.anvelope || 0;
+                          if (depTires <= 0) return null;
+                          return (
+                            <p className="text-xs text-emerald-800 font-semibold">
+                              Depozitul <strong>{depObj?.nume}</strong> conține{' '}
+                              <strong>{depTires} {depTires === 1 ? 'anvelopă' : 'anvelope'}</strong> în stoc (gestionate separat în Magazie Anvelope).
+                            </p>
+                          );
+                        })()}
                         <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                          {selectedDepozitFilter && (() => {
+                            const depObj = depozite.find((d) => d.id === selectedDepozitFilter);
+                            const depTires = depObj?._count?.anvelope || 0;
+                            if (depTires <= 0) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDepozitAnvelope(selectedDepozitFilter)}
+                                className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                              >
+                                <CircleDot className="w-3.5 h-3.5" />
+                                <span>
+                                  Vezi {depTires} {depTires === 1 ? 'anvelopă' : 'anvelope'} din {depObj?.nume}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          })()}
                           {searchQuery && (
                             <button
                               type="button"
@@ -2081,10 +2135,15 @@ function StocuriGarantiiContent() {
                   onChange={(e) => setAnvelopeStocDepozitFilter(e.target.value)}
                   className="bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
                 >
-                  <option value="">Toate Depozitele ({depozite.length})</option>
-                  {depozite.map((d) => (
-                    <option key={d.id} value={d.id}>{d.nume}</option>
-                  ))}
+                  <option value="">Toate Depozitele ({anvelopeStocList.length} buc)</option>
+                  {depozite.map((d) => {
+                    const cnt = d._count?.anvelope || 0;
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {d.nume}{cnt > 0 ? ` (${cnt} buc)` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
 
                 <button
@@ -2292,62 +2351,79 @@ function StocuriGarantiiContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {depozite.map((d) => (
-              <div
-                key={d.id}
-                className="p-5 rounded-2xl bg-white border border-morning-200 hover:border-sapphire-500 space-y-3 shadow-xs hover:shadow-md transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 cursor-pointer" onClick={() => handleOpenDepozitStoc(d.id)}>
-                    <Building2 className="w-5 h-5 text-sapphire-500 group-hover:scale-110 transition-transform" />
-                    <h3 className="font-extrabold text-sapphire-900 text-sm group-hover:text-sapphire-600 transition">{d.nume}</h3>
-                  </div>
+            {depozite.map((d) => {
+              const pieseCount = d._count?.articoleStoc || 0;
+              const anvelopeCount = d._count?.anvelope || 0;
+              const isTirePrimaryDepot =
+                pieseCount === 0 && (anvelopeCount > 0 || /anvelop|cauciuc/i.test(String(d.nume || '')));
+              const handleOpenPrimary = () =>
+                isTirePrimaryDepot ? handleOpenDepozitAnvelope(d.id) : handleOpenDepozitStoc(d.id);
 
-                  <button
-                    onClick={() => setEditingDepozit(d)}
-                    className="p-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-600 text-xs font-semibold"
-                    title="Editează Depozit"
-                  >
-                    <Edit3 className="w-4 h-4 text-sapphire-600" />
-                  </button>
-                </div>
+              return (
+                <div
+                  key={d.id}
+                  className="p-5 rounded-2xl bg-white border border-morning-200 hover:border-sapphire-500 space-y-3 shadow-xs hover:shadow-md transition-all group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 cursor-pointer" onClick={handleOpenPrimary}>
+                      {isTirePrimaryDepot ? (
+                        <CircleDot className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                      ) : (
+                        <Building2 className="w-5 h-5 text-sapphire-500 group-hover:scale-110 transition-transform" />
+                      )}
+                      <h3 className="font-extrabold text-sapphire-900 text-sm group-hover:text-sapphire-600 transition">{d.nume}</h3>
+                    </div>
 
-                <p className="text-xs text-sage-700 font-medium">Adresă: <span className="font-semibold text-slate-800">{d.adresa || 'N/A'}</span></p>
-                <p className="text-xs text-sage-700 font-medium">Responsabil: <span className="font-semibold text-slate-800">{d.responsabil || 'N/A'}</span></p>
-
-                <div className="pt-2 border-t border-morning-200 flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
-                      type="button"
-                      onClick={() => handleOpenDepozitStoc(d.id)}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 border border-sapphire-200 font-extrabold text-[10px] transition cursor-pointer"
-                      title={`Vezi cele ${d._count?.articoleStoc || 0} piese active din ${d.nume}`}
+                      onClick={() => setEditingDepozit(d)}
+                      className="p-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 text-slate-600 text-xs font-semibold"
+                      title="Editează Depozit"
                     >
-                      <PackageCheck className="w-3 h-3" />
-                      <span>{d._count?.articoleStoc || 0} piese active</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDepozitAnvelope(d.id)}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[10px] transition cursor-pointer"
-                      title={`Deschide Magazie Anvelope filtrată pe ${d.nume}`}
-                    >
-                      <CircleDot className="w-3 h-3" />
-                      <span>{d._count?.anvelope || 0} anvelope în stoc</span>
+                      <Edit3 className="w-4 h-4 text-sapphire-600" />
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenDepozitStoc(d.id)}
-                    className="flex items-center space-x-1 text-xs font-bold text-sapphire-600 hover:text-sapphire-800 cursor-pointer"
-                  >
-                    <span>Vezi Stoc Piese</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  <p className="text-xs text-sage-700 font-medium">Adresă: <span className="font-semibold text-slate-800">{d.adresa || 'N/A'}</span></p>
+                  <p className="text-xs text-sage-700 font-medium">Responsabil: <span className="font-semibold text-slate-800">{d.responsabil || 'N/A'}</span></p>
+
+                  <div className="pt-2 border-t border-morning-200 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDepozitStoc(d.id)}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 border border-sapphire-200 font-extrabold text-[10px] transition cursor-pointer"
+                        title={`Vezi cele ${pieseCount} piese active din ${d.nume}`}
+                      >
+                        <PackageCheck className="w-3 h-3" />
+                        <span>{pieseCount} piese active</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDepozitAnvelope(d.id)}
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-extrabold text-[10px] transition cursor-pointer"
+                        title={`Deschide Magazie Anvelope filtrată pe ${d.nume}`}
+                      >
+                        <CircleDot className="w-3 h-3" />
+                        <span>{anvelopeCount} anvelope în stoc</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenPrimary}
+                      className={`flex items-center space-x-1 text-xs font-bold cursor-pointer ${
+                        isTirePrimaryDepot
+                          ? 'text-emerald-700 hover:text-emerald-900'
+                          : 'text-sapphire-600 hover:text-sapphire-800'
+                      }`}
+                    >
+                      <span>{isTirePrimaryDepot ? 'Vezi Anvelope' : 'Vezi Stoc Piese'}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
