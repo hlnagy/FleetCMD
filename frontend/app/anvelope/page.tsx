@@ -10,6 +10,9 @@ import {
   ExternalLink, Building2, FileText
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
+import InventarAnvelopeTab from '@/components/anvelope/InventarAnvelopeTab';
+import IstoricPermutariTab from '@/components/anvelope/IstoricPermutariTab';
+import AnalizaTcoTab from '@/components/anvelope/AnalizaTcoTab';
 import { getLabelPozitie } from '@/lib/tirePositions';
 import { getCategoryColor } from '@/lib/categoryColors';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
@@ -1029,196 +1032,29 @@ export default function AnvelopePage() {
 
       {/* TAB 2: REGISTRU FLOTĂ ANVELOPE */}
       {activeTab === 'flota' && (
-        <div className="pleasant-card rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900">Registrul Centralizat al Anvelopelor din Flotă</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 min-w-[950px]">
-              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
-                <tr>
-                  <th className="p-3">Serie Anvelopă</th>
-                  <th className="p-3">Marcă & Model</th>
-                  <th className="p-3 font-mono">Dimensiune</th>
-                  <th className="p-3">Stare & Poziție</th>
-                  <th className="p-3 font-mono">Rulaj Total Acumulat</th>
-                  <th className="p-3 text-right">Preț Achiziție</th>
-                  <th className="p-3 text-center">Istoric & Audit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200">
-                {flotaAnvelope.map((a: any) => {
-                  const kmCurenti = (a.stare === 'MONTATA' && a.vehicul && a.vehicul.valoareContorCurent > (a.kilometrajMontare || 0))
-                    ? (a.vehicul.valoareContorCurent - a.kilometrajMontare)
-                    : 0;
-                  const totalKm = (a.rulajTotalKm || 0) + kmCurenti;
-
-                  return (
-                    <tr key={a.id} className="hover:bg-morning-50 transition">
-                      <td className="p-3 font-extrabold text-sapphire-900 font-mono">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span>{a.serieAnvelopa}</span>
-                          {duplicateTireIdSet.has(a.id) && (
-                            <span
-                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold"
-                              title="Serie duplicată pe anvelope active — necesită verificare!"
-                            >
-                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                              <span>DUPLICAT</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3 font-bold text-slate-800">
-                        <div>{a.marca} {a.model}</div>
-                        {(a.furnizor || a.numarFactura) && (
-                          <div className="mt-1 flex items-center flex-wrap gap-1.5 text-[10px] font-normal">
-                            {a.furnizor && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-sapphire-50 border border-sapphire-200 text-sapphire-900 font-semibold">
-                                {a.furnizor}
-                              </span>
-                            )}
-                            {a.numarFactura && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenFacturaInEfactura(a.numarFactura)}
-                                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-morning-100 hover:bg-sapphire-100 border border-morning-300 text-slate-700 hover:text-sapphire-800 font-mono font-semibold transition cursor-pointer"
-                                title="Click pentru a deschide factura în ANAF e-Factura"
-                              >
-                                <FileText className="w-3 h-3 text-sapphire-600 shrink-0" />
-                                <span className="underline decoration-dotted">{a.numarFactura}</span>
-                                {a.dataFactura && (
-                                  <span className="text-sage-600 font-normal">
-                                    ({new Date(a.dataFactura).toLocaleDateString('ro-RO')})
-                                  </span>
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 font-mono text-sage-700 font-semibold">{a.dimensiune}</td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                            a.stare === 'MONTATA'
-                              ? 'bg-sapphire-50 text-sapphire-700 border border-sapphire-200'
-                              : a.stare === 'CASATA'
-                                ? 'bg-roseash-100 text-terracotta-700 border border-roseash-300'
-                                : a.stare === 'RESAPATA'
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          }`}>
-                            {a.stare === 'MONTATA'
-                              ? `MONTATĂ (${a.vehicul?.numarIntern || ''} ${a.pozitieAx ? `• ${getLabelPozitie(a.pozitieAx).titlu}` : ''})`
-                              : a.stare === 'CASATA'
-                                ? 'CASATĂ / DEȘEU'
-                                : a.stare === 'RESAPATA'
-                                  ? 'ÎN REȘAPARE'
-                                  : `ÎN STOC (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
-                          </span>
-
-                          {a.stare === 'MONTATA' && a.vehiculId && (
-                            <button
-                              type="button"
-                              onClick={() => handleJumpToVehicleAxle(a)}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-700 hover:text-sapphire-900 border border-sapphire-200 text-[11px] font-bold hover:underline transition cursor-pointer"
-                              title={`Deschide Șasiu & Axe Vizuale pentru ${a.vehicul?.numarIntern || 'vehicul'}`}
-                            >
-                              <CircleDot className="w-3 h-3 text-sapphire-600" />
-                              <span>Șasiu & Axe</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </button>
-                          )}
-
-                          {a.stare === 'IN_STOC' && (
-                            <Link
-                              href={
-                                a.serieAnvelopa
-                                  ? `/stocuri?tab=anvelope_stoc&serie=${encodeURIComponent(a.serieAnvelopa)}`
-                                  : '/stocuri?tab=anvelope_stoc'
-                              }
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-950 border border-emerald-200 text-[11px] font-bold hover:underline transition"
-                              title={`Deschide în Magazie Anvelope (${a.depozit?.nume || a.depozitNume || 'Depozit Central'})`}
-                            >
-                              <Building2 className="w-3 h-3 text-emerald-600" />
-                              <span>{a.depozit?.nume || a.depozitNume || 'Depozit Central'}</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3 font-mono font-extrabold text-sapphire-900">
-                        {Math.round(totalKm).toLocaleString('ro-RO')} KM
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-slate-800">
-                        {Number(a.pretAchizitie || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => openHistoryModal(a.id)}
-                          className="px-2.5 py-1 bg-sapphire-50 hover:bg-sapphire-100 text-sapphire-800 border border-sapphire-200 rounded-lg text-xs font-bold transition inline-flex items-center space-x-1"
-                        >
-                          <History className="w-3.5 h-3.5 text-sapphire-600" />
-                          <span>Istoric Rulaj</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <InventarAnvelopeTab
+          flotaAnvelope={flotaAnvelope}
+          duplicateTireIdSet={duplicateTireIdSet}
+          onJumpToVehicleAxle={handleJumpToVehicleAxle}
+          onOpenFactura={handleOpenFacturaInEfactura}
+          onOpenHistory={openHistoryModal}
+        />
       )}
 
       {/* TAB 3: AUDIT ISTORIC SCHIMBURI & PERMUTĂRI */}
       {activeTab === 'istoric' && (
-        <div className="pleasant-card rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900"> Registru Audit Schimburi & Permutări Roți (Istoric Mutări)</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 min-w-[850px]">
-              <thead className="bg-morning-100 text-sage-700 uppercase text-[10px] tracking-wider font-bold">
-                <tr>
-                  <th className="p-3">Dată Intervenție</th>
-                  <th className="p-3">Utilaj</th>
-                  <th className="p-3">Anvelopă / Serie</th>
-                  <th className="p-3">Poziție Sursă  Destinație</th>
-                  <th className="p-3 font-mono">Odometru (KM/mTH)</th>
-                  <th className="p-3 text-right">Operator</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-morning-200">
-                {istoricPermutari.map((h: any) => (
-                  <tr key={h.id} className="hover:bg-morning-50 transition">
-                    <td className="p-3 text-sage-700 font-medium">{new Date(h.dataPermutare).toISOString().split('T')[0]}</td>
-                    <td className="p-3 font-extrabold text-sapphire-900">{h.vehicul?.numarIntern}</td>
-                    <td className="p-3 font-bold text-slate-800">{h.anvelopa?.marca} ({h.anvelopa?.serieAnvelopa})</td>
-                    <td className="p-3 font-mono font-bold text-sapphire-900">
-                      <span className="px-2 py-0.5 rounded bg-morning-200">{h.pozitieSursaCod}</span>  <span className="px-2 py-0.5 rounded bg-sapphire-100 text-sapphire-900">{h.pozitieDestCod}</span>
-                    </td>
-                    <td className="p-3 font-mono font-extrabold text-sapphire-900">{h.valoareContor}</td>
-                    <td className="p-3 text-right text-sage-600 font-bold">{h.operator || 'Atelier'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <IstoricPermutariTab
+          istoricPermutari={istoricPermutari}
+          onOpenHistory={openHistoryModal}
+        />
       )}
 
       {/* TAB 4: TCO BRAND */}
       {activeTab === 'tco' && (
-        <div className="pleasant-card rounded-2xl p-6 space-y-4">
-          <h2 className="text-base font-bold text-sapphire-900">Analiză Cost Per Kilometru / Brand Anvelopă (TCO)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {tcoBrands.map((b: any) => (
-              <div key={b.marca} className="p-5 rounded-2xl border border-morning-200 bg-white space-y-2">
-                <p className="font-extrabold text-sapphire-900 text-sm">{b.marca}</p>
-                <p className="text-2xl font-extrabold text-sapphire-900 font-mono">{b.costPer1000Km} RON / 1.000 KM</p>
-                <p className="text-xs text-sage-600 font-medium">Cost total achiziții: {b.costTotal} RON ({b.countTotal || b.count} bucăți)</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <AnalizaTcoTab
+          flotaAnvelope={flotaAnvelope}
+          tcoData={tcoBrands}
+        />
       )}
 
 
