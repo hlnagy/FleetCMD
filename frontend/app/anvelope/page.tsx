@@ -593,6 +593,42 @@ export default function AnvelopePage() {
   const targetSelectedPositionObj = targetPozitii.find((p: any) => p.id === newMountPositionId);
   const estePozitieOcupata = targetSelectedPositionObj && targetSelectedPositionObj.anvelopa;
 
+  // Detectare persistentă serii duplicate pe anvelopele active (MONTATA / IN_STOC / RESAPATA)
+  const getBaseSerie = (s?: string | null) =>
+    (s || '').trim().toUpperCase().replace(/-DUP\d*$/i, '').replace(/[^A-Z0-9]/g, '');
+
+  const { duplicateSerialGroups, duplicateTireIdSet } = (() => {
+    const activeTires = flotaAnvelope.filter((a: any) => a.stare !== 'CASATA' && a.serieAnvelopa);
+    const byBase = new Map<string, any[]>();
+    for (const a of activeTires) {
+      const base = getBaseSerie(a.serieAnvelopa);
+      if (!base) continue;
+      const list = byBase.get(base) || [];
+      list.push(a);
+      byBase.set(base, list);
+    }
+    const groups: Array<{ baseSerie: string; displaySerie: string; items: any[] }> = [];
+    const idSet = new Set<string>();
+    byBase.forEach((items, base) => {
+      const hasDupFlag = items.some((x: any) => /-DUP\d*$/i.test(x.serieAnvelopa || ''));
+      if (items.length > 1 || hasDupFlag) {
+        const displaySerie = (items[0].serieAnvelopa || base).replace(/-DUP\d*$/i, '');
+        groups.push({ baseSerie: base, displaySerie, items });
+        items.forEach((x: any) => idSet.add(x.id));
+      }
+    });
+    return { duplicateSerialGroups: groups, duplicateTireIdSet: idSet };
+  })();
+
+  const liveDuplicateMatch = newSerie.trim()
+    ? flotaAnvelope.find(
+        (a: any) =>
+          a.stare !== 'CASATA' &&
+          a.id !== selectedAnvelopaDinStocId &&
+          getBaseSerie(a.serieAnvelopa) === getBaseSerie(newSerie)
+      )
+    : null;
+
   return (
     <div className="space-y-6">
       {/* Antet Titlu & Acțiuni */}
@@ -639,6 +675,47 @@ export default function AnvelopePage() {
         onSelect={(v) => setSelectedId(v.id)}
         vehicule={vehicule}
       />
+
+      {duplicateSerialGroups.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 text-amber-950 shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <span className="text-xs font-extrabold uppercase tracking-wide">
+                Atenție: {duplicateSerialGroups.length} {duplicateSerialGroups.length === 1 ? 'serie duplicată detectată' : 'serii duplicate detectate'} pe anvelope active ({duplicateTireIdSet.size} anvelope necesită verificare)
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {duplicateSerialGroups.map((grp) => (
+              <div
+                key={grp.baseSerie}
+                className="flex items-center flex-wrap gap-2 text-xs bg-white/80 px-3 py-1.5 rounded-xl border border-amber-300"
+              >
+                <span className="font-mono font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                  SN: {grp.displaySerie}
+                </span>
+                <span className="text-amber-900 font-semibold">apare pe:</span>
+                {grp.items.map((item: any) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => item.vehiculId && handleJumpToVehicleAxle(item)}
+                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-950 font-bold transition cursor-pointer"
+                    title={`Deschide ${item.vehicul?.numarIntern || 'vehicul'} (${item.serieAnvelopa})`}
+                  >
+                    <span>
+                      {item.vehicul?.numarIntern || 'Stoc'}
+                      {item.pozitieAx ? ` • ${getLabelPozitie(item.pozitieAx).titlu}` : ''}
+                    </span>
+                    <span className="font-mono text-[10px] opacity-80">({item.serieAnvelopa})</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center space-x-2 border-b border-morning-200 pb-2">
         <button
@@ -777,6 +854,15 @@ export default function AnvelopePage() {
                             <p className="text-[9px] font-bold text-sage-600 truncate">{posLbl.descriereCurata}</p>
                             {poz.anvelopa ? (
                               <div className="mt-1 space-y-0.5">
+                                {duplicateTireIdSet.has(poz.anvelopa.id) && (
+                                  <div
+                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold tracking-wide"
+                                    title="Serie duplicată — verificați seria fizică de pe anvelopă!"
+                                  >
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                    <span>SERIE DUPLICATĂ</span>
+                                  </div>
+                                )}
                                 <p className="text-[10px] font-bold truncate max-w-[110px]">{poz.anvelopa.marca} {poz.anvelopa.dimensiune}</p>
                                 <p className="text-[9px] font-bold text-sage-600 font-mono">SN: {poz.anvelopa.serieAnvelopa || 'N/A'}</p>
                                 <p className="text-[10px] font-extrabold text-sapphire-900 font-mono bg-sapphire-100/70 px-1 py-0.5 rounded">
@@ -869,6 +955,15 @@ export default function AnvelopePage() {
                             <p className="text-[9px] font-bold text-sage-600 truncate">{posLbl.descriereCurata}</p>
                             {poz.anvelopa ? (
                               <div className="mt-1 space-y-0.5">
+                                {duplicateTireIdSet.has(poz.anvelopa.id) && (
+                                  <div
+                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold tracking-wide"
+                                    title="Serie duplicată — verificați seria fizică de pe anvelopă!"
+                                  >
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                                    <span>SERIE DUPLICATĂ</span>
+                                  </div>
+                                )}
                                 <p className="text-[10px] font-bold truncate max-w-[110px]">{poz.anvelopa.marca} {poz.anvelopa.dimensiune}</p>
                                 <p className="text-[9px] font-bold text-sage-600 font-mono">SN: {poz.anvelopa.serieAnvelopa || 'N/A'}</p>
                                 <p className="text-[10px] font-extrabold text-sapphire-900 font-mono bg-sapphire-100/70 px-1 py-0.5 rounded">
@@ -958,7 +1053,20 @@ export default function AnvelopePage() {
 
                   return (
                     <tr key={a.id} className="hover:bg-morning-50 transition">
-                      <td className="p-3 font-extrabold text-sapphire-900 font-mono">{a.serieAnvelopa}</td>
+                      <td className="p-3 font-extrabold text-sapphire-900 font-mono">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{a.serieAnvelopa}</span>
+                          {duplicateTireIdSet.has(a.id) && (
+                            <span
+                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-extrabold"
+                              title="Serie duplicată pe anvelope active — necesită verificare!"
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              <span>DUPLICAT</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3 font-bold text-slate-800">
                         <div>{a.marca} {a.model}</div>
                         {(a.furnizor || a.numarFactura) && (
@@ -1490,6 +1598,12 @@ export default function AnvelopePage() {
                             placeholder="ex: SN-12345678"
                             className="bg-morning-50 border border-morning-300 rounded-lg p-2 font-mono font-bold text-sapphire-900 text-xs w-full focus:bg-white focus:border-sapphire-500"
                           />
+                          {liveDuplicateMatch && (
+                            <p className="mt-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1 flex items-center space-x-1">
+                              <AlertTriangle className="w-3 h-3 shrink-0" />
+                              <span>Atenție: seria există deja pe {liveDuplicateMatch.vehicul?.numarIntern || 'Stoc'} ({liveDuplicateMatch.serieAnvelopa})!</span>
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label className="text-[10px] text-sage-700 font-bold block mb-1">
@@ -1532,6 +1646,12 @@ export default function AnvelopePage() {
                     <div>
                       <label className="text-sage-700 block mb-1 font-bold">Serie Unică Anvelopă: *</label>
                       <input required value={newSerie} onChange={(e) => setNewSerie(e.target.value)} placeholder="ex: MIC-99201" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold" />
+                      {liveDuplicateMatch && (
+                        <p className="mt-1 text-[10px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1 flex items-center space-x-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          <span>Atenție: seria există deja pe {liveDuplicateMatch.vehicul?.numarIntern || 'Stoc'} ({liveDuplicateMatch.serieAnvelopa})!</span>
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="text-sage-700 block mb-1 font-bold">Cod DOT:</label>

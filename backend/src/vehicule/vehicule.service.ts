@@ -300,43 +300,43 @@ export class VehiculeService {
       }
     } else if (categorie === 'CAP_TRACTOR') {
       axe.push(
-        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga (Directoare)' },
-        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta (Directoare)' },
-        { codPozitie: '2-ST-EXT', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Exterior (Tracțiune)' },
-        { codPozitie: '2-ST-INT', numarAx: 2, descrierePozitie: 'Axă 2 Stânga Interior (Tracțiune)' },
-        { codPozitie: '2-DR-INT', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Interior (Tracțiune)' },
-        { codPozitie: '2-DR-EXT', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta Exterior (Tracțiune)' }
+        { codPozitie: '1/STG', numarAx: 1, descrierePozitie: 'Axa 1 Stânga' },
+        { codPozitie: '1/DR', numarAx: 1, descrierePozitie: 'Axa 1 Dreapta' },
+        { codPozitie: '2/STG/EXT', numarAx: 2, descrierePozitie: 'Axa 2 Stânga Exterior' },
+        { codPozitie: '2/STG/INT', numarAx: 2, descrierePozitie: 'Axa 2 Stânga Interior' },
+        { codPozitie: '2/DR/INT', numarAx: 2, descrierePozitie: 'Axa 2 Dreapta Interior' },
+        { codPozitie: '2/DR/EXT', numarAx: 2, descrierePozitie: 'Axa 2 Dreapta Exterior' }
       );
     } else if (categorie === 'REMORCA' || categorie === 'SEMIREMORCA') {
       axe.push(
-        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga' },
-        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta' },
-        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga' },
-        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta' },
-        { codPozitie: '3-ST', numarAx: 3, descrierePozitie: 'Axă 3 Stânga' },
-        { codPozitie: '3-DR', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta' }
+        { codPozitie: '1/STG', numarAx: 1, descrierePozitie: 'Axa 1 Stânga' },
+        { codPozitie: '1/DR', numarAx: 1, descrierePozitie: 'Axa 1 Dreapta' },
+        { codPozitie: '2/STG', numarAx: 2, descrierePozitie: 'Axa 2 Stânga' },
+        { codPozitie: '2/DR', numarAx: 2, descrierePozitie: 'Axa 2 Dreapta' },
+        { codPozitie: '3/STG', numarAx: 3, descrierePozitie: 'Axa 3 Stânga' },
+        { codPozitie: '3/DR', numarAx: 3, descrierePozitie: 'Axa 3 Dreapta' }
       );
-    } else if (categorie === 'BASCULANTA') {
+    } else if (categorie === 'BASCULANTA' || categorie === 'CAMION_8X4') {
       axe.push(
-        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga (Directoare)' },
-        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta (Directoare)' },
-        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga (Directoare 2)' },
-        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta (Directoare 2)' },
-        { codPozitie: '3-ST-EXT', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Exterior (Tracțiune)' },
-        { codPozitie: '3-ST-INT', numarAx: 3, descrierePozitie: 'Axă 3 Stânga Interior (Tracțiune)' },
-        { codPozitie: '3-DR-INT', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Interior (Tracțiune)' },
-        { codPozitie: '3-DR-EXT', numarAx: 3, descrierePozitie: 'Axă 3 Dreapta Exterior (Tracțiune)' },
-        { codPozitie: '4-ST-EXT', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Exterior (Tracțiune)' },
-        { codPozitie: '4-ST-INT', numarAx: 4, descrierePozitie: 'Axă 4 Stânga Interior (Tracțiune)' },
-        { codPozitie: '4-DR-INT', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Interior (Tracțiune)' },
-        { codPozitie: '4-DR-EXT', numarAx: 4, descrierePozitie: 'Axă 4 Dreapta Exterior (Tracțiune)' }
+        { codPozitie: '1/STG', numarAx: 1, descrierePozitie: 'Axa 1 Stânga' },
+        { codPozitie: '1/DR', numarAx: 1, descrierePozitie: 'Axa 1 Dreapta' },
+        { codPozitie: '2/STG', numarAx: 2, descrierePozitie: 'Axa 2 Stânga' },
+        { codPozitie: '2/DR', numarAx: 2, descrierePozitie: 'Axa 2 Dreapta' },
+        { codPozitie: '3/STG/EXT', numarAx: 3, descrierePozitie: 'Axa 3 Stânga Exterior' },
+        { codPozitie: '3/STG/INT', numarAx: 3, descrierePozitie: 'Axa 3 Stânga Interior' },
+        { codPozitie: '3/DR/INT', numarAx: 3, descrierePozitie: 'Axa 3 Dreapta Interior' },
+        { codPozitie: '3/DR/EXT', numarAx: 3, descrierePozitie: 'Axa 3 Dreapta Exterior' },
+        { codPozitie: '4/STG/EXT', numarAx: 4, descrierePozitie: 'Axa 4 Stânga Exterior' },
+        { codPozitie: '4/STG/INT', numarAx: 4, descrierePozitie: 'Axa 4 Stânga Interior' },
+        { codPozitie: '4/DR/INT', numarAx: 4, descrierePozitie: 'Axa 4 Dreapta Interior' },
+        { codPozitie: '4/DR/EXT', numarAx: 4, descrierePozitie: 'Axa 4 Dreapta Exterior' }
       );
     } else {
       axe.push(
-        { codPozitie: '1-ST', numarAx: 1, descrierePozitie: 'Axă 1 Stânga' },
-        { codPozitie: '1-DR', numarAx: 1, descrierePozitie: 'Axă 1 Dreapta' },
-        { codPozitie: '2-ST', numarAx: 2, descrierePozitie: 'Axă 2 Stânga' },
-        { codPozitie: '2-DR', numarAx: 2, descrierePozitie: 'Axă 2 Dreapta' }
+        { codPozitie: '1/STG', numarAx: 1, descrierePozitie: 'Axa 1 Stânga' },
+        { codPozitie: '1/DR', numarAx: 1, descrierePozitie: 'Axa 1 Dreapta' },
+        { codPozitie: '2/STG', numarAx: 2, descrierePozitie: 'Axa 2 Stânga' },
+        { codPozitie: '2/DR', numarAx: 2, descrierePozitie: 'Axa 2 Dreapta' }
       );
     }
 
