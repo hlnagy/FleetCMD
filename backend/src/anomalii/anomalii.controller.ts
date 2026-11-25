@@ -368,6 +368,6 @@ export class AnomaliiController {
 
   @Get('istoric-completari')
   getIstoricCompletari(@Query('limit') limit?: number) {
-    return this.anomaliiService.getIstoricCompletariFluide(limit ? Number(limit) : 150);
+    return this.anomaliiService.getIstoricCompletariFluide(limit ? Number(limit) : 2000);
   }
 }

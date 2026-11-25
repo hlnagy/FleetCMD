@@ -410,7 +410,7 @@ export default function FluidePage() {
       await fetchCategoriiNorme();
 
       // Fetch Istoric Completări Flotă
-      const resIstoric = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=150`);
+      const resIstoric = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=2000`);
       if (resIstoric.ok) setIstoricCompletari(await resIstoric.json());
     } catch (e) {
       console.log('Error fetching initial data for fluids', e);
@@ -420,7 +420,7 @@ export default function FluidePage() {
   const fetchIstoricCompletari = async () => {
     setLoadingIstoric(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=150`);
+      const res = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=2000`);
       if (res.ok) setIstoricCompletari(await res.json());
     } catch (e) {
       console.error('Error fetching completions history', e);
