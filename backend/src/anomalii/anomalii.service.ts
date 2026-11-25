@@ -2574,7 +2574,7 @@ export class AnomaliiService {
   // ==========================================
   // ISTORIC COMPLETĂRI & SCHIMBURI FLUIDE
   // ==========================================
-  async getIstoricCompletariFluide(limit = 2000) {
+  async getIstoricCompletariFluide(limit?: number) {
     const records = await this.prisma.completareLichid.findMany({
       include: {
         vehicul: true,
@@ -2583,7 +2583,7 @@ export class AnomaliiService {
         },
       },
       orderBy: { dataCompletare: 'desc' },
-      take: limit,
+      ...(limit && limit > 0 ? { take: limit } : {}),
     });
 
     const clIds = Array.from(

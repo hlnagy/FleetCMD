@@ -367,7 +367,10 @@ export class AnomaliiController {
   }
 
   @Get('istoric-completari')
-  getIstoricCompletari(@Query('limit') limit?: number) {
-    return this.anomaliiService.getIstoricCompletariFluide(limit ? Number(limit) : 2000);
+  getIstoricCompletari(@Query('limit') limit?: string) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.anomaliiService.getIstoricCompletariFluide(
+      parsedLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined,
+    );
   }
 }

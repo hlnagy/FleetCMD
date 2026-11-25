@@ -83,6 +83,12 @@ export default function FluidePage() {
   const [searchIstoric, setSearchIstoric] = useState<string>('');
   const [filterIstoricTip, setFilterIstoricTip] = useState<string>('TOATE');
   const [filterIstoricOperatiune, setFilterIstoricOperatiune] = useState<'TOATE' | 'SCHIMB' | 'COMPLETARE'>('TOATE');
+  const [filterIstoricVehicul, setFilterIstoricVehicul] = useState<string>('TOATE');
+  const [filterIstoricMecanic, setFilterIstoricMecanic] = useState<string>('TOATE');
+  const [filterIstoricDateFrom, setFilterIstoricDateFrom] = useState<string>('');
+  const [filterIstoricDateTo, setFilterIstoricDateTo] = useState<string>('');
+  const [istoricPage, setIstoricPage] = useState<number>(1);
+  const [istoricPageSize, setIstoricPageSize] = useState<number>(50);
 
   // Categorii & Depozite Fluide + Tipuri Fluide Dinamice
   const [categoriiFluide, setCategoriiFluide] = useState<any[]>([]);
@@ -409,8 +415,8 @@ export default function FluidePage() {
       // Fetch Norme pe Categorii
       await fetchCategoriiNorme();
 
-      // Fetch Istoric Completări Flotă
-      const resIstoric = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=2000`);
+      // Fetch Istoric Completări Flotă (toate înregistrările, paginat în UI)
+      const resIstoric = await fetch(`${API_BASE_URL}/anomalii/istoric-completari`);
       if (resIstoric.ok) setIstoricCompletari(await resIstoric.json());
     } catch (e) {
       console.log('Error fetching initial data for fluids', e);
@@ -420,7 +426,7 @@ export default function FluidePage() {
   const fetchIstoricCompletari = async () => {
     setLoadingIstoric(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/anomalii/istoric-completari?limit=2000`);
+      const res = await fetch(`${API_BASE_URL}/anomalii/istoric-completari`);
       if (res.ok) setIstoricCompletari(await res.json());
     } catch (e) {
       console.error('Error fetching completions history', e);
@@ -1460,14 +1466,40 @@ export default function FluidePage() {
     setFilterFlotaUnit('TOATE');
   };
 
+  // Opțiuni dinamice filtre Istoric Intervenții Fluide
+  const istoricVehiculeOptiuni = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of istoricCompletari) {
+      if (c.vehicul?.id) {
+        map.set(c.vehicul.id, c.vehicul.numarIntern || c.vehicul.numarInmatriculare || 'Vehicul');
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'ro', { numeric: true }));
+  }, [istoricCompletari]);
+
+  const istoricMecaniciOptiuni = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of istoricCompletari) {
+      if (c.mecanic) set.add(c.mecanic);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ro'));
+  }, [istoricCompletari]);
+
   // Filtrare Istoric Intervenții Fluide
   const istoricCompletariFiltrat = useMemo(() => {
     const q = searchIstoric.trim().toLowerCase();
     return istoricCompletari.filter((c) => {
       if (filterIstoricTip !== 'TOATE' && c.tipLichid !== filterIstoricTip) return false;
+      if (filterIstoricVehicul !== 'TOATE' && c.vehicul?.id !== filterIstoricVehicul) return false;
+      if (filterIstoricMecanic !== 'TOATE' && c.mecanic !== filterIstoricMecanic) return false;
       const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
       if (filterIstoricOperatiune === 'SCHIMB' && !isSchimb) return false;
       if (filterIstoricOperatiune === 'COMPLETARE' && isSchimb) return false;
+      if (filterIstoricDateFrom || filterIstoricDateTo) {
+        const dtStr = c.dataCompletare ? new Date(c.dataCompletare).toISOString().slice(0, 10) : '';
+        if (filterIstoricDateFrom && dtStr < filterIstoricDateFrom) return false;
+        if (filterIstoricDateTo && dtStr > filterIstoricDateTo) return false;
+      }
       if (q) {
         const match =
           (c.vehicul?.numarIntern || '').toLowerCase().includes(q) ||
@@ -1481,7 +1513,56 @@ export default function FluidePage() {
       }
       return true;
     });
-  }, [istoricCompletari, searchIstoric, filterIstoricTip, filterIstoricOperatiune]);
+  }, [
+    istoricCompletari,
+    searchIstoric,
+    filterIstoricTip,
+    filterIstoricOperatiune,
+    filterIstoricVehicul,
+    filterIstoricMecanic,
+    filterIstoricDateFrom,
+    filterIstoricDateTo,
+  ]);
+
+  const istoricTotalPages = Math.max(1, Math.ceil(istoricCompletariFiltrat.length / istoricPageSize));
+  const istoricSafePage = Math.min(istoricPage, istoricTotalPages);
+  const istoricPaginat = useMemo(() => {
+    const start = (istoricSafePage - 1) * istoricPageSize;
+    return istoricCompletariFiltrat.slice(start, start + istoricPageSize);
+  }, [istoricCompletariFiltrat, istoricSafePage, istoricPageSize]);
+
+  const istoricKpi = useMemo(() => {
+    let schimburi = 0;
+    let completari = 0;
+    let volumTotal = 0;
+    for (const c of istoricCompletariFiltrat) {
+      const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+      if (isSchimb) schimburi++;
+      else completari++;
+      volumTotal += Number(c.cantitateLitri || 0);
+    }
+    return { schimburi, completari, volumTotal };
+  }, [istoricCompletariFiltrat]);
+
+  const hasIstoricFilters =
+    searchIstoric.trim() !== '' ||
+    filterIstoricTip !== 'TOATE' ||
+    filterIstoricOperatiune !== 'TOATE' ||
+    filterIstoricVehicul !== 'TOATE' ||
+    filterIstoricMecanic !== 'TOATE' ||
+    filterIstoricDateFrom !== '' ||
+    filterIstoricDateTo !== '';
+
+  const resetIstoricFilters = () => {
+    setSearchIstoric('');
+    setFilterIstoricTip('TOATE');
+    setFilterIstoricOperatiune('TOATE');
+    setFilterIstoricVehicul('TOATE');
+    setFilterIstoricMecanic('TOATE');
+    setFilterIstoricDateFrom('');
+    setFilterIstoricDateTo('');
+    setIstoricPage(1);
+  };
 
   const stocUleiuriFiltrate = stocUleiuri.filter((s) => {
     // Filtru căutare text
@@ -2359,48 +2440,152 @@ export default function FluidePage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 p-3.5 bg-morning-100 rounded-2xl border border-morning-200 text-xs">
-            <div className="md:col-span-2 relative">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
-              <input
-                type="text"
-                value={searchIstoric}
-                onChange={(e) => setSearchIstoric(e.target.value)}
-                placeholder="Caută vehicul, ulei/antigel, mecanic, CL-XXXXX..."
-                className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-morning-300 text-sapphire-900 font-medium focus:outline-none focus:border-sapphire-500"
-              />
+          {/* KPI rezumat filtrat */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+            <button
+              type="button"
+              onClick={() => { setFilterIstoricOperatiune('TOATE'); setIstoricPage(1); }}
+              className={`p-3 rounded-xl border text-left transition ${
+                filterIstoricOperatiune === 'TOATE'
+                  ? 'bg-sapphire-50 border-sapphire-300 ring-1 ring-sapphire-400'
+                  : 'bg-morning-50 border-morning-200 hover:bg-morning-100'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sage-600">Total Intervenții</div>
+              <div className="text-lg font-black text-sapphire-900 font-mono mt-0.5">{istoricCompletariFiltrat.length}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFilterIstoricOperatiune('SCHIMB'); setIstoricPage(1); }}
+              className={`p-3 rounded-xl border text-left transition ${
+                filterIstoricOperatiune === 'SCHIMB'
+                  ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400'
+                  : 'bg-morning-50 border-morning-200 hover:bg-morning-100'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Schimburi Complete</div>
+              <div className="text-lg font-black text-emerald-800 font-mono mt-0.5">{istoricKpi.schimburi}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFilterIstoricOperatiune('COMPLETARE'); setIstoricPage(1); }}
+              className={`p-3 rounded-xl border text-left transition ${
+                filterIstoricOperatiune === 'COMPLETARE'
+                  ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-400'
+                  : 'bg-morning-50 border-morning-200 hover:bg-morning-100'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Completări (Top-up)</div>
+              <div className="text-lg font-black text-amber-800 font-mono mt-0.5">{istoricKpi.completari}</div>
+            </button>
+            <div className="p-3 rounded-xl border bg-morning-50 border-morning-200 text-left">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sage-600">Volum Filtrat</div>
+              <div className="text-lg font-black text-sapphire-900 font-mono mt-0.5">
+                {istoricKpi.volumTotal.toLocaleString('ro-RO', { maximumFractionDigits: 1 })} L
+              </div>
+            </div>
+          </div>
+
+          {/* Bară căutare și filtre avansate */}
+          <div className="p-3.5 bg-morning-100 rounded-2xl border border-morning-200 text-xs space-y-2.5">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+              <div className="md:col-span-2 relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
+                <input
+                  type="text"
+                  value={searchIstoric}
+                  onChange={(e) => { setSearchIstoric(e.target.value); setIstoricPage(1); }}
+                  placeholder="Caută vehicul, ulei/antigel, observații, mecanic, CL-XXXXX..."
+                  className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-morning-300 text-sapphire-900 font-medium focus:outline-none focus:border-sapphire-500"
+                />
+              </div>
+
+              <select
+                value={filterIstoricVehicul}
+                onChange={(e) => { setFilterIstoricVehicul(e.target.value); setIstoricPage(1); }}
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+              >
+                <option value="TOATE">Utilaj: Toate ({istoricVehiculeOptiuni.length})</option>
+                {istoricVehiculeOptiuni.map(([id, label]) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+
+              <select
+                value={filterIstoricTip}
+                onChange={(e) => { setFilterIstoricTip(e.target.value); setIstoricPage(1); }}
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+              >
+                <option value="TOATE">Fluid: Toate Tipurile</option>
+                {tipuriFluide.map((tf) => (
+                  <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
+                ))}
+              </select>
             </div>
 
-            <select
-              value={filterIstoricTip}
-              onChange={(e) => setFilterIstoricTip(e.target.value)}
-              className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
-            >
-              <option value="TOATE">Fluid: Toate Tipurile</option>
-              {tipuriFluide.map((tf) => (
-                <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
-              ))}
-            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-center">
+              <select
+                value={filterIstoricOperatiune}
+                onChange={(e) => { setFilterIstoricOperatiune(e.target.value as any); setIstoricPage(1); }}
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+              >
+                <option value="TOATE">Operațiune: Toate</option>
+                <option value="SCHIMB">Doar Schimburi (Revizie)</option>
+                <option value="COMPLETARE">Doar Completări (Top-up)</option>
+              </select>
 
-            <select
-              value={filterIstoricOperatiune}
-              onChange={(e) => setFilterIstoricOperatiune(e.target.value as any)}
-              className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
-            >
-              <option value="TOATE">Operațiune: Toate</option>
-              <option value="SCHIMB">Doar Schimburi (Revizie)</option>
-              <option value="COMPLETARE">Doar Completări (Top-up)</option>
-            </select>
+              <select
+                value={filterIstoricMecanic}
+                onChange={(e) => { setFilterIstoricMecanic(e.target.value); setIstoricPage(1); }}
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
+              >
+                <option value="TOATE">Mecanic / Sursă: Toți</option>
+                {istoricMecaniciOptiuni.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
+              <input
+                type="date"
+                value={filterIstoricDateFrom}
+                onChange={(e) => { setFilterIstoricDateFrom(e.target.value); setIstoricPage(1); }}
+                title="De la data"
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-mono text-sapphire-900"
+              />
+
+              <input
+                type="date"
+                value={filterIstoricDateTo}
+                onChange={(e) => { setFilterIstoricDateTo(e.target.value); setIstoricPage(1); }}
+                title="Până la data"
+                className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-mono text-sapphire-900"
+              />
+
+              {hasIstoricFilters ? (
+                <button
+                  type="button"
+                  onClick={resetIstoricFilters}
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-roseash-100 border border-morning-300 text-terracotta-700 font-bold transition"
+                >
+                  Resetează filtrele
+                </button>
+              ) : (
+                <div className="text-[11px] text-sage-600 font-semibold text-right px-1">
+                  Toate înregistrările încărcate
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-morning-200">
-            <table className="w-full text-left border-collapse text-xs min-w-[960px]">
+            <table className="w-full text-left border-collapse text-xs min-w-[1120px]">
               <thead>
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
                   <th className="p-3">Dată</th>
                   <th className="p-3">Utilaj</th>
                   <th className="p-3">Operațiune &amp; Tip Fluid</th>
                   <th className="p-3">Articol / Sortiment</th>
+                  <th className="p-3">Observații</th>
                   <th className="p-3 text-right">Volum</th>
                   <th className="p-3 text-right">Cost FIFO</th>
                   <th className="p-3 text-right">Contor</th>
@@ -2409,14 +2594,14 @@ export default function FluidePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-morning-200 text-slate-700">
-                {istoricCompletariFiltrat.length === 0 ? (
+                {istoricPaginat.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-sage-600 italic">
+                    <td colSpan={10} className="p-8 text-center text-sage-600 italic">
                       Nu există intervenții de fluide înregistrate conform filtrelor.
                     </td>
                   </tr>
                 ) : (
-                  istoricCompletariFiltrat.map((c: any) => {
+                  istoricPaginat.map((c: any) => {
                     const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
                     const unit = c.unitateContor || c.vehicul?.tipMasurare || 'KM';
                     return (
@@ -2449,7 +2634,13 @@ export default function FluidePage() {
                         </td>
                         <td className="p-3">
                           <div className="font-bold text-sapphire-900">{c.articolStoc?.denumire || c.marcaUlei || '—'}</div>
-                          {c.observatii && <div className="text-[10px] text-sage-600 truncate max-w-xs">{c.observatii}</div>}
+                        </td>
+                        <td className="p-3 max-w-[260px]">
+                          {c.observatii ? (
+                            <div className="text-[11px] text-slate-700 leading-snug break-words">{c.observatii}</div>
+                          ) : (
+                            <span className="text-[11px] text-sage-500 italic">—</span>
+                          )}
                         </td>
                         <td className="p-3 text-right font-mono font-black text-sapphire-900 whitespace-nowrap">
                           {Number(c.cantitateLitri || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} L
@@ -2500,6 +2691,69 @@ export default function FluidePage() {
               </tbody>
             </table>
           </div>
+
+          {/* Paginare */}
+          {istoricCompletariFiltrat.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 text-xs">
+              <div className="flex items-center space-x-2 text-sage-700 font-semibold">
+                <span>
+                  Afișate{' '}
+                  <strong className="text-sapphire-900 font-mono">
+                    {(istoricSafePage - 1) * istoricPageSize + 1}–{Math.min(istoricSafePage * istoricPageSize, istoricCompletariFiltrat.length)}
+                  </strong>{' '}
+                  din <strong className="text-sapphire-900 font-mono">{istoricCompletariFiltrat.length}</strong>
+                </span>
+                <select
+                  value={istoricPageSize}
+                  onChange={(e) => { setIstoricPageSize(Number(e.target.value)); setIstoricPage(1); }}
+                  className="px-2 py-1 bg-white rounded-lg border border-morning-300 font-bold text-sapphire-900"
+                >
+                  <option value={25}>25 / pagină</option>
+                  <option value={50}>50 / pagină</option>
+                  <option value={100}>100 / pagină</option>
+                  <option value={200}>200 / pagină</option>
+                </select>
+              </div>
+
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  disabled={istoricSafePage <= 1}
+                  onClick={() => setIstoricPage(1)}
+                  className="px-2.5 py-1.5 rounded-lg border border-morning-300 bg-white text-sapphire-900 font-bold disabled:opacity-40 hover:bg-morning-100 transition"
+                >
+                  « Prima
+                </button>
+                <button
+                  type="button"
+                  disabled={istoricSafePage <= 1}
+                  onClick={() => setIstoricPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-morning-300 bg-white text-sapphire-900 font-bold disabled:opacity-40 hover:bg-morning-100 transition"
+                >
+                  Anterior
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-morning-100 border border-morning-200 font-mono font-extrabold text-sapphire-900">
+                  {istoricSafePage} / {istoricTotalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={istoricSafePage >= istoricTotalPages}
+                  onClick={() => setIstoricPage((p) => Math.min(istoricTotalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-morning-300 bg-white text-sapphire-900 font-bold disabled:opacity-40 hover:bg-morning-100 transition"
+                >
+                  Următor
+                </button>
+                <button
+                  type="button"
+                  disabled={istoricSafePage >= istoricTotalPages}
+                  onClick={() => setIstoricPage(istoricTotalPages)}
+                  className="px-2.5 py-1.5 rounded-lg border border-morning-300 bg-white text-sapphire-900 font-bold disabled:opacity-40 hover:bg-morning-100 transition"
+                >
+                  Ultima »
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
