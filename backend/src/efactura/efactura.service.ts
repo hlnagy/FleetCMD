@@ -1717,16 +1717,52 @@ export class EFacturaService implements OnModuleInit {
     }
 
     // 2. Căutare Inteligentă sau Creare ArticolStoc în Depozit (doar piese/fluide non-anvelopă)
-    // Pentru fluide: căutăm și după Depozit + Categorie + Subcategorie identice!
+    // Protecție împotriva codurilor generice de tip {CUI}-{nrLinie} (ex: 27627746-4) care se repetă
+    // pe facturi diferite pentru piese complet diferite!
+    const cleanCifDigits = (item.factura.cifVanzator || '').replace(/\D/g, '');
+    const isGenericCuiLineCode = Boolean(
+      codArticol &&
+        (/^\d{5,10}-\d{1,3}$/.test(codArticol.trim()) ||
+          (cleanCifDigits.length >= 5 && codArticol.trim().startsWith(`${cleanCifDigits}-`)))
+    );
+
+    const normalizeNameTokens = (str: string) =>
+      (str || '')
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/[^A-Z0-9]+/)
+        .filter((w) => w.length >= 3);
+
+    const isNameCompatible = (existingName: string, incomingName: string) => {
+      const a = (existingName || '').trim().toUpperCase();
+      const b = (incomingName || '').trim().toUpperCase();
+      if (a === b) return true;
+      if (isGenericCuiLineCode) return false;
+      const tokensA = new Set(normalizeNameTokens(a));
+      const tokensB = normalizeNameTokens(b);
+      if (tokensA.size === 0 || tokensB.length === 0) return a === b;
+      return tokensB.some((w) => tokensA.has(w));
+    };
+
     let articol: any = null;
+    let finalCodArticol = codArticol;
 
     if (codArticol) {
-      articol = await this.prisma.articolStoc.findFirst({
+      const candidateByCode = await this.prisma.articolStoc.findFirst({
         where: {
           codArticol: codArticol,
           depozitId: targetDepozitId,
         },
       });
+      if (candidateByCode && isNameCompatible(candidateByCode.denumire, item.descrierePiesa)) {
+        articol = candidateByCode;
+      } else if (candidateByCode) {
+        // Codul există deja pentru o piesă complet diferită -> generăm un cod unic sigur pentru piesa nouă
+        const slug = normalizeNameTokens(item.descrierePiesa).slice(0, 3).join('-').slice(0, 24) || 'ART';
+        const suffix = (item.factura.numarFactura || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6);
+        finalCodArticol = `${slug}${suffix ? `-${suffix}` : `-${Date.now().toString().slice(-4)}`}`;
+      }
     }
 
     if (!articol && isFluid && catName && data.subcategorieNume) {
@@ -1768,9 +1804,19 @@ export class EFacturaService implements OnModuleInit {
       const catCustom = await this.prisma.categorieStoc.findUnique({ where: { nume: catName } });
       const defaultMin = catCustom ? catCustom.stocMinimImplicit : (isFluid ? 20 : 5);
 
+      // Garantăm unicitatea codArticol în cazul unui cod generat sau deja folosit în alt depozit
+      let safeCod = finalCodArticol;
+      const existingGlobalCode = await this.prisma.articolStoc.findFirst({
+        where: { codArticol: safeCod },
+        select: { id: true },
+      });
+      if (existingGlobalCode) {
+        safeCod = `${safeCod}-${Date.now().toString().slice(-4)}`;
+      }
+
       articol = await this.prisma.articolStoc.create({
         data: {
-          codArticol,
+          codArticol: safeCod,
           denumire: item.descrierePiesa,
           categorie: catName,
           subcategorie: data.subcategorieNume || (catName.trim().toLowerCase() === 'alte' ? 'Alte piese' : null),
