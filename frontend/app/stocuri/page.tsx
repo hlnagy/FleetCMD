@@ -12,6 +12,7 @@ import {
   LayoutList, LayoutGrid, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { showConfirm, showToast } from '@/lib/swal';
+import { useAuth } from '@/lib/AuthContext';
 import { useTabWorkspace } from '@/lib/TabWorkspaceContext';
 import {
   FALLBACK_TIPURI_FLUIDE,
@@ -102,6 +103,7 @@ const matchesSearchTokens = (fields: Array<string | null | undefined>, query?: s
 
 function StocuriGarantiiContent() {
   const { openTab } = useTabWorkspace();
+  const { user: authUser } = useAuth();
   const searchParams = useSearchParams();
   const tabParam = searchParams?.get('tab');
   const depozitIdParam = searchParams?.get('depozitId');
@@ -212,8 +214,10 @@ function StocuriGarantiiContent() {
   const [transferArticol, setTransferArticol] = useState<any>(null);
   const [transferDepozitDestinatieId, setTransferDepozitDestinatieId] = useState('');
   const [transferCantitate, setTransferCantitate] = useState(1);
-  const [transferOperator, setTransferOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
+  const [transferOperator, setTransferOperator] = useState('');
   const [transferObservatii, setTransferObservatii] = useState('');
+  const [transferLotId, setTransferLotId] = useState('');
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   // Stare Creare Articol Simplu
   const [codArticol, setCodArticol] = useState('');
@@ -492,11 +496,33 @@ function StocuriGarantiiContent() {
     }
   };
 
-  // Handler Execuție Transfer Parțial Între Depozite (Requested by User)
+  // Handler Execuție Transfer Între Depozite (cu suport FIFO & selectare lot specific)
   const handleExecutaTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!transferArticol) return;
+    if (!transferArticol || transferSubmitting) return;
 
+    const reservedQty = Number(transferArticol.stocRezervat || 0);
+    const maxTransfer =
+      transferArticol.stocDisponibil !== undefined && transferArticol.stocDisponibil !== null
+        ? Number(transferArticol.stocDisponibil)
+        : Math.max(0, Number(transferArticol.stocCurent || 0) - reservedQty);
+
+    const qty = Number(transferCantitate);
+    if (!transferDepozitDestinatieId || transferDepozitDestinatieId === transferArticol.depozitId) {
+      showToast('Selectați un depozit destinație diferit de depozitul sursă.', 'warning');
+      return;
+    }
+    if (!Number.isFinite(qty) || qty <= 0 || qty > maxTransfer + 0.0001) {
+      showToast(`Cantitatea trebuie să fie între 0.01 și ${maxTransfer} ${transferArticol.unitateMasura || 'buc'}.`, 'warning');
+      return;
+    }
+
+    const activeLots = (transferArticol.intrariStoc || []).filter(
+      (l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata ?? 0) > 0.001
+    );
+    const chosenLot = activeLots.find((l: any) => l.id === transferLotId) || null;
+
+    setTransferSubmitting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/transfer-stoc`, {
         method: 'POST',
@@ -504,24 +530,29 @@ function StocuriGarantiiContent() {
         body: JSON.stringify({
           articolStocId: transferArticol.id,
           depozitDestinatieId: transferDepozitDestinatieId,
-          cantitate: Number(transferCantitate),
-          operator: transferOperator,
-          observatii: transferObservatii,
+          cantitate: qty,
+          operator: transferOperator.trim() || authUser?.nume || 'Operator Depozit',
+          observatii: transferObservatii.trim() || undefined,
+          preferredNumarFactura: chosenLot?.numarFactura || undefined,
+          preferredPretUnitar: chosenLot?.pretUnitar !== undefined ? Number(chosenLot.pretUnitar) : undefined,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        alert(data.mesaj);
+        showToast(data.mesaj || 'Transfer efectuat cu succes!', 'success');
         setTransferArticol(null);
+        setTransferLotId('');
         setTransferObservatii('');
         fetchData();
       } else {
-        const err = await res.json();
-        alert(`Eroare transfer: ${err.message}`);
+        const err = await res.json().catch(() => ({}));
+        showToast(`Eroare transfer: ${err.message || res.statusText}`, 'error');
       }
-    } catch (e) {
-      alert('Eroare la executarea transferului parțial.');
+    } catch {
+      showToast('Eroare la executarea transferului între depozite.', 'error');
+    } finally {
+      setTransferSubmitting(false);
     }
   };
 
@@ -2110,10 +2141,22 @@ function StocuriGarantiiContent() {
 
                         <button
                           onClick={() => {
+                            const activeLots = (s.intrariStoc || [])
+                              .filter((l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata ?? 0) > 0.001)
+                              .slice()
+                              .sort((a: any, b: any) => new Date(a.dataFactura || a.createdAt || 0).getTime() - new Date(b.dataFactura || b.createdAt || 0).getTime());
+                            const maxAvail =
+                              s.stocDisponibil !== undefined && s.stocDisponibil !== null
+                                ? Number(s.stocDisponibil)
+                                : Math.max(0, Number(s.stocCurent || 0) - Number(s.stocRezervat || 0));
                             setTransferArticol(s);
-                            setTransferCantitate(1);
-                            const altDep = depozite.find(d => d.id !== s.depozitId);
-                            if (altDep) setTransferDepozitDestinatieId(altDep.id);
+                            setTransferLotId(activeLots[0]?.id || '');
+                            setTransferCantitate(maxAvail > 0 ? Math.min(1, maxAvail) : 0);
+                            setTransferObservatii('');
+                            const defaultOp = authUser?.nume || mecanici[0]?.nume || '';
+                            setTransferOperator((prev) => prev || defaultOp);
+                            const altDep = depozite.find((d) => d.id !== s.depozitId);
+                            setTransferDepozitDestinatieId(altDep ? altDep.id : '');
                           }}
                           className="px-2.5 py-1 rounded-lg bg-periwinkle-100 hover:bg-periwinkle-300 text-periwinkle-700 text-[11px] font-bold border border-periwinkle-300 transition"
                           title="Transferă parțial în alt depozit"
@@ -3222,110 +3265,272 @@ function StocuriGarantiiContent() {
         </div>
       )}
 
-      {/* MODÁL TRANSFER PARȚIAL ÎNTRE DEPOZITE (USER REQUESTED FEATURE) */}
-      {transferArticol && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card p-6 rounded-2xl w-full max-w-md space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-sapphire-900 flex items-center space-x-2">
-                <ArrowLeftRight className="w-5 h-5 text-periwinkle-700" />
-                <span>Transfer Parțial Între Depozite</span>
-              </h3>
-              <button onClick={() => setTransferArticol(null)} className="text-sage-500 hover:text-sapphire-900">
-                <X className="w-5 h-5" />
-              </button>
+      {/* MODAL TRANSFER ÎNTRE DEPOZITE (FIFO + SELECTARE LOT + OPERATOR REAL) */}
+      {transferArticol && (() => {
+        const reservedQty = Number(transferArticol.stocRezervat || 0);
+        const maxTransfer =
+          transferArticol.stocDisponibil !== undefined && transferArticol.stocDisponibil !== null
+            ? Number(transferArticol.stocDisponibil)
+            : Math.max(0, Number(transferArticol.stocCurent || 0) - reservedQty);
+        const activeLots = (transferArticol.intrariStoc || [])
+          .filter((l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata ?? 0) > 0.001)
+          .slice()
+          .sort((a: any, b: any) => {
+            const da = new Date(a.dataFactura || a.createdAt || 0).getTime();
+            const db = new Date(b.dataFactura || b.createdAt || 0).getTime();
+            if (da !== db) return da - db;
+            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+          });
+        const destOptions = depozite.filter((d) => d.id !== transferArticol.depozitId);
+        const selectedDest = destOptions.find((d) => d.id === transferDepozitDestinatieId);
+        const qtyNum = Number(transferCantitate) || 0;
+        const afterSourceQty = Math.max(0, Number((Number(transferArticol.stocCurent || 0) - qtyNum).toFixed(2)));
+        const isTotalTransfer = maxTransfer > 0 && Math.abs(qtyNum - maxTransfer) < 0.001;
+
+        const operatorOptions: string[] = [];
+        if (authUser?.nume) operatorOptions.push(authUser.nume);
+        for (const m of mecanici) {
+          if (m?.nume && !operatorOptions.includes(m.nume)) operatorOptions.push(m.nume);
+        }
+        if (transferOperator && !operatorOptions.includes(transferOperator)) {
+          operatorOptions.unshift(transferOperator);
+        }
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setTransferArticol(null)}
+          >
+            <div
+              className="pleasant-card p-6 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl border border-morning-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-morning-200 pb-3">
+                <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
+                  <ArrowLeftRight className="w-5 h-5 text-sapphire-600" />
+                  <span>Transfer Între Depozite</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setTransferArticol(null)}
+                  className="p-1 rounded-lg text-sage-500 hover:text-sapphire-900 hover:bg-morning-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleExecutaTransfer} className="space-y-4 text-xs">
+                {/* Articol & Rute Sursă -> Destinație */}
+                <div className="p-3.5 bg-morning-100 rounded-xl border border-morning-200 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-sapphire-900 text-sm truncate">{transferArticol.denumire}</p>
+                      <p className="text-[11px] font-mono text-sage-600">{transferArticol.codArticol}</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 font-mono font-extrabold text-xs shrink-0">
+                      Disponibil: {maxTransfer} {transferArticol.unitateMasura}
+                    </span>
+                  </div>
+
+                  {reservedQty > 0 && (
+                    <p className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                      Stoc fizic: {transferArticol.stocCurent} {transferArticol.unitateMasura} · Rezervat în comenzi deschise: {reservedQty} {transferArticol.unitateMasura}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                    <div className="flex-1 bg-white dark:bg-[#111D28] px-2.5 py-1.5 rounded-lg border border-morning-200">
+                      <span className="text-[10px] uppercase font-bold text-sage-500 block">Depozit Sursă</span>
+                      <span className="font-extrabold text-sapphire-900">{transferArticol.depozit?.nume || 'Depozit Central'}</span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-sapphire-500 shrink-0" />
+                    <div className="flex-1 bg-white dark:bg-[#111D28] px-2.5 py-1.5 rounded-lg border border-sapphire-200">
+                      <span className="text-[10px] uppercase font-bold text-sapphire-600 block">Depozit Destinație</span>
+                      <span className="font-extrabold text-sapphire-900">{selectedDest?.nume || 'Selectați...'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Depozit Destinație */}
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Depozit Destinație: *</label>
+                  {destOptions.length === 0 ? (
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-semibold">
+                      Nu există alt depozit configurat. Creați un al doilea depozit pentru a putea transfera stoc.
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={transferDepozitDestinatieId}
+                      onChange={(e) => setTransferDepozitDestinatieId(e.target.value)}
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                    >
+                      {destOptions.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.nume}{d.responsabil ? ` (${d.responsabil})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Selector Lot FIFO dacă există mai multe loturi active */}
+                {activeLots.length > 1 && (
+                  <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-300 space-y-2">
+                    <span className="text-[11px] font-extrabold text-amber-950 block">
+                      Articolul are {activeLots.length} loturi active — alegeți lotul de transferat:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {activeLots.map((lot: any, idx: number) => {
+                        const isLotSel = transferLotId === lot.id;
+                        const lotRem = Number(lot.cantitateRamasa ?? lot.cantitateIntrata ?? 0);
+                        return (
+                          <button
+                            key={lot.id}
+                            type="button"
+                            onClick={() => {
+                              setTransferLotId(lot.id);
+                              setTransferCantitate(Math.min(maxTransfer, lotRem > 0 ? lotRem : 1));
+                            }}
+                            className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                              isLotSel
+                                ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-xs'
+                                : 'bg-white hover:bg-morning-50 text-sapphire-900 border-amber-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 font-mono font-extrabold text-[11px]">
+                              <span className="truncate">#{idx + 1} · {lot.numarFactura || 'Fără nr.'}</span>
+                              <span>{Number(lot.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON</span>
+                            </div>
+                            <div className={`text-[10px] mt-0.5 flex justify-between ${isLotSel ? 'text-sapphire-100' : 'text-sage-600'}`}>
+                              <span className="truncate">{lot.furnizor || 'Furnizor'}</span>
+                              <span className="font-mono font-bold">Rămas: {lotRem}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cantitate + Quick Presets + Previzualizare După Transfer */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="text-sage-700 font-bold">
+                      Cantitate de Transferat ({transferArticol.unitateMasura}): *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      {maxTransfer >= 4 && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferCantitate(Math.max(1, Math.floor(maxTransfer / 2)))}
+                          className="px-2 py-0.5 rounded-md bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-800 font-bold text-[10px] transition"
+                        >
+                          50% ({Math.floor(maxTransfer / 2)})
+                        </button>
+                      )}
+                      {maxTransfer > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferCantitate(maxTransfer)}
+                          className={`px-2 py-0.5 rounded-md border font-bold text-[10px] transition ${
+                            isTotalTransfer
+                              ? 'bg-sapphire-600 text-white border-sapphire-600'
+                              : 'bg-sapphire-50 hover:bg-sapphire-100 border-sapphire-200 text-sapphire-800'
+                          }`}
+                        >
+                          Transfer Total ({maxTransfer} {transferArticol.unitateMasura})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    max={maxTransfer}
+                    required
+                    disabled={maxTransfer <= 0}
+                    value={transferCantitate}
+                    onChange={(e) => setTransferCantitate(Number(e.target.value))}
+                    className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-mono font-extrabold text-sm"
+                  />
+                  {maxTransfer > 0 && qtyNum > 0 && qtyNum <= maxTransfer && (
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-sage-700 bg-morning-50 px-2.5 py-1.5 rounded-lg border border-morning-200">
+                      <span>
+                        Sursă după transfer:{' '}
+                        <strong className="font-mono text-sapphire-900">{afterSourceQty} {transferArticol.unitateMasura}</strong>
+                      </span>
+                      <span>
+                        Destinație:{' '}
+                        <strong className="font-mono text-emerald-700">+{qtyNum} {transferArticol.unitateMasura}</strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Operator / Responsabil din lista reală de mecanici / utilizator autentificat */}
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Operator / Responsabil Transfer: *</label>
+                  {operatorOptions.length > 0 ? (
+                    <select
+                      required
+                      value={transferOperator}
+                      onChange={(e) => setTransferOperator(e.target.value)}
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                    >
+                      <option value="">-- Selectați operatorul --</option>
+                      {operatorOptions.map((op) => (
+                        <option key={op} value={op}>{op}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      required
+                      value={transferOperator}
+                      onChange={(e) => setTransferOperator(e.target.value)}
+                      placeholder="Introduceți numele operatorului"
+                      className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-semibold"
+                    />
+                  )}
+                </div>
+
+                {/* Observații */}
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Observații / Motiv Transfer:</label>
+                  <input
+                    value={transferObservatii}
+                    onChange={(e) => setTransferObservatii(e.target.value)}
+                    placeholder="ex: Mutare stoc la atelier / punct de lucru"
+                    className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2.5 pt-2 border-t border-morning-200">
+                  <button
+                    type="button"
+                    onClick={() => setTransferArticol(null)}
+                    className="px-4 py-2 rounded-xl bg-morning-200 hover:bg-morning-300 text-slate-700 font-bold transition"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={transferSubmitting || maxTransfer <= 0 || destOptions.length === 0}
+                    className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-extrabold shadow-md shadow-sapphire-600/20 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    {transferSubmitting
+                      ? 'Se procesează...'
+                      : isTotalTransfer
+                        ? 'Execută Transfer Total'
+                        : 'Execută Transfer Parțial'}
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleExecutaTransfer} className="space-y-3 text-xs">
-              {(() => {
-                const reservedQty = Number(transferArticol.stocRezervat || 0);
-                const maxTransfer =
-                  transferArticol.stocDisponibil !== undefined && transferArticol.stocDisponibil !== null
-                    ? Number(transferArticol.stocDisponibil)
-                    : Math.max(0, Number(transferArticol.stocCurent || 0) - reservedQty);
-                return (
-                  <>
-                    <div className="p-3 bg-morning-100 rounded-xl border border-morning-200 space-y-1">
-                      <p className="font-extrabold text-sapphire-900">{transferArticol.denumire} ({transferArticol.codArticol})</p>
-                      <p className="text-sage-700 font-medium">
-                        Depozit Sursă: <span className="font-bold text-slate-800">{transferArticol.depozit?.nume || 'Depozit Central'}</span>
-                      </p>
-                      <p className="text-sage-700 font-medium">
-                        Stoc Disponibil Transfer:{' '}
-                        <span className="font-mono font-extrabold text-sapphire-600">
-                          {maxTransfer} {transferArticol.unitateMasura}
-                        </span>
-                        {reservedQty > 0 && (
-                          <span className="ml-1.5 text-[10px] font-bold text-amber-800">
-                            (din {transferArticol.stocCurent} fizic · {reservedQty} rezervat în comenzi deschise)
-                          </span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Destinație:</label>
-                      <select
-                        required
-                        value={transferDepozitDestinatieId}
-                        onChange={(e) => setTransferDepozitDestinatieId(e.target.value)}
-                        className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                      >
-                        {depozite
-                          .filter((d) => d.id !== transferArticol.depozitId)
-                          .map((d) => (
-                            <option key={d.id} value={d.id}>{d.nume}</option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-sage-700 block mb-1 font-bold">Cantitate de Transferat ({transferArticol.unitateMasura}):</label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0.01"
-                        max={maxTransfer}
-                        required
-                        value={transferCantitate}
-                        onChange={(e) => setTransferCantitate(Number(e.target.value))}
-                        className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-mono font-extrabold text-sm"
-                      />
-                      <p className="text-[10px] text-sage-500 mt-1">
-                        Maxim transferabil: {maxTransfer} {transferArticol.unitateMasura}
-                      </p>
-                    </div>
-                  </>
-                );
-              })()}
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Operator / Mecanic:</label>
-                <input
-                  value={transferOperator}
-                  onChange={(e) => setTransferOperator(e.target.value)}
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Observații & Notițe Transfer:</label>
-                <input
-                  value={transferObservatii}
-                  onChange={(e) => setTransferObservatii(e.target.value)}
-                  placeholder="ex: Transfer 2 buc filtre ulei la șantier A3"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-3">
-                <button type="button" onClick={() => setTransferArticol(null)} className="px-4 py-2 rounded-lg bg-morning-200 text-slate-700 font-semibold">Anulează</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-sapphire-500 text-white font-bold shadow-md shadow-sapphire-500/20">Execută Transfer Parțial</button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODÁL EDITARE DEPOZIT */}
       {editingDepozit && (
@@ -3368,7 +3573,7 @@ function StocuriGarantiiContent() {
                   <input
                     value={editingDepozit.responsabil || ''}
                     onChange={(e) => setEditingDepozit({ ...editingDepozit, responsabil: e.target.value })}
-                    placeholder="ex: Brașoveanu Virgil (Șef Atelier)"
+                    placeholder="ex: Nume responsabil depozit"
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold"
                   />
                 )}
@@ -3531,7 +3736,7 @@ function StocuriGarantiiContent() {
                     required
                     value={responsabilDepozitNou}
                     onChange={(e) => setResponsabilDepozitNou(e.target.value)}
-                    placeholder="ex: Brașoveanu Virgil (Șef Atelier)"
+                    placeholder="ex: Nume responsabil depozit"
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold"
                   />
                 )}

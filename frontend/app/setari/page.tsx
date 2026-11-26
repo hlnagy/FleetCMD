@@ -209,7 +209,7 @@ function SetariContent() {
   const [customCategorie, setCustomCategorie] = useState('LICENTA_FIRMA');
   const [customDataExpirare, setCustomDataExpirare] = useState('');
   const [customZileAvertizare, setCustomZileAvertizare] = useState(30);
-  const [customResponsabil, setCustomResponsabil] = useState('Brașoveanu Virgil');
+  const [customResponsabil, setCustomResponsabil] = useState('');
   const [customStare, setCustomStare] = useState('ACTIV');
 
   // ==========================================
@@ -1202,7 +1202,7 @@ function SetariContent() {
     setCustomCategorie('LICENTA_FIRMA');
     setCustomDataExpirare('');
     setCustomZileAvertizare(30);
-    setCustomResponsabil('Brașoveanu Virgil');
+    setCustomResponsabil('');
     setCustomStare('ACTIV');
     setShowAddCustomModal(true);
   };
@@ -5624,7 +5624,7 @@ function SetariContent() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Responsabil:</label>
-                  <input value={customResponsabil} onChange={(e) => setCustomResponsabil(e.target.value)} placeholder="ex: Brașoveanu Virgil" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
+                  <input value={customResponsabil} onChange={(e) => setCustomResponsabil(e.target.value)} placeholder="ex: Nume responsabil" className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold" />
                 </div>
               </div>
 

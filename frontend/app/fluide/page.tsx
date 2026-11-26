@@ -179,7 +179,7 @@ export default function FluidePage() {
   const [iesireContor, setIesireContor] = useState(0);
   const [iesireUnitateContor, setIesireUnitateContor] = useState<'KM' | 'MTH'>('KM');
   const [iesireData, setIesireData] = useState(new Date().toISOString().split('T')[0]);
-  const [iesireMecanic, setIesireMecanic] = useState('Brașoveanu Virgil (Șef Atelier)');
+  const [iesireMecanic, setIesireMecanic] = useState('');
   const [iesireObservatii, setIesireObservatii] = useState('');
   const [arataToateFluidele, setArataToateFluidele] = useState<boolean>(false);
   const [faraDeducereStoc, setFaraDeducereStoc] = useState<boolean>(false);

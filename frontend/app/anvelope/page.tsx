@@ -59,7 +59,7 @@ export default function AnvelopePage() {
   const [demountDepozitId, setDemountDepozitId] = useState('');
   const [demountContor, setDemountContor] = useState<number>(0);
   const [demountData, setDemountData] = useState(new Date().toISOString().split('T')[0]);
-  const [demountOperator, setDemountOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
+  const [demountOperator, setDemountOperator] = useState('');
   const [demountObservatii, setDemountObservatii] = useState('Înlocuire de sezon / Demontare în stoc');
 
   // Modal State Istoric Complet Anvelopă
@@ -72,7 +72,7 @@ export default function AnvelopePage() {
   const [pozitieB, setPozitieB] = useState<any>(null);
   const [showPermutareModal, setShowPermutareModal] = useState(false);
   const [permutareData, setPermutareData] = useState(new Date().toISOString().split('T')[0]);
-  const [permutareOperator, setPermutareOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
+  const [permutareOperator, setPermutareOperator] = useState('');
   const [permutareObservatii, setPermutareObservatii] = useState('');
   const [permutareValoareContor, setPermutareValoareContor] = useState<number>(0);
   const [mecaniciList, setMecaniciList] = useState<any[]>([]);
@@ -95,7 +95,7 @@ export default function AnvelopePage() {
   // Date & Contor Montare
   const [mountData, setMountData] = useState(new Date().toISOString().split('T')[0]);
   const [mountContor, setMountContor] = useState<number | ''>('');
-  const [mountOperator, setMountOperator] = useState('Brașoveanu Virgil (Șef Atelier)');
+  const [mountOperator, setMountOperator] = useState('');
   const [mountObservatii, setMountObservatii] = useState('');
 
   // Selecție Axă & Poziție per Vehicul

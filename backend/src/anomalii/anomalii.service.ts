@@ -2173,7 +2173,7 @@ export class AnomaliiService {
           categorie: 'LICENTA_FIRMA',
           dataExpirare: new Date('2026-12-31'),
           zileAvertizareInainte: 30,
-          responsabil: 'Brașoveanu Virgil',
+          responsabil: 'Responsabil Depozit',
           observatii: 'Licență de transport marfă generală valabilă până la sf. anului 2026',
         },
         {

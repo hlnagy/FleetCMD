@@ -55,7 +55,7 @@ export class StocuriGarantiiService {
     if (depozite.length === 0) {
       await this.prisma.depozit.createMany({
         data: [
-          { nume: 'Depozit Central Atelier', adresa: 'Sediu Central', responsabil: 'Brașoveanu Virgil (Șef Atelier)' },
+          { nume: 'Depozit Central Atelier', adresa: 'Sediu Central', responsabil: 'Responsabil Depozit' },
           { nume: 'Depozit Șantier Autostrada A3', adresa: 'Șantier A3', responsabil: 'Mecanic Șantier A3' },
           { nume: 'Depozit Cariera Poiana', adresa: 'Cariera Poiana', responsabil: 'Gestionar Cariera' },
         ],
@@ -638,6 +638,8 @@ export class StocuriGarantiiService {
     cantitate: number;
     operator?: string;
     observatii?: string;
+    preferredNumarFactura?: string | null;
+    preferredPretUnitar?: number | null;
   }) {
     const cantitate = Number(data.cantitate);
     if (!Number.isFinite(cantitate) || cantitate <= 0) {
@@ -686,8 +688,18 @@ export class StocuriGarantiiService {
         );
       }
 
-      // 1. Consumăm FIFO atomic din depozitul sursă (scade atât stocCurent cât și loturile IntrareStoc)
-      const fifoRes = await this.consumaStocFIFO(articolSursa.id, cantitate, tx);
+      // 1. Consumăm FIFO atomic din depozitul sursă (respectă lotul selectat explicit dacă există)
+      const fifoRes = await this.consumaStocFIFO(
+        articolSursa.id,
+        cantitate,
+        tx,
+        data.preferredNumarFactura
+          ? {
+              numarFactura: data.preferredNumarFactura,
+              pretUnitar: data.preferredPretUnitar,
+            }
+          : undefined,
+      );
 
       // 2. Căutăm sau creăm articolul în depozitul destinație
       let articolDestinatie = await tx.articolStoc.findFirst({
@@ -797,13 +809,14 @@ export class StocuriGarantiiService {
           depozitSursaId: articolSursa.depozitId || data.depozitDestinatieId,
           depozitDestinatieId: data.depozitDestinatieId,
           cantitateTransferata: cantitate,
-          operator: data.operator || 'Brașoveanu Virgil (Șef Atelier)',
-          observatii: data.observatii,
+          operator: data.operator?.trim() || 'Operator Depozit',
+          observatii: data.observatii?.trim() || null,
         },
       });
 
+      const isTotal = fifoRes.stocCurentRamas <= 0.0001;
       return {
-        mesaj: ` Transfer parțial efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
+        mesaj: `${isTotal ? 'Transfer total' : 'Transfer parțial'} efectuat cu succes! Au fost transferate ${cantitate} ${articolSursa.unitateMasura} de "${articolSursa.denumire}" din ${articolSursa.depozit?.nume || 'Depozitul Sursă'} în ${depozitDestinatie.nume}.`,
         transferLog,
         stocSursaNou: fifoRes.stocCurentRamas,
         stocDestinatieNou: articolDestinatie.stocCurent,
