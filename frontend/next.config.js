@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    const backendUrl = (process.env.BACKEND_URL || 'https://fleetcmd.onrender.com').replace(/\/+$/, '');
+    const backendUrl = (process.env.BACKEND_URL || 'https://fleet-cmd-fson.vercel.app').replace(/\/+$/, '');
     return [
       {
         source: '/api/backend/:path*',
