@@ -136,6 +136,79 @@ export class StocuriGarantiiService {
     return reservedMap;
   }
 
+  async getReservedStockDetailsMap(
+    tx?: Prisma.TransactionClient,
+  ): Promise<
+    Map<
+      string,
+      Array<{
+        comandaId: string;
+        numarComanda: string;
+        stare: string;
+        vehiculNumar: string;
+        cantitate: number;
+      }>
+    >
+  > {
+    const db = tx || this.prisma;
+    const rows = await db.elementComandaLucru.findMany({
+      where: {
+        pilonCost: 'PIESA_STOC',
+        articolStocId: { not: null },
+        comandaLucru: {
+          stare: { in: ['IN_LUCRU', 'DEVALIDAT'] },
+        },
+      },
+      select: {
+        articolStocId: true,
+        cantitate: true,
+        comandaLucru: {
+          select: {
+            id: true,
+            numarComanda: true,
+            stare: true,
+            vehicul: { select: { numarIntern: true, numarInmatriculare: true } },
+          },
+        },
+      },
+    });
+
+    const grouped = new Map<
+      string,
+      Map<string, { comandaId: string; numarComanda: string; stare: string; vehiculNumar: string; cantitate: number }>
+    >();
+
+    for (const r of rows) {
+      if (!r.articolStocId || !r.comandaLucru) continue;
+      let perArt = grouped.get(r.articolStocId);
+      if (!perArt) {
+        perArt = new Map();
+        grouped.set(r.articolStocId, perArt);
+      }
+      const existing = perArt.get(r.comandaLucru.id);
+      if (existing) {
+        existing.cantitate = Number((existing.cantitate + Number(r.cantitate || 0)).toFixed(4));
+      } else {
+        perArt.set(r.comandaLucru.id, {
+          comandaId: r.comandaLucru.id,
+          numarComanda: r.comandaLucru.numarComanda,
+          stare: r.comandaLucru.stare,
+          vehiculNumar: r.comandaLucru.vehicul?.numarIntern || r.comandaLucru.vehicul?.numarInmatriculare || '—',
+          cantitate: Number(r.cantitate || 0),
+        });
+      }
+    }
+
+    const result = new Map<
+      string,
+      Array<{ comandaId: string; numarComanda: string; stare: string; vehiculNumar: string; cantitate: number }>
+    >();
+    grouped.forEach((inner, artId) => {
+      result.set(artId, Array.from(inner.values()));
+    });
+    return result;
+  }
+
   async createDepozit(data: { nume: string; adresa?: string; responsabil?: string }) {
     if (!data.nume) throw new BadRequestException('Numele depozitului este obligatoriu.');
     return this.prisma.depozit.create({
@@ -928,14 +1001,19 @@ export class StocuriGarantiiService {
       );
     }
 
-    const reservedMap = await this.getReservedStockMap();
+    const [reservedMap, reservedDetailsMap] = await Promise.all([
+      this.getReservedStockMap(),
+      this.getReservedStockDetailsMap(),
+    ]);
     const enriched = articole.map((a) => {
       const stocRezervat = Number((reservedMap.get(a.id) || 0).toFixed(4));
       const stocDisponibil = Math.max(0, Number((Number(a.stocCurent || 0) - stocRezervat).toFixed(4)));
+      const rezervariActive = reservedDetailsMap.get(a.id) || [];
       return {
         ...a,
         stocRezervat,
         stocDisponibil,
+        rezervariActive,
       };
     });
 

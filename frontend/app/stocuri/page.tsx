@@ -2121,6 +2121,31 @@ function StocuriGarantiiContent() {
                             >
                               Disponibil: {stocDisponibil}
                             </span>
+                            {Array.isArray(s.rezervariActive) && s.rezervariActive.length > 0 && (
+                              <div className="w-full flex flex-wrap gap-1 mt-0.5">
+                                {s.rezervariActive.map((rez: any) => (
+                                  <button
+                                    key={rez.comandaId}
+                                    type="button"
+                                    onClick={() =>
+                                      openTab({
+                                        id: '/comenzi-lucru',
+                                        title: `Deviz ${rez.numarComanda}`,
+                                        href: '/comenzi-lucru',
+                                        iconName: 'Wrench',
+                                      })
+                                    }
+                                    className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-amber-100/80 hover:bg-amber-200 text-amber-950 border border-amber-300 text-[10px] font-bold transition cursor-pointer"
+                                    title={`Rezervat în ${rez.numarComanda} (${rez.stare}) pentru ${rez.vehiculNumar} — ${rez.cantitate} ${s.unitateMasura}. Click pentru a deschide Comenzi de Lucru.`}
+                                  >
+                                    <Wrench className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="font-mono">{rez.numarComanda}</span>
+                                    <span>· {rez.vehiculNumar}</span>
+                                    <span className="opacity-75">({rez.stare === 'DEVALIDAT' ? 'Devalidat' : 'În lucru'}{rez.cantitate > 1 ? ` ×${rez.cantitate}` : ''})</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
