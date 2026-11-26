@@ -10,6 +10,7 @@ import {
   LayoutGrid, LayoutList, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
+import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
 import FluidStatusMatrix from '@/components/FluidStatusMatrix';
 import { getCategoryColor } from '@/lib/categoryColors';
 import { showConfirm } from '@/lib/swal';
@@ -957,8 +958,15 @@ export default function FluidePage() {
         await fetchInitialData();
         await fetchStatusSchimburi(selectedVehiculId);
       } else {
-        const err = await res.json().catch(() => ({}));
-        alert(`Eroare la salvare: ${err.message || 'Verificați datele introduse'}`);
+        const rawText = await res.text().catch(() => '');
+        let parsedMsg = '';
+        try {
+          const err = JSON.parse(rawText);
+          parsedMsg = Array.isArray(err?.message) ? err.message.join(', ') : (err?.message || err?.error || '');
+        } catch {
+          parsedMsg = rawText.slice(0, 180);
+        }
+        alert(`Eroare la salvare (${res.status}): ${parsedMsg || 'Verificați datele introduse'}`);
       }
     } catch (e) {
       alert('Eroare la procesarea cererii de completare ulei.');
@@ -4029,19 +4037,50 @@ export default function FluidePage() {
               })()}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* 1. DATA INTERVENȚIEI — PRIMA ÎN FORMULAR */}
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Utilaj Destinație:</label>
-                  <select
+                  <label className="text-sage-700 block mb-1 font-bold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-sapphire-600" />
+                    Data Intervenției: *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={iesireData}
+                    onChange={(e) => setIesireData(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
+                  />
+                </div>
+
+                {/* 2. UTILAJ DESTINAȚIE — CU FILTRU ACTIV (SEARCHABLE COMBOBOX) */}
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Utilaj Destinație: *</label>
+                  <SearchableCombobox
+                    required
                     value={selectedVehiculId}
-                    onChange={(e) => setSelectedVehiculId(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
-                  >
-                    {vehicule.map((v) => (
-                      <option key={v.id} value={v.id}>
-                         {v.numarIntern} ({v.numarInmatriculare}) - {v.marca}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedVehiculId(val)}
+                    placeholder="Caută nr. intern / înmatriculare (ex: SYI, WBT, LIB004)..."
+                    emptyText="Niciun utilaj găsit."
+                    options={vehicule
+                      .slice()
+                      .sort((a, b) =>
+                        String(a.numarIntern || '').localeCompare(String(b.numarIntern || ''), 'ro', { numeric: true })
+                      )
+                      .map((v): ComboboxOption => ({
+                        value: v.id,
+                        label: v.numarIntern || v.numarInmatriculare,
+                        sublabel: [
+                          v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? v.numarInmatriculare : '',
+                          v.marca,
+                          v.model,
+                        ]
+                          .filter(Boolean)
+                          .join(' • '),
+                        badge: v.categorieEnum || undefined,
+                        badgeTone: 'sapphire',
+                        keywords: `${v.numarIntern || ''} ${v.numarInmatriculare || ''} ${v.marca || ''} ${v.model || ''} ${v.categorieEnum || ''}`,
+                      }))}
+                  />
                 </div>
 
                 <div>
@@ -4140,29 +4179,6 @@ export default function FluidePage() {
                   </label>
                 </div>
 
-                {!faraDeducereStoc && (
-                  <div className="md:col-span-2 p-2.5 bg-sapphire-50 border border-sapphire-200 rounded-xl text-[11px] text-sapphire-900 flex items-center space-x-2">
-                    <ShieldCheck className="w-4 h-4 text-sapphire-600 shrink-0" />
-                    <span>
-                      <b>Consum Automat FIFO:</b> Cantitatea va fi dedusă automat din cele mai vechi loturi din depozit, cu validare strictă de stoc disponibil.
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-sage-700 block mb-1 font-bold flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-sapphire-600" />
-                    Data Intervenției: *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={iesireData}
-                    onChange={(e) => setIesireData(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
-                  />
-                </div>
-
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Cantitate (Litri): *</label>
                   <input
@@ -4191,6 +4207,15 @@ export default function FluidePage() {
                     ))}
                   </div>
                 </div>
+
+                {!faraDeducereStoc && (
+                  <div className="md:col-span-2 p-2.5 bg-sapphire-50 border border-sapphire-200 rounded-xl text-[11px] text-sapphire-900 flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-sapphire-600 shrink-0" />
+                    <span>
+                      <b>Consum Automat FIFO:</b> Cantitatea va fi dedusă automat din cele mai vechi loturi din depozit, cu validare strictă de stoc disponibil.
+                    </span>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -4226,9 +4251,10 @@ export default function FluidePage() {
                   </div>
                   <input
                     type="number"
+                    step="any"
                     min="0"
                     value={iesireContor}
-                    onChange={(e) => setIesireContor(Number(e.target.value))}
+                    onChange={(e) => setIesireContor(e.target.value === '' ? 0 : Number(e.target.value))}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                   />
                 </div>
