@@ -990,11 +990,14 @@ export class MentenantaService {
           if (elem.pilonCost === 'PIESA_STOC' && elem.articolStocId) {
             const articol = articolMap.get(elem.articolStocId)!;
 
-            // Consum atomic FIFO în aceeași tranzacție — fără fallback silențios care ar desincroniza IntrareStoc
+            // Consum atomic FIFO în aceeași tranzacție — respectă lotul ales explicit pe deviz dacă există
             const fifoRes = await this.stocuriGarantiiService.consumaStocFIFO(
               elem.articolStocId,
               elem.cantitate,
               tx,
+              elem.numarFactura
+                ? { numarFactura: elem.numarFactura, pretUnitar: elem.pretUnitar }
+                : undefined,
             );
             const furnizoriFIFO = fifoRes.loturiConsumate?.map((l: any) => l.furnizor).filter(Boolean);
             const facturiFIFO = fifoRes.loturiConsumate?.map((l: any) => l.numarFactura).filter(Boolean);

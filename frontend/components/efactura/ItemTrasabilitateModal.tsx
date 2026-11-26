@@ -274,7 +274,7 @@ export default function ItemTrasabilitateModal({ itemId, onClose }: ItemTrasabil
                     </div>
                   </div>
 
-                  {articolStoc.intrariStoc?.length > 0 && (
+                  {articolStoc.intrariStoc?.filter((l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata) > 0.001).length > 0 && (
                     <div className="overflow-x-auto rounded-xl border border-morning-200 bg-white dark:bg-[#111D28]">
                       <table className="w-full text-left border-collapse text-[11px]">
                         <thead>
@@ -288,7 +288,9 @@ export default function ItemTrasabilitateModal({ itemId, onClose }: ItemTrasabil
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-morning-200">
-                          {articolStoc.intrariStoc.map((lot: any) => {
+                          {articolStoc.intrariStoc
+                            .filter((l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata) > 0.001)
+                            .map((lot: any) => {
                             const isThisInvoice = lot.numarFactura === factura?.numarFactura;
                             return (
                               <tr

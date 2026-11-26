@@ -4369,13 +4369,23 @@ function StocuriGarantiiContent() {
                 </div>
               ) : (
                 (() => {
-                  const firstActiveIdx = fifoLoturiList.findIndex(
-                    (l) => (l.cantitateRamasa ?? l.cantitateIntrata) > 0
+                  const activeLoturi = fifoLoturiList.filter(
+                    (l) => (l.cantitateRamasa ?? l.cantitateIntrata) > 0.001
                   );
-                  const totalRamas = fifoLoturiList.reduce(
+                  const totalRamas = activeLoturi.reduce(
                     (acc, l) => acc + (l.cantitateRamasa ?? l.cantitateIntrata),
                     0
                   );
+
+                  if (activeLoturi.length === 0) {
+                    return (
+                      <div className="py-10 text-center space-y-2">
+                        <Layers className="w-8 h-8 text-sage-400 mx-auto" />
+                        <p className="text-xs font-bold text-slate-600">Nu există loturi active cu stoc disponibil pentru acest articol.</p>
+                        <p className="text-[11px] text-sage-500">Toate loturile anterioare au fost consumate integral.</p>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div className="space-y-3">
@@ -4393,10 +4403,9 @@ function StocuriGarantiiContent() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-morning-200">
-                          {fifoLoturiList.map((lot, idx) => {
+                          {activeLoturi.map((lot, idx) => {
                             const cantRamasa = lot.cantitateRamasa ?? lot.cantitateIntrata;
-                            const esteEpuizat = cantRamasa <= 0.001;
-                            const estePrioritar = idx === firstActiveIdx && !esteEpuizat;
+                            const estePrioritar = idx === 0;
                             const lotCostTotal = lot.pretTotal || (lot.cantitateIntrata * (lot.pretUnitar || 0));
 
                             return (
@@ -4405,8 +4414,6 @@ function StocuriGarantiiContent() {
                                 className={`transition ${
                                   estePrioritar
                                     ? 'bg-emerald-50/80 font-semibold'
-                                    : esteEpuizat
-                                    ? 'bg-slate-50/60 opacity-60'
                                     : 'hover:bg-morning-50'
                                 }`}
                               >
@@ -4433,9 +4440,7 @@ function StocuriGarantiiContent() {
                                 <td className="p-2.5 font-mono">
                                   <span
                                     className={`px-2 py-0.5 rounded font-extrabold text-xs ${
-                                      esteEpuizat
-                                        ? 'bg-slate-200 text-slate-600'
-                                        : estePrioritar
+                                      estePrioritar
                                         ? 'bg-emerald-200 text-emerald-950 border border-emerald-400'
                                         : 'bg-morning-200 text-sapphire-900'
                                     }`}
@@ -4456,11 +4461,7 @@ function StocuriGarantiiContent() {
                                   </span>
                                 </td>
                                 <td className="p-2.5 text-center">
-                                  {esteEpuizat ? (
-                                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                                      <span>Consumat integral</span>
-                                    </span>
-                                  ) : estePrioritar ? (
+                                  {estePrioritar ? (
                                     <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping mr-1" />
                                       <span>Următorul la consum</span>

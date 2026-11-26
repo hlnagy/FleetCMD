@@ -2,7 +2,7 @@
 
 import { API_BASE_URL } from '@/lib/api';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Wrench, Plus, CheckCircle2, DollarSign, Filter, Search, FileText, X, Trash2,
   ShieldAlert, UserPlus, Users, Check, Clock, PackageCheck, Printer, Eye, Edit3,
@@ -235,6 +235,7 @@ export default function ComenziLucruPage() {
   const [quickSelectedWarehouse, setQuickSelectedWarehouse] = useState('TOATE');
   const [quickSelectedCategory, setQuickSelectedCategory] = useState('TOATE');
   const [quickSelectedArticol, setQuickSelectedArticol] = useState<any | null>(null);
+  const [quickSelectedLotId, setQuickSelectedLotId] = useState<string>('');
   const [quickDescriere, setQuickDescriere] = useState('');
   const [quickCantitate, setQuickCantitate] = useState<number>(1);
   const [quickPretUnitar, setQuickPretUnitar] = useState<number>(0);
@@ -1093,18 +1094,45 @@ export default function ComenziLucruPage() {
     return Math.max(0, getMaxAllowedForCurrentOrder(item) - allocated);
   };
 
+  const getActiveLotsForArticol = (articol: any): any[] => {
+    if (!articol?.intrariStoc || !Array.isArray(articol.intrariStoc)) return [];
+    return articol.intrariStoc
+      .filter((l: any) => Number(l.cantitateRamasa ?? l.cantitateIntrata ?? 0) > 0.001)
+      .slice()
+      .sort((a: any, b: any) => {
+        const da = new Date(a.dataFactura || a.createdAt || 0).getTime();
+        const db = new Date(b.dataFactura || b.createdAt || 0).getTime();
+        if (da !== db) return da - db;
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+  };
+
+  const quickActiveLots = useMemo(
+    () => getActiveLotsForArticol(quickSelectedArticol),
+    [quickSelectedArticol]
+  );
+
   const selectQuickStockItem = (st: any) => {
     const remaining = getRemainingStockForItem(st);
+    const activeLots = getActiveLotsForArticol(st);
+    const firstLot = activeLots[0] || null;
     setQuickSelectedArticol(st);
+    setQuickSelectedLotId(firstLot ? firstLot.id : '');
     setQuickDescriere(st.denumire);
-    setQuickPretUnitar(st.pretUnitar || 0);
+    setQuickPretUnitar(firstLot ? Number(firstLot.pretUnitar || 0) : (st.pretUnitar || 0));
     setQuickSearchQuery(`${st.codArticol} — ${st.denumire}`);
-    setQuickCantitate(remaining > 0 ? remaining : 1);
+    if (activeLots.length > 1 && firstLot) {
+      const lotRem = Number(firstLot.cantitateRamasa ?? firstLot.cantitateIntrata ?? 1);
+      setQuickCantitate(Math.min(remaining > 0 ? remaining : 1, lotRem > 0 ? lotRem : 1));
+    } else {
+      setQuickCantitate(remaining > 0 ? remaining : 1);
+    }
     setIsSearchDropdownOpen(false);
   };
 
   const clearQuickStockSelection = (keepSearchText = false) => {
     setQuickSelectedArticol(null);
+    setQuickSelectedLotId('');
     setQuickCantitate(1);
     setQuickPretUnitar(0);
     if (!keepSearchText) {
@@ -1172,6 +1200,7 @@ export default function ComenziLucruPage() {
         );
         return;
       }
+      const chosenLot = quickActiveLots.find((l: any) => l.id === quickSelectedLotId) || null;
       setEditElemente([
         ...editElemente,
         {
@@ -1183,11 +1212,14 @@ export default function ComenziLucruPage() {
           codArticol: quickSelectedArticol.codArticol,
           unitateMasura: quickSelectedArticol.unitateMasura || 'buc',
           provenienta: quickSelectedArticol.depozit?.nume || 'Magazie Centrală',
+          furnizor: chosenLot?.furnizor || null,
+          numarFactura: chosenLot?.numarFactura || null,
           categorie: quickSelectedArticol.categorie || null,
           subcategorie: quickSelectedArticol.subcategorie || null,
           tipLichid: quickSelectedArticol.tipLichid || null,
         },
       ]);
+      setQuickSelectedLotId('');
     } else if (quickPilonCost === 'PIESA_DEZMEMBRATA') {
       if (!quickDescriere.trim()) {
         alert('Vă rugăm să introduceți denumirea piesei din dezmembrări!');
@@ -2788,6 +2820,72 @@ export default function ComenziLucruPage() {
                   </button>
                 </div>
               </div>
+
+              {/* SELECTOR LOT / PREȚ CÂND ARTICOLUL ARE MAI MULTE LOTURI ACTIVE */}
+              {quickPilonCost === 'PIESA_STOC' && quickSelectedArticol && quickActiveLots.length > 1 && (
+                <div className="p-3 rounded-xl bg-amber-50/90 border border-amber-300 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] font-extrabold text-amber-950 flex items-center space-x-1.5">
+                      <Package className="w-3.5 h-3.5 text-amber-700" />
+                      <span>
+                        Articolul are {quickActiveLots.length} loturi active în stoc — alegeți lotul / prețul de consumat:
+                      </span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-amber-800">
+                      Lotul selectat va fi debitat prioritar la finalizare
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {quickActiveLots.map((lot: any, idx: number) => {
+                      const isLotSelected = quickSelectedLotId === lot.id;
+                      const lotRem = Number(lot.cantitateRamasa ?? lot.cantitateIntrata ?? 0);
+                      const noteMatch = String(lot.observatii || '').match(/Notă:\s*([^|•\n]+)/i);
+                      const shortNote = noteMatch ? noteMatch[1].trim() : null;
+                      return (
+                        <button
+                          key={lot.id}
+                          type="button"
+                          onClick={() => {
+                            setQuickSelectedLotId(lot.id);
+                            setQuickPretUnitar(Number(lot.pretUnitar || 0));
+                            const remArt = getRemainingStockForItem(quickSelectedArticol);
+                            setQuickCantitate(Math.min(remArt > 0 ? remArt : 1, lotRem > 0 ? lotRem : 1));
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                            isLotSelected
+                              ? 'bg-sapphire-600 text-white border-sapphire-700 shadow-sm ring-2 ring-sapphire-400'
+                              : 'bg-white hover:bg-morning-50 text-sapphire-900 border-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="font-mono font-extrabold text-[11px] truncate">
+                              #{idx + 1} · {lot.numarFactura || 'Fără Factură'}
+                            </span>
+                            <span
+                              className={`font-mono font-black text-[11px] px-1.5 py-0.5 rounded ${
+                                isLotSelected ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              }`}
+                            >
+                              {Number(lot.pretUnitar || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} RON
+                            </span>
+                          </div>
+                          <div className={`mt-1 flex items-center justify-between gap-2 text-[10px] ${isLotSelected ? 'text-sapphire-100' : 'text-sage-600'}`}>
+                            <span className="truncate">{lot.furnizor || 'Furnizor'}</span>
+                            <span className="font-mono font-bold shrink-0">
+                              Rămas: {lotRem} {quickSelectedArticol.unitateMasura || 'buc'}
+                            </span>
+                          </div>
+                          {shortNote && (
+                            <div className={`mt-1 text-[10px] font-extrabold truncate ${isLotSelected ? 'text-amber-200' : 'text-sapphire-700'}`}>
+                              Notă: {shortNote}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. TABEL DEVIZ / ELEMENTE DE LUCRU */}

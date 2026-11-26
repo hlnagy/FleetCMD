@@ -1566,10 +1566,11 @@ export class StocuriGarantiiService {
     articolStocId: string,
     cantitateDeConsumat: number,
     tx?: Prisma.TransactionClient,
+    preferredLot?: { numarFactura?: string | null; pretUnitar?: number | null },
   ) {
     if (!tx) {
       return this.prisma.$transaction((innerTx) =>
-        this.consumaStocFIFO(articolStocId, cantitateDeConsumat, innerTx),
+        this.consumaStocFIFO(articolStocId, cantitateDeConsumat, innerTx, preferredLot),
       );
     }
 
@@ -1605,6 +1606,26 @@ export class StocuriGarantiiService {
         { createdAt: 'asc' },
       ],
     });
+
+    // Dacă utilizatorul a selectat explicit un lot (factură / preț) pe deviz, îl consumăm cu prioritate
+    if (preferredLot?.numarFactura) {
+      const targetFact = preferredLot.numarFactura.trim().toLowerCase();
+      const targetPret =
+        preferredLot.pretUnitar !== undefined && preferredLot.pretUnitar !== null
+          ? Number(preferredLot.pretUnitar)
+          : null;
+      loturi.sort((a, b) => {
+        const aMatchFact = (a.numarFactura || '').trim().toLowerCase() === targetFact ? 1 : 0;
+        const bMatchFact = (b.numarFactura || '').trim().toLowerCase() === targetFact ? 1 : 0;
+        if (aMatchFact !== bMatchFact) return bMatchFact - aMatchFact;
+        if (aMatchFact === 1 && targetPret !== null) {
+          const aDiff = Math.abs(Number(a.pretUnitar || 0) - targetPret);
+          const bDiff = Math.abs(Number(b.pretUnitar || 0) - targetPret);
+          if (Math.abs(aDiff - bDiff) > 0.005) return aDiff - bDiff;
+        }
+        return 0;
+      });
+    }
 
     let cantitateRamasaDeConsumat = cantitate;
     let costTotalConsum = 0;
