@@ -1139,6 +1139,140 @@ export class EFacturaService implements OnModuleInit {
     return factura;
   }
 
+  async getItemTrasabilitate(itemId: string) {
+    const item = await this.prisma.eFacturaItem.findUnique({
+      where: { id: itemId },
+      include: {
+        factura: {
+          select: {
+            id: true,
+            numarFactura: true,
+            dataFactura: true,
+            numeVanzator: true,
+            cifVanzator: true,
+            moneda: true,
+          },
+        },
+      },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Linia din factură nu a fost găsită.');
+    }
+
+    let articolStoc: any = null;
+    let comenziLucruConsum: any[] = [];
+    let transferuri: any[] = [];
+
+    if (item.articolStocId) {
+      articolStoc = await this.prisma.articolStoc.findUnique({
+        where: { id: item.articolStocId },
+        include: {
+          depozit: true,
+          intrariStoc: {
+            orderBy: [{ dataFactura: 'asc' }, { createdAt: 'asc' }],
+            include: { depozit: true },
+          },
+        },
+      });
+
+      if (articolStoc) {
+        const elemComenzi = await this.prisma.elementComandaLucru.findMany({
+          where: { articolStocId: articolStoc.id },
+          include: {
+            comandaLucru: {
+              include: {
+                vehicul: {
+                  select: { id: true, numarIntern: true, numarInmatriculare: true, categorieEnum: true },
+                },
+              },
+            },
+          },
+          orderBy: { id: 'desc' },
+          take: 25,
+        });
+
+        comenziLucruConsum = elemComenzi.map((el) => ({
+          id: el.id,
+          cantitate: el.cantitate,
+          pretUnitar: el.pretUnitar,
+          subtotal: el.costTotal,
+          descriere: el.descriere,
+          comandaLucru: el.comandaLucru
+            ? {
+                id: el.comandaLucru.id,
+                numarComanda: el.comandaLucru.numarComanda,
+                stare: el.comandaLucru.stare,
+                dataDeschidere: el.comandaLucru.dataDeschidere,
+                dataFinalizare: el.comandaLucru.dataFinalizare,
+                mecanicResponsabil: el.comandaLucru.mecanicResponsabil,
+                descriereLucrari: el.comandaLucru.observatii,
+                vehicul: el.comandaLucru.vehicul,
+              }
+            : null,
+        }));
+
+        transferuri = await this.prisma.transferStoc.findMany({
+          where: { articolStocId: articolStoc.id },
+          include: {
+            depozitSursa: { select: { id: true, nume: true } },
+            depozitDestinatie: { select: { id: true, nume: true } },
+          },
+          orderBy: { dataTransfer: 'desc' },
+          take: 15,
+        });
+      }
+    }
+
+    let comandaLucruDirecta: any = null;
+    if (item.comandaLucruId) {
+      const cl = await this.prisma.comandaLucru.findUnique({
+        where: { id: item.comandaLucruId },
+        include: {
+          vehicul: {
+            select: { id: true, numarIntern: true, numarInmatriculare: true, categorieEnum: true },
+          },
+          elementeComanda: {
+            orderBy: { id: 'asc' },
+          },
+        },
+      });
+      if (cl) {
+        comandaLucruDirecta = {
+          ...cl,
+          descriereLucrari: cl.observatii,
+          elemente: cl.elementeComanda.map((el) => ({
+            ...el,
+            subtotal: el.costTotal,
+          })),
+        };
+      }
+    }
+
+    // Verificare anvelope serializate legate de această factură
+    const anvelope = await this.prisma.anvelopa.findMany({
+      where: {
+        numarFactura: item.factura.numarFactura,
+      },
+      include: {
+        depozit: { select: { id: true, nume: true } },
+        vehicul: { select: { id: true, numarIntern: true, numarInmatriculare: true } },
+        pozitieAx: { select: { id: true, codPozitie: true, numarAx: true, descrierePozitie: true } },
+      },
+      orderBy: { serieAnvelopa: 'asc' },
+    });
+
+    return {
+      item,
+      factura: item.factura,
+      articolStoc,
+      comandaLucruDirecta,
+      comenziLucruConsum,
+      transferuri,
+      anvelope,
+    };
+  }
+
   async genereazaFacturaPdf(id: string): Promise<{ buffer: Buffer; filename: string }> {
     const factura = await this.prisma.eFacturaFactura.findUnique({
       where: { id },

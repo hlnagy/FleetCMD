@@ -153,6 +153,12 @@ export class EFacturaController {
     return this.efacturaService.importaItemInStoc(itemId, body);
   }
 
+  // TRASABILITATE COMPLETĂ ARTICOL (DEPOZIT / FIFO / DEVIZ DE LUCRU / ANVELOPE)
+  @Get('items/:itemId/trasabilitate')
+  async getItemTrasabilitate(@Param('itemId') itemId: string) {
+    return this.efacturaService.getItemTrasabilitate(itemId);
+  }
+
   // IMPORT DIRECT PE MAȘINĂ / COMANDĂ DE LUCRU
   @Get('comenzi-deschise')
   async getComenziLucruDeschise() {
