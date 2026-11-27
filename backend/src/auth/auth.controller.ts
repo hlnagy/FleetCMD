@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, Ip, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Headers, Ip, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { Roles } from './roles.decorator';
@@ -12,6 +12,11 @@ export class AuthController {
   @Post('login')
   login(@Body() body: { identifier: string; parola: string }, @Ip() ip: string) {
     return this.authService.login(body, ip);
+  }
+
+  @Get('me')
+  getMe(@Req() req: any) {
+    return this.authService.getUserById(req.user.sub);
   }
 
   @Get('users')

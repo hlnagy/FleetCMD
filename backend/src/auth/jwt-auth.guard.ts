@@ -76,6 +76,18 @@ export class JwtAuthGuard implements CanActivate {
       throw new ForbiddenException('Utilizatorii cu rolul Vizualizator nu au permisiunea de a efectua modificări în sistem.');
     }
 
+    // 6. Restricționare strictă pentru utilizatorii cu rol COMBUSTIBIL: acces exclusiv la /combustibil și /auth/me
+    if (payload.rol === 'COMBUSTIBIL') {
+      const reqPath = String(request.originalUrl || request.url || '')
+        .split('?')[0]
+        .replace(/^\/api\/backend/, '');
+      const isCombustibilRoute = reqPath === '/combustibil' || reqPath.startsWith('/combustibil/');
+      const isSelfAuthRoute = reqPath === '/auth/me' && method === 'GET';
+      if (!isCombustibilRoute && !isSelfAuthRoute) {
+        throw new ForbiddenException('Acces interzis. Acest cont are acces exclusiv la modulul Combustibil.');
+      }
+    }
+
     return true;
   }
 }

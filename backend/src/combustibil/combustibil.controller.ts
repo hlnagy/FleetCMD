@@ -139,7 +139,8 @@ export class CombustibilController {
   @Post('import-csv')
   importCsv(@Body() body: { gestiuneId: number; csvText: string; syncFleetKm?: boolean }, @Req() req: any) {
     const operator = req?.user?.nume || req?.user?.username || 'Import CSV Combustibil';
-    return this.service.importSelerCsv(Number(body.gestiuneId), body.csvText, Boolean(body.syncFleetKm), operator);
+    const allowFleetKmSync = req?.user?.rol !== 'COMBUSTIBIL' && Boolean(body.syncFleetKm);
+    return this.service.importSelerCsv(Number(body.gestiuneId), body.csvText, allowFleetKmSync, operator);
   }
 
   // --- RAPOARTE & PDF ---

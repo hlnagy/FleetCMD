@@ -6,6 +6,7 @@ import {
   ArrowRightLeft, Loader2, FileSpreadsheet,
 } from 'lucide-react';
 import { CombustibilGestiune, combustibilFetch, fmtNum } from './types';
+import { useAuth } from '@/lib/AuthContext';
 
 interface Props {
   gestiune: CombustibilGestiune | null;
@@ -13,8 +14,9 @@ interface Props {
 }
 
 export default function CombustibilImportTab({ gestiune, onImportDone }: Props) {
+  const { isCombustibilOnly } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [syncFleetKm, setSyncFleetKm] = useState<boolean>(true);
+  const [syncFleetKm, setSyncFleetKm] = useState<boolean>(!isCombustibilOnly);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [selectedDupIds, setSelectedDupIds] = useState<Set<number>>(new Set());
@@ -41,7 +43,7 @@ export default function CombustibilImportTab({ gestiune, onImportDone }: Props) 
         body: JSON.stringify({
           gestiuneId: gestiune.id,
           csvText: text,
-          syncFleetKm,
+          syncFleetKm: isCombustibilOnly ? false : syncFleetKm,
         }),
       });
       setResult(res);
@@ -165,24 +167,26 @@ export default function CombustibilImportTab({ gestiune, onImportDone }: Props) 
               />
             </label>
 
-            {/* FleetCMD KM Sync Toggle */}
-            <label className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={syncFleetKm}
-                onChange={(e) => setSyncFleetKm(e.target.checked)}
-                className="w-4 h-4 mt-0.5 accent-emerald-600"
-              />
-              <div>
-                <div className="font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                  <Gauge className="w-3.5 h-3.5" />
-                  <span>Actualizează automat și kilometrajul (KM) vehiculelor din FleetCMD</span>
+            {/* FleetCMD KM Sync Toggle (hidden for COMBUSTIBIL-only accounts) */}
+            {!isCombustibilOnly && (
+              <label className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncFleetKm}
+                  onChange={(e) => setSyncFleetKm(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 accent-emerald-600"
+                />
+                <div>
+                  <div className="font-extrabold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                    <Gauge className="w-3.5 h-3.5" />
+                    <span>Actualizează automat și kilometrajul (KM) vehiculelor din FleetCMD</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
+                    Extrage odometrul din același CSV Seler, aplică protecția rollover 1.000.000 KM și actualizează contorul vehiculelor KM + semiremorcile cuplate.
+                  </div>
                 </div>
-                <div className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
-                  Extrage odometrul din același CSV Seler, aplică protecția rollover 1.000.000 KM și actualizează contorul vehiculelor KM + semiremorcile cuplate.
-                </div>
-              </div>
-            </label>
+              </label>
+            )}
 
             <button
               type="submit"

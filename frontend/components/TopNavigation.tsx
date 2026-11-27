@@ -26,7 +26,7 @@ interface NavGroup {
 }
 
 export default function TopNavigation() {
-  const { user, logout } = useAuth();
+  const { user, logout, isCombustibilOnly } = useAuth();
   const { resolvedTheme, toggleTheme } = useTheme();
   const { openTab, activeTabId } = useTabWorkspace();
 
@@ -142,10 +142,11 @@ export default function TopNavigation() {
   };
 
   useEffect(() => {
+    if (isCombustibilOnly) return;
     fetchAlerte();
     const interval = setInterval(fetchAlerte, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isCombustibilOnly]);
 
   const searchResults = searchQuery.trim()
     ? vehicule.filter(
@@ -167,6 +168,94 @@ export default function TopNavigation() {
   const numStoc = alerteList.filter((a) => a.categorieAlert === 'STOC_CRITIC').length;
   const numMent = alerteList.filter((a) => a.categorieAlert === 'MENTENANTA_CONSUMABIL' || a.categorieAlert === 'SCURGERI_ULEI').length;
   const numDoc = alerteList.filter((a) => a.categorieAlert === 'DOCUMENTE_FLOTA' || a.categorieAlert === 'LICENTE_CUSTOM').length;
+
+  if (isCombustibilOnly) {
+    return (
+      <header className="bg-white/95 dark:bg-slate-900/95 border-b border-morning-200 dark:border-slate-800 sticky top-0 z-40 backdrop-blur-md shadow-xs">
+        <div className="px-3 sm:px-5 h-14 flex items-center justify-between gap-3">
+          {/* BRAND & LOGO (Exclusiv Combustibil) */}
+          <div className="flex items-center space-x-3 shrink-0">
+            <Link href="/combustibil" className="flex items-center space-x-2.5 text-left group cursor-pointer">
+              <div className="w-8 h-8 rounded-xl bg-sapphire-600 dark:bg-sapphire-500 flex items-center justify-center shadow-md shadow-sapphire-600/20 group-hover:scale-105 transition">
+                <Fuel className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <span className="font-black text-sm tracking-tight text-sapphire-900 dark:text-white flex items-center">
+                  Fleet<span className="text-sapphire-500 dark:text-cyan-400">CMD</span>
+                </span>
+                <span className="text-[9px] text-sage-500 font-bold uppercase tracking-wider block -mt-1">
+                  Combustibil
+                </span>
+              </div>
+            </Link>
+          </div>
+
+          {/* RIGHT: ONLY THEME TOGGLE + USER MENU (LOGOUT ONLY) */}
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-1.5 rounded-xl text-sage-600 dark:text-slate-400 hover:text-sapphire-900 dark:hover:text-white hover:bg-morning-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              title="Comutator Temă (Luminos / Gris / Întunecat)"
+            >
+              {resolvedTheme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : resolvedTheme === 'gray' ? (
+                <Sparkles className="w-4 h-4 text-sky-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-sapphire-700" />
+              )}
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center space-x-1.5 p-1 rounded-xl hover:bg-morning-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-lg bg-cyan-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                  {user?.nume ? user.nume[0] : 'M'}
+                </div>
+                <span className="hidden sm:inline text-xs font-bold text-sapphire-900 dark:text-white">
+                  {user?.nume}
+                </span>
+                <ChevronDown className="w-3 h-3 text-sage-400" />
+              </button>
+
+              {isUserMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-900 border border-morning-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 z-50 text-xs font-bold divide-y divide-morning-100 dark:divide-slate-800 animate-scale-up">
+                    <div className="p-2 space-y-0.5">
+                      <p className="font-black text-sapphire-900 dark:text-white">{user?.nume}</p>
+                      <p className="text-[10px] text-sage-500 font-mono">@{user?.username || 'motorina'}</p>
+                      <span className="inline-block mt-1 text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-800">
+                        COMBUSTIBIL
+                      </span>
+                    </div>
+
+                    <div className="p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          logout();
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-rose-50 text-rose-600 flex items-center space-x-2 cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Deconectare (Logout)</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="bg-white/95 dark:bg-slate-900/95 border-b border-morning-200 dark:border-slate-800 sticky top-0 z-40 backdrop-blur-md shadow-xs">

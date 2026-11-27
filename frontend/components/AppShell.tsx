@@ -1,20 +1,29 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import LoginPage from '@/components/LoginPage';
 import TopNavigation from '@/components/TopNavigation';
 import TabBar from '@/components/TabBar';
 import { TabWorkspaceProvider } from '@/lib/TabWorkspaceContext';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Fuel } from 'lucide-react';
 import OptiBaseFooter from '@/components/OptiBaseFooter';
 import FleetAIAssistant from '@/components/ai/FleetAIAssistant';
 import DailyBackupModal from '@/components/DailyBackupModal';
 import { API_BASE_URL } from '@/lib/api';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isCombustibilOnly } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (mounted && !loading && user && isCombustibilOnly && pathname !== '/combustibil') {
+      router.replace('/combustibil');
+    }
+  }, [mounted, loading, user, isCombustibilOnly, pathname, router]);
 
   useEffect(() => {
     setMounted(true);
@@ -87,25 +96,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <LoginPage />;
   }
 
-  // Authenticated -> render full operational cockpit with TopNavigation, TabBar & widescreen workspace
+  // Authenticated -> render full operational cockpit (or strictly isolated Combustibil-only workspace)
+  const isBlockedForCombustibil = isCombustibilOnly && pathname !== '/combustibil';
+
   return (
     <TabWorkspaceProvider>
       <div className="min-h-screen w-full flex flex-col bg-morning-100 text-sapphire-900 transition-colors duration-200 print:bg-white print:min-h-0 print:block">
         <div className="print:hidden">
           <TopNavigation />
-          <TabBar />
+          {!isCombustibilOnly && <TabBar />}
         </div>
         <main className="flex-1 p-3 sm:p-5 overflow-y-auto w-full print:p-0 print:m-0 print:overflow-visible print:block">
-          {children}
+          {isBlockedForCombustibil ? (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-sapphire-600 text-white flex items-center justify-center shadow-md animate-pulse">
+                <Fuel className="w-6 h-6" />
+              </div>
+              <p className="text-sm font-bold text-sapphire-900 dark:text-white">
+                Se deschide modulul Combustibil...
+              </p>
+            </div>
+          ) : (
+            children
+          )}
         </main>
         <div className="print:hidden">
           <OptiBaseFooter variant="light" />
         </div>
       </div>
-      <div className="print:hidden">
-        <FleetAIAssistant />
-        <DailyBackupModal />
-      </div>
+      {!isCombustibilOnly && (
+        <div className="print:hidden">
+          <FleetAIAssistant />
+          <DailyBackupModal />
+        </div>
+      )}
     </TabWorkspaceProvider>
   );
 }

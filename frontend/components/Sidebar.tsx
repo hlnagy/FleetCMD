@@ -245,16 +245,22 @@ export default function Sidebar() {
         {/* Navigație Principală */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems
-            .filter((item) => !(user?.rol === 'VIEWER' && item.href === '/efactura'))
+            .filter((item) => {
+              if (user?.rol === 'COMBUSTIBIL') return item.href === '/combustibil';
+              if (user?.rol === 'VIEWER' && item.href === '/efactura') return false;
+              return true;
+            })
             .map(renderNavItem)}
         </nav>
 
         {/* Subsol & Setări */}
         <div className="p-3 border-t border-morning-200 space-y-2">
           <div className="flex items-center space-x-1.5">
-            <div className="flex-1 min-w-0">
-              {renderNavItem(setariItem)}
-            </div>
+            {user?.rol !== 'COMBUSTIBIL' && (
+              <div className="flex-1 min-w-0">
+                {renderNavItem(setariItem)}
+              </div>
+            )}
             <button
               type="button"
               onClick={toggleTheme}

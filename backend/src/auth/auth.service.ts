@@ -275,7 +275,7 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException('Un utilizator cu acest nume de utilizator există deja.');
     }
 
-    const rol = ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol) ? data.rol : 'OPERATOR';
+    const rol = ['ADMIN', 'OPERATOR', 'VIEWER', 'COMBUSTIBIL'].includes(data.rol) ? data.rol : 'OPERATOR';
 
     const newUser = await this.prisma.user.create({
       data: {
@@ -284,7 +284,15 @@ export class AuthService implements OnModuleInit {
         email: data.email?.trim() || null,
         parola: hashPassword(data.parola),
         rol,
-        functie: data.functie || (rol === 'ADMIN' ? 'Administrator' : rol === 'OPERATOR' ? 'Operator Flotă' : 'Vizitator'),
+        functie:
+          data.functie ||
+          (rol === 'ADMIN'
+            ? 'Administrator'
+            : rol === 'COMBUSTIBIL'
+              ? 'Gestionar Combustibil'
+              : rol === 'OPERATOR'
+                ? 'Operator Flotă'
+                : 'Vizitator'),
         telefon: data.telefon || null,
         activ: true,
       },
@@ -354,7 +362,7 @@ export class AuthService implements OnModuleInit {
     }
     if (data.email !== undefined) updateData.email = data.email ? data.email.trim() : null;
     if (data.parola) updateData.parola = hashPassword(data.parola);
-    if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER'].includes(data.rol)) {
+    if (data.rol && ['ADMIN', 'OPERATOR', 'VIEWER', 'COMBUSTIBIL'].includes(data.rol)) {
       if (user.username === 'admin') {
         updateData.rol = 'ADMIN';
       } else {

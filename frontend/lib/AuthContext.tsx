@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { API_BASE_URL } from './api';
 import { showToast } from './swal';
 
-export type UserRole = 'ADMIN' | 'OPERATOR' | 'VIEWER';
+export type UserRole = 'ADMIN' | 'OPERATOR' | 'VIEWER' | 'COMBUSTIBIL';
 
 export interface User {
   id: string;
@@ -24,6 +24,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isOperator: boolean;
   isViewer: boolean;
+  isCombustibilOnly: boolean;
   canEdit: (module?: string) => boolean;
   login: (identifier: string, parola: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
@@ -165,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sincronizare profil utilizator curent cu datele din baza de date & verificare token pe server
     if (validStoredToken) {
       lastServerCheckRef.current = Date.now();
-      fetch(`${API_BASE_URL}/auth/users`, {
+      fetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${validStoredToken}` },
       })
         .then((res) => {
@@ -173,33 +174,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             expireSession();
             return null;
           }
+          if (!res.ok) return null;
           return res.json();
         })
-        .then((users) => {
-          if (Array.isArray(users)) {
+        .then((freshUser) => {
+          if (freshUser && freshUser.id) {
             setUser((prev) => {
               if (!prev) return null;
-              const freshUser = users.find((u) => u.id === prev.id || u.username === prev.username);
-              if (freshUser) {
-                if (freshUser.activ === false) {
-                  expireSession();
-                  return null;
-                }
-                const updated = {
-                  ...prev,
-                  id: freshUser.id,
-                  nume: freshUser.nume || prev.nume,
-                  username: freshUser.username || prev.username,
-                  rol: freshUser.rol || prev.rol,
-                  functie: freshUser.functie || prev.functie,
-                  email: freshUser.email || prev.email,
-                  telefon: freshUser.telefon || prev.telefon,
-                  activ: freshUser.activ !== undefined ? freshUser.activ : prev.activ,
-                };
-                localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
-                return updated;
+              if (freshUser.activ === false) {
+                expireSession();
+                return null;
               }
-              return prev;
+              const updated = {
+                ...prev,
+                id: freshUser.id,
+                nume: freshUser.nume || prev.nume,
+                username: freshUser.username || prev.username,
+                rol: freshUser.rol || prev.rol,
+                functie: freshUser.functie || prev.functie,
+                email: freshUser.email || prev.email,
+                telefon: freshUser.telefon || prev.telefon,
+                activ: freshUser.activ !== undefined ? freshUser.activ : prev.activ,
+              };
+              localStorage.setItem('fleetcmd_user', JSON.stringify(updated));
+              return updated;
             });
           }
         })
@@ -228,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       if (now - lastServerCheckRef.current > 5 * 60 * 1000) {
         lastServerCheckRef.current = now;
-        fetch(`${API_BASE_URL}/auth/users`, {
+        fetch(`${API_BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${currentToken}` },
         })
           .then((res) => {
@@ -305,11 +303,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.rol === 'ADMIN';
   const isOperator = user?.rol === 'OPERATOR';
   const isViewer = user?.rol === 'VIEWER';
+  const isCombustibilOnly = user?.rol === 'COMBUSTIBIL';
 
   const canEdit = (module?: string) => {
     if (!user) return false;
     if (user.rol === 'ADMIN') return true;
     if (user.rol === 'VIEWER') return false;
+    if (user.rol === 'COMBUSTIBIL') return module === 'COMBUSTIBIL';
     // OPERATOR can edit standard fleet modules, but NOT SETARI / UTILIZATORI system config
     if (module === 'SETARI' || module === 'UTILIZATORI' || module === 'AUDIT') return false;
     return true;
@@ -360,6 +360,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin,
         isOperator,
         isViewer,
+        isCombustibilOnly,
         canEdit,
         login,
         logout,

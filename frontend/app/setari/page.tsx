@@ -224,7 +224,7 @@ function SetariContent() {
   const [userEmail, setUserEmail] = useState('');
   const [userUsername, setUserUsername] = useState('');
   const [userParola, setUserParola] = useState('');
-  const [userRol, setUserRol] = useState<'ADMIN' | 'OPERATOR' | 'VIEWER'>('OPERATOR');
+  const [userRol, setUserRol] = useState<'ADMIN' | 'OPERATOR' | 'VIEWER' | 'COMBUSTIBIL'>('OPERATOR');
   const [userFunctie, setUserFunctie] = useState('Operator Flotă');
   const [userTelefon, setUserTelefon] = useState('');
   const [userActiv, setUserActiv] = useState(true);
@@ -2714,6 +2714,7 @@ function SetariContent() {
               .map((u) => {
                 const isUserAdmin = u.rol === 'ADMIN';
                 const isUserOperator = u.rol === 'OPERATOR';
+                const isUserCombustibil = u.rol === 'COMBUSTIBIL';
                 const isUserViewer = u.rol === 'VIEWER';
 
                 return (
@@ -2729,6 +2730,8 @@ function SetariContent() {
                           className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm text-white shadow-xs ${
                             isUserAdmin
                               ? 'bg-sapphire-600 ring-2 ring-sapphire-400/20'
+                              : isUserCombustibil
+                              ? 'bg-cyan-600'
                               : isUserOperator
                               ? 'bg-emerald-600'
                               : 'bg-amber-600'
@@ -2749,12 +2752,20 @@ function SetariContent() {
                             className={`inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-md mt-0.5 ${
                               isUserAdmin
                                 ? 'bg-sapphire-100 text-sapphire-800 border border-sapphire-300'
+                                : isUserCombustibil
+                                ? 'bg-cyan-100 text-cyan-800 border border-cyan-300'
                                 : isUserOperator
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                 : 'bg-amber-100 text-amber-800 border border-amber-300'
                             }`}
                           >
-                            {isUserAdmin ? 'ADMIN (Full Access)' : isUserOperator ? 'OPERATOR FLOTĂ' : 'VIEWER (Doar Citire)'}
+                            {isUserAdmin
+                              ? 'ADMIN (Full Access)'
+                              : isUserCombustibil
+                              ? 'COMBUSTIBIL (Exclusiv Motorină)'
+                              : isUserOperator
+                              ? 'OPERATOR FLOTĂ'
+                              : 'VIEWER (Doar Citire)'}
                           </span>
                         </div>
                       </div>
@@ -5402,6 +5413,7 @@ function SetariContent() {
                   >
                     <option value="ADMIN">ADMIN - Administrare completă (Acces total)</option>
                     <option value="OPERATOR">OPERATOR - Editare operațională (Fără acces Setări)</option>
+                    <option value="COMBUSTIBIL">COMBUSTIBIL - Acces exclusiv modul Motorină</option>
                     <option value="VIEWER">VIEWER - Numai citire (Modificări restricționate)</option>
                   </select>
                   {editingUser && (editingUser.rol === 'ADMIN' || editingUser.username === 'admin') && (
