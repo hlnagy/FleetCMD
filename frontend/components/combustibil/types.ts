@@ -28,9 +28,17 @@ export interface DashboardCompanyStock {
   lastUpdate: string | null;
 }
 
+export interface CombustibilTankItem {
+  name: string;
+  capacity: number;
+  currentStock: number;
+  fillPercent: number;
+}
+
 export interface CombustibilDashboardData {
   gestiune: CombustibilGestiune;
   tankCapacity: number;
+  tanks?: CombustibilTankItem[];
   totalStock: number;
   freeSpace: number;
   totalPercent: number;
@@ -362,7 +370,12 @@ export function generateMobileSnapshotPng(data: CombustibilDashboardData) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#94a3b8';
   ctx.font = '600 10.5px "Segoe UI", Arial, sans-serif';
-  ctx.fillText(`Capacitate Totală Rezervor: ${fmtNum(data.tankCapacity, 0)} L`, W / 2, heroY + 195);
+  const tCount = data.tanks?.length || 3;
+  ctx.fillText(
+    `Capacitate Totală (${tCount} ${tCount === 1 ? 'rezervor' : 'rezervoare'}): ${fmtNum(data.tankCapacity, 0)} L`,
+    W / 2,
+    heroY + 195,
+  );
 
   // Two secondary metric tiles
   const tileY = heroY + heroH + 16;

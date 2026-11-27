@@ -40,8 +40,11 @@ export class CombustibilController {
   }
 
   @Put('gestiuni/:id/capacitate')
-  updateTankCapacity(@Param('id', ParseIntPipe) id: number, @Body() body: { capacitateBazin: number }) {
-    return this.service.updateTankCapacity(id, body.capacitateBazin);
+  updateTankCapacity(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { capacitateBazin?: number; tanks?: Array<{ name?: string; capacity: number }> },
+  ) {
+    return this.service.updateTankCapacity(id, body);
   }
 
   // --- DASHBOARD ---

@@ -195,21 +195,86 @@ export class CombustibilService {
     });
   }
 
+  private buildDefaultTanks(totalCapacity: number): Array<{ name: string; capacity: number }> {
+    const cap = Number(totalCapacity || 27000);
+    const perTank = Number((cap / 3).toFixed(2));
+    const third = Number((cap - perTank * 2).toFixed(2));
+    return [
+      { name: 'Rezervor 1', capacity: perTank },
+      { name: 'Rezervor 2', capacity: perTank },
+      { name: 'Rezervor 3', capacity: third > 0 ? third : perTank },
+    ];
+  }
+
+  private parseTanksConfig(raw: string | undefined | null, fallbackTotal: number): Array<{ name: string; capacity: number }> {
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed
+            .map((t: any, idx: number) => ({
+              name: String(t?.name || '').trim() || `Rezervor ${idx + 1}`,
+              capacity: Number(Number(t?.capacity || 0).toFixed(2)),
+            }))
+            .filter((t) => t.capacity > 0);
+          if (valid.length > 0) return valid;
+        }
+      } catch {}
+    }
+    return this.buildDefaultTanks(fallbackTotal);
+  }
+
   async updateGestiune(
     id: number,
     dto: { nume?: string; codPunctLucru?: string; tipCombustibil?: string; capacitateBazin?: number },
   ) {
     const existing = await this.prisma.combustibilGestiune.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Gestiunea nu a fost găsită.');
-    return this.prisma.combustibilGestiune.update({
+    const nextCap = dto.capacitateBazin !== undefined ? Number(dto.capacitateBazin) : existing.capacitateBazin;
+    const updated = await this.prisma.combustibilGestiune.update({
       where: { id },
       data: {
         nume: dto.nume !== undefined ? dto.nume.trim() : existing.nume,
         codPunctLucru: dto.codPunctLucru !== undefined ? dto.codPunctLucru.trim() || null : existing.codPunctLucru,
         tipCombustibil: dto.tipCombustibil !== undefined ? dto.tipCombustibil.trim() || 'Motorină' : existing.tipCombustibil,
-        capacitateBazin: dto.capacitateBazin !== undefined ? Number(dto.capacitateBazin) : existing.capacitateBazin,
+        capacitateBazin: nextCap,
       },
     });
+    if (dto.capacitateBazin !== undefined && Math.abs(nextCap - existing.capacitateBazin) > 0.01 && nextCap > 0) {
+      const existingCfg = await this.prisma.combustibilSetare.findUnique({
+        where: { cheie_gestiuneId: { cheie: 'tanks_config', gestiuneId: id } },
+      });
+      if (existingCfg?.valoare) {
+        const prevTanks = this.parseTanksConfig(existingCfg.valoare, existing.capacitateBazin);
+        const prevSum = prevTanks.reduce((s, t) => s + t.capacity, 0) || 1;
+        const scaled = prevTanks.map((t, i) => ({
+          name: t.name,
+          capacity:
+            i === prevTanks.length - 1
+              ? Number(
+                  Math.max(
+                    1,
+                    nextCap -
+                      prevTanks
+                        .slice(0, -1)
+                        .reduce((acc, x) => acc + Number(((x.capacity / prevSum) * nextCap).toFixed(2)), 0),
+                  ).toFixed(2),
+                )
+              : Number(((t.capacity / prevSum) * nextCap).toFixed(2)),
+        }));
+        await this.prisma.combustibilSetare.upsert({
+          where: { cheie_gestiuneId: { cheie: 'tanks_config', gestiuneId: id } },
+          update: { valoare: JSON.stringify(scaled) },
+          create: { cheie: 'tanks_config', valoare: JSON.stringify(scaled), gestiuneId: id },
+        });
+      }
+      await this.prisma.combustibilSetare.upsert({
+        where: { cheie_gestiuneId: { cheie: 'tank_capacity', gestiuneId: id } },
+        update: { valoare: String(nextCap) },
+        create: { cheie: 'tank_capacity', valoare: String(nextCap), gestiuneId: id },
+      });
+    }
+    return updated;
   }
 
   async deleteGestiune(id: number) {
@@ -221,9 +286,38 @@ export class CombustibilService {
     return { succes: true };
   }
 
-  async updateTankCapacity(gestiuneId: number, capacitateBazin: number) {
-    const cap = Number(capacitateBazin);
-    if (!cap || cap <= 0) throw new BadRequestException('Capacitatea trebuie să fie mai mare ca 0.');
+  async updateTankCapacity(
+    gestiuneId: number,
+    payload: number | { capacitateBazin?: number; tanks?: Array<{ name?: string; capacity: number }> },
+  ) {
+    let cap = 0;
+    let normalizedTanks: Array<{ name: string; capacity: number }> | null = null;
+
+    if (typeof payload === 'number') {
+      cap = Number(payload);
+    } else if (Array.isArray(payload?.tanks) && payload.tanks.length > 0) {
+      if (payload.tanks.length > 20) {
+        throw new BadRequestException('Se pot configura maximum 20 de rezervoare per gestiune.');
+      }
+      normalizedTanks = payload.tanks.map((t, idx) => {
+        const c = Number(t?.capacity);
+        if (!c || isNaN(c) || c <= 0) {
+          throw new BadRequestException(`Capacitatea pentru rezervorul #${idx + 1} trebuie să fie mai mare ca 0.`);
+        }
+        return {
+          name: String(t?.name || '').trim() || `Rezervor ${idx + 1}`,
+          capacity: Number(c.toFixed(2)),
+        };
+      });
+      cap = Number(normalizedTanks.reduce((s, t) => s + t.capacity, 0).toFixed(2));
+    } else {
+      cap = Number(payload?.capacitateBazin || 0);
+    }
+
+    if (!cap || isNaN(cap) || cap <= 0) {
+      throw new BadRequestException('Capacitatea trebuie să fie mai mare ca 0.');
+    }
+
     const updated = await this.prisma.combustibilGestiune.update({
       where: { id: gestiuneId },
       data: { capacitateBazin: cap },
@@ -233,7 +327,14 @@ export class CombustibilService {
       update: { valoare: String(cap) },
       create: { cheie: 'tank_capacity', valoare: String(cap), gestiuneId },
     });
-    return updated;
+    if (normalizedTanks) {
+      await this.prisma.combustibilSetare.upsert({
+        where: { cheie_gestiuneId: { cheie: 'tanks_config', gestiuneId } },
+        update: { valoare: JSON.stringify(normalizedTanks) },
+        create: { cheie: 'tanks_config', valoare: JSON.stringify(normalizedTanks), gestiuneId },
+      });
+    }
+    return { ...updated, tanks: normalizedTanks };
   }
 
   // ==========================================
@@ -244,10 +345,13 @@ export class CombustibilService {
     const gestiuneId = await this.resolveGestiuneId(rawGestiuneId);
     const gestiune = await this.prisma.combustibilGestiune.findUniqueOrThrow({ where: { id: gestiuneId } });
 
-    const [companii, ops, trans] = await Promise.all([
+    const [companii, ops, trans, tanksSetting] = await Promise.all([
       this.prisma.combustibilCompanie.findMany({ where: { gestiuneId }, orderBy: { id: 'asc' } }),
       this.prisma.combustibilOperatiuneStoc.findMany({ where: { gestiuneId } }),
       this.prisma.combustibilTranzactie.findMany({ where: { gestiuneId } }),
+      this.prisma.combustibilSetare.findUnique({
+        where: { cheie_gestiuneId: { cheie: 'tanks_config', gestiuneId } },
+      }),
     ]);
 
     let totalStock = 0;
@@ -307,16 +411,26 @@ export class CombustibilService {
     unallocTrans.forEach((t) => { if (!unallocLast || t.data > unallocLast) unallocLast = t.data; });
 
     totalStock = Number(totalStock.toFixed(2));
-    const tankCapacity = Number(gestiune.capacitateBazin || 27000);
+    const configuredTanks = this.parseTanksConfig(tanksSetting?.valoare, Number(gestiune.capacitateBazin || 27000));
+    const tankCapacity = Number(configuredTanks.reduce((s, t) => s + t.capacity, 0).toFixed(2));
     const totalPercent = tankCapacity > 0 ? Number(((totalStock / tankCapacity) * 100).toFixed(1)) : 0;
     const displayPercent = Math.max(0, Math.min(100, totalPercent));
     const isOverloaded = totalStock > tankCapacity;
     const overloadQty = isOverloaded ? Number((totalStock - tankCapacity).toFixed(2)) : 0;
     const freeSpace = Number(Math.max(0, tankCapacity - totalStock).toFixed(2));
 
+    const tanks = configuredTanks.map((t) => ({
+      name: t.name,
+      capacity: t.capacity,
+      currentStock:
+        tankCapacity > 0 ? Number((Math.max(0, totalStock) * (t.capacity / tankCapacity)).toFixed(1)) : 0,
+      fillPercent: displayPercent,
+    }));
+
     return {
       gestiune,
       tankCapacity,
+      tanks,
       totalStock,
       freeSpace,
       totalPercent,
