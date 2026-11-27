@@ -87,7 +87,15 @@ export interface CombustibilStocData {
     history: StockHistoryItem[];
   };
   duplicateCount: number;
-  vehiclesList: Array<{ id: number; numarAuto: string; companieId: number | null }>;
+  vehiclesList: Array<{
+    id: number;
+    numarAuto: string;
+    companieId: number | null;
+    categorieId?: number | null;
+    companieNume?: string | null;
+    categorieNume?: string | null;
+  }>;
+  categoriesList?: Array<{ id: number; nume: string }>;
   canUndo: boolean;
   canRedo: boolean;
 }

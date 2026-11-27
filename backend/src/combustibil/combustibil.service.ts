@@ -363,7 +363,7 @@ export class CombustibilService {
 
   async getStockDetails(rawGestiuneId?: number) {
     const gestiuneId = await this.resolveGestiuneId(rawGestiuneId);
-    const [companii, ops, trans, vehicule, undoCount, redoCount] = await Promise.all([
+    const [companii, ops, trans, vehicule, categorii, undoCount, redoCount] = await Promise.all([
       this.prisma.combustibilCompanie.findMany({ where: { gestiuneId }, orderBy: { id: 'asc' } }),
       this.prisma.combustibilOperatiuneStoc.findMany({ where: { gestiuneId }, orderBy: { data: 'desc' } }),
       this.prisma.combustibilTranzactie.findMany({
@@ -377,7 +377,19 @@ export class CombustibilService {
       this.prisma.combustibilVehicul.findMany({
         where: { gestiuneId },
         orderBy: { numarAuto: 'asc' },
-        select: { id: true, numarAuto: true, companieId: true },
+        select: {
+          id: true,
+          numarAuto: true,
+          companieId: true,
+          categorieId: true,
+          companie: { select: { nume: true } },
+          categorie: { select: { nume: true } },
+        },
+      }),
+      this.prisma.combustibilCategorieVehicul.findMany({
+        where: { gestiuneId },
+        orderBy: { nume: 'asc' },
+        select: { id: true, nume: true },
       }),
       this.prisma.combustibilHistoryLog.count({ where: { gestiuneId, isUndone: false } }),
       this.prisma.combustibilHistoryLog.count({ where: { gestiuneId, isUndone: true } }),
@@ -489,7 +501,15 @@ export class CombustibilService {
       companies: companyTabs,
       unallocated,
       duplicateCount: dupInfoById.size,
-      vehiclesList: vehicule,
+      vehiclesList: vehicule.map((v) => ({
+        id: v.id,
+        numarAuto: v.numarAuto,
+        companieId: v.companieId,
+        categorieId: v.categorieId,
+        companieNume: v.companie?.nume || null,
+        categorieNume: v.categorie?.nume || null,
+      })),
+      categoriesList: categorii,
       canUndo: undoCount > 0,
       canRedo: redoCount > 0,
     };
@@ -566,23 +586,68 @@ export class CombustibilService {
 
   async updateTransaction(
     id: number,
-    dto: { cantitate?: number; data?: string; companieId?: number | null; vehiculId?: number | null },
+    dto: {
+      cantitate?: number;
+      data?: string;
+      companieId?: number | null;
+      vehiculId?: number | null;
+      numarAuto?: string | null;
+      newVehicleCategorieId?: number | null;
+    },
   ) {
     const existing = await this.prisma.combustibilTranzactie.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Tranzacția nu a fost găsită.');
 
+    const resolvedCompanieId =
+      dto.companieId !== undefined ? (dto.companieId ? Number(dto.companieId) : null) : existing.companieId;
+
     return this.prisma.$transaction(async (tx) => {
+      let targetVehiculId: number | null = existing.vehiculId;
+      let createdVehicle: { id: number; numarAuto: string } | null = null;
+
+      if (dto.vehiculId !== undefined && dto.vehiculId !== null) {
+        const foundVeh = await tx.combustibilVehicul.findFirst({
+          where: { id: Number(dto.vehiculId), gestiuneId: existing.gestiuneId },
+        });
+        if (!foundVeh) {
+          throw new NotFoundException('Vehiculul selectat nu a fost găsit în această gestiune.');
+        }
+        targetVehiculId = foundVeh.id;
+      } else if (typeof dto.numarAuto === 'string' && dto.numarAuto.trim().length > 0) {
+        const cleanPlate = dto.numarAuto.trim();
+        const foundByPlate = await tx.combustibilVehicul.findFirst({
+          where: {
+            gestiuneId: existing.gestiuneId,
+            numarAuto: { equals: cleanPlate, mode: 'insensitive' },
+          },
+        });
+        if (foundByPlate) {
+          targetVehiculId = foundByPlate.id;
+        } else {
+          const newVeh = await tx.combustibilVehicul.create({
+            data: {
+              numarAuto: cleanPlate.toUpperCase(),
+              companieId: resolvedCompanieId,
+              categorieId: dto.newVehicleCategorieId ? Number(dto.newVehicleCategorieId) : null,
+              gestiuneId: existing.gestiuneId,
+            },
+          });
+          targetVehiculId = newVeh.id;
+          createdVehicle = { id: newVeh.id, numarAuto: newVeh.numarAuto };
+        }
+      }
+
       const updated = await tx.combustibilTranzactie.update({
         where: { id },
         data: {
           cantitate: dto.cantitate !== undefined ? Number(dto.cantitate) : existing.cantitate,
           data: dto.data ? parseDateTimeInput(dto.data) : existing.data,
-          companieId: dto.companieId !== undefined ? dto.companieId : existing.companieId,
-          vehiculId: dto.vehiculId !== undefined ? dto.vehiculId : existing.vehiculId,
+          companieId: resolvedCompanieId,
+          vehiculId: targetVehiculId,
         },
       });
       await this.logHistory(tx, existing.gestiuneId, 'Transaction', id, 'UPDATE', updated, existing);
-      return updated;
+      return { ...updated, createdVehicle };
     });
   }
 

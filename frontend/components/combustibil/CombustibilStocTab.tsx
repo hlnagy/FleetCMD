@@ -55,6 +55,13 @@ export default function CombustibilStocTab({
   const [editDate, setEditDate] = useState<string>('');
   const [editDesc, setEditDesc] = useState<string>('');
   const [editCompId, setEditCompId] = useState<string>('');
+  // Vehicle reassignment / auto-creation state for Transaction edit
+  const [editVehInput, setEditVehInput] = useState<string>('');
+  const [editVehId, setEditVehId] = useState<number | null>(null);
+  const [editVehDropdownOpen, setEditVehDropdownOpen] = useState<boolean>(false);
+  const [editVehQueryDirty, setEditVehQueryDirty] = useState<boolean>(false);
+  const [editNewVehCatId, setEditNewVehCatId] = useState<string>('');
+  const [editCompanyAutoHint, setEditCompanyAutoHint] = useState<string | null>(null);
 
   const resolvedCompanyId: number | -1 = useMemo(() => {
     if (!data) return -1;
@@ -162,11 +169,67 @@ export default function CombustibilStocTab({
     setEditDate(toDatetimeLocalValue(it.date));
     setEditDesc(it.description || '');
     setEditCompId(it.companieId ? String(it.companieId) : '');
+    setEditVehInput(it.kind === 'trans' ? it.description || '' : '');
+    setEditVehId(it.kind === 'trans' ? (it.vehiculId ?? null) : null);
+    setEditVehDropdownOpen(false);
+    setEditVehQueryDirty(false);
+    setEditNewVehCatId('');
+    setEditCompanyAutoHint(null);
+  };
+
+  const trimmedEditVeh = editVehInput.trim();
+
+  const exactMatchedVehicle = useMemo(() => {
+    if (!data || !trimmedEditVeh) return null;
+    const lower = trimmedEditVeh.toLowerCase();
+    return data.vehiclesList.find((v) => v.numarAuto.trim().toLowerCase() === lower) || null;
+  }, [data, trimmedEditVeh]);
+
+  const isCreatingNewVehicle = Boolean(editingItem?.kind === 'trans' && trimmedEditVeh && !exactMatchedVehicle);
+
+  const filteredEditVehicles = useMemo(() => {
+    if (!data) return [];
+    const list = [...data.vehiclesList].sort((a, b) =>
+      a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' }),
+    );
+    if (!editVehQueryDirty || !trimmedEditVeh) return list;
+    const q = trimmedEditVeh.toLowerCase();
+    const matched = list.filter(
+      (v) =>
+        v.numarAuto.toLowerCase().includes(q) ||
+        (v.companieNume || '').toLowerCase().includes(q) ||
+        (v.categorieNume || '').toLowerCase().includes(q),
+    );
+    matched.sort((a, b) => {
+      const aStarts = a.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' });
+    });
+    return matched;
+  }, [data, editVehQueryDirty, trimmedEditVeh]);
+
+  const handleSelectEditVehicle = (v: CombustibilStocData['vehiclesList'][number]) => {
+    setEditVehInput(v.numarAuto);
+    setEditVehId(v.id);
+    setEditVehDropdownOpen(false);
+    setEditVehQueryDirty(false);
+    setEditNewVehCatId('');
+    if (v.companieId) {
+      setEditCompId(String(v.companieId));
+      setEditCompanyAutoHint(`Firmă preluată automat de la ${v.numarAuto}: ${v.companieNume || 'alocată'}`);
+    } else {
+      setEditCompanyAutoHint(`Vehiculul ${v.numarAuto} nu are firmă atribuită — alegeți firma mai jos dacă doriți mutarea.`);
+    }
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem) return;
+    if (editingItem.kind === 'trans' && !trimmedEditVeh) {
+      alert('Selectați un vehicul existent sau introduceți numele/numărul unui vehicul nou.');
+      return;
+    }
     setBusy(true);
     try {
       if (editingItem.kind === 'op') {
@@ -181,12 +244,16 @@ export default function CombustibilStocTab({
           }),
         });
       } else {
+        const matched = exactMatchedVehicle;
         await combustibilFetch(`/stoc/tranzactii/${editingItem.id}`, {
           method: 'PUT',
           body: JSON.stringify({
             cantitate: parseFloat(editQty),
             data: editDate,
             companieId: editCompId ? Number(editCompId) : null,
+            vehiculId: matched ? matched.id : null,
+            numarAuto: matched ? undefined : trimmedEditVeh,
+            newVehicleCategorieId: !matched && editNewVehCatId ? Number(editNewVehCatId) : null,
           }),
         });
       }
@@ -798,9 +865,18 @@ export default function CombustibilStocTab({
 
       {/* Edit / Move Modal */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-morning-300 shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-5 py-3.5 bg-sapphire-600 text-white flex items-center justify-between">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setEditVehDropdownOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-morning-300 shadow-2xl w-full max-w-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditVehDropdownOpen(false);
+            }}
+          >
+            <div className="px-5 py-3.5 rounded-t-2xl bg-sapphire-600 text-white flex items-center justify-between">
               <h4 className="font-black text-sm">
                 {editingItem.kind === 'op' ? 'Editează Operațiune Stoc' : `Editează Alimentare (${editingItem.description})`}
               </h4>
@@ -828,11 +904,161 @@ export default function CombustibilStocTab({
                 </div>
               )}
 
+              {editingItem.kind === 'trans' && (
+                <div className="space-y-2">
+                  <label className="block font-bold text-sage-700">
+                    Vehicul / Utilaj <span className="font-normal text-sage-500">(alege existent sau scrie unul nou)</span>
+                  </label>
+                  <div className="relative" onClick={(e) => e.stopPropagation()}>
+                    <Truck className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editVehInput}
+                      onFocus={() => setEditVehDropdownOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setEditVehDropdownOpen(false);
+                      }}
+                      onChange={(e) => {
+                        setEditVehInput(e.target.value);
+                        setEditVehId(null);
+                        setEditVehQueryDirty(true);
+                        setEditVehDropdownOpen(true);
+                        setEditCompanyAutoHint(null);
+                      }}
+                      placeholder="Caută număr înmatriculare / utilaj sau scrie unul nou..."
+                      autoComplete="off"
+                      className="w-full pl-9 pr-8 py-2 rounded-xl bg-morning-100 border border-morning-300 font-bold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500"
+                    />
+                    {editVehInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditVehInput('');
+                          setEditVehId(null);
+                          setEditVehQueryDirty(false);
+                          setEditVehDropdownOpen(true);
+                          setEditCompanyAutoHint(null);
+                        }}
+                        title="Șterge câmpul pentru a căuta alt vehicul"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md text-sage-500 hover:text-sapphire-900 hover:bg-morning-200 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {editVehDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-morning-300 rounded-xl shadow-2xl overflow-hidden">
+                        <div className="max-h-56 overflow-y-auto divide-y divide-morning-100">
+                          {isCreatingNewVehicle && (
+                            <button
+                              type="button"
+                              onClick={() => setEditVehDropdownOpen(false)}
+                              className="w-full px-3 py-2.5 text-left bg-emerald-50 hover:bg-emerald-100 flex items-center justify-between gap-2 cursor-pointer transition"
+                            >
+                              <span className="flex items-center gap-2 font-extrabold text-emerald-800">
+                                <Plus className="w-3.5 h-3.5 shrink-0" />
+                                <span>Creează vehicul nou: &ldquo;{trimmedEditVeh.toUpperCase()}&rdquo;</span>
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black shrink-0">
+                                NOU
+                              </span>
+                            </button>
+                          )}
+
+                          {filteredEditVehicles.length === 0 ? (
+                            <div className="px-3 py-3 text-center text-sage-500 font-semibold">
+                              Nu există vehicule care să corespundă căutării. La salvare se va crea automat vehiculul nou.
+                            </div>
+                          ) : (
+                            filteredEditVehicles.map((v) => {
+                              const isSelected = exactMatchedVehicle?.id === v.id || editVehId === v.id;
+                              return (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  onClick={() => handleSelectEditVehicle(v)}
+                                  className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-sapphire-50 text-sapphire-900 font-extrabold'
+                                      : 'hover:bg-morning-100 text-sapphire-900'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Truck className="w-3.5 h-3.5 text-sapphire-600 shrink-0" />
+                                    <span className="font-extrabold truncate">{v.numarAuto}</span>
+                                    {v.categorieNume && (
+                                      <span className="px-1.5 py-0.5 rounded bg-morning-100 border border-morning-200 text-[10px] font-bold text-sage-700 truncate">
+                                        {v.categorieNume}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                                      v.companieNume
+                                        ? 'bg-sapphire-100 text-sapphire-800'
+                                        : 'bg-rose-100 text-rose-700'
+                                    }`}
+                                  >
+                                    {v.companieNume || 'Nealocat'}
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {isCreatingNewVehicle && (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                      <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-emerald-800">
+                        <Plus className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          Vehicul nou — <span className="font-mono">{trimmedEditVeh.toUpperCase()}</span> va fi creat automat
+                          și asociat cu firma selectată mai jos.
+                        </span>
+                      </div>
+                      {data.categoriesList && data.categoriesList.length > 0 && (
+                        <div>
+                          <label className="block text-[11px] font-bold text-emerald-900 mb-1">
+                            Categorie vehicul nou (opțional)
+                          </label>
+                          <FilterableSelect
+                            value={editNewVehCatId}
+                            onChange={(e) => setEditNewVehCatId(e.target.value)}
+                            searchPlaceholder="Caută categorie..."
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-emerald-300 font-bold text-sapphire-900"
+                          >
+                            <option value="">-- Fără categorie --</option>
+                            {data.categoriesList.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.nume}
+                              </option>
+                            ))}
+                          </FilterableSelect>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!isCreatingNewVehicle && editCompanyAutoHint && (
+                    <p className="text-[11px] font-semibold text-sapphire-700 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>{editCompanyAutoHint}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-sage-700 mb-1">Firmă Asociată (Mutare)</label>
                 <FilterableSelect
                   value={editCompId}
-                  onChange={(e) => setEditCompId(e.target.value)}
+                  onChange={(e) => {
+                    setEditCompId(e.target.value);
+                    setEditCompanyAutoHint(null);
+                  }}
                   searchPlaceholder="Caută firmă..."
                   className="w-full px-3 py-2 rounded-xl bg-morning-100 border border-morning-300 font-bold text-sapphire-900"
                 >
@@ -896,7 +1122,7 @@ export default function CombustibilStocTab({
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-extrabold cursor-pointer disabled:opacity-60"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>Salvează</span>
+                  <span>{isCreatingNewVehicle ? 'Creează vehicul și Salvează' : 'Salvează'}</span>
                 </button>
               </div>
             </form>
