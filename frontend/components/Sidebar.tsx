@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Truck, Wrench, ShieldAlert, PackageCheck, CircleDot,
   Droplets, FileText, BarChart3, Settings, Clock, Link2, ChevronDown, ChevronRight,
-  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles, Gauge, Timer, ClipboardList
+  ShoppingCart, History, Building2, ShieldCheck, Layers, Users, Bell, X, Sun, Moon, FileCheck, Sparkles, Gauge, Timer, ClipboardList, Fuel
 } from 'lucide-react';
 import { useSidebar } from '../lib/SidebarContext';
 import { useAuth } from '../lib/AuthContext';
@@ -74,6 +74,7 @@ export default function Sidebar() {
     },
     { name: 'Anvelope', href: '/anvelope', icon: CircleDot },
     { name: 'Uleiuri & Filtre', href: '/fluide', icon: Droplets },
+    { name: 'Combustibil', href: '/combustibil', icon: Fuel },
     { name: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
     { name: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
   ];

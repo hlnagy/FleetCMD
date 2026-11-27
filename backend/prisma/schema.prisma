@@ -893,3 +893,138 @@ model TipFluid {
   @@index([activ, ordine])
 }
 
+// ==========================================
+// MODUL COMBUSTIBIL (FUEL MANAGER v6.2.1)
+// ==========================================
+
+model CombustibilGestiune {
+  id              Int      @id @default(autoincrement())
+  nume            String   @unique
+  codPunctLucru   String?
+  tipCombustibil  String   @default("Motorină")
+  capacitateBazin Float    @default(27000)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  companii        CombustibilCompanie[]
+  categorii       CombustibilCategorieVehicul[]
+  vehicule        CombustibilVehicul[]
+  operatiuniStoc  CombustibilOperatiuneStoc[]
+  tranzactii      CombustibilTranzactie[]
+  setari          CombustibilSetare[]
+  istoricActiuni  CombustibilHistoryLog[]
+}
+
+model CombustibilCompanie {
+  id              Int      @id @default(autoincrement())
+  nume            String
+  cui             String?
+  adresa          String?
+  codProdus       String?
+  gestiuneId      Int
+  gestiune        CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+  lastReportStart DateTime?
+  lastReportEnd   DateTime?
+  createdAt       DateTime @default(now())
+
+  vehicule        CombustibilVehicul[]
+  operatiuniStoc  CombustibilOperatiuneStoc[]
+  tranzactii      CombustibilTranzactie[]
+
+  @@unique([nume, gestiuneId])
+  @@index([gestiuneId])
+}
+
+model CombustibilCategorieVehicul {
+  id          Int      @id @default(autoincrement())
+  nume        String
+  descriere   String?
+  icon        String   @default("truck")
+  gestiuneId  Int
+  gestiune    CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+
+  vehicule    CombustibilVehicul[]
+
+  @@unique([nume, gestiuneId])
+  @@index([gestiuneId])
+}
+
+model CombustibilVehicul {
+  id          Int      @id @default(autoincrement())
+  numarAuto   String
+  companieId  Int?
+  companie    CombustibilCompanie? @relation(fields: [companieId], references: [id], onDelete: SetNull)
+  categorieId Int?
+  categorie   CombustibilCategorieVehicul? @relation(fields: [categorieId], references: [id], onDelete: SetNull)
+  gestiuneId  Int
+  gestiune    CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+
+  tranzactii  CombustibilTranzactie[]
+
+  @@unique([numarAuto, gestiuneId])
+  @@index([gestiuneId])
+  @@index([companieId])
+  @@index([categorieId])
+}
+
+model CombustibilOperatiuneStoc {
+  id          Int      @id @default(autoincrement())
+  tip         String   // "INITIAL" | "IN" | "OUT"
+  cantitate   Float
+  data        DateTime @default(now())
+  descriere   String?
+  companieId  Int?
+  companie    CombustibilCompanie? @relation(fields: [companieId], references: [id], onDelete: SetNull)
+  gestiuneId  Int
+  gestiune    CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([gestiuneId, data])
+  @@index([companieId])
+}
+
+model CombustibilTranzactie {
+  id          Int      @id @default(autoincrement())
+  data        DateTime
+  vehiculId   Int?
+  vehicul     CombustibilVehicul? @relation(fields: [vehiculId], references: [id], onDelete: Cascade)
+  companieId  Int?
+  companie    CombustibilCompanie? @relation(fields: [companieId], references: [id], onDelete: SetNull)
+  cantitate   Float
+  odometruKm  Float?
+  gestiuneId  Int
+  gestiune    CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([data, vehiculId, cantitate, gestiuneId])
+  @@index([gestiuneId, data])
+  @@index([companieId, data])
+  @@index([vehiculId])
+}
+
+model CombustibilSetare {
+  id         Int    @id @default(autoincrement())
+  cheie      String
+  valoare    String
+  gestiuneId Int
+  gestiune   CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+
+  @@unique([cheie, gestiuneId])
+  @@index([gestiuneId])
+}
+
+model CombustibilHistoryLog {
+  id                Int      @id @default(autoincrement())
+  tableName         String   // "StockOperation" | "Transaction"
+  recordId          Int
+  actionType        String   // "CREATE" | "UPDATE" | "DELETE"
+  dataSnapshot      String
+  preUpdateSnapshot String?
+  isUndone          Boolean  @default(false)
+  gestiuneId        Int
+  gestiune          CombustibilGestiune @relation(fields: [gestiuneId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+
+  @@index([gestiuneId, isUndone, createdAt])
+}
+

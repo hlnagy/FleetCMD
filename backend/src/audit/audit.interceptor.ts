@@ -32,6 +32,7 @@ export class AuditInterceptor implements NestInterceptor {
     // Infer module & action from URL and method
     let modul = 'GENERAL';
     if (url.includes('/vehicule')) modul = 'VEHICULE';
+    else if (url.includes('/combustibil')) modul = 'COMBUSTIBIL';
     else if (url.includes('/mentenanta') || url.includes('/comanda-lucru')) modul = 'MENTENANTA';
     else if (url.includes('/anomalii') || url.includes('/alerte') || url.includes('/fluide')) modul = 'ALERTE_FLUIDE';
     else if (url.includes('/anvelope')) modul = 'ANVELOPE';

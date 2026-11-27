@@ -14,6 +14,7 @@ import { StocuriGarantiiModule } from './stocuri-garantii/stocuri-garantii.modul
 import { EFacturaModule } from './efactura/efactura.module';
 import { AiModule } from './ai/ai.module';
 import { BackupModule } from './backup/backup.module';
+import { CombustibilModule } from './combustibil/combustibil.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BackupModule } from './backup/backup.module';
     EFacturaModule,
     AiModule,
     BackupModule,
+    CombustibilModule,
   ],
   providers: [
     {

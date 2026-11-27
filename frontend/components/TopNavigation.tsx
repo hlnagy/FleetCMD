@@ -7,7 +7,7 @@ import {
   Droplets, FileText, CheckCircle2, ChevronDown, ChevronRight, X, RefreshCw, Menu,
   Users, Settings, LogOut, Package, Sun, Moon, Sparkles,
   ShoppingCart, History, CircleDot, Building2, ShieldCheck, Clock, Gauge,
-  Timer, FileCheck, Link2, BarChart3, ClipboardList
+  Timer, FileCheck, Link2, BarChart3, ClipboardList, Fuel, Layers, UploadCloud
 } from 'lucide-react';
 import { API_BASE_URL } from '../lib/api';
 import { useAuth } from '../lib/AuthContext';
@@ -90,6 +90,19 @@ export default function TopNavigation() {
         { name: 'Piese', href: '/stocuri?tab=stoc', icon: PackageCheck, desc: 'Nomenclator articole, consumabile, stoc FIFO' },
         { name: 'Magazie Anvelope', href: '/stocuri?tab=anvelope_stoc', icon: CircleDot, desc: 'Anvelope cu serii unice și rulaj' },
         { name: 'Garanții Componente', href: '/stocuri?tab=componente', icon: ShieldCheck, desc: 'Piese montate aflate în perioada de garanție' },
+      ],
+    },
+    {
+      name: 'Combustibil',
+      icon: Fuel,
+      items: [
+        { name: 'Panou Combustibil', href: '/combustibil', icon: Fuel, desc: 'Bazine carburant, stocuri firme & snapshot mobil' },
+        { name: 'Gestionare Stoc', href: '/combustibil?view=stoc', icon: Layers, desc: 'Operațiuni IN/OUT, duplicate & Undo/Redo' },
+        { name: 'Parc Auto (Combustibil)', href: '/combustibil?view=parc', icon: Truck, desc: 'Consum pe categorii & calculator eficiență' },
+        { name: 'Analiză Consum (MC)', href: '/combustibil?view=analiza', icon: BarChart3, desc: 'Eficiență producție Budila & Ghidfalău + PDF' },
+        { name: 'Import CSV (Seler)', href: '/combustibil?view=import', icon: UploadCloud, desc: 'Import pompă Seler, duplicate & sincronizare KM' },
+        { name: 'Rapoarte & Bonuri PDF', href: '/combustibil?view=rapoarte', icon: FileText, desc: 'Anexă bon consum & raport lunar cu serii pompă' },
+        { name: 'Administrare Combustibil', href: '/combustibil?view=admin', icon: Settings, desc: 'Firme, vehicule, categorii & gestiuni' },
       ],
     },
     {
@@ -221,7 +234,11 @@ export default function TopNavigation() {
                                 key={item.href}
                                 type="button"
                                 onClick={() => {
-                                  openTab({ href: item.href, title: item.name });
+                                  openTab({
+                                    href: item.href,
+                                    title: item.href.startsWith('/combustibil') ? 'Combustibil' : item.name,
+                                    iconName: item.href.startsWith('/combustibil') ? 'Fuel' : undefined,
+                                  });
                                   setActiveDropdown(null);
                                 }}
                                 className={`w-full flex items-start space-x-2.5 p-2 rounded-xl text-left transition cursor-pointer ${
@@ -547,7 +564,11 @@ export default function TopNavigation() {
                   key={item.href}
                   type="button"
                   onClick={() => {
-                    openTab({ href: item.href, title: item.name });
+                    openTab({
+                      href: item.href,
+                      title: item.href.startsWith('/combustibil') ? 'Combustibil' : item.name,
+                      iconName: item.href.startsWith('/combustibil') ? 'Fuel' : undefined,
+                    });
                     setIsMobileMenuOpen(false);
                   }}
                   className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-morning-100 dark:hover:bg-slate-800"

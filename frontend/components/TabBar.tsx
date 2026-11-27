@@ -5,7 +5,7 @@ import {
   LayoutDashboard, FileText, ShoppingCart, History, Wrench, Clock, Truck,
   Gauge, Timer, FileCheck, Link2, PackageCheck, CircleDot, Building2,
   ShieldCheck, Droplets, ShieldAlert, BarChart3, Settings, X, Plus,
-  MoreVertical, ChevronRight, Sparkles, ClipboardList
+  MoreVertical, ChevronRight, Sparkles, ClipboardList, Fuel
 } from 'lucide-react';
 import { useTabWorkspace, WorkspaceTab, ROUTE_TAB_DEFINITIONS } from '../lib/TabWorkspaceContext';
 
@@ -27,6 +27,7 @@ const ICON_MAP: Record<string, any> = {
   Building2,
   ShieldCheck,
   Droplets,
+  Fuel,
   ShieldAlert,
   BarChart3,
   Settings,
@@ -143,6 +144,7 @@ export default function TabBar() {
                     { title: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
                     { title: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
                     { title: 'Uleiuri & Filtre', href: '/fluide', icon: Droplets },
+                    { title: 'Combustibil', href: '/combustibil', icon: Fuel },
                     { title: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
                     { title: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
                     { title: 'Setări', href: '/setari', icon: Settings },
