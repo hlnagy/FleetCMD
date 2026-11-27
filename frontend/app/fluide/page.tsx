@@ -87,7 +87,7 @@ export default function FluidePage() {
   const [loadingIstoric, setLoadingIstoric] = useState<boolean>(false);
   const [searchIstoric, setSearchIstoric] = useState<string>('');
   const [filterIstoricTip, setFilterIstoricTip] = useState<string>('TOATE');
-  const [filterIstoricOperatiune, setFilterIstoricOperatiune] = useState<'TOATE' | 'SCHIMB' | 'COMPLETARE'>('TOATE');
+  const [filterIstoricOperatiune, setFilterIstoricOperatiune] = useState<'TOATE' | 'SCHIMB' | 'COMPLETARE' | 'CURATARE'>('TOATE');
   const [filterIstoricVehicul, setFilterIstoricVehicul] = useState<string>('TOATE');
   const [filterIstoricMecanic, setFilterIstoricMecanic] = useState<string>('TOATE');
   const [filterIstoricDateFrom, setFilterIstoricDateFrom] = useState<string>('');
@@ -209,6 +209,10 @@ export default function FluidePage() {
   const [isSubmittingIesire, setIsSubmittingIesire] = useState<boolean>(false);
 
   const isIesirePiece = useMemo(() => isConsumablePieceNorm(iesireTipLichid), [iesireTipLichid]);
+  const isIesireCuratare = useMemo(
+    () => isIesirePiece && iesireOperatiune === 'CURATARE_FILTRU',
+    [isIesirePiece, iesireOperatiune],
+  );
 
   // Sursa activă de stoc pentru modalul de intervenție (filtre/consumabile vs fluide/uleiuri)
   const stocSursaModal = useMemo(
@@ -1002,18 +1006,18 @@ export default function FluidePage() {
     e.preventDefault();
     if (!selectedVehiculId) return;
 
-    const cant = Number(iesireCantitate || 0);
-    if (cant <= 0) {
+    const cant = isIesireCuratare ? 0 : Number(iesireCantitate || 0);
+    if (!isIesireCuratare && cant <= 0) {
       alert('Cantitatea trebuie să fie mai mare ca 0.');
       return;
     }
 
-    const selectedArt = selectedArticolStocId
+    const selectedArt = !isIesireCuratare && selectedArticolStocId
       ? [...stocUleiuri, ...stocConsumabile].find((s: any) => s.id === selectedArticolStocId)
       : null;
     const qtyUnit = getNormUnitMeasure(iesireTipLichid, selectedArt?.unitateMasura);
 
-    if (!faraDeducereStoc) {
+    if (!isIesireCuratare && !faraDeducereStoc) {
       if (!selectedArt) {
         alert('Selectați un articol din stoc sau bifați opțiunea "Fără deducere din depozit" dacă produsul nu este în stoc.');
         return;
@@ -1034,10 +1038,14 @@ export default function FluidePage() {
         body: JSON.stringify({
           vehiculId: selectedVehiculId,
           tipLichid: iesireTipLichid,
-          tipOperatiune: isIesirePiece ? 'SCHIMB_FILTRU' : iesireOperatiune,
-          articolStocId: !faraDeducereStoc && selectedArticolStocId ? selectedArticolStocId : undefined,
-          faraDeducereStoc,
-          marcaUlei: iesireMarca,
+          tipOperatiune: isIesireCuratare
+            ? 'CURATARE_FILTRU'
+            : isIesirePiece
+            ? 'SCHIMB_FILTRU'
+            : iesireOperatiune,
+          articolStocId: !isIesireCuratare && !faraDeducereStoc && selectedArticolStocId ? selectedArticolStocId : undefined,
+          faraDeducereStoc: isIesireCuratare ? true : faraDeducereStoc,
+          marcaUlei: isIesireCuratare ? (iesireMarca || 'Curățare / Suflare Filtru Aer') : iesireMarca,
           cantitateLitri: cant,
           valoareContor: Number(iesireContor || 0),
           unitateContor: iesireUnitateContor,
@@ -1590,9 +1598,12 @@ export default function FluidePage() {
       if (filterIstoricTip !== 'TOATE' && c.tipLichid !== filterIstoricTip) return false;
       if (filterIstoricVehicul !== 'TOATE' && c.vehicul?.id !== filterIstoricVehicul) return false;
       if (filterIstoricMecanic !== 'TOATE' && c.mecanic !== filterIstoricMecanic) return false;
-      const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+      const opUp = String(c.tipOperatiune || '').toUpperCase();
+      const isCuratare = opUp.includes('CURATARE');
+      const isSchimb = !isCuratare && opUp.includes('SCHIMB');
       if (filterIstoricOperatiune === 'SCHIMB' && !isSchimb) return false;
-      if (filterIstoricOperatiune === 'COMPLETARE' && isSchimb) return false;
+      if (filterIstoricOperatiune === 'CURATARE' && !isCuratare) return false;
+      if (filterIstoricOperatiune === 'COMPLETARE' && (isSchimb || isCuratare)) return false;
       if (filterIstoricDateFrom || filterIstoricDateTo) {
         const dtStr = c.dataCompletare ? new Date(c.dataCompletare).toISOString().slice(0, 10) : '';
         if (filterIstoricDateFrom && dtStr < filterIstoricDateFrom) return false;
@@ -1632,20 +1643,26 @@ export default function FluidePage() {
   const istoricKpi = useMemo(() => {
     let schimburi = 0;
     let completari = 0;
+    let curatari = 0;
     let volumTotal = 0;
     let pieseBuc = 0;
     for (const c of istoricCompletariFiltrat) {
-      const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
-      const isPiece = isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU';
-      if (isSchimb) schimburi++;
+      const opUp = String(c.tipOperatiune || '').toUpperCase();
+      const isCuratare = opUp.includes('CURATARE');
+      const isSchimb = !isCuratare && opUp.includes('SCHIMB');
+      const isPiece = !isCuratare && (isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU');
+      if (isCuratare) curatari++;
+      else if (isSchimb) schimburi++;
       else completari++;
-      if (isPiece) {
-        pieseBuc += Number(c.cantitateLitri || 0);
-      } else {
-        volumTotal += Number(c.cantitateLitri || 0);
+      if (!isCuratare) {
+        if (isPiece) {
+          pieseBuc += Number(c.cantitateLitri || 0);
+        } else {
+          volumTotal += Number(c.cantitateLitri || 0);
+        }
       }
     }
-    return { schimburi, completari, volumTotal, pieseBuc };
+    return { schimburi, completari, curatari, volumTotal, pieseBuc };
   }, [istoricCompletariFiltrat]);
 
   const hasIstoricFilters =
@@ -2609,7 +2626,7 @@ export default function FluidePage() {
           </div>
 
           {/* KPI rezumat filtrat */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
             <button
               type="button"
               onClick={() => { setFilterIstoricOperatiune('TOATE'); setIstoricPage(1); }}
@@ -2645,6 +2662,18 @@ export default function FluidePage() {
             >
               <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Completări (Top-up)</div>
               <div className="text-lg font-black text-amber-800 font-mono mt-0.5">{istoricKpi.completari}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setFilterIstoricOperatiune('CURATARE'); setIstoricPage(1); }}
+              className={`p-3 rounded-xl border text-left transition ${
+                filterIstoricOperatiune === 'CURATARE'
+                  ? 'bg-sky-50 border-sky-300 ring-1 ring-sky-400 dark:bg-sky-900/30 dark:border-sky-600'
+                  : 'bg-morning-50 border-morning-200 hover:bg-morning-100'
+              }`}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sky-700 dark:text-sky-300">Curățări / Suflări</div>
+              <div className="text-lg font-black text-sky-800 dark:text-sky-200 font-mono mt-0.5">{istoricKpi.curatari}</div>
             </button>
             <div className="p-3 rounded-xl border bg-morning-50 border-morning-200 text-left">
               <div className="text-[10px] font-bold uppercase tracking-wider text-sage-600">Volum Fluide / Piese</div>
@@ -2707,6 +2736,7 @@ export default function FluidePage() {
                 <option value="TOATE">Operațiune: Toate</option>
                 <option value="SCHIMB">Doar Schimburi (Revizie)</option>
                 <option value="COMPLETARE">Doar Completări (Top-up)</option>
+                <option value="CURATARE">Doar Curățări / Suflări Filtre</option>
               </select>
 
               <FilterableSelect
@@ -2778,8 +2808,10 @@ export default function FluidePage() {
                   </tr>
                 ) : (
                   istoricPaginat.map((c: any) => {
-                    const isPieceRow = isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU';
-                    const isSchimb = isPieceRow || String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+                    const opUp = String(c.tipOperatiune || '').toUpperCase();
+                    const isCuratareRow = opUp.includes('CURATARE');
+                    const isPieceRow = !isCuratareRow && (isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU');
+                    const isSchimb = !isCuratareRow && (isPieceRow || opUp.includes('SCHIMB'));
                     const qtyUm = getNormUnitMeasure(c.tipLichid, c.articolStoc?.unitateMasura);
                     const unit = c.unitateContor || c.vehicul?.tipMasurare || 'KM';
                     return (
@@ -2794,13 +2826,15 @@ export default function FluidePage() {
                         <td className="p-3 space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              isPieceRow
+                              isCuratareRow
+                                ? 'bg-sky-100 text-sky-800 border-sky-200 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700'
+                                : isPieceRow
                                 ? 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:border-indigo-700'
                                 : isSchimb
                                 ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                                 : 'bg-amber-100 text-amber-800 border-amber-200'
                             }`}>
-                              {isPieceRow ? 'SCHIMB FILTRU' : isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE'}
+                              {isCuratareRow ? 'CURĂȚARE / SUFLARE' : isPieceRow ? 'SCHIMB FILTRU' : isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE'}
                             </span>
                             {c.alertaScurgereGenerata && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-roseash-100 text-terracotta-700 border border-roseash-300">
@@ -2823,15 +2857,23 @@ export default function FluidePage() {
                           )}
                         </td>
                         <td className="p-3 text-right font-mono font-black text-sapphire-900 whitespace-nowrap">
-                          {Number(c.cantitateLitri || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} {qtyUm}
+                          {isCuratareRow
+                            ? '—'
+                            : `${Number(c.cantitateLitri || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} ${qtyUm}`}
                         </td>
                         <td className="p-3 text-right font-mono whitespace-nowrap">
-                          <div className="font-extrabold text-sapphire-900">
-                            {Number(c.costTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
-                          </div>
-                          <div className="text-[10px] text-sage-600">
-                            {Number(c.pretPerLitru || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{qtyUm}
-                          </div>
+                          {isCuratareRow ? (
+                            <span className="text-sage-500">—</span>
+                          ) : (
+                            <>
+                              <div className="font-extrabold text-sapphire-900">
+                                {Number(c.costTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
+                              </div>
+                              <div className="text-[10px] text-sage-600">
+                                {Number(c.pretPerLitru || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{qtyUm}
+                              </div>
+                            </>
+                          )}
                         </td>
                         <td className="p-3 text-right font-mono whitespace-nowrap">
                           {Number(c.valoareContor || 0) > 0 ? `${Number(c.valoareContor).toLocaleString('ro-RO')} ${unit}` : '—'}
@@ -4319,13 +4361,26 @@ export default function FluidePage() {
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Tip Operațiune:</label>
                   <select
-                    value={isIesirePiece ? 'SCHIMB_FILTRU' : iesireOperatiune}
-                    onChange={(e) => setIesireOperatiune(e.target.value)}
-                    disabled={isIesirePiece}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold disabled:opacity-80"
+                    value={isIesirePiece ? (iesireOperatiune === 'CURATARE_FILTRU' ? 'CURATARE_FILTRU' : 'SCHIMB_FILTRU') : iesireOperatiune}
+                    onChange={(e) => {
+                      const nextOp = e.target.value;
+                      setIesireOperatiune(nextOp);
+                      if (nextOp === 'CURATARE_FILTRU') {
+                        setFaraDeducereStoc(true);
+                        setIesireCantitate(0);
+                        setIesireMarca('Curățare / Suflare Filtru');
+                      } else if (nextOp === 'SCHIMB_FILTRU') {
+                        setFaraDeducereStoc(false);
+                        setIesireCantitate(1);
+                      }
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {isIesirePiece ? (
-                      <option value="SCHIMB_FILTRU">Înlocuire / Schimb Complet (&amp; Resetare Contor)</option>
+                      <>
+                        <option value="SCHIMB_FILTRU">Înlocuire / Schimb Complet (&amp; Resetare Contor)</option>
+                        <option value="CURATARE_FILTRU">Curățare / Suflare Filtru (Fără resetare contor)</option>
+                      </>
                     ) : (
                       <>
                         <option value="COMPLETARE_ULEI">Completare Nivel (Top-up)</option>
@@ -4345,10 +4400,13 @@ export default function FluidePage() {
                       setIesireTipLichid(nextTip);
                       setArataToateFluidele(false);
                       if (nextIsPiece) {
-                        setIesireOperatiune('SCHIMB_FILTRU');
-                        setIesireCantitate(1);
-                      } else if (iesireOperatiune === 'SCHIMB_FILTRU') {
+                        if (iesireOperatiune !== 'CURATARE_FILTRU') {
+                          setIesireOperatiune('SCHIMB_FILTRU');
+                          setIesireCantitate(1);
+                        }
+                      } else if (iesireOperatiune === 'SCHIMB_FILTRU' || iesireOperatiune === 'CURATARE_FILTRU') {
                         setIesireOperatiune('SCHIMB_ULEI');
+                        setFaraDeducereStoc(false);
                         setIesireCantitate(5);
                       }
                     }}
@@ -4361,6 +4419,12 @@ export default function FluidePage() {
                   </FilterableSelect>
                 </div>
 
+                {isIesireCuratare ? (
+                  <div className="md:col-span-2 p-3 bg-sky-50 dark:bg-sky-900/25 border border-sky-200 dark:border-sky-700 rounded-xl text-[11px] text-sky-900 dark:text-sky-100 font-medium">
+                    Operațiunea de <strong>Curățare / Suflare Filtru</strong> se înregistrează în <strong>Istoric Intervenții</strong> fără deducere din depozit și <strong>nu resetează</strong> contorul de schimb al filtrului.
+                  </div>
+                ) : (
+                  <>
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-sage-700 font-bold">
@@ -4465,6 +4529,8 @@ export default function FluidePage() {
                     ))}
                   </div>
                 </div>
+                  </>
+                )}
 
                 {!faraDeducereStoc && (
                   <div className="md:col-span-2 p-2.5 bg-sapphire-50 border border-sapphire-200 rounded-xl text-[11px] text-sapphire-900 flex items-center space-x-2">

@@ -138,13 +138,16 @@ export class MentenantaService {
     });
 
     fluide.forEach(f => {
-      const isPiece = isConsumablePieceNorm(f.tipLichid) || f.tipOperatiune === 'SCHIMB_FILTRU';
-      const isSchimb = String(f.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+      const isCuratare = String(f.tipOperatiune || '').toUpperCase().includes('CURATARE');
+      const isPiece = !isCuratare && (isConsumablePieceNorm(f.tipLichid) || f.tipOperatiune === 'SCHIMB_FILTRU');
+      const isSchimb = !isCuratare && String(f.tipOperatiune || '').toUpperCase().includes('SCHIMB');
       const tipPretty = f.tipLichid.replace(/_/g, ' ');
       servicii.push({
         id: `FL-${f.id}`,
-        tip: isPiece ? 'SCHIMB_FILTRU' : isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
-        titlu: isPiece
+        tip: isCuratare ? 'CURATARE_FILTRU' : isPiece ? 'SCHIMB_FILTRU' : isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
+        titlu: isCuratare
+          ? `Curățare / Suflare Filtru (${tipPretty})`
+          : isPiece
           ? `Schimb Filtru / Consumabil (${tipPretty})`
           : isSchimb
           ? `Schimb Complet Ulei (${tipPretty})`
@@ -153,7 +156,9 @@ export class MentenantaService {
         vehicul: f.vehicul ? `${f.vehicul.numarIntern} (${f.vehicul.numarInmatriculare})` : '-',
         data: f.dataCompletare,
         stare: 'FINALIZAT',
-        detalii: isPiece
+        detalii: isCuratare
+          ? `Curățare / suflare (${f.marcaUlei || 'Întreținere'}). Contor: ${f.valoareContor}`
+          : isPiece
           ? `${f.cantitateLitri} buc (${f.marcaUlei || 'Standard'}). Contor: ${f.valoareContor}`
           : `${f.cantitateLitri} Litri (${f.marcaUlei || 'Standard'}). Contor: ${f.valoareContor}`,
         costTotal: f.costTotal,
@@ -2600,6 +2605,11 @@ export class MentenantaService {
       const lKey = getLunaKey(new Date(f.dataCompletare));
       if (!evolutieMap[lKey]) {
         evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
+      }
+
+      // Operațiunile de curățare / suflare filtru nu consumă piese din stoc și nu au cost de piesă/fluid
+      if (String(f.tipOperatiune || '').toUpperCase().includes('CURATARE')) {
+        return;
       }
 
       // Schimburile directe de filtre / consumabile la bucată se contabilizează la Piese (nu în litrii de fluide!)

@@ -454,7 +454,10 @@ export class AnomaliiService {
         ? 0
         : Number(
             matchingLogs
-              .filter((c) => !String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB'))
+              .filter((c) => {
+                const op = String(c.tipOperatiune || '').toUpperCase();
+                return !op.includes('SCHIMB') && !op.includes('CURATARE');
+              })
               .reduce((sum, c) => sum + Number(c.cantitateLitri || 0), 0)
               .toFixed(1),
           );
@@ -502,8 +505,9 @@ export class AnomaliiService {
     const vehicul = await this.prisma.vehicul.findUnique({ where: { id: data.vehiculId } });
     if (!vehicul) throw new NotFoundException('Vehiculul nu a fost găsit.');
 
-    const cantitate = Number(data.cantitateLitri);
-    if (!cantitate || cantitate <= 0) {
+    const isCuratareOp = String(data.tipOperatiune || '').toUpperCase().includes('CURATARE');
+    const cantitate = isCuratareOp ? 0 : Number(data.cantitateLitri);
+    if (!isCuratareOp && (!cantitate || cantitate <= 0)) {
       throw new BadRequestException('Cantitatea trebuie să fie mai mare ca 0.');
     }
 
@@ -548,11 +552,15 @@ export class AnomaliiService {
     }
 
     const isPieceNorm = isConsumablePieceNorm(data.tipLichid);
-    const resolvedTipOperatiune = isPieceNorm
+    const resolvedTipOperatiune = isCuratareOp
+      ? 'CURATARE_FILTRU'
+      : isPieceNorm
       ? 'SCHIMB_FILTRU'
       : data.tipOperatiune;
-    const isSchimb = isPieceNorm || String(resolvedTipOperatiune || '').toUpperCase().includes('SCHIMB');
-    const sursaOp = isPieceNorm
+    const isSchimb = !isCuratareOp && (isPieceNorm || String(resolvedTipOperatiune || '').toUpperCase().includes('SCHIMB'));
+    const sursaOp = isCuratareOp
+      ? 'CURATARE_FILTRU'
+      : isPieceNorm
       ? 'SCHIMB_FILTRU'
       : isSchimb
       ? 'SCHIMB_ULEI'
@@ -565,7 +573,7 @@ export class AnomaliiService {
         let articolUlei: any = null;
         let fifoResult: any = null;
 
-        if (!data.faraDeducereStoc && data.articolStocId && String(data.articolStocId).trim() !== '') {
+        if (!isCuratareOp && !data.faraDeducereStoc && data.articolStocId && String(data.articolStocId).trim() !== '') {
           articolUlei = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
           if (!articolUlei) {
             throw new NotFoundException('Articolul selectat nu a fost găsit în depozit.');
@@ -669,7 +677,7 @@ export class AnomaliiService {
             dataCompletare: dataOp,
             mecanic: data.mecanic || 'Atelier',
             observatii: data.observatii,
-            stareAlerta: isPieceNorm ? 'REZOLVATA' : 'NOUA',
+            stareAlerta: isPieceNorm || isCuratareOp ? 'REZOLVATA' : 'NOUA',
           },
         });
 
@@ -705,7 +713,7 @@ export class AnomaliiService {
     const { completare, articolUlei, fifoResult, pretPerLitru, costTotal, qtyUnit } = txResult;
 
     let verificareScurgere = null;
-    if (!isSchimb && !isPieceNorm) {
+    if (!isSchimb && !isPieceNorm && !isCuratareOp) {
       verificareScurgere = await this.verificaAnomalieScurgere(vehicul.id, data.tipLichid, useMthCounter);
       if (verificareScurgere.esteAnomalie) {
         await this.prisma.completareLichid.update({
@@ -717,9 +725,17 @@ export class AnomaliiService {
 
     const labelsMap = await this.getTipFluidLabelsMap();
     const tipLabel = labelsMap[data.tipLichid] || data.tipLichid;
-    const operatiuneNume = isPieceNorm ? 'SCHIMB FILTRU / CONSUMABIL' : isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE';
+    const operatiuneNume = isCuratareOp
+      ? 'CURĂȚARE / SUFLARE FILTRU'
+      : isPieceNorm
+      ? 'SCHIMB FILTRU / CONSUMABIL'
+      : isSchimb
+      ? 'SCHIMB COMPLET'
+      : 'COMPLETARE';
     return {
-      mesaj: isSchimb
+      mesaj: isCuratareOp
+        ? `${operatiuneNume} ÎNREGISTRATĂ pentru ${tipLabel} la ${effectiveContor} ${unitLabel} (istoric actualizat fără resetare contor și fără scădere stoc).`
+        : isSchimb
         ? `${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${tipLabel} a fost RESETAT la ${effectiveContor} ${unitLabel}.${articolUlei ? ` (Consumat FIFO: ${cantitate} ${qtyUnit} din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/${qtyUnit}, Cost total: ${costTotal} RON)` : ''}`
         : `Completare ${cantitate} ${qtyUnit} ${tipLabel} înregistrată.${articolUlei ? ` Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/${qtyUnit}) · Stoc dedus din ${articolUlei.denumire}` : ''}`,
       completare,
