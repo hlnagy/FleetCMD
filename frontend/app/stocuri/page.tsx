@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
@@ -1089,13 +1090,14 @@ function StocuriGarantiiContent() {
               </div>
             </div>
           ) : (
-            <select
+            <FilterableSelect
               required
               value={canonCat}
               onChange={(e) => {
                 onChangeCat(e.target.value);
                 onChangeSubcat('');
               }}
+              searchPlaceholder="Caută categorie..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
             >
               <option value="">-- Alege Categorie --</option>
@@ -1105,7 +1107,7 @@ function StocuriGarantiiContent() {
                   {c.nume}
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
           )}
         </div>
 
@@ -1173,9 +1175,10 @@ function StocuriGarantiiContent() {
               </div>
             </div>
           ) : (
-            <select
+            <FilterableSelect
               value={canonSub}
               onChange={(e) => onChangeSubcat(e.target.value)}
+              searchPlaceholder="Caută subcategorie..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
             >
               <option value="">-- Fără Subcategorie --</option>
@@ -1185,7 +1188,7 @@ function StocuriGarantiiContent() {
                   {sub.nume}
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
           )}
         </div>
       </div>
@@ -1686,45 +1689,48 @@ function StocuriGarantiiContent() {
 
               <div className="flex items-center space-x-2 text-xs flex-wrap">
                 {/* Filtru Categorie */}
-                <select
+                <FilterableSelect
                   value={selectedCategorieFilter}
                   onChange={(e) => {
                     setSelectedCategorieFilter(e.target.value);
                     setSelectedSubcategorieFilter('');
                   }}
+                  searchPlaceholder="Caută categorie..."
                   className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
                 >
                   <option value="">Toate Categoriile</option>
                   {categoriiPiese.map((c, idx) => (
                     <option key={idx} value={c.nume}>{c.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Subcategorie */}
                 {selectedCategorieFilter && (
-                  <select
+                  <FilterableSelect
                     value={selectedSubcategorieFilter}
                     onChange={(e) => setSelectedSubcategorieFilter(e.target.value)}
+                    searchPlaceholder="Caută subcategorie..."
                     className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
                   >
                     <option value="">Toate Subcategoriile ({selectedCategorieFilter})</option>
                     {getSubcategoriiPentruCategorie(selectedCategorieFilter).map((sub: any, idx: number) => (
                       <option key={idx} value={sub.nume}>{sub.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 )}
 
                 {/* Filtru Depozit */}
-                <select
+                <FilterableSelect
                   value={selectedDepozitFilter}
                   onChange={(e) => setSelectedDepozitFilter(e.target.value)}
+                  searchPlaceholder="Caută depozit..."
                   className="bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
                 >
                   <option value="">Toate Depozitele</option>
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Stare Stoc */}
                 <select
@@ -1930,13 +1936,14 @@ function StocuriGarantiiContent() {
                               </div>
                             ) : (
                               <div className="flex items-center space-x-1">
-                                <select
+                                <FilterableSelect
                                   value={inlineCatEdit.categorie}
                                   onChange={(e) =>
                                     setInlineCatEdit((prev) =>
                                       prev ? { ...prev, categorie: e.target.value, subcategorie: '' } : prev,
                                     )
                                   }
+                                  searchPlaceholder="Caută categorie..."
                                   className="flex-1 min-w-0 bg-white border border-morning-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
                                 >
                                   <option value="">-- Categorie --</option>
@@ -1950,7 +1957,7 @@ function StocuriGarantiiContent() {
                                       {c.nume}
                                     </option>
                                   ))}
-                                </select>
+                                </FilterableSelect>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -2012,13 +2019,14 @@ function StocuriGarantiiContent() {
                               </div>
                             ) : (
                               <div className="flex items-center space-x-1">
-                                <select
+                                <FilterableSelect
                                   value={inlineCatEdit.subcategorie}
                                   onChange={(e) =>
                                     setInlineCatEdit((prev) =>
                                       prev ? { ...prev, subcategorie: e.target.value } : prev,
                                     )
                                   }
+                                  searchPlaceholder="Caută subcategorie..."
                                   className="flex-1 min-w-0 bg-white border border-morning-300 rounded-lg px-2 py-1 text-[11px] font-bold text-sapphire-900"
                                 >
                                   <option value="">-- Fără subcategorie --</option>
@@ -2031,7 +2039,7 @@ function StocuriGarantiiContent() {
                                       {sub.nume}
                                     </option>
                                   ))}
-                                </select>
+                                </FilterableSelect>
                                 {inlineCatEdit.categorie && (
                                   <button
                                     type="button"
@@ -2409,9 +2417,10 @@ function StocuriGarantiiContent() {
               {/* Filtre Dropdown & Comutatoare */}
               <div className="flex items-center gap-2 text-xs flex-wrap">
                 {/* Filtru Dimensiune */}
-                <select
+                <FilterableSelect
                   value={anvelopeStocDimensiuneFilter}
                   onChange={(e) => setAnvelopeStocDimensiuneFilter(e.target.value)}
+                  searchPlaceholder="Caută dimensiune (ex: 315/80)..."
                   className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
                   title="Filtrează după dimensiune anvelopă"
                 >
@@ -2421,12 +2430,13 @@ function StocuriGarantiiContent() {
                       {dim.label} ({dim.count} buc)
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Marcă */}
-                <select
+                <FilterableSelect
                   value={anvelopeStocMarcaFilter}
                   onChange={(e) => setAnvelopeStocMarcaFilter(e.target.value)}
+                  searchPlaceholder="Caută marcă anvelopă..."
                   className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
                   title="Filtrează după marcă anvelopă"
                 >
@@ -2436,12 +2446,13 @@ function StocuriGarantiiContent() {
                       {m.label} ({m.count} buc)
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Depozit */}
-                <select
+                <FilterableSelect
                   value={anvelopeStocDepozitFilter}
                   onChange={(e) => setAnvelopeStocDepozitFilter(e.target.value)}
+                  searchPlaceholder="Caută depozit..."
                   className="bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-sapphire-900 font-bold text-xs focus:bg-white cursor-pointer"
                   title="Filtrează după depozit"
                 >
@@ -2454,7 +2465,7 @@ function StocuriGarantiiContent() {
                       </option>
                     );
                   })}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Stare Anvelopă */}
                 <div className="flex items-center space-x-1 bg-morning-100 p-1 rounded-xl border border-morning-200">
@@ -3401,10 +3412,11 @@ function StocuriGarantiiContent() {
                       Nu există alt depozit configurat. Creați un al doilea depozit pentru a putea transfera stoc.
                     </div>
                   ) : (
-                    <select
+                    <FilterableSelect
                       required
                       value={transferDepozitDestinatieId}
                       onChange={(e) => setTransferDepozitDestinatieId(e.target.value)}
+                      searchPlaceholder="Caută depozit destinație..."
                       className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold"
                     >
                       {destOptions.map((d) => (
@@ -3412,7 +3424,7 @@ function StocuriGarantiiContent() {
                           {d.nume}{d.responsabil ? ` (${d.responsabil})` : ''}
                         </option>
                       ))}
-                    </select>
+                    </FilterableSelect>
                   )}
                 </div>
 
@@ -3515,17 +3527,18 @@ function StocuriGarantiiContent() {
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Operator / Responsabil Transfer: *</label>
                   {operatorOptions.length > 0 ? (
-                    <select
+                    <FilterableSelect
                       required
                       value={transferOperator}
                       onChange={(e) => setTransferOperator(e.target.value)}
+                      searchPlaceholder="Caută operator..."
                       className="w-full bg-white border border-morning-300 rounded-xl p-2.5 text-sapphire-900 font-bold"
                     >
                       <option value="">-- Selectați operatorul --</option>
                       {operatorOptions.map((op) => (
                         <option key={op} value={op}>{op}</option>
                       ))}
-                    </select>
+                    </FilterableSelect>
                   ) : (
                     <input
                       required
@@ -3599,9 +3612,10 @@ function StocuriGarantiiContent() {
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit (din Mecanici / Personal):</label>
                 {mecanici.length > 0 ? (
-                  <select
+                  <FilterableSelect
                     value={editingDepozit.responsabil || ''}
                     onChange={(e) => setEditingDepozit({ ...editingDepozit, responsabil: e.target.value })}
+                    searchPlaceholder="Caută responsabil..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Fără Responsabil Desemnat --</option>
@@ -3610,7 +3624,7 @@ function StocuriGarantiiContent() {
                          {m.nume} {m.functie ? `(${m.functie})` : ''}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 ) : (
                   <input
                     value={editingDepozit.responsabil || ''}
@@ -3760,10 +3774,11 @@ function StocuriGarantiiContent() {
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Responsabil Depozit (din Mecanici Înregistrați): *</label>
                 {mecanici.length > 0 ? (
-                  <select
+                  <FilterableSelect
                     required
                     value={responsabilDepozitNou}
                     onChange={(e) => setResponsabilDepozitNou(e.target.value)}
+                    searchPlaceholder="Caută responsabil..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Selectează Responsabil Depozit --</option>
@@ -3772,7 +3787,7 @@ function StocuriGarantiiContent() {
                          {m.nume} {m.functie ? `(${m.functie})` : ''}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 ) : (
                   <input
                     required
@@ -3838,11 +3853,16 @@ function StocuriGarantiiContent() {
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Depozit</label>
-                  <select value={depozitId} onChange={(e) => setDepozitId(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold">
+                  <FilterableSelect
+                    value={depozitId}
+                    onChange={(e) => setDepozitId(e.target.value)}
+                    searchPlaceholder="Caută depozit..."
+                    className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-semibold"
+                  >
                     {depozite.map((d) => (
                       <option key={d.id} value={d.id}>{d.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -3859,7 +3879,7 @@ function StocuriGarantiiContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Principală</label>
-                  <select
+                  <FilterableSelect
                     value={categorie}
                     onChange={(e) => {
                       setCategorie(e.target.value);
@@ -3869,12 +3889,13 @@ function StocuriGarantiiContent() {
                         setArticolTipLichid('');
                       }
                     }}
+                    searchPlaceholder="Caută categorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
                     {categoriiPiese.map((c, idx) => (
                       <option key={idx} value={c.nume}>{c.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
@@ -3891,7 +3912,7 @@ function StocuriGarantiiContent() {
                       + Subcategorie
                     </button>
                   </div>
-                  <select
+                  <FilterableSelect
                     value={subcategorie}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -3901,13 +3922,14 @@ function StocuriGarantiiContent() {
                         setArticolTipLichid(subObj.tipLichid);
                       }
                     }}
+                    searchPlaceholder="Caută subcategorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Fără Subcategorie --</option>
                     {getSubcategoriiPentruCategorie(categorie).map((sub: any, idx: number) => (
                       <option key={idx} value={sub.nume}>{sub.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -3922,9 +3944,10 @@ function StocuriGarantiiContent() {
                   <label className="text-sapphire-900 block mb-1 font-bold">
                     Normă Întreținere Asociată (Fluid / Filtru):
                   </label>
-                  <select
+                  <FilterableSelect
                     value={articolTipLichid}
                     onChange={(e) => setArticolTipLichid(e.target.value)}
+                    searchPlaceholder="Caută normă (ulei, filtru)..."
                     className="w-full bg-white border border-sapphire-200 rounded-lg p-2 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Fără asociere normă (detectare automată) --</option>
@@ -3933,7 +3956,7 @@ function StocuriGarantiiContent() {
                         {tf.nume} ({tf.cod})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               )}
 
@@ -3982,15 +4005,16 @@ function StocuriGarantiiContent() {
             <form onSubmit={handleCreateSubcategorie} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Categorie Părinte:</label>
-                <select
+                <FilterableSelect
                   value={targetCatForSubcat}
                   onChange={(e) => setTargetCatForSubcat(e.target.value)}
+                  searchPlaceholder="Caută categorie..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2 text-sapphire-900 font-bold"
                 >
                   {categoriiPiese.map((c, idx) => (
                     <option key={idx} value={c.nume}>{c.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -4012,9 +4036,10 @@ function StocuriGarantiiContent() {
                   <label className="text-sage-700 block mb-1 font-bold">
                     Normă Întreținere Asociată (Fluid / Filtru — opțional):
                   </label>
-                  <select
+                  <FilterableSelect
                     value={subcatTipLichidNou}
                     onChange={(e) => setSubcatTipLichidNou(e.target.value)}
+                    searchPlaceholder="Caută normă..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">-- Fără asociere implicită --</option>
@@ -4023,7 +4048,7 @@ function StocuriGarantiiContent() {
                         {tf.nume} ({tf.cod})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               )}
 
@@ -4105,9 +4130,10 @@ function StocuriGarantiiContent() {
                     <label className="text-sapphire-900 block mb-1 font-bold">
                       Normă Întreținere (Fluid / Filtru):
                     </label>
-                    <select
+                    <FilterableSelect
                       value={editingArticol.tipLichid || ''}
                       onChange={(e) => setEditingArticol({ ...editingArticol, tipLichid: e.target.value })}
+                      searchPlaceholder="Caută normă..."
                       className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-bold text-xs"
                     >
                       <option value="">-- Fără asociere normă (auto) --</option>
@@ -4116,7 +4142,7 @@ function StocuriGarantiiContent() {
                           {tf.nume} ({tf.cod})
                         </option>
                       ))}
-                    </select>
+                    </FilterableSelect>
                   </div>
                   <div>
                     <label className="text-sapphire-900 block mb-1 font-bold">Marcă Lubrifiant (Opțional):</label>
@@ -4142,16 +4168,17 @@ function StocuriGarantiiContent() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Depozit Stoc: *</label>
-                <select
+                <FilterableSelect
                   required
                   value={editingArticol.depozitId || ''}
                   onChange={(e) => setEditingArticol({ ...editingArticol, depozitId: e.target.value })}
+                  searchPlaceholder="Caută depozit..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -4276,16 +4303,17 @@ function StocuriGarantiiContent() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Depozit Stoc Target: *</label>
-                  <select
+                  <FilterableSelect
                     required
                     value={reclassifyData.depozitId}
                     onChange={(e) => setReclassifyData({ ...reclassifyData, depozitId: e.target.value })}
+                    searchPlaceholder="Caută depozit..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {depozite.map((d) => (
                       <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
@@ -4382,15 +4410,16 @@ function StocuriGarantiiContent() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Depozit / Locație Depozitare: *</label>
-                <select
+                <FilterableSelect
                   value={editingAnvelopaStoc.depozitId || ''}
                   onChange={(e) => setEditingAnvelopaStoc({ ...editingAnvelopaStoc, depozitId: e.target.value })}
+                  searchPlaceholder="Caută depozit..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t border-morning-200">
@@ -4512,15 +4541,16 @@ function StocuriGarantiiContent() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Depozit Destinație: *</label>
-                <select
+                <FilterableSelect
                   value={newBatchAnv.depozitId || ''}
                   onChange={(e) => setNewBatchAnv({ ...newBatchAnv, depozitId: e.target.value })}
+                  searchPlaceholder="Caută depozit..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               {/* Serii Individuale per Bucată */}

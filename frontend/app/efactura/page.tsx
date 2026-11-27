@@ -17,6 +17,7 @@ import { showConfirm, showToast } from '@/lib/swal';
 import { openFacturaPdf } from '@/lib/facturaPdf';
 import { useAuth } from '@/lib/AuthContext';
 import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
+import FilterableSelect from '@/components/FilterableSelect';
 import {
   FALLBACK_TIPURI_FLUIDE,
   TipFluidDef,
@@ -2201,7 +2202,7 @@ function EFacturaContent() {
               </div>
             </div>
           ) : (
-            <select
+            <FilterableSelect
               value={currentCat}
               onChange={(e) => {
                 const val = e.target.value;
@@ -2226,6 +2227,7 @@ function EFacturaContent() {
                   );
                 }
               }}
+              searchPlaceholder="Caută categorie..."
               className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
                 isDirect
                   ? 'bg-white border border-morning-300'
@@ -2241,7 +2243,7 @@ function EFacturaContent() {
               ) : (
                 <option value="">Se încarcă categoriile din sistem...</option>
               )}
-            </select>
+            </FilterableSelect>
           )}
         </div>
 
@@ -2304,7 +2306,7 @@ function EFacturaContent() {
               </div>
             </div>
           ) : (
-            <select
+            <FilterableSelect
               value={currentSubcat}
               onChange={(e) => {
                 const subVal = e.target.value;
@@ -2314,6 +2316,7 @@ function EFacturaContent() {
                   setTip(subObj.tipLichid);
                 }
               }}
+              searchPlaceholder="Caută subcategorie..."
               className={`w-full rounded-xl p-2.5 text-sapphire-900 font-bold text-xs ${
                 isDirect
                   ? 'bg-white border border-morning-300'
@@ -2331,7 +2334,7 @@ function EFacturaContent() {
                   </option>
                 );
               })}
-            </select>
+            </FilterableSelect>
           )}
         </div>
 
@@ -2342,9 +2345,10 @@ function EFacturaContent() {
               <label className="text-sapphire-900 font-bold text-xs block mb-1">
                 Normă Întreținere (Fluid / Filtru):
               </label>
-              <select
+              <FilterableSelect
                 value={currentTip}
                 onChange={(e) => setTip(e.target.value)}
+                searchPlaceholder="Caută normă..."
                 className="w-full bg-white border border-sapphire-200 rounded-xl p-2 text-sapphire-900 font-bold text-xs"
               >
                 <option value="">-- Fără asociere normă (detectare automată) --</option>
@@ -2353,7 +2357,7 @@ function EFacturaContent() {
                     {tf.nume} ({tf.cod})
                   </option>
                 ))}
-              </select>
+              </FilterableSelect>
             </div>
             {!isDirect && (
               <div>
@@ -4524,15 +4528,16 @@ function EFacturaContent() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Destinație:</label>
-                <select
+                <FilterableSelect
                   value={bevDepozitId}
                   onChange={(e) => setBevDepozitId(e.target.value)}
+                  searchPlaceholder="Caută depozit..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {depozite.map((d) => (
                     <option key={d.id} value={d.id}>{d.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -4613,18 +4618,19 @@ function EFacturaContent() {
                     </div>
                   </div>
                 ) : (
-                  <select
+                  <FilterableSelect
                     value={bevCategorie}
                     onChange={(e) => {
                       setBevCategorie(e.target.value);
                       setBevSubcategorie('');
                     }}
+                    searchPlaceholder="Caută categorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {categoriiStoc.map((c, idx) => (
                       <option key={c.id || idx} value={c.nume}>{c.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 )}
               </div>
             </div>
@@ -4686,7 +4692,7 @@ function EFacturaContent() {
                     </div>
                   </div>
                 ) : (
-                  <select
+                  <FilterableSelect
                     value={bevSubcategorie}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -4696,13 +4702,14 @@ function EFacturaContent() {
                         setBevTipLichid(subObj.tipLichid);
                       }
                     }}
+                    searchPlaceholder="Caută subcategorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">Fără subcategorie</option>
                     {getSubcategoriiPentruCategorie(bevCategorie).map((sub: any, idx: number) => (
                       <option key={sub.id || idx} value={sub.nume}>{sub.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 )}
               </div>
 
@@ -4825,9 +4832,10 @@ function EFacturaContent() {
             <div className="p-4 bg-morning-100 border border-morning-200 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sapphire-900 block mb-1 font-bold">Dacă este Achiziție Ulei / Fluid, alegeți Tipul (Norma):</label>
-                <select
+                <FilterableSelect
                   value={bevTipLichid}
                   onChange={(e) => setBevTipLichid(e.target.value)}
+                  searchPlaceholder="Caută normă..."
                   className="w-full bg-white border border-morning-200 rounded-xl p-2 text-sapphire-900 font-semibold"
                 >
                   <option value="NICIUNUL">Nu este fluid (Piesă / Filtru / Consumabil)</option>
@@ -4836,7 +4844,7 @@ function EFacturaContent() {
                       {tf.nume} ({tf.cod})
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -5286,7 +5294,7 @@ function EFacturaContent() {
 
                   <div>
                     <label className="text-sage-700 block mb-1 font-bold">Selectează Depozit Stoc Target: *</label>
-                    <select
+                    <FilterableSelect
                       required
                       value={targetDepozitId}
                       onChange={(e) => {
@@ -5305,17 +5313,18 @@ function EFacturaContent() {
                           setTargetDepozitId(e.target.value);
                         }
                       }}
+                      searchPlaceholder="Caută depozit sau import direct..."
                       className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                     >
                       {!isAnvelopaItemHelper(importingItem, targetCategorie, targetSubcategorie) && (
-                        <option value="DIRECT_PE_MASINA" className="text-sapphire-700 font-extrabold bg-sapphire-50">
+                        <option value="DIRECT_PE_MASINA">
                           🚗 [Import Direct pe Mașină / Comandă de Lucru] (Fără stocare în depozit)
                         </option>
                       )}
                       {depozite.map((d) => (
                         <option key={d.id} value={d.id}>{d.nume} ({d.adresa || 'Atelier'})</option>
                       ))}
-                    </select>
+                    </FilterableSelect>
                   </div>
 
               {/* CATEGORIE & SUBCATEGORIE STOC CU CREARE RAPIDĂ */}
@@ -5868,9 +5877,10 @@ function EFacturaContent() {
                               <label className="text-amber-950 font-bold block mb-1 text-[11px]">
                                 Alegeți comanda deschisă pe care adăugați piesa:
                               </label>
-                              <select
+                              <FilterableSelect
                                 value={selectedComandaLucruId}
                                 onChange={(e) => setSelectedComandaLucruId(e.target.value)}
+                                searchPlaceholder="Caută comandă de lucru / mecanic..."
                                 className="w-full bg-white border border-amber-300 rounded-lg p-2 font-bold text-xs text-slate-800"
                               >
                                 {openOrdersForVeh.map((c) => (
@@ -5878,7 +5888,7 @@ function EFacturaContent() {
                                     {c.numarComanda} — Mecanic: {c.mecanicResponsabil} (Deschisă: {new Date(c.dataDeschidere).toLocaleDateString('ro-RO')}) [{c.stare}]
                                   </option>
                                 ))}
-                              </select>
+                              </FilterableSelect>
                             </div>
                           ) : (
                             <div className="p-2 bg-emerald-100/70 border border-emerald-300 rounded-lg flex items-center justify-between text-xs text-emerald-950 font-medium">
@@ -6448,9 +6458,10 @@ function EFacturaContent() {
                     <label className="text-[11px] font-bold text-sage-700 dark:text-slate-300 block mb-1">
                       Categorie / Motiv Excludere:
                     </label>
-                    <select
+                    <FilterableSelect
                       value={newExclusMotiv}
                       onChange={(e) => setNewExclusMotiv(e.target.value)}
+                      searchPlaceholder="Caută categorie excludere..."
                       className="w-full bg-white dark:bg-[#142232] border border-morning-300 dark:border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 dark:text-white font-bold"
                     >
                       <option value="Telecomunicații & IT">Telecomunicații & IT</option>
@@ -6460,7 +6471,7 @@ function EFacturaContent() {
                       <option value="Chirii & Spații / Sediu">Chirii & Spații / Sediu</option>
                       <option value="Servicii Juridice & Contabilitate">Servicii Juridice & Contabilitate</option>
                       <option value="Servicii Diverse & Operaționale">Servicii Diverse & Operaționale</option>
-                    </select>
+                    </FilterableSelect>
                   </div>
 
                   <div className="md:col-span-2 flex items-end">

@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -1132,46 +1133,49 @@ export default function AnvelopePage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sage-700 block mb-1 font-bold">Vehicul / Utilaj: *</label>
-                      <select
+                      <FilterableSelect
                         value={selectedVehiculForAdd}
                         onChange={(e) => {
                           setSelectedVehiculForAdd(e.target.value);
                           setSelectedAxNumar('');
                           setNewMountPositionId('');
                         }}
+                        searchPlaceholder="Caută vehicul / utilaj..."
                         className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                       >
                         <option value="">-- Alege Vehiculul --</option>
                         {vehicule.map((v) => (
                           <option key={v.id} value={v.id}>{v.numarIntern} - {v.numarInmatriculare}</option>
                         ))}
-                      </select>
+                      </FilterableSelect>
                     </div>
 
                     <div>
                       <label className="text-sage-700 block mb-1 font-bold">Selectează Axă: *</label>
-                      <select
+                      <FilterableSelect
                         value={selectedAxNumar}
                         onChange={(e) => {
                           setSelectedAxNumar(e.target.value ? Number(e.target.value) : '');
                           setNewMountPositionId('');
                         }}
+                        searchPlaceholder="Caută axă..."
                         className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                       >
                         <option value="">-- Alege Axă --</option>
                         {axeDisponibile.map((axNum: any) => (
                           <option key={String(axNum)} value={String(axNum)}>Axă {String(axNum)}</option>
                         ))}
-                      </select>
+                      </FilterableSelect>
                     </div>
                   </div>
 
                   <div>
                     <label className="text-sage-700 block mb-1 font-extrabold text-sapphire-900">Poziție pe Axă: *</label>
-                    <select
+                    <FilterableSelect
                       required
                       value={newMountPositionId}
                       onChange={(e) => setNewMountPositionId(e.target.value)}
+                      searchPlaceholder="Caută poziție (stânga, dreapta, exterior)..."
                       className="w-full bg-morning-100 border-2 border-sapphire-500/40 rounded-xl p-2.5 text-sapphire-900 font-extrabold"
                     >
                       <option value="">-- Alege Poziția de Montaj pe Șasiu --</option>
@@ -1183,7 +1187,7 @@ export default function AnvelopePage() {
                           </option>
                         );
                       })}
-                    </select>
+                    </FilterableSelect>
                   </div>
                 </>
               )}
@@ -1223,10 +1227,11 @@ export default function AnvelopePage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Mecanic / Operator Responsabil: *</label>
-                  <select
+                  <FilterableSelect
                     required
                     value={mountOperator}
                     onChange={(e) => setMountOperator(e.target.value)}
+                    searchPlaceholder="Caută mecanic / operator..."
                     className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {mecaniciList.map((m: any) => (
@@ -1234,7 +1239,7 @@ export default function AnvelopePage() {
                          {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
@@ -1633,10 +1638,11 @@ export default function AnvelopePage() {
                   <label className="text-amber-950 block font-extrabold text-xs">
                     Depozit de Destinație (Unde intră anvelopa): *
                   </label>
-                  <select
+                  <FilterableSelect
                     required
                     value={demountDepozitId}
                     onChange={(e) => setDemountDepozitId(e.target.value)}
+                    searchPlaceholder="Caută depozit..."
                     className="w-full bg-white border border-amber-300 rounded-lg p-2 text-sapphire-900 font-bold text-xs"
                   >
                     {depoziteList.map((dep: any) => (
@@ -1644,7 +1650,7 @@ export default function AnvelopePage() {
                          {dep.nume} {dep.responsabil ? `(Resp: ${dep.responsabil})` : ''}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                   <p className="text-[10px] text-amber-800 font-medium">
                      Anvelopa va fi înregistrată automat în gestiunea stocului din acest depozit.
                   </p>
@@ -1665,10 +1671,11 @@ export default function AnvelopePage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Mecanic / Operator: *</label>
-                  <select
+                  <FilterableSelect
                     required
                     value={demountOperator}
                     onChange={(e) => setDemountOperator(e.target.value)}
+                    searchPlaceholder="Caută mecanic / operator..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {mecaniciList.map((m: any) => (
@@ -1676,7 +1683,7 @@ export default function AnvelopePage() {
                          {m.nume}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -1935,10 +1942,11 @@ export default function AnvelopePage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Mecanic / Operator: *</label>
-                  <select
+                  <FilterableSelect
                     required
                     value={permutareOperator}
                     onChange={(e) => setPermutareOperator(e.target.value)}
+                    searchPlaceholder="Caută mecanic / operator..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {mecaniciList.map((m: any) => (
@@ -1946,7 +1954,7 @@ export default function AnvelopePage() {
                          {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 

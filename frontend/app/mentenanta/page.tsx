@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect } from 'react';
 import {
@@ -302,9 +303,10 @@ export default function MentenantaPage() {
           </div>
 
           <div className="flex items-center space-x-2 text-xs flex-wrap">
-            <select
+            <FilterableSelect
               value={selectedVehiculFilter}
               onChange={(e) => setSelectedVehiculFilter(e.target.value)}
+              searchPlaceholder="Caută utilaj..."
               className="bg-white border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold focus:outline-none cursor-pointer"
             >
               <option value="">Toate Utilajele Flotă</option>
@@ -313,7 +315,7 @@ export default function MentenantaPage() {
                   {v.numarIntern} ({v.numarInmatriculare})
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
 
             <div className="relative w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-sage-500" />
@@ -507,15 +509,16 @@ export default function MentenantaPage() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Mecanic Responsabil:</label>
-                <select
+                <FilterableSelect
                   value={selectedMecanic}
                   onChange={(e) => setSelectedMecanic(e.target.value)}
+                  searchPlaceholder="Caută mecanic..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {mecaniciList.map((m) => (
                     <option key={m.id} value={m.nume}>{m.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div className="p-3 bg-morning-100 rounded-xl border border-morning-200 space-y-2">
@@ -534,9 +537,10 @@ export default function MentenantaPage() {
               {!esteBontott ? (
                 <div>
                   <label className="text-sage-700 block mb-1 font-semibold">Selectează Piesă Inițială din Stoc Intern (Opțional):</label>
-                  <select
+                  <FilterableSelect
                     value={selectedArticolId}
                     onChange={(e) => setSelectedArticolId(e.target.value)}
+                    searchPlaceholder="Caută piesă din stoc..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
                     <option value="">Fără piesă inițială (Adăugați mai târziu în Comenzi de Lucru)</option>
@@ -551,7 +555,7 @@ export default function MentenantaPage() {
                           </option>
                         );
                       })}
-                  </select>
+                  </FilterableSelect>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -621,9 +625,10 @@ export default function MentenantaPage() {
             <form onSubmit={handleCreateSarcina} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Utilaj Destinație:</label>
-                <select
+                <FilterableSelect
                   value={targetVehiculId}
                   onChange={(e) => setTargetVehiculId(e.target.value)}
+                  searchPlaceholder="Caută utilaj..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {vehicule.map((v) => (
@@ -631,7 +636,7 @@ export default function MentenantaPage() {
                       {v.numarIntern} ({v.numarInmatriculare}) - {v.marca} {v.model}
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>

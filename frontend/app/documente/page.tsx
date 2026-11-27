@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 import { getCategoryColor } from '@/lib/categoryColors';
 import { showConfirm, showError, showToast } from '@/lib/swal';
 import { useAuth } from '@/lib/AuthContext';
@@ -1068,9 +1069,10 @@ function DocumenteFlotaContent() {
               </div>
 
               <div>
-                <select
+                <FilterableSelect
                   value={filterCategorie}
                   onChange={(e) => setFilterCategorie(e.target.value)}
+                  searchPlaceholder="Caută categorie flotă..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
                 >
                   <option value="TOATE">Toate Categoriile Flotă</option>
@@ -1082,13 +1084,14 @@ function DocumenteFlotaContent() {
                       </option>
                     );
                   })}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
-                <select
+                <FilterableSelect
                   value={selectedVehiculId}
                   onChange={(e) => setSelectedVehiculId(e.target.value)}
+                  searchPlaceholder="Caută vehicul / utilaj..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
                 >
                   <option value="">Toate Utilajele ({vehicule.length})</option>
@@ -1098,7 +1101,7 @@ function DocumenteFlotaContent() {
                       {v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? ` (${v.numarInmatriculare})` : ''} — {v.categorieEnum || 'Utilaj'}
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               {viewMode === 'matrice' ? (
@@ -1947,10 +1950,11 @@ function DocumenteFlotaContent() {
                     );
                   })()
                 ) : (
-                  <select
+                  <FilterableSelect
                     required
                     value={formVehiculId}
                     onChange={(e) => setFormVehiculId(e.target.value)}
+                    searchPlaceholder="Caută vehicul / utilaj..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold cursor-pointer"
                   >
                     <option value="">Alege vehiculul...</option>
@@ -1960,7 +1964,7 @@ function DocumenteFlotaContent() {
                         {v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? ` (${v.numarInmatriculare})` : ''} — {v.categorieEnum || 'Utilaj'}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 )}
               </div>
 
@@ -1986,7 +1990,7 @@ function DocumenteFlotaContent() {
                     const otherTips = tipuriDocumente.filter((t) => !isTipApplicableToCategory(t, selVehCat));
 
                     return (
-                      <select
+                      <FilterableSelect
                         value={formTip}
                         onChange={(e) => {
                           const val = e.target.value;
@@ -1996,6 +2000,7 @@ function DocumenteFlotaContent() {
                             setFormZileAvertizare(tipObj.zileAvertizare);
                           }
                         }}
+                        searchPlaceholder="Caută tip document (ITP, RCA, Rovinietă)..."
                         className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                       >
                         {selVehCat && otherTips.length > 0 ? (
@@ -2025,7 +2030,7 @@ function DocumenteFlotaContent() {
                           ))
                         )}
                         <option value="ALTELE">Alt Document Specific</option>
-                      </select>
+                      </FilterableSelect>
                     );
                   })()}
                 </div>

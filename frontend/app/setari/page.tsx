@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 import { useAuth } from '@/lib/AuthContext';
 
 import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
@@ -4626,7 +4627,12 @@ function SetariContent() {
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj: *</label>
-                  <select value={categorieEnum} onChange={(e) => setCategorieEnum(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  <FilterableSelect
+                    value={categorieEnum}
+                    onChange={(e) => setCategorieEnum(e.target.value)}
+                    searchPlaceholder="Caută categorie utilaj..."
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
                     {categoriiVehicul.length > 0 ? (
                       categoriiVehicul.map((c) => (
                         <option key={c.id || c.nume} value={c.nume}>{c.nume} {c.descriere ? `(${c.descriere})` : ''}</option>
@@ -4648,7 +4654,7 @@ function SetariContent() {
                         <option value="NEDEFINIT">NEDEFINIT</option>
                       </>
                     )}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -4720,11 +4726,16 @@ function SetariContent() {
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj: *</label>
-                  <select value={editingVehicul.categorieEnum || 'CAP_TRACTOR'} onChange={(e) => setEditingVehicul({ ...editingVehicul, categorieEnum: e.target.value })} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  <FilterableSelect
+                    value={editingVehicul.categorieEnum || 'CAP_TRACTOR'}
+                    onChange={(e) => setEditingVehicul({ ...editingVehicul, categorieEnum: e.target.value })}
+                    searchPlaceholder="Caută categorie utilaj..."
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
                     {categoriiVehicul.map((c) => (
                       <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -5036,14 +5047,19 @@ function SetariContent() {
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Funcție / Specialitate: *</label>
-                <select value={newMecanicFunctie} onChange={(e) => setNewMecanicFunctie(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                <FilterableSelect
+                  value={newMecanicFunctie}
+                  onChange={(e) => setNewMecanicFunctie(e.target.value)}
+                  searchPlaceholder="Caută funcție..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
                   <option value="Mecanic Șef">Mecanic Șef</option>
                   <option value="Mecanic Atelier">Mecanic Atelier</option>
                   <option value="Mecanic Utilaje Grele">Mecanic Utilaje Grele</option>
                   <option value="Electrician Auto">Electrician Auto</option>
                   <option value="Vulcanizator">Vulcanizator / Anvelope</option>
                   <option value="Tinichigiu">Tinichigiu / Carosier</option>
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -5168,11 +5184,16 @@ function SetariContent() {
             <form onSubmit={handleSaveSubcategorie} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Categoria Părinte: *</label>
-                <select value={targetCatForSubcat} onChange={(e) => setTargetCatForSubcat(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                <FilterableSelect
+                  value={targetCatForSubcat}
+                  onChange={(e) => setTargetCatForSubcat(e.target.value)}
+                  searchPlaceholder="Caută categorie..."
+                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                >
                   {categoriiPiese.map((c) => (
                     <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -5219,12 +5240,17 @@ function SetariContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Utilaj:</label>
-                  <select value={regulaCategorieUtilaj} onChange={(e) => setRegulaCategorieUtilaj(e.target.value)} className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold">
+                  <FilterableSelect
+                    value={regulaCategorieUtilaj}
+                    onChange={(e) => setRegulaCategorieUtilaj(e.target.value)}
+                    searchPlaceholder="Caută categorie utilaj..."
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
                     <option value="TOATE">TOATE CATEGORIILE</option>
                     {categoriiVehicul.map((c) => (
                       <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>

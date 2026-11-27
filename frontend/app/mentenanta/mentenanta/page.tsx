@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect } from 'react';
 import { Wrench, CheckCircle2, AlertTriangle, ArrowUpRight, Clock, PackageCheck, Plus, X, Trash2 } from 'lucide-react';
@@ -157,9 +158,10 @@ export default function MentenantaPage() {
           </button>
 
           <div className="w-full md:w-72">
-            <select
+            <FilterableSelect
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
+              searchPlaceholder="Caută utilaj..."
               className="w-full bg-white border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-bold focus:border-sapphire-500 focus:outline-none shadow-xs"
             >
               {vehicule.map((v) => (
@@ -167,7 +169,7 @@ export default function MentenantaPage() {
                   {v.numarIntern} - {v.numarInmatriculare} ({v.valoareContorCurent} {v.tipMasurare})
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
           </div>
         </div>
       </div>
@@ -292,9 +294,10 @@ export default function MentenantaPage() {
               {!esteBontott ? (
                 <div>
                   <label className="text-sage-700 block mb-1 font-semibold">Selectează Piesă din Stoc Intern:</label>
-                  <select
+                  <FilterableSelect
                     value={selectedArticolId}
                     onChange={(e) => setSelectedArticolId(e.target.value)}
+                    searchPlaceholder="Caută piesă din stoc..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-lg p-2.5 text-sapphire-900 font-semibold"
                   >
                     {stocuri.map((st) => (
@@ -302,7 +305,7 @@ export default function MentenantaPage() {
                         {st.denumire} (Stoc: {st.stocCurent} {st.unitateMasura} - {st.pretUnitar} RON/buc)
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               ) : (
                 <div className="space-y-2">

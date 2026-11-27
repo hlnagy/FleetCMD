@@ -8,6 +8,7 @@ import {
   Activity, ShieldCheck, Cpu, User, FileText, CheckCircle2
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import FilterableSelect from '@/components/FilterableSelect';
 
 interface VehicleOdometerModalProps {
   vehiculId: string;
@@ -264,9 +265,10 @@ export default function VehicleOdometerModal({
               />
             </div>
 
-            <select
+            <FilterableSelect
               value={sursaFilter}
               onChange={(e) => setSursaFilter(e.target.value)}
+              searchPlaceholder="Filtrează sursa..."
               className="bg-white border border-morning-200 rounded-xl p-1.5 font-bold text-sapphire-900 focus:outline-none cursor-pointer"
             >
               <option value="">Toate Sursele</option>
@@ -276,7 +278,7 @@ export default function VehicleOdometerModal({
               <option value="ULEI"> Schimb Ulei / Fluide</option>
               <option value="ANVELOPE">Anvelope</option>
               <option value="CUPLARE">Cuplare Ansamblu</option>
-            </select>
+            </FilterableSelect>
             {isDualMth && (
               <select
                 value={filterTipContor}

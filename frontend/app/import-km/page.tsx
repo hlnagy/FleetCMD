@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 import React, { useState, useEffect, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import {
   UploadCloud, FileText, CheckCircle2, AlertTriangle, XCircle, ArrowRight,
@@ -1720,9 +1721,11 @@ function ImportKmPompaContent() {
                                   <span>+ Adaugă în flotă</span>
                                 </button>
                               </div>
-                              <select
+                              <FilterableSelect
+                                value=""
                                 onChange={(e) => handleAssignVehicle(row.idTemp, e.target.value)}
-                                defaultValue=""
+                                placeholder="sau alege vehicul existent..."
+                                searchPlaceholder="Caută vehicul existent..."
                                 className="bg-white dark:bg-slate-900 border border-amber-400 text-[11px] text-slate-800 dark:text-slate-200 rounded-lg px-2 py-1 max-w-[210px] focus:outline-none focus:ring-2 focus:ring-sapphire-500/20 font-medium"
                               >
                                 <option value="" disabled>
@@ -1733,7 +1736,7 @@ function ImportKmPompaContent() {
                                     {v.numarInmatriculare} ({v.numarIntern || extractCatName(v.categorieEnum)})
                                   </option>
                                 ))}
-                              </select>
+                              </FilterableSelect>
                             </div>
                           )}
                         </td>
@@ -2107,13 +2110,14 @@ function ImportKmPompaContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">Categorie Vehicul *</label>
-                  <select
+                  <FilterableSelect
                     value={quickCreateModal.categorieEnum}
                     onChange={(e) =>
                       setQuickCreateModal((prev) =>
                         prev ? { ...prev, categorieEnum: e.target.value } : null
                       )
                     }
+                    searchPlaceholder="Caută categorie vehicul..."
                     className="w-full bg-morning-50 dark:bg-slate-800 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   >
                     {allCategories.map((c) => (
@@ -2124,7 +2128,7 @@ function ImportKmPompaContent() {
                     {!allCategories.includes('CAP_TRACTOR') && <option value="CAP_TRACTOR">CAP_TRACTOR</option>}
                     {!allCategories.includes('AUTOUTILITARA') && <option value="AUTOUTILITARA">AUTOUTILITARA</option>}
                     {!allCategories.includes('CAMION') && <option value="CAMION">CAMION</option>}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>

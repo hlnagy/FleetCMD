@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect, useMemo } from 'react';
 import {
@@ -1732,9 +1733,10 @@ export default function ComenziLucruPage() {
 
           {/* Vehicul Filter */}
           <div>
-            <select
+            <FilterableSelect
               value={vehiculFilter}
               onChange={(e) => setVehiculFilter(e.target.value)}
+              searchPlaceholder="Caută utilaj / nr. înmatriculare..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
             >
               <option value="TOATE">Utilaj: Toate Flota</option>
@@ -1747,14 +1749,15 @@ export default function ComenziLucruPage() {
                   </option>
                 );
               })}
-            </select>
+            </FilterableSelect>
           </div>
 
           {/* Mecanic Filter */}
           <div>
-            <select
+            <FilterableSelect
               value={mecanicFilter}
               onChange={(e) => setMecanicFilter(e.target.value)}
+              searchPlaceholder="Caută mecanic..."
               className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-sapphire-900 font-bold"
             >
               <option value="TOATE">Mecanic: Toți Mecanicii</option>
@@ -1763,7 +1766,7 @@ export default function ComenziLucruPage() {
                    {m.nume}
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
           </div>
 
           {/* Date Range Filter */}
@@ -2528,9 +2531,10 @@ export default function ComenziLucruPage() {
                         );
                       })
                     ) : (
-                      <select
+                      <FilterableSelect
                         value={effectiveStockWarehouse}
                         onChange={(e) => handleWarehouseFilterChange(e.target.value)}
+                        searchPlaceholder="Caută depozit..."
                         className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-morning-300 text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400"
                       >
                         {availableStockWarehouses.map((wh) => {
@@ -2541,7 +2545,7 @@ export default function ComenziLucruPage() {
                             </option>
                           );
                         })}
-                      </select>
+                      </FilterableSelect>
                     )}
                   </div>
 
@@ -2552,9 +2556,10 @@ export default function ComenziLucruPage() {
                         <Filter className="w-3 h-3 text-sapphire-600" />
                         <span>Categorie:</span>
                       </span>
-                      <select
+                      <FilterableSelect
                         value={effectiveStockCategory}
                         onChange={(e) => handleCategoryFilterChange(e.target.value)}
+                        searchPlaceholder="Caută categorie..."
                         className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-morning-300 text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-400 max-w-[220px]"
                       >
                         {availableStockCategories.map((cat) => {
@@ -2565,7 +2570,7 @@ export default function ComenziLucruPage() {
                             </option>
                           );
                         })}
-                      </select>
+                      </FilterableSelect>
                     </div>
 
                     <span className="px-2 py-0.5 rounded-md bg-white border border-morning-200 text-[11px] font-mono font-bold text-slate-600">
@@ -3375,9 +3380,10 @@ export default function ComenziLucruPage() {
               {elemPilonCost === 'PIESA_STOC' && (
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Selectează Articol din Stoc:</label>
-                  <select
+                  <FilterableSelect
                     value={elemArticolStocId}
                     onChange={(e) => handleSelectElemArticolStoc(e.target.value)}
+                    searchPlaceholder="Caută piesă, cod sau stoc..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
                     {stocuri.filter((st) => !isTireItem(st) && getItemFreeStock(st) > 0).map((st) => {
@@ -3389,7 +3395,7 @@ export default function ComenziLucruPage() {
                         </option>
                       );
                     })}
-                  </select>
+                  </FilterableSelect>
                 </div>
               )}
 
@@ -3710,11 +3716,12 @@ export default function ComenziLucruPage() {
                           <label className="text-[10px] text-sage-700 font-bold block mb-1">
                             Alege Cap Tractor din flotă (opțional):
                           </label>
-                          <select
+                          <FilterableSelect
                             onChange={(e) => {
                               const tr = vehicule.find((v) => v.id === e.target.value);
                               if (tr) setValoareContorExecutie(String(tr.valoareContorCurent || 0));
                             }}
+                            searchPlaceholder="Caută cap tractor..."
                             className="w-full bg-white border border-amber-300 rounded-xl p-2 font-bold text-sapphire-900 text-xs"
                           >
                             <option value="">-- Selectează Cap Tractor --</option>
@@ -3731,7 +3738,7 @@ export default function ComenziLucruPage() {
                                   </option>
                                 );
                               })}
-                          </select>
+                          </FilterableSelect>
                         </div>
                       </div>
                     )}

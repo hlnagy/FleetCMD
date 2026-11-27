@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -1840,11 +1841,12 @@ export default function FisaTehnicaPage() {
                           <label className="text-[10px] text-sage-700 font-bold block mb-1">
                             Selectează Cap Tractor care tractează semiremorca:
                           </label>
-                          <select
+                          <FilterableSelect
                             onChange={(e) => {
                               const tr = vehicule.find((v: any) => v.id === e.target.value);
                               if (tr) setCmdContor(tr.valoareContorCurent || 0);
                             }}
+                            searchPlaceholder="Caută cap tractor..."
                             className="w-full bg-white border border-amber-300 rounded-xl p-2 font-bold text-sapphire-900 text-xs"
                           >
                             <option value="">-- Alege Cap Tractor din flotă --</option>
@@ -1855,7 +1857,7 @@ export default function FisaTehnicaPage() {
                                    {tr.numarIntern} ({tr.numarInmatriculare}) - {tr.marca} • Contor Curent: {tr.valoareContorCurent} KM
                                 </option>
                               ))}
-                          </select>
+                          </FilterableSelect>
                         </div>
                       </div>
                     )}
@@ -2444,9 +2446,10 @@ export default function FisaTehnicaPage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Vehicul: *</label>
-                  <select
+                  <FilterableSelect
                     value={categorieEnum}
                     onChange={(e) => setCategorieEnum(e.target.value)}
+                    searchPlaceholder="Caută categorie vehicul..."
                     className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
                   >
                     <option value="CAP_TRACTOR">Cap Tractor</option>
@@ -2462,7 +2465,7 @@ export default function FisaTehnicaPage() {
                     <option value="AUTOTURISM">Autoturism</option>
                     <option value="AUTOUTILITARA">Autoutilitară</option>
                     <option value="NEDEFINIT">Nedefinit</option>
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
@@ -2603,9 +2606,10 @@ export default function FisaTehnicaPage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Vehicul: *</label>
-                  <select
+                  <FilterableSelect
                     value={categorieEnum}
                     onChange={(e) => setCategorieEnum(e.target.value)}
+                    searchPlaceholder="Caută categorie vehicul..."
                     className="w-full bg-morning-100 border border-morning-300 rounded-xl p-2.5 font-bold text-sapphire-900"
                   >
                     <option value="CAP_TRACTOR">Cap Tractor</option>
@@ -2621,7 +2625,7 @@ export default function FisaTehnicaPage() {
                     <option value="AUTOTURISM">Autoturism</option>
                     <option value="AUTOUTILITARA">Autoutilitară</option>
                     <option value="NEDEFINIT">Nedefinit</option>
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>

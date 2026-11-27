@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
+import FilterableSelect from '@/components/FilterableSelect';
 import {
   Search,
   X,
@@ -732,10 +733,11 @@ export default function AnalizaTcoTab({ flotaAnvelope, tcoData }: AnalizaTcoTabP
           </div>
 
           {/* Dimensiune */}
-          <select
+          <FilterableSelect
             value={selectedDimensiune}
             onChange={(e) => setSelectedDimensiune(e.target.value)}
-            aria-label="Filtrează după dimensiune"
+            title="Filtrează după dimensiune"
+            searchPlaceholder="Caută dimensiune (ex: 315/80)..."
             className="w-full px-3 py-2 rounded-xl bg-white border border-morning-300 text-xs font-semibold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500/30 focus:border-sapphire-500"
           >
             <option value="">Toate dimensiunile ({filterOptions.dimensiuni.length})</option>
@@ -744,13 +746,14 @@ export default function AnalizaTcoTab({ flotaAnvelope, tcoData }: AnalizaTcoTabP
                 {d.value} ({d.count} buc)
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
           {/* Categorie Vehicul */}
-          <select
+          <FilterableSelect
             value={selectedCategorie}
             onChange={(e) => setSelectedCategorie(e.target.value)}
-            aria-label="Filtrează după categorie vehicul"
+            title="Filtrează după categorie vehicul"
+            searchPlaceholder="Caută categorie vehicul..."
             className="w-full px-3 py-2 rounded-xl bg-white border border-morning-300 text-xs font-semibold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500/30 focus:border-sapphire-500"
           >
             <option value="">Toate categoriile ({filterOptions.categorii.length})</option>
@@ -759,13 +762,14 @@ export default function AnalizaTcoTab({ flotaAnvelope, tcoData }: AnalizaTcoTabP
                 {c.label} ({c.count} buc)
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
           {/* Furnizor */}
-          <select
+          <FilterableSelect
             value={selectedFurnizor}
             onChange={(e) => setSelectedFurnizor(e.target.value)}
-            aria-label="Filtrează după furnizor"
+            title="Filtrează după furnizor"
+            searchPlaceholder="Caută furnizor..."
             className="w-full px-3 py-2 rounded-xl bg-white border border-morning-300 text-xs font-semibold text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500/30 focus:border-sapphire-500"
           >
             <option value="">Toți furnizorii ({filterOptions.furnizori.length})</option>
@@ -774,7 +778,7 @@ export default function AnalizaTcoTab({ flotaAnvelope, tcoData }: AnalizaTcoTabP
                 {f.value} ({f.count} buc)
               </option>
             ))}
-          </select>
+          </FilterableSelect>
         </div>
       </div>
 

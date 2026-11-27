@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
+import FilterableSelect from '@/components/FilterableSelect';
 import {
   Search,
   X,
@@ -721,11 +722,12 @@ export default function IstoricPermutariTab({
             </div>
 
             <div className="md:col-span-4 relative">
-              <Truck className="w-3.5 h-3.5 text-sage-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
+              <Truck className="w-3.5 h-3.5 text-sage-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+              <FilterableSelect
                 value={vehicleFilter}
                 onChange={(e) => setVehicleFilter(e.target.value)}
-                aria-label="Filtrează după vehicul"
+                title="Filtrează după vehicul"
+                searchPlaceholder="Caută vehicul..."
                 className="w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-lg bg-morning-50 border border-morning-300 text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500/40 focus:border-sapphire-500"
               >
                 <option value="all">Toate vehiculele ({vehicleOptions.length})</option>
@@ -735,15 +737,16 @@ export default function IstoricPermutariTab({
                     {v.plate ? ` (${v.plate})` : ''} — {v.count}
                   </option>
                 ))}
-              </select>
+              </FilterableSelect>
             </div>
 
             <div className="md:col-span-3 relative">
-              <User className="w-3.5 h-3.5 text-sage-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
+              <User className="w-3.5 h-3.5 text-sage-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+              <FilterableSelect
                 value={operatorFilter}
                 onChange={(e) => setOperatorFilter(e.target.value)}
-                aria-label="Filtrează după operator sau sursă"
+                title="Filtrează după operator sau sursă"
+                searchPlaceholder="Caută operator..."
                 className="w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-lg bg-morning-50 border border-morning-300 text-sapphire-900 focus:outline-none focus:ring-2 focus:ring-sapphire-500/40 focus:border-sapphire-500"
               >
                 <option value="all">Toți operatorii ({operatorOptions.length})</option>
@@ -752,7 +755,7 @@ export default function IstoricPermutariTab({
                     {op.label} ({op.count})
                   </option>
                 ))}
-              </select>
+              </FilterableSelect>
             </div>
           </div>
 

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import FilterableSelect from '@/components/FilterableSelect';
 import {
   Search,
   X,
@@ -924,10 +925,11 @@ export function InventarAnvelopeTab({
             )}
           </div>
 
-          <select
+          <FilterableSelect
             value={vehiculFilter}
             onChange={(e) => setVehiculFilter(e.target.value)}
-            aria-label="Filtrează după vehicul"
+            title="Filtrează după vehicul"
+            searchPlaceholder="Caută vehicul..."
             className="xl:col-span-2 px-3 py-2 rounded-xl bg-morning-100 border border-morning-200 text-xs font-semibold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
           >
             <option value="">Toate vehiculele ({filterOptions.vehicule.length})</option>
@@ -937,12 +939,13 @@ export function InventarAnvelopeTab({
                 {v.plate ? `${v.code} (${v.plate})` : v.code}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
-          <select
+          <FilterableSelect
             value={marcaFilter}
             onChange={(e) => setMarcaFilter(e.target.value)}
-            aria-label="Filtrează după marcă"
+            title="Filtrează după marcă"
+            searchPlaceholder="Caută marcă..."
             className="xl:col-span-2 px-3 py-2 rounded-xl bg-morning-100 border border-morning-200 text-xs font-semibold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
           >
             <option value="">Toate mărcile ({filterOptions.marci.length})</option>
@@ -951,12 +954,13 @@ export function InventarAnvelopeTab({
                 {m}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
-          <select
+          <FilterableSelect
             value={dimensiuneFilter}
             onChange={(e) => setDimensiuneFilter(e.target.value)}
-            aria-label="Filtrează după dimensiune"
+            title="Filtrează după dimensiune"
+            searchPlaceholder="Caută dimensiune..."
             className="xl:col-span-2 px-3 py-2 rounded-xl bg-morning-100 border border-morning-200 text-xs font-semibold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
           >
             <option value="">Toate dimensiunile ({filterOptions.dimensiuni.length})</option>
@@ -965,13 +969,14 @@ export function InventarAnvelopeTab({
                 {d}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
           <div className="xl:col-span-2 flex items-center gap-2">
-            <select
+            <FilterableSelect
               value={furnizorFilter}
               onChange={(e) => setFurnizorFilter(e.target.value)}
-              aria-label="Filtrează după furnizor"
+              title="Filtrează după furnizor"
+              searchPlaceholder="Caută furnizor..."
               className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-morning-100 border border-morning-200 text-xs font-semibold text-sapphire-900 focus:outline-none focus:border-sapphire-400"
             >
               <option value="">Toți furnizorii ({filterOptions.furnizori.length})</option>
@@ -980,7 +985,7 @@ export function InventarAnvelopeTab({
                   {f}
                 </option>
               ))}
-            </select>
+            </FilterableSelect>
 
             {hasActiveFilters && (
               <button

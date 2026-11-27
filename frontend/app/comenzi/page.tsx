@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 import { getCategoryColor } from '@/lib/categoryColors';
 import { showConfirm, showError, showToast } from '@/lib/swal';
 import { useAuth } from '@/lib/AuthContext';
@@ -1114,9 +1115,10 @@ function ComenziAtelierContent() {
             />
           </div>
 
-          <select
+          <FilterableSelect
             value={quickVehiculId}
             onChange={(e) => setQuickVehiculId(e.target.value)}
+            searchPlaceholder="Caută vehicul..."
             className="md:w-52 bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-xs font-bold text-sapphire-900 cursor-pointer"
           >
             <option value="">General Atelier (Fără vehicul)</option>
@@ -1125,11 +1127,12 @@ function ComenziAtelierContent() {
                 {v.numarIntern} {v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? `(${v.numarInmatriculare})` : ''}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
-          <select
+          <FilterableSelect
             value={quickCategorie}
             onChange={(e) => setQuickCategorie(e.target.value as NotaCategorie)}
+            searchPlaceholder="Caută categorie..."
             className="md:w-40 bg-morning-100 border border-morning-200 rounded-xl px-2.5 py-2 text-xs font-bold text-sapphire-900 cursor-pointer"
           >
             {Object.entries(CATEGORY_META).map(([cod, cfg]) => (
@@ -1137,7 +1140,7 @@ function ComenziAtelierContent() {
                 {cfg.label}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
           <select
             value={quickPrioritate}
@@ -1296,9 +1299,10 @@ function ComenziAtelierContent() {
             )}
           </div>
 
-          <select
+          <FilterableSelect
             value={vehiculFilter}
             onChange={(e) => setVehiculFilter(e.target.value)}
+            searchPlaceholder="Caută vehicul..."
             className="bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
           >
             <option value="">Toate Vehiculele</option>
@@ -1308,11 +1312,12 @@ function ComenziAtelierContent() {
                 {v.numarIntern} {v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? `(${v.numarInmatriculare})` : ''}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
-          <select
+          <FilterableSelect
             value={mecanicFilter}
             onChange={(e) => setMecanicFilter(e.target.value)}
+            searchPlaceholder="Caută mecanic..."
             className="bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
           >
             <option value="">Toți Mecanicii</option>
@@ -1321,7 +1326,7 @@ function ComenziAtelierContent() {
                 {m.nume}
               </option>
             ))}
-          </select>
+          </FilterableSelect>
 
           <select
             value={sortBy}
@@ -1505,9 +1510,10 @@ function ComenziAtelierContent() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie:</label>
-                  <select
+                  <FilterableSelect
                     value={formCategorie}
                     onChange={(e) => setFormCategorie(e.target.value as NotaCategorie)}
+                    searchPlaceholder="Caută categorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {Object.entries(CATEGORY_META).map(([cod, cfg]) => (
@@ -1515,7 +1521,7 @@ function ComenziAtelierContent() {
                         {cfg.label}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
@@ -1551,9 +1557,10 @@ function ComenziAtelierContent() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Vehicul Asociat (Opțional):</label>
-                  <select
+                  <FilterableSelect
                     value={formVehiculId}
                     onChange={(e) => setFormVehiculId(e.target.value)}
+                    searchPlaceholder="Caută vehicul / categorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">General Atelier (Fără vehicul)</option>
@@ -1562,14 +1569,15 @@ function ComenziAtelierContent() {
                         {v.numarIntern} {v.numarInmatriculare && v.numarInmatriculare !== v.numarIntern ? `(${v.numarInmatriculare})` : ''} — {v.categorieEnum}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Mecanic Responsabil:</label>
-                  <select
+                  <FilterableSelect
                     value={formMecanic}
                     onChange={(e) => setFormMecanic(e.target.value)}
+                    searchPlaceholder="Caută mecanic..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     <option value="">Neatribuit</option>
@@ -1578,7 +1586,7 @@ function ComenziAtelierContent() {
                         {m.nume}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>

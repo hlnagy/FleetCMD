@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from '@/lib/api';
+import FilterableSelect from '@/components/FilterableSelect';
 import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3, DollarSign, Layers, Wrench, ShieldAlert, Search, Filter,
@@ -672,9 +673,10 @@ export default function RapoartePage() {
               {scopeMode === 'CATEGORIE' && (
                 <div>
                   <label className="text-xs font-bold text-sapphire-900 dark:text-slate-300">Selectați Categoria de Utilaje</label>
-                  <select
+                  <FilterableSelect
                     value={selectedCategorie}
                     onChange={(e) => setSelectedCategorie(e.target.value)}
+                    searchPlaceholder="Caută categorie utilaje..."
                     className="w-full mt-1 bg-white dark:bg-slate-950 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-sapphire-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
                   >
                     {categoriiDisponibile.map((cat) => (
@@ -682,36 +684,25 @@ export default function RapoartePage() {
                         {cat.replace(/_/g, ' ')}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               )}
 
               {scopeMode === 'VEHICUL' && (
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-sapphire-900 dark:text-slate-300">Selectați Vehiculul / Utilajul</label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-3 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Filtrează după nr. intern, nr. înmatriculare sau marcă..."
-                        value={searchVehiculFilter}
-                        onChange={(e) => setSearchVehiculFilter(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-950 border border-morning-300 dark:border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-sapphire-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
-                      />
-                    </div>
-                    <select
-                      value={selectedVehiculId}
-                      onChange={(e) => setSelectedVehiculId(e.target.value)}
-                      className="flex-1 bg-white dark:bg-slate-950 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-sapphire-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
-                    >
-                      {filteredVehiculeSelect.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.numarIntern || 'Fără nr.'} - {v.numarInmatriculare || 'Fără înmatr.'} ({v.marca} {v.model})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <FilterableSelect
+                    value={selectedVehiculId}
+                    onChange={(e) => setSelectedVehiculId(e.target.value)}
+                    searchPlaceholder="Caută după nr. intern, nr. înmatriculare sau marcă..."
+                    className="w-full bg-white dark:bg-slate-950 border border-morning-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-sapphire-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sapphire-500/20"
+                  >
+                    {filteredVehiculeSelect.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.numarIntern || 'Fără nr.'} - {v.numarInmatriculare || 'Fără înmatr.'} ({v.marca} {v.model})
+                      </option>
+                    ))}
+                  </FilterableSelect>
                 </div>
               )}
 

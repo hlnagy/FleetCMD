@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
+import FilterableSelect from '@/components/FilterableSelect';
 import FluidStatusMatrix from '@/components/FluidStatusMatrix';
 import { getCategoryColor } from '@/lib/categoryColors';
 import { showConfirm } from '@/lib/swal';
@@ -2105,16 +2106,17 @@ export default function FluidePage() {
                 )}
               </div>
 
-              <select
+              <FilterableSelect
                 value={filterFlotaTip}
                 onChange={(e) => setFilterFlotaTip(e.target.value)}
+                searchPlaceholder="Caută normă (ulei, filtru)..."
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
               >
                 <option value="TOATE">Normă: Toate Tipurile ({tipuriFluide.length})</option>
                 {tipuriFluide.map((tf) => (
                   <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
-              </select>
+              </FilterableSelect>
 
               <select
                 value={filterFlotaUnit}
@@ -2615,27 +2617,29 @@ export default function FluidePage() {
                 />
               </div>
 
-              <select
+              <FilterableSelect
                 value={filterIstoricVehicul}
                 onChange={(e) => { setFilterIstoricVehicul(e.target.value); setIstoricPage(1); }}
+                searchPlaceholder="Caută utilaj / vehicul..."
                 className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
               >
                 <option value="TOATE">Utilaj: Toate ({istoricVehiculeOptiuni.length})</option>
                 {istoricVehiculeOptiuni.map(([id, label]) => (
                   <option key={id} value={id}>{label}</option>
                 ))}
-              </select>
+              </FilterableSelect>
 
-              <select
+              <FilterableSelect
                 value={filterIstoricTip}
                 onChange={(e) => { setFilterIstoricTip(e.target.value); setIstoricPage(1); }}
+                searchPlaceholder="Caută normă..."
                 className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
               >
                 <option value="TOATE">Normă: Toate Tipurile</option>
                 {tipuriFluide.map((tf) => (
                   <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
-              </select>
+              </FilterableSelect>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-center">
@@ -2649,16 +2653,17 @@ export default function FluidePage() {
                 <option value="COMPLETARE">Doar Completări (Top-up)</option>
               </select>
 
-              <select
+              <FilterableSelect
                 value={filterIstoricMecanic}
                 onChange={(e) => { setFilterIstoricMecanic(e.target.value); setIstoricPage(1); }}
+                searchPlaceholder="Caută mecanic / sursă..."
                 className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
               >
                 <option value="TOATE">Mecanic / Sursă: Toți</option>
                 {istoricMecaniciOptiuni.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
-              </select>
+              </FilterableSelect>
 
               <input
                 type="date"
@@ -3005,40 +3010,43 @@ export default function FluidePage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 {/* Filtru Depozit */}
-                <select
+                <FilterableSelect
                   value={selectedDepozitStoc}
                   onChange={(e) => setSelectedDepozitStoc(e.target.value)}
+                  searchPlaceholder="Caută depozit..."
                   className="px-3 py-2 bg-white rounded-xl border border-morning-300 text-xs font-bold text-sapphire-900 shadow-2xs"
                 >
                   <option value="">Toate Depozitele</option>
                   {depoziteList.map((d: any) => (
                     <option key={d.id} value={d.id}>{d.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Categorie Fluid */}
-                <select
+                <FilterableSelect
                   value={selectedCategorieStoc}
                   onChange={(e) => setSelectedCategorieStoc(e.target.value)}
+                  searchPlaceholder="Caută categorie..."
                   className="px-3 py-2 bg-white rounded-xl border border-morning-300 text-xs font-bold text-sapphire-900 shadow-2xs"
                 >
                   <option value="">Toate Categoriile de Fluide</option>
                   {categoriiFluide.map((c: any) => (
                     <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Tip Lubrifiant / Normă */}
-                <select
+                <FilterableSelect
                   value={selectedTipFluidStoc}
                   onChange={(e) => setSelectedTipFluidStoc(e.target.value)}
+                  searchPlaceholder="Caută normă..."
                   className="px-3 py-2 bg-white rounded-xl border border-morning-300 text-xs font-bold text-sapphire-900 shadow-2xs"
                 >
                   <option value="">Toate Tipurile (Norme)</option>
                   {tipuriFluide.map((tf) => (
                     <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
 
                 {/* Filtru Stare Alertă */}
                 <select
@@ -4235,7 +4243,7 @@ export default function FluidePage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Normă (Fluid / Filtru):</label>
-                  <select
+                  <FilterableSelect
                     value={iesireTipLichid}
                     onChange={(e) => {
                       const nextTip = e.target.value;
@@ -4250,12 +4258,13 @@ export default function FluidePage() {
                         setIesireCantitate(5);
                       }
                     }}
+                    searchPlaceholder="Caută normă (ulei, filtru)..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {tipuriFluide.map((tf) => (
                       <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
 
                 <div>
@@ -4269,7 +4278,7 @@ export default function FluidePage() {
                       </span>
                     )}
                   </div>
-                  <select
+                  <FilterableSelect
                     disabled={faraDeducereStoc}
                     value={selectedArticolStocId}
                     onChange={(e) => {
@@ -4277,6 +4286,7 @@ export default function FluidePage() {
                       const item = stocSursaModal.find((s: any) => s.id === e.target.value);
                       if (item) setIesireMarca(item.marcaUlei || item.denumire);
                     }}
+                    searchPlaceholder="Caută articol din stoc..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold disabled:opacity-45"
                   >
                     {articoleStocFiltrate.length === 0 ? (
@@ -4293,7 +4303,7 @@ export default function FluidePage() {
                         );
                       })
                     )}
-                  </select>
+                  </FilterableSelect>
 
                   {articoleStocFiltrate.length === 0 && !faraDeducereStoc && (
                     <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-center justify-between gap-2">
@@ -4415,9 +4425,10 @@ export default function FluidePage() {
 
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Mecanic / Responsabil: *</label>
-                  <select
+                  <FilterableSelect
                     value={iesireMecanic}
                     onChange={(e) => setIesireMecanic(e.target.value)}
+                    searchPlaceholder="Caută mecanic..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {mecaniciList.map((m: any) => (
@@ -4425,7 +4436,7 @@ export default function FluidePage() {
                          {m.nume} ({m.functie || 'Mecanic'})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -4631,15 +4642,16 @@ export default function FluidePage() {
             <form onSubmit={handleSaveFluidSubcategorie} className="space-y-3 text-xs">
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">Selectează Categoria de Fluid: *</label>
-                <select
+                <FilterableSelect
                   value={targetCatForSubcat}
                   onChange={(e) => setTargetCatForSubcat(e.target.value)}
+                  searchPlaceholder="Caută categorie..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   {categoriiFluide.map((c) => (
                     <option key={c.id || c.nume} value={c.nume}>{c.nume}</option>
                   ))}
-                </select>
+                </FilterableSelect>
               </div>
 
               <div>
@@ -4667,9 +4679,10 @@ export default function FluidePage() {
                 <label className="text-sage-700 block mb-1 font-bold">
                   Tip Lubrifiant / Normă Asociată (legătură directă cu reviziile):
                 </label>
-                <select
+                <FilterableSelect
                   value={subcatTipLichid}
                   onChange={(e) => setSubcatTipLichid(e.target.value)}
+                  searchPlaceholder="Caută normă..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   <option value="">-- Fără asociere implicită (detecție automată) --</option>
@@ -4678,7 +4691,7 @@ export default function FluidePage() {
                       {tf.nume} ({tf.cod})
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
                 <p className="text-[11px] text-sage-500 mt-1">
                   Orice articol importat din e-Factura în acest subtip va moșteni automat norma selectată.
                 </p>
@@ -4945,7 +4958,7 @@ export default function FluidePage() {
                   <label className="text-xs font-bold text-sapphire-900 block mb-1.5">
                     Selectează Tipul de Fluid / Filtru / Consumabil:
                   </label>
-                  <select
+                  <FilterableSelect
                     value={modalNormaTipLichid}
                     onChange={(e) => {
                       const newTip = e.target.value;
@@ -4964,6 +4977,7 @@ export default function FluidePage() {
                         setModalNormaTrackingMode(cat?.areContorDualMth ? 'MTH' : (isCatKmLocal ? 'KM' : 'MTH'));
                       }
                     }}
+                    searchPlaceholder="Caută tip fluid / filtru..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-xs text-sapphire-900 font-bold focus:outline-none focus:border-sapphire-500"
                   >
                     {tipuriFluide.map((f) => (
@@ -4971,7 +4985,7 @@ export default function FluidePage() {
                         {f.nume} ({f.cod})
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                   {fluidConfig?.descriere && (
                     <p className="text-[11px] text-sage-500 mt-1 italic">
                       {fluidConfig.descriere}
@@ -5348,7 +5362,7 @@ export default function FluidePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc:</label>
-                  <select
+                  <FilterableSelect
                     value={stockCategorieValue}
                     onChange={(e) => {
                       const nextCat = e.target.value;
@@ -5363,6 +5377,7 @@ export default function FluidePage() {
                         setStockTipValue('');
                       }
                     }}
+                    searchPlaceholder="Caută categorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
                     {!allCatOptions.some((c: any) => c.nume === stockCategorieValue) && stockCategorieValue && (
@@ -5373,11 +5388,11 @@ export default function FluidePage() {
                         {c.nume}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Subcategorie:</label>
-                  <select
+                  <FilterableSelect
                     value={stockSubcategorieValue}
                     onChange={(e) => {
                       const nextSub = e.target.value;
@@ -5385,6 +5400,7 @@ export default function FluidePage() {
                       const subObj = subcatOptionsModal.find((sc: any) => sc.nume === nextSub);
                       if (subObj?.tipLichid) setStockTipValue(subObj.tipLichid);
                     }}
+                    searchPlaceholder="Caută subcategorie..."
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
                   >
                     <option value="">-- Fără subcategorie --</option>
@@ -5397,7 +5413,7 @@ export default function FluidePage() {
                         {sc.nume}
                       </option>
                     ))}
-                  </select>
+                  </FilterableSelect>
                 </div>
               </div>
 
@@ -5405,9 +5421,10 @@ export default function FluidePage() {
                 <label className="text-sage-700 block mb-1 font-bold">
                   Normă Întreținere (Fluid / Filtru):
                 </label>
-                <select
+                <FilterableSelect
                   value={stockTipValue}
                   onChange={(e) => setStockTipValue(e.target.value)}
+                  searchPlaceholder="Caută normă..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
                   <option value="">-- Fără asociere normă --</option>
@@ -5416,7 +5433,7 @@ export default function FluidePage() {
                       {tf.nume} ({tf.cod})
                     </option>
                   ))}
-                </select>
+                </FilterableSelect>
                 <p className="text-[11px] text-sage-500 mt-1">
                   La eliberarea din depozit sau pe Comandă de Lucru, acest articol va contoriza automat pentru norma aleasă.
                 </p>

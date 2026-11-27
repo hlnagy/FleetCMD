@@ -8,6 +8,7 @@ import {
   AlertCircle, RefreshCw, Layers, Plus, ArrowRight, ShieldCheck
 } from 'lucide-react';
 import { showConfirm } from '@/lib/swal';
+import FilterableSelect from '@/components/FilterableSelect';
 
 export default function AnsambluriPage() {
   const [vehicule, setVehicule] = useState<any[]>([]);
@@ -184,9 +185,10 @@ export default function AnsambluriPage() {
             {/* SELECTOR CAP TRACTOR */}
             <div className="md:col-span-2 space-y-1">
               <label className="text-sage-700 font-bold block">1. Selectează Cap Tractor: *</label>
-              <select
+              <FilterableSelect
                 value={selectedCapTractorId}
                 onChange={(e) => setSelectedCapTractorId(e.target.value)}
+                searchPlaceholder="Caută cap tractor (nr. intern, înmatriculare)..."
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-extrabold text-xs focus:outline-none"
               >
                 {capTractoare.length === 0 && <option value="">Nu există capete tractoare</option>}
@@ -198,7 +200,7 @@ export default function AnsambluriPage() {
                     </option>
                   );
                 })}
-              </select>
+              </FilterableSelect>
             </div>
 
             {/* SIMBOL CUPLARE */}
@@ -211,9 +213,10 @@ export default function AnsambluriPage() {
             {/* SELECTOR SEMIREMORCĂ */}
             <div className="md:col-span-2 space-y-1">
               <label className="text-sage-700 font-bold block">2. Selectează Semiremorcă: *</label>
-              <select
+              <FilterableSelect
                 value={selectedSemiremorcaId}
                 onChange={(e) => setSelectedSemiremorcaId(e.target.value)}
+                searchPlaceholder="Caută semiremorcă (nr. intern, înmatriculare)..."
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-extrabold text-xs focus:outline-none"
               >
                 {semiremorci.length === 0 && <option value="">Nu există semiremorci</option>}
@@ -225,7 +228,7 @@ export default function AnsambluriPage() {
                     </option>
                   );
                 })}
-              </select>
+              </FilterableSelect>
             </div>
           </div>
 

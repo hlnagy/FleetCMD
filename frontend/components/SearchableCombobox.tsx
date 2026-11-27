@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 
 export interface ComboboxOption {
@@ -56,6 +57,7 @@ export default function SearchableCombobox({
   className = '',
 }: SearchableComboboxProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,6 +65,56 @@ export default function SearchableCombobox({
   const [query, setQuery] = useState('');
   const [onlyPinned, setOnlyPinned] = useState(false);
   const [highlightedIdx, setHighlightedIdx] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const [popoverPos, setPopoverPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    useDropUp: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const updatePopoverPos = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    const width = Math.min(Math.max(rect.width, 260), vw - margin * 2);
+    let left = rect.left;
+    if (left + width > vw - margin) {
+      left = Math.max(margin, rect.right - width);
+    }
+    const spaceBelow = vh - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    const useDropUp = dropUp || (spaceBelow < 240 && spaceAbove > spaceBelow);
+    setPopoverPos({
+      top: useDropUp ? rect.top - 6 : rect.bottom + 6,
+      left,
+      width,
+      useDropUp,
+    });
+  }, [dropUp]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePopoverPos();
+    const handleReposition = (e?: Event) => {
+      if (e?.type === 'scroll' && popoverRef.current && e.target instanceof Node && popoverRef.current.contains(e.target)) {
+        return;
+      }
+      updatePopoverPos();
+    };
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [isOpen, updatePopoverPos]);
 
   const selectedOption = useMemo(
     () => options.find((opt) => opt.value === value) || null,
@@ -98,10 +150,15 @@ export default function SearchableCombobox({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setQuery('');
+      const target = e.target as Node;
+      if (
+        containerRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return;
       }
+      setIsOpen(false);
+      setQuery('');
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -261,11 +318,20 @@ export default function SearchableCombobox({
         </button>
       </div>
 
-      {isOpen && (
+      {mounted &&
+        isOpen &&
+        popoverPos &&
+        createPortal(
         <div
-          className={`absolute z-50 left-0 right-0 bg-white border border-sapphire-300 rounded-xl shadow-2xl overflow-hidden ${
-            dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-          }`}
+          ref={popoverRef}
+          style={{
+            position: 'fixed',
+            top: popoverPos.useDropUp ? undefined : popoverPos.top,
+            bottom: popoverPos.useDropUp ? window.innerHeight - popoverPos.top : undefined,
+            left: popoverPos.left,
+            width: popoverPos.width,
+          }}
+          className="z-[9999] bg-white border border-sapphire-300 rounded-xl shadow-2xl overflow-hidden"
         >
           {/* Quick filter bar */}
           <div className="px-2.5 py-1.5 bg-morning-100 border-b border-morning-200 flex items-center justify-between gap-2 text-[10px]">
@@ -351,7 +417,8 @@ export default function SearchableCombobox({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
