@@ -468,6 +468,11 @@ export function detectTipLichidFromStockText(item: any): string {
     return '';
   }
 
+  // Produse auxiliare / non-ulei care nu au normă de schimb (lichid parbriz, vaselină, echipamente protecție, spray-uri)
+  if (/\b(parbriz|spalare|vaselin|unsoare|grease|manus[ia]|cizm|bocanc|salopet|echipament|spray|degresant|curatitor|vopsea|diluant)\b/i.test(txt)) {
+    return '';
+  }
+
   if (/adblue|uree/i.test(txt)) return 'ADBLUE';
   if (/antigel|coolant|racire|g12|g11/i.test(txt)) {
     return /g11|albastru|blue/i.test(txt) ? 'ANTIGEL_G11' : 'ANTIGEL_G12';
@@ -487,7 +492,10 @@ export function detectTipLichidFromStockText(item: any): string {
   if (/cutie.*vitez/i.test(txt)) return 'ULEI_CUTIE_VITEZA';
   if (/diferential/i.test(txt)) return 'ULEI_DIFERENTIAL';
   if (/turism|5w[- ]?30|5w[- ]?40|0w[- ]?30|0w[- ]?20/i.test(txt)) return 'ULEI_MOTOR_TURISME';
-  return 'ULEI_MOTOR_15W40';
+  if (/15w[- ]?40|10w[- ]?40|delvac|urania|rimula|rubia|ulei\s+motor|engine\s+oil|lubrifian/i.test(txt)) {
+    return 'ULEI_MOTOR_15W40';
+  }
+  return '';
 }
 
 export function resolveEffectiveTipLichid(

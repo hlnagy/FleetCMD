@@ -865,13 +865,30 @@ function StocuriGarantiiContent() {
     if (!inlineCatEdit || !inlineCatEdit.categorie.trim()) return;
     setInlineCatEdit((prev) => (prev ? { ...prev, saving: true } : prev));
     try {
+      const nextCat = inlineCatEdit.categorie.trim();
+      const nextSub = inlineCatEdit.subcategorie.trim() || null;
+      const nextCatObj = categorii.find((c: any) => c.nume === nextCat);
+      const nextSubObj = (nextCatObj?.subcategorii || []).find((sc: any) => sc.nume === nextSub);
+      const nextTrackable = isNormTrackableCategoryOrItem(
+        nextCat,
+        nextCatObj?.esteFluid,
+        nextSubObj?.tipLichid || null,
+        null,
+        null,
+      );
+      const bodyPayload: Record<string, any> = {
+        categorie: nextCat,
+        subcategorie: nextSub,
+      };
+      if (nextSubObj?.tipLichid) {
+        bodyPayload.tipLichid = nextSubObj.tipLichid;
+      } else if (!nextTrackable) {
+        bodyPayload.tipLichid = null;
+      }
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${inlineCatEdit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          categorie: inlineCatEdit.categorie.trim(),
-          subcategorie: inlineCatEdit.subcategorie.trim() || null,
-        }),
+        body: JSON.stringify(bodyPayload),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -4047,7 +4064,23 @@ function StocuriGarantiiContent() {
                 categorieVal: editingArticol.categorie || '',
                 subcategorieVal: editingArticol.subcategorie || '',
                 onChangeCat: (newCat) =>
-                  setEditingArticol((prev: any) => (prev ? { ...prev, categorie: newCat, subcategorie: '' } : prev)),
+                  setEditingArticol((prev: any) => {
+                    if (!prev) return prev;
+                    const nextCatObj = categorii.find((c: any) => c.nume === newCat);
+                    const stillTrackable = isNormTrackableCategoryOrItem(
+                      newCat,
+                      nextCatObj?.esteFluid,
+                      null,
+                      null,
+                      prev.denumire,
+                    );
+                    return {
+                      ...prev,
+                      categorie: newCat,
+                      subcategorie: '',
+                      tipLichid: stillTrackable ? prev.tipLichid : '',
+                    };
+                  }),
                 onChangeSubcat: (newSub) =>
                   setEditingArticol((prev: any) => {
                     if (!prev) return prev;

@@ -82,21 +82,31 @@ interface CategoryResolution {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
-function findDynamicSubcat(desc: string, subcats: any[]): string {
+const GENERIC_SUBCAT_MODIFIERS = new Set([
+  'ulei', 'oil', 'filtru', 'filter', 'lichid', 'fluid', 'piesa', 'piese', 'alte',
+  'pentru', 'si', '&', 'cu', 'de', 'la', 'in', 'pt', 'buc', 'ltr', 'litri',
+  'iarna', 'vara', 'mare', 'mica', 'mic', 'nou', 'vechi', 'fata', 'spate',
+  'stanga', 'dreapta', 'alb', 'negru', 'rosu', 'albastru', 'verde', 'galben', 'gri',
+  'auto', 'manual', 'set', 'kit', 'tip', 'pro', 'max', 'mini', 'super', 'extra', 'flex', 'therm',
+]);
+
+const NON_FLUID_ITEM_REGEX =
+  /\b(manus[ia]|cizm[ae]|bocanc|salopet[ae]|casc[ae]|ochelar|vest[ae]|geac[ae]|pantalon|tricou|echipament|protectie|surub|piulit|saib[ae]|colier|coliere|bec|becuri|sigurant|cablu|furtun|cure[al]|rulment|garnitur|simering|pomp[ae]|senzor|electrod|disc|panz[ae]|perie|spray|degresant|degripant|curatitor|vopsea|grund|diluant|spuma|sapun|lavet|carpa|banda|scotch|silicon|adeziv)\b/i;
+
+function findDynamicSubcat(desc: string, subcats: any[], strictCrossCategory = false): string {
   if (!desc || !Array.isArray(subcats) || subcats.length === 0) return '';
   const cleanDesc = desc.toLowerCase();
-  const stopWords = new Set(['ulei', 'oil', 'filtru', 'filter', 'pentru', 'si', '&', 'cu', 'de', 'la', 'in', 'pt', 'buc', 'ltr', 'litri']);
 
   // 1. Direct core name match (ex: dacă descrierea conține nucleul numelui subcategoriei)
   for (const sub of subcats) {
     const sName = (sub.nume || '').toLowerCase();
     const coreName = sName.replace(/^(ulei|filtru|lichid)\s+/i, '').replace(/\(.*?\)/g, '').trim();
-    if (coreName.length >= 3 && cleanDesc.includes(coreName)) {
+    if (coreName.length >= 4 && !GENERIC_SUBCAT_MODIFIERS.has(coreName) && cleanDesc.includes(coreName)) {
       return sub.nume;
     }
   }
 
-  // 2. Potrivire pe bază de suprapunere de cuvinte cheie semnificative
+  // 2. Potrivire pe bază de suprapunere de cuvinte cheie semnificative (fără modificatori generici gen 'iarna', 'vara')
   let bestSub = '';
   let highestScore = 0;
 
@@ -105,13 +115,24 @@ function findDynamicSubcat(desc: string, subcats: any[]): string {
     const keywords = sName
       .replace(/[^a-z0-9]/gi, ' ')
       .split(/\s+/)
-      .filter(w => w.length >= 3 && !stopWords.has(w));
+      .filter((w) => w.length >= 3 && !GENERIC_SUBCAT_MODIFIERS.has(w));
+
+    if (keywords.length === 0) continue;
 
     let score = 0;
+    let matchedCount = 0;
     for (const kw of keywords) {
-      if (cleanDesc.includes(kw)) {
+      const kwRegex = new RegExp(`(?:^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
+      if (kwRegex.test(cleanDesc)) {
         score += kw.length;
+        matchedCount++;
       }
+    }
+
+    // La căutarea între categorii diferite (step 5), dacă subcategoria are >= 2 cuvinte cheie,
+    // cerem potrivirea a cel puțin 2 cuvinte (sau >= 60% din cuvintele ei cheie) pentru a evita potriviri false.
+    if (strictCrossCategory && keywords.length >= 2 && matchedCount < 2) {
+      continue;
     }
 
     if (score > highestScore) {
@@ -120,7 +141,7 @@ function findDynamicSubcat(desc: string, subcats: any[]): string {
     }
   }
 
-  return highestScore >= 3 ? bestSub : '';
+  return highestScore >= 4 ? bestSub : '';
 }
 
 function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []): CategoryResolution {
@@ -232,12 +253,18 @@ function resolveCategoryAndSubcategory(descriere?: string, categorii: any[] = []
     else if (/perna|bucsa|bucse/i.test(desc)) matchedSub = subcats.find(s => /buc|pern/i.test(s.nume))?.nume || '';
     else matchedSub = subcats[0]?.nume || '';
   } else {
-    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE (excluzând 'Alte' și 'Anvelope' pentru a evita potriviri false)
+    // 5. CĂUTARE DINAMICĂ ÎN TOATE CELELALTE CATEGORII DIN BAZA DE DATE
+    // Excludem 'Alte', 'Anvelope' și protejăm categoriile de fluide împotriva articolelor non-fluid (ex: mănuși iarnă -> lichid parbriz iarnă)
+    const isExplicitNonFluid = NON_FLUID_ITEM_REGEX.test(desc);
+    const hasFluidIndicator = /\b(lichid|parbriz|spalare|ulei|antigel|adblue|vaselin|unsoare|grease|fluid|lubrifiant|racire|solutie)\b/i.test(desc);
+
     for (const c of categorii) {
       const cLow = (c.nume || '').trim().toLowerCase();
       if (cLow === 'alte' || cLow.includes('anvelop')) continue;
+      const isCatFluid = c.esteFluid === true || /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|parbriz/i.test(cLow);
+      if (isCatFluid && (isExplicitNonFluid || !hasFluidIndicator)) continue;
       const cSubcats = c.subcategorii || [];
-      const dynSub = findDynamicSubcat(desc, cSubcats);
+      const dynSub = findDynamicSubcat(desc, cSubcats, true);
       if (dynSub) {
         matchedCat = c;
         matchedSub = dynSub;

@@ -113,10 +113,13 @@ export default function FluidePage() {
   const [selectedTipFluidStoc, setSelectedTipFluidStoc] = useState('');
   const [selectedStatusStoc, setSelectedStatusStoc] = useState<'TOATE' | 'CRITIC' | 'OPTIM'>('TOATE');
 
-  // Modal Asociere Tip Normă pe Articol Stoc
+  // Modal Asociere Tip Normă & Reclasificare Articol Stoc
   const [editingStockTipArticol, setEditingStockTipArticol] = useState<any>(null);
   const [stockTipValue, setStockTipValue] = useState<string>('');
   const [stockMarcaValue, setStockMarcaValue] = useState<string>('');
+  const [stockCategorieValue, setStockCategorieValue] = useState<string>('');
+  const [stockSubcategorieValue, setStockSubcategorieValue] = useState<string>('');
+  const [stockUmValue, setStockUmValue] = useState<string>('L');
   const [isSavingStockTip, setIsSavingStockTip] = useState<boolean>(false);
 
   // Modal Nomenclator Tip Fluid Nou / Editare
@@ -351,7 +354,7 @@ export default function FluidePage() {
           const den = (s.denumire || '').toLowerCase();
           const sub = (s.subcategorie || '').toLowerCase();
           const isFilter = cat.includes('filtr') || den.includes('filtr') || cat === 'filtre';
-          const isNonFluid = /\b(bec|pozitie|cireasa|vopsea|kober|diluant|grund|spuma|curatitor|spray|degresant|sapun|senzor|vas expansiune|furtun|pompa|taxa)\b/i.test(`${cat} ${den} ${sub}`);
+          const isNonFluid = /\b(bec|pozitie|cireasa|vopsea|kober|diluant|grund|spuma|curatitor|spray|degresant|sapun|senzor|vas expansiune|furtun|pompa|taxa|manus[ia]|cizm[ae]|bocanc|salopet[ae]|echipament)\b/i.test(`${cat} ${den} ${sub}`);
           if (isFilter || isNonFluid) return false;
 
           const isFluid =
@@ -670,12 +673,15 @@ export default function FluidePage() {
     }
   };
 
-  // Handlers Asociere Tip Normă pe Articol Stoc
+  // Handlers Asociere Tip Normă & Reclasificare Articol Stoc
   const handleOpenEditStockTip = (art: any) => {
     const resolved = resolveEffectiveTipLichid(art, subcatTipMap);
     setEditingStockTipArticol(art);
     setStockTipValue(art.tipLichid || resolved.cod || '');
     setStockMarcaValue(art.marcaUlei || '');
+    setStockCategorieValue(art.categorie || '');
+    setStockSubcategorieValue(art.subcategorie || '');
+    setStockUmValue(art.unitateMasura || 'L');
   };
 
   const handleSaveStockTip = async (e: React.FormEvent) => {
@@ -683,10 +689,15 @@ export default function FluidePage() {
     if (!editingStockTipArticol) return;
     setIsSavingStockTip(true);
     try {
+      const catClean = stockCategorieValue.trim() || editingStockTipArticol.categorie;
+      const subClean = stockSubcategorieValue.trim() || null;
       const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingStockTipArticol.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          categorie: catClean,
+          subcategorie: subClean,
+          unitateMasura: stockUmValue.trim() || editingStockTipArticol.unitateMasura || 'L',
           tipLichid: stockTipValue.trim() || null,
           marcaUlei: stockMarcaValue.trim() || null,
         }),
@@ -699,6 +710,46 @@ export default function FluidePage() {
       }
     } catch {
       alert('Eroare de rețea la actualizarea articolului.');
+    } finally {
+      setIsSavingStockTip(false);
+    }
+  };
+
+  const handleRemoveArticolFromFluids = async () => {
+    if (!editingStockTipArticol) return;
+    const confirmed = await showConfirm(
+      'Scoți articolul din Gestiunea Fluidelor?',
+      `„${editingStockTipArticol.denumire}” va fi mutat în categoria Alte ▸ Alte piese, fără normă de fluid asociată (iar unitatea de măsură va fi trecută pe buc dacă era L). Articolul rămâne în Stocuri Generale.`,
+      'Mută în Alte (scoate din Fluide)',
+      'Anulează',
+      'warning',
+    );
+    if (!confirmed) return;
+
+    setIsSavingStockTip(true);
+    try {
+      const nextUm = /^(l|litri|litru)$/i.test(String(editingStockTipArticol.unitateMasura || '').trim())
+        ? 'buc'
+        : editingStockTipArticol.unitateMasura || 'buc';
+      const res = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri/${editingStockTipArticol.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categorie: 'Alte',
+          subcategorie: 'Alte piese',
+          tipLichid: null,
+          marcaUlei: null,
+          unitateMasura: nextUm,
+        }),
+      });
+      if (res.ok) {
+        setEditingStockTipArticol(null);
+        await fetchInitialData();
+      } else {
+        alert('Nu s-a putut muta articolul din Fluide.');
+      }
+    } catch {
+      alert('Eroare de rețea la mutarea articolului.');
     } finally {
       setIsSavingStockTip(false);
     }
@@ -3063,20 +3114,25 @@ export default function FluidePage() {
                               const tipLabel = effTip.cod ? getTipFluidLabel(effTip.cod, tipuriFluide) : null;
                               return (
                                 <div className="space-y-1">
-                                  <div className="flex flex-wrap items-center gap-1">
-                                    <span className="px-2 py-0.5 rounded-lg bg-sapphire-100 text-sapphire-900 font-bold text-[10px]">
-                                      {s.categorie}
-                                    </span>
-                                    {s.subcategorie && (
-                                      <span className="text-[11px] text-sage-600 font-medium">
-                                        ▸ {s.subcategorie}
-                                      </span>
-                                    )}
-                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => handleOpenEditStockTip(s)}
-                                    title="Click pentru a asocia acest articol cu un Tip Lubrifiant din Norme"
+                                    title="Click pentru a edita categoria, subcategoria sau a scoate articolul din Fluide"
+                                    className="flex flex-wrap items-center gap-1 text-left group cursor-pointer"
+                                  >
+                                    <span className="px-2 py-0.5 rounded-lg bg-sapphire-100 text-sapphire-900 font-bold text-[10px] group-hover:bg-sapphire-200 transition">
+                                      {s.categorie}
+                                    </span>
+                                    {s.subcategorie && (
+                                      <span className="text-[11px] text-sage-600 font-medium group-hover:text-sapphire-800 transition">
+                                        ▸ {s.subcategorie}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditStockTip(s)}
+                                    title="Click pentru a asocia normă, schimba categoria sau scoate articolul din Fluide"
                                     className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition cursor-pointer border ${
                                       effTip.source === 'ARTICOL'
                                         ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
@@ -5255,20 +5311,27 @@ export default function FluidePage() {
         );
       })()}
       {/* ========================================================================= */}
-      {/* MODAL 7: ASOCIERE TIP LUBRIFIANT / NORMĂ PE ARTICOL DIN STOC */}
+      {/* MODAL 7: CLASIFICARE ARTICOL & ASOCIERE NORMĂ PE ARTICOL DIN STOC */}
       {/* ========================================================================= */}
-      {editingStockTipArticol && (
+      {editingStockTipArticol && (() => {
+        const allCatOptions = (toateCategoriileStoc.length > 0 ? toateCategoriileStoc : categoriiFluide).filter(
+          (c: any) => !/anvelop/i.test(c?.nume || ''),
+        );
+        const selectedCatObjModal = allCatOptions.find((c: any) => c.nume === stockCategorieValue);
+        const subcatOptionsModal = selectedCatObjModal?.subcategorii || [];
+
+        return (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-md space-y-4 shadow-2xl border border-morning-200">
+          <div className="pleasant-card bg-white p-6 rounded-2xl w-full max-w-lg space-y-4 shadow-2xl border border-morning-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
                   <Link2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-sapphire-900">Asociere Tip Lubrifiant &amp; Normă</h3>
+                  <h3 className="text-base font-bold text-sapphire-900">Clasificare Articol &amp; Normă</h3>
                   <p className="text-[11px] text-sage-600 font-medium truncate max-w-xs">
-                    {editingStockTipArticol.denumire}
+                    {editingStockTipArticol.denumire} · <span className="font-mono">{editingStockTipArticol.codArticol}</span>
                   </p>
                 </div>
               </div>
@@ -5282,30 +5345,72 @@ export default function FluidePage() {
             </div>
 
             <form onSubmit={handleSaveStockTip} className="space-y-3.5 text-xs">
-              <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 space-y-0.5 text-[11px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <span className="text-sage-600">Categorie:</span>{' '}
-                  <strong className="text-sapphire-900">{editingStockTipArticol.categorie}</strong>
-                  {editingStockTipArticol.subcategorie && (
-                    <span className="text-sage-700"> ▸ {editingStockTipArticol.subcategorie}</span>
-                  )}
+                  <label className="text-sage-700 block mb-1 font-bold">Categorie Stoc:</label>
+                  <select
+                    value={stockCategorieValue}
+                    onChange={(e) => {
+                      const nextCat = e.target.value;
+                      setStockCategorieValue(nextCat);
+                      const nextCatObj = allCatOptions.find((c: any) => c.nume === nextCat);
+                      const firstSub = nextCatObj?.subcategorii?.[0]?.nume || '';
+                      setStockSubcategorieValue(firstSub);
+                      const isFluidOrFilter =
+                        nextCatObj?.esteFluid === true ||
+                        /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|filtr/i.test(nextCat);
+                      if (!isFluidOrFilter) {
+                        setStockTipValue('');
+                      }
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    {!allCatOptions.some((c: any) => c.nume === stockCategorieValue) && stockCategorieValue && (
+                      <option value={stockCategorieValue}>{stockCategorieValue}</option>
+                    )}
+                    {allCatOptions.map((c: any) => (
+                      <option key={c.id || c.nume} value={c.nume}>
+                        {c.nume}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <span className="text-sage-600">Cod:</span>{' '}
-                  <strong className="font-mono text-sapphire-900">{editingStockTipArticol.codArticol}</strong>
+                  <label className="text-sage-700 block mb-1 font-bold">Subcategorie:</label>
+                  <select
+                    value={stockSubcategorieValue}
+                    onChange={(e) => {
+                      const nextSub = e.target.value;
+                      setStockSubcategorieValue(nextSub);
+                      const subObj = subcatOptionsModal.find((sc: any) => sc.nume === nextSub);
+                      if (subObj?.tipLichid) setStockTipValue(subObj.tipLichid);
+                    }}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
+                  >
+                    <option value="">-- Fără subcategorie --</option>
+                    {stockSubcategorieValue &&
+                      !subcatOptionsModal.some((sc: any) => sc.nume === stockSubcategorieValue) && (
+                        <option value={stockSubcategorieValue}>{stockSubcategorieValue}</option>
+                      )}
+                    {subcatOptionsModal.map((sc: any) => (
+                      <option key={sc.id || sc.nume} value={sc.nume}>
+                        {sc.nume}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
               <div>
                 <label className="text-sage-700 block mb-1 font-bold">
-                  Tip Lubrifiant / Normă Întreținere:
+                  Normă Întreținere (Fluid / Filtru):
                 </label>
                 <select
                   value={stockTipValue}
                   onChange={(e) => setStockTipValue(e.target.value)}
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 >
-                  <option value="">-- Fără asociere directă (moștenește subcategoria / auto) --</option>
+                  <option value="">-- Fără asociere normă --</option>
                   {tipuriFluide.map((tf) => (
                     <option key={tf.cod} value={tf.cod}>
                       {tf.nume} ({tf.cod})
@@ -5313,40 +5418,68 @@ export default function FluidePage() {
                   ))}
                 </select>
                 <p className="text-[11px] text-sage-500 mt-1">
-                  La eliberarea din depozit sau pe Deviz de Lucru, acest ulei va contoriza automat pentru norma aleasă.
+                  La eliberarea din depozit sau pe Comandă de Lucru, acest articol va contoriza automat pentru norma aleasă.
                 </p>
               </div>
 
-              <div>
-                <label className="text-sage-700 block mb-1 font-bold">Marcă / Brand (opțional):</label>
-                <input
-                  value={stockMarcaValue}
-                  onChange={(e) => setStockMarcaValue(e.target.value)}
-                  placeholder="ex: Mobil Delvac, Castrol, Liebherr, Ravenol"
-                  className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Marcă / Brand (opțional):</label>
+                  <input
+                    value={stockMarcaValue}
+                    onChange={(e) => setStockMarcaValue(e.target.value)}
+                    placeholder="ex: Mobil Delvac, Castrol, Liebherr"
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="text-sage-700 block mb-1 font-bold">Unitate de Măsură:</label>
+                  <select
+                    value={stockUmValue}
+                    onChange={(e) => setStockUmValue(e.target.value)}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                  >
+                    <option value="L">L (Litri)</option>
+                    <option value="buc">buc (Bucăți)</option>
+                    <option value="kg">kg (Kilograme)</option>
+                    <option value="set">set (Set)</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex justify-end space-x-2.5 pt-3 border-t border-morning-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-morning-200">
                 <button
                   type="button"
-                  onClick={() => setEditingStockTipArticol(null)}
-                  className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold cursor-pointer"
-                >
-                  Anulează
-                </button>
-                <button
-                  type="submit"
                   disabled={isSavingStockTip}
-                  className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                  onClick={handleRemoveArticolFromFluids}
+                  className="px-3 py-2 rounded-xl bg-roseash-50 hover:bg-roseash-100 text-terracotta-700 font-bold text-xs border border-roseash-200 transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+                  title="Mută articolul în categoria Alte ▸ Alte piese și îl scoate din Gestiunea Fluidelor"
                 >
-                  {isSavingStockTip ? 'Se salvează...' : 'Salvează Asocierea'}
+                  <Trash2 className="w-3.5 h-3.5 text-terracotta-600" />
+                  <span>Scoate din Fluide</span>
                 </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingStockTipArticol(null)}
+                    className="px-4 py-2 rounded-xl bg-morning-200 text-slate-700 font-semibold cursor-pointer"
+                  >
+                    Anulează
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingStockTip}
+                    className="px-5 py-2 rounded-xl bg-sapphire-600 hover:bg-sapphire-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSavingStockTip ? 'Se salvează...' : 'Salvează'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MODAL 8: CREARE / EDITARE TIP LUBRIFIANT (NOMENCLATOR MASTER) */}

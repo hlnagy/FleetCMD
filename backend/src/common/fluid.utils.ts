@@ -289,7 +289,7 @@ export function resolveFluidRuleCounterConfig(vehicul: any, cfg: any): {
 }
 
 const NON_FLUID_PATTERN =
-  /\b(filtru|filter|senzor|vas\s+expansiune|furtun|pompa|joja|buson|capac|garnitur|oring|o-ring|simering|bec|pozitie|cireasa|vopsea|kober|diluant|grund|spray|spuma|degresant|sapun|lavete|taxa\s+(?:mediu\s+)?ulei)\b/i;
+  /\b(filtru|filter|senzor|vas\s+expansiune|furtun|pompa|joja|buson|capac|garnitur|oring|o-ring|simering|bec|pozitie|cireasa|vopsea|kober|diluant|grund|spray|spuma|degresant|degripant|curatitor|sapun|lavete|manus[ia]|cizm[ae]|bocanc|salopet[ae]|casc[ae]|echipament|protectie|taxa\s+(?:mediu\s+)?ulei)\b/i;
 
 const POSITIVE_FLUID_PATTERN =
   /\b(ulei|oil|antigel|coolant|adblue|uree|vaselina|unsoare|atf|hlp|hvlp|tellus|delvac|urania|castrol|rimula|gear\s*\d*|10w[- ]?40|15w[- ]?40|5w[- ]?30|5w[- ]?40|0w[- ]?30|0w[- ]?20|80w[- ]?90|75w[- ]?90|75w[- ]?80|85w[- ]?140|lichid\s+(?:frana|parbriz|racire|hidraulic))\b/i;
@@ -530,6 +530,11 @@ export function isActualFluidItem(
 
   if (explicitTipLichid && String(explicitTipLichid).trim() !== '') {
     return true;
+  }
+
+  // Lichidul de spălare parbriz fără normă explicită nu trebuie să reseteze intervalul de ulei motor
+  if (/\bparbriz\b/i.test(`${desc} ${cat} ${sub}`)) {
+    return false;
   }
 
   if (FLUID_CATEGORY_PATTERN.test(cat) || FLUID_CATEGORY_PATTERN.test(sub)) {
