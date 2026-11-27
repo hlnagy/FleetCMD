@@ -1091,8 +1091,9 @@ export default function FluidStatusMatrix({
                   <Info className="w-4 h-4 text-periwinkle-700 shrink-0 mt-0.5" />
                   <p className="leading-snug font-semibold">
                     Nu a existat o dată de schimb în evidența anterioară — norma a fost inițializată estimativ la{' '}
-                    <span className="font-black">50% din interval</span>. Această notificare rămâne activă până la
-                    înregistrarea primului schimb real.
+                    <span className="font-black">50% din interval</span>. O poți elimina fie prin{' '}
+                    <span className="font-black">Înregistrează Schimb</span>, fie confirmând contorul/data reală din{' '}
+                    <span className="font-black">Editează Bază Schimb</span>.
                   </p>
                 </div>
               )}

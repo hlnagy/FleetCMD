@@ -267,6 +267,7 @@ export default function FluidePage() {
   const [baselineMthValue, setBaselineMthValue] = useState<number>(0);
   const [baselineSchimbContor, setBaselineSchimbContor] = useState<number>(0);
   const [baselineSchimbData, setBaselineSchimbData] = useState<string>('');
+  const [baselineIsEstimated, setBaselineIsEstimated] = useState<boolean>(false);
   const [isSavingVehicleBaseline, setIsSavingVehicleBaseline] = useState<boolean>(false);
 
   const [cfgTipLichid, setCfgTipLichid] = useState('ULEI_MOTOR_15W40');
@@ -1288,6 +1289,7 @@ export default function FluidePage() {
         ? new Date(row.ultimulSchimbData).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0],
     );
+    setBaselineIsEstimated(Boolean(row.ultimulSchimbEstimat));
   };
 
   const handleSaveVehicleBaseline = async (e: React.FormEvent) => {
@@ -1314,15 +1316,7 @@ export default function FluidePage() {
         }
       }
 
-      // 2. Actualizăm valoarea de bază a ultimului schimb pentru norma selectată (păstrăm flag-ul estimat dacă s-a modificat doar mTH-ul curent)
-      const origContor = Number(editingBaselineRow.ultimulSchimbContor || 0);
-      const origDate = editingBaselineRow.ultimulSchimbData
-        ? new Date(editingBaselineRow.ultimulSchimbData).toISOString().split('T')[0]
-        : '';
-      const baselineChanged =
-        Number(baselineSchimbContor || 0) !== origContor ||
-        (baselineSchimbData || '') !== origDate;
-
+      // 2. Actualizăm valoarea de bază a ultimului schimb + statusul confirmat/estimat
       const resCfg = await fetch(`${API_BASE_URL}/anomalii/configurare-ulei`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1331,7 +1325,7 @@ export default function FluidePage() {
           tipLichid: editingBaselineRow.tipLichid,
           ultimulSchimbContor: Number(baselineSchimbContor || 0),
           ultimulSchimbData: baselineSchimbData || undefined,
-          ultimulSchimbEstimat: baselineChanged ? false : Boolean(editingBaselineRow.ultimulSchimbEstimat),
+          ultimulSchimbEstimat: baselineIsEstimated,
         }),
       });
       if (!resCfg.ok) {
@@ -2508,12 +2502,15 @@ export default function FluidePage() {
                                     <span>AVERTIZARE</span>
                                   </span>
                                 ) : f.ultimulSchimbEstimat ? (
-                                  <span
-                                    className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-periwinkle-50 text-periwinkle-900 border border-dashed border-periwinkle-300 inline-flex items-center space-x-1"
-                                    title="Fără dată de schimb în evidența anterioară — setat la 50% din interval până la primul schimb real"
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenVehicleBaseline(f)}
+                                    className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-periwinkle-50 hover:bg-periwinkle-100 text-periwinkle-900 border border-dashed border-periwinkle-300 inline-flex items-center space-x-1 transition cursor-pointer"
+                                    title="Click pentru a introduce/confirma baza reală și a elimina eticheta Estimat 50%"
                                   >
                                     <span>ESTIMAT 50%</span>
-                                  </span>
+                                    <Edit3 className="w-2.5 h-2.5 opacity-70" />
+                                  </button>
                                 ) : (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1">
                                     <CheckCircle2 className="w-3 h-3" />
@@ -2521,12 +2518,14 @@ export default function FluidePage() {
                                   </span>
                                 )}
                                 {f.ultimulSchimbEstimat && (isOver || isWarn) && (
-                                  <span
-                                    className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-periwinkle-50 text-periwinkle-900 border border-dashed border-periwinkle-300"
-                                    title="Fără dată de schimb în evidența anterioară — rămâne activ până la primul schimb real"
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenVehicleBaseline(f)}
+                                    className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-periwinkle-50 hover:bg-periwinkle-100 text-periwinkle-900 border border-dashed border-periwinkle-300 transition cursor-pointer"
+                                    title="Click pentru a confirma baza reală și a elimina eticheta Estimat"
                                   >
                                     FĂRĂ ISTORIC (EST.)
-                                  </span>
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -5748,10 +5747,13 @@ export default function FluidePage() {
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min={baselineIsEstimated ? undefined : 0}
                     step="0.5"
                     value={baselineSchimbContor}
-                    onChange={(e) => setBaselineSchimbContor(Number(e.target.value))}
+                    onChange={(e) => {
+                      setBaselineSchimbContor(Number(e.target.value));
+                      setBaselineIsEstimated(false);
+                    }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
                   />
                 </div>
@@ -5760,11 +5762,47 @@ export default function FluidePage() {
                   <input
                     type="date"
                     value={baselineSchimbData}
-                    onChange={(e) => setBaselineSchimbData(e.target.value)}
+                    onChange={(e) => {
+                      setBaselineSchimbData(e.target.value);
+                      setBaselineIsEstimated(false);
+                    }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 font-mono font-bold text-sapphire-900"
                   />
                 </div>
               </div>
+
+              {(editingBaselineRow.ultimulSchimbEstimat || baselineIsEstimated) && (
+                <label
+                  className={`flex items-start space-x-2.5 p-3 rounded-xl border cursor-pointer transition select-none ${
+                    !baselineIsEstimated
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-periwinkle-50 border-dashed border-periwinkle-300 text-periwinkle-900'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!baselineIsEstimated}
+                    onChange={(e) => {
+                      const confirmed = e.target.checked;
+                      setBaselineIsEstimated(!confirmed);
+                      if (confirmed && baselineSchimbContor < 0) {
+                        setBaselineSchimbContor(0);
+                      }
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                  />
+                  <div className="space-y-0.5 text-[11px] leading-snug">
+                    <span className="font-extrabold block">
+                      Confirmă ca valoare reală (elimină eticheta „Estimat 50%”)
+                    </span>
+                    <span className="opacity-85 block">
+                      {!baselineIsEstimated
+                        ? 'La salvare, eticheta „Estimat 50%” va fi eliminată definitiv.'
+                        : 'Bifează această opțiune sau modifică contorul/data pentru a confirma baza ca reală.'}
+                    </span>
+                  </div>
+                </label>
+              )}
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-morning-200">
                 <button
