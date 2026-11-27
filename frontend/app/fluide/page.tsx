@@ -107,12 +107,23 @@ export default function FluidePage() {
     [toateCategoriileStoc, categoriiFluide],
   );
 
-  // Filtre Tab Stocuri Fluide
+  // Filtre & Sortare Tab Stocuri Fluide
   const [searchStoc, setSearchStoc] = useState('');
   const [selectedDepozitStoc, setSelectedDepozitStoc] = useState('');
   const [selectedCategorieStoc, setSelectedCategorieStoc] = useState('');
   const [selectedTipFluidStoc, setSelectedTipFluidStoc] = useState('');
   const [selectedStatusStoc, setSelectedStatusStoc] = useState<'TOATE' | 'CRITIC' | 'OPTIM'>('TOATE');
+  const [stocSortCol, setStocSortCol] = useState<'denumire' | 'categorie' | 'depozit' | 'stocCurent' | 'stocMinim' | 'stare'>('denumire');
+  const [stocSortDir, setStocSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleStocSort = (col: 'denumire' | 'categorie' | 'depozit' | 'stocCurent' | 'stocMinim' | 'stare') => {
+    if (stocSortCol === col) {
+      setStocSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setStocSortCol(col);
+      setStocSortDir(col === 'stocCurent' || col === 'stocMinim' ? 'desc' : 'asc');
+    }
+  };
 
   // Modal Asociere Tip Normă & Reclasificare Articol Stoc
   const [editingStockTipArticol, setEditingStockTipArticol] = useState<any>(null);
@@ -1663,42 +1674,88 @@ export default function FluidePage() {
     setIstoricPage(1);
   };
 
-  const stocUleiuriFiltrate = stocUleiuri.filter((s) => {
-    // Filtru căutare text
-    if (searchStoc.trim()) {
-      const q = searchStoc.toLowerCase();
-      const den = (s.denumire || '').toLowerCase();
-      const cod = (s.codArticol || '').toLowerCase();
-      const marca = (s.marcaUlei || '').toLowerCase();
-      const sub = (s.subcategorie || '').toLowerCase();
-      const cat = (s.categorie || '').toLowerCase();
-      if (!den.includes(q) && !cod.includes(q) && !marca.includes(q) && !sub.includes(q) && !cat.includes(q)) {
+  const stocUleiuriFiltrate = useMemo(() => {
+    const filtered = stocUleiuri.filter((s) => {
+      // Filtru căutare text
+      if (searchStoc.trim()) {
+        const q = searchStoc.toLowerCase();
+        const den = (s.denumire || '').toLowerCase();
+        const cod = (s.codArticol || '').toLowerCase();
+        const marca = (s.marcaUlei || '').toLowerCase();
+        const sub = (s.subcategorie || '').toLowerCase();
+        const cat = (s.categorie || '').toLowerCase();
+        if (!den.includes(q) && !cod.includes(q) && !marca.includes(q) && !sub.includes(q) && !cat.includes(q)) {
+          return false;
+        }
+      }
+      // Filtru depozit
+      if (selectedDepozitStoc && s.depozitId !== selectedDepozitStoc) {
         return false;
       }
-    }
-    // Filtru depozit
-    if (selectedDepozitStoc && s.depozitId !== selectedDepozitStoc) {
-      return false;
-    }
-    // Filtru categorie fluid
-    if (selectedCategorieStoc && s.categorie !== selectedCategorieStoc) {
-      return false;
-    }
-    // Filtru Tip Lubrifiant / Normă
-    if (selectedTipFluidStoc) {
-      const resolved = resolveEffectiveTipLichid(s, subcatTipMap);
-      if (resolved.cod !== selectedTipFluidStoc) return false;
-    }
-    // Filtru stare
-    const min = Number(s.stocMinim) || 0;
-    const cur = Number(s.stocCurent) || 0;
-    if (selectedStatusStoc === 'CRITIC') {
-      if (min <= 0 || cur >= min) return false;
-    } else if (selectedStatusStoc === 'OPTIM') {
-      if (min > 0 && cur < min) return false;
-    }
-    return true;
-  });
+      // Filtru categorie fluid
+      if (selectedCategorieStoc && s.categorie !== selectedCategorieStoc) {
+        return false;
+      }
+      // Filtru Tip Lubrifiant / Normă
+      if (selectedTipFluidStoc) {
+        const resolved = resolveEffectiveTipLichid(s, subcatTipMap);
+        if (resolved.cod !== selectedTipFluidStoc) return false;
+      }
+      // Filtru stare
+      const min = Number(s.stocMinim) || 0;
+      const cur = Number(s.stocCurent) || 0;
+      if (selectedStatusStoc === 'CRITIC') {
+        if (min <= 0 || cur >= min) return false;
+      } else if (selectedStatusStoc === 'OPTIM') {
+        if (min > 0 && cur < min) return false;
+      }
+      return true;
+    });
+
+    const natCmp = (a: string, b: string) =>
+      a.localeCompare(b, 'ro', { numeric: true, sensitivity: 'base' });
+
+    const getStareRank = (item: any) => {
+      const cur = Number(item.stocCurent) || 0;
+      const min = Number(item.stocMinim) || 0;
+      if (min > 0 && cur <= 0) return 0; // EPUIZAT
+      if (min > 0 && cur < min) return 1; // SUB MINIM
+      return 2; // OPTIM
+    };
+
+    const dir = stocSortDir === 'asc' ? 1 : -1;
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (stocSortCol === 'denumire') {
+        cmp = natCmp(a.denumire || '', b.denumire || '');
+      } else if (stocSortCol === 'categorie') {
+        cmp =
+          natCmp(a.categorie || '', b.categorie || '') ||
+          natCmp(a.subcategorie || '', b.subcategorie || '');
+      } else if (stocSortCol === 'depozit') {
+        cmp = natCmp(a.depozit?.nume || 'Depozit Central', b.depozit?.nume || 'Depozit Central');
+      } else if (stocSortCol === 'stocCurent') {
+        cmp = (Number(a.stocCurent) || 0) - (Number(b.stocCurent) || 0);
+      } else if (stocSortCol === 'stocMinim') {
+        cmp = (Number(a.stocMinim) || 0) - (Number(b.stocMinim) || 0);
+      } else if (stocSortCol === 'stare') {
+        cmp = getStareRank(a) - getStareRank(b);
+      }
+      if (cmp !== 0) return cmp * dir;
+      return natCmp(a.denumire || '', b.denumire || '');
+    });
+  }, [
+    stocUleiuri,
+    searchStoc,
+    selectedDepozitStoc,
+    selectedCategorieStoc,
+    selectedTipFluidStoc,
+    selectedStatusStoc,
+    subcatTipMap,
+    stocSortCol,
+    stocSortDir,
+  ]);
 
   const currentVehicul = vehicule.find((v) => v.id === selectedVehiculId);
 
@@ -3065,13 +3122,51 @@ export default function FluidePage() {
             <div className="overflow-x-auto rounded-2xl border border-morning-200">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider">
-                    <th className="p-3">Articol Fluid & Marcă</th>
-                    <th className="p-3">Categorie & Subtip</th>
-                    <th className="p-3">Depozit Gestiune</th>
-                    <th className="p-3 text-right">Stoc Curent</th>
-                    <th className="p-3 text-right">Prag Alertă (Minim)</th>
-                    <th className="p-3 text-center">Stare Stoc</th>
+                  <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
+                    {([
+                      { key: 'denumire', label: 'Articol Fluid & Marcă', align: 'left' },
+                      { key: 'categorie', label: 'Categorie & Subtip', align: 'left' },
+                      { key: 'depozit', label: 'Depozit Gestiune', align: 'left' },
+                      { key: 'stocCurent', label: 'Stoc Curent', align: 'right' },
+                      { key: 'stocMinim', label: 'Prag Alertă (Minim)', align: 'right' },
+                      { key: 'stare', label: 'Stare Stoc', align: 'center' },
+                    ] as const).map((col) => {
+                      const isActive = stocSortCol === col.key;
+                      const alignClass =
+                        col.align === 'right'
+                          ? 'text-right'
+                          : col.align === 'center'
+                            ? 'text-center'
+                            : 'text-left';
+                      return (
+                        <th
+                          key={col.key}
+                          onClick={() => handleStocSort(col.key)}
+                          aria-sort={isActive ? (stocSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                          title={`Sortează după ${col.label}`}
+                          className={`p-3 cursor-pointer select-none transition group ${alignClass} ${
+                            isActive
+                              ? 'bg-sapphire-100 text-sapphire-950 border-b-2 border-b-sapphire-500 font-black'
+                              : 'hover:bg-morning-200 hover:text-sapphire-900'
+                          }`}
+                        >
+                          <div className="inline-flex items-center space-x-1.5">
+                            <span>{col.label}</span>
+                            {isActive ? (
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-sapphire-600 text-white shrink-0">
+                                {stocSortDir === 'asc' ? (
+                                  <ArrowUp className="w-3 h-3" />
+                                ) : (
+                                  <ArrowDown className="w-3 h-3" />
+                                )}
+                              </span>
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 text-sage-400 opacity-60 group-hover:opacity-100 group-hover:text-sapphire-600 transition shrink-0" />
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
                     <th className="p-3 text-right">Acțiuni</th>
                   </tr>
                 </thead>
