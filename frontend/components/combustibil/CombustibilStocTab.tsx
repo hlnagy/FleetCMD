@@ -94,6 +94,38 @@ export default function CombustibilStocTab({
     });
   }, [data, resolvedCompanyId, currentTab, search, onlyDuplicates]);
 
+  const trimmedEditVeh = editVehInput.trim();
+
+  const exactMatchedVehicle = useMemo(() => {
+    if (!data || !trimmedEditVeh) return null;
+    const lower = trimmedEditVeh.toLowerCase();
+    return (data.vehiclesList || []).find((v) => v.numarAuto.trim().toLowerCase() === lower) || null;
+  }, [data, trimmedEditVeh]);
+
+  const isCreatingNewVehicle = Boolean(editingItem?.kind === 'trans' && trimmedEditVeh && !exactMatchedVehicle);
+
+  const filteredEditVehicles = useMemo(() => {
+    if (!data) return [];
+    const list = [...(data.vehiclesList || [])].sort((a, b) =>
+      a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' }),
+    );
+    if (!editVehQueryDirty || !trimmedEditVeh) return list;
+    const q = trimmedEditVeh.toLowerCase();
+    const matched = list.filter(
+      (v) =>
+        v.numarAuto.toLowerCase().includes(q) ||
+        (v.companieNume || '').toLowerCase().includes(q) ||
+        (v.categorieNume || '').toLowerCase().includes(q),
+    );
+    matched.sort((a, b) => {
+      const aStarts = a.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' });
+    });
+    return matched;
+  }, [data, editVehQueryDirty, trimmedEditVeh]);
+
   if (loading && !data) {
     return <div className="p-12 text-center text-sage-600 font-semibold animate-pulse">Se încarcă detaliile de stoc...</div>;
   }
@@ -176,38 +208,6 @@ export default function CombustibilStocTab({
     setEditNewVehCatId('');
     setEditCompanyAutoHint(null);
   };
-
-  const trimmedEditVeh = editVehInput.trim();
-
-  const exactMatchedVehicle = useMemo(() => {
-    if (!data || !trimmedEditVeh) return null;
-    const lower = trimmedEditVeh.toLowerCase();
-    return data.vehiclesList.find((v) => v.numarAuto.trim().toLowerCase() === lower) || null;
-  }, [data, trimmedEditVeh]);
-
-  const isCreatingNewVehicle = Boolean(editingItem?.kind === 'trans' && trimmedEditVeh && !exactMatchedVehicle);
-
-  const filteredEditVehicles = useMemo(() => {
-    if (!data) return [];
-    const list = [...data.vehiclesList].sort((a, b) =>
-      a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' }),
-    );
-    if (!editVehQueryDirty || !trimmedEditVeh) return list;
-    const q = trimmedEditVeh.toLowerCase();
-    const matched = list.filter(
-      (v) =>
-        v.numarAuto.toLowerCase().includes(q) ||
-        (v.companieNume || '').toLowerCase().includes(q) ||
-        (v.categorieNume || '').toLowerCase().includes(q),
-    );
-    matched.sort((a, b) => {
-      const aStarts = a.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
-      const bStarts = b.numarAuto.toLowerCase().startsWith(q) ? 0 : 1;
-      if (aStarts !== bStarts) return aStarts - bStarts;
-      return a.numarAuto.localeCompare(b.numarAuto, 'ro', { numeric: true, sensitivity: 'base' });
-    });
-    return matched;
-  }, [data, editVehQueryDirty, trimmedEditVeh]);
 
   const handleSelectEditVehicle = (v: CombustibilStocData['vehiclesList'][number]) => {
     setEditVehInput(v.numarAuto);

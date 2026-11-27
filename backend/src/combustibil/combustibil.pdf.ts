@@ -109,102 +109,193 @@ export interface BonuriPdfPayload {
 }
 
 export async function generateBonuriPdf(payload: BonuriPdfPayload): Promise<Buffer> {
-  return createPdfBuffer({ size: 'A4', margin: 45 }, (doc, setFont) => {
-    payload.transactions.forEach((t, idx) => {
-      if (idx > 0) doc.addPage();
+  return createPdfBuffer(
+    { size: 'A4', margins: { top: 18, bottom: 18, left: 36, right: 36 } },
+    (doc, setFont) => {
+      const marginX = 36;
+      const pageW = doc.page.width - marginX * 2;
+      const pageH = doc.page.height; // 841.89 pt on A4
+      const halfH = pageH / 2; // 420.94 pt
+      const slotOrigins = [22, Math.round(halfH) + 22]; // 22 and 443 -> voucher height 368pt ends at 811pt (< 823pt)
+      const voucherH = 368;
+      const totalPages = Math.max(1, Math.ceil(payload.transactions.length / 2));
 
-      const compName = t.companieNume || 'NECUNOSCUT';
-      const seria = t.codProdus || '---';
-      const nrAnexa = String(idx + 1).padStart(3, '0');
-      const pageW = doc.page.width - 90;
-
-      // Top header card
-      doc.rect(45, 45, pageW, 74).fillAndStroke('#f8fafc', '#cbd5e1');
-      setFont(true);
-      doc.fillColor('#0f172a').fontSize(14).text(compName, 58, 56, { width: pageW - 180 });
-      setFont(false);
-      doc.fillColor('#475569').fontSize(9.5);
-      doc.text(`CUI: ${t.companieCui || '—'}   |   Gestiune: ${payload.gestiuneNume}`, 58, 76);
-      doc.text(`Adresa: ${t.companieAdresa || '—'}`, 58, 92, { width: pageW - 180 });
-
-      setFont(true);
-      doc.fillColor('#1e293b').fontSize(9.5).text(`Data: ${fmtDateRo(t.data)}`, 45, 58, {
-        width: pageW - 14,
-        align: 'right',
-      });
-      setFont(false);
-      doc.fillColor('#64748b').fontSize(8.5).text(`Ora: ${fmtDateTimeRo(t.data).slice(11)}`, 45, 74, {
-        width: pageW - 14,
-        align: 'right',
-      });
-
-      // Title
-      setFont(true);
-      doc.fillColor('#0f172a').fontSize(16).text('BON DE ALIMENTARE COMBUSTIBIL', 45, 142, {
-        width: pageW,
-        align: 'center',
-      });
-      setFont(false);
-      doc.fillColor('#334155').fontSize(10).text(
-        `Seria ${seria}   |   Număr Anexă: ${nrAnexa}   |   Atașat la Bon Consum: ${payload.bonNumber || '—'}`,
-        45,
-        166,
-        { width: pageW, align: 'center' },
-      );
-
-      // Table Header
-      const tableTop = 205;
-      const cols = [
-        { label: 'Data / Ora', x: 45, w: 105, align: 'left' },
-        { label: 'Vehicul / Utilaj', x: 150, w: 130, align: 'left' },
-        { label: 'Produs', x: 280, w: 120, align: 'left' },
-        { label: 'U.M.', x: 400, w: 55, align: 'center' },
-        { label: 'Cantitate', x: 455, w: 95, align: 'right' },
-      ];
-
-      doc.rect(45, tableTop, pageW, 26).fill('#1e293b');
-      setFont(true);
-      doc.fillColor('#ffffff').fontSize(9.5);
-      for (const c of cols) {
-        doc.text(c.label, c.x + 6, tableTop + 8, { width: c.w - 12, align: c.align as any });
+      if (payload.transactions.length === 0) {
+        setFont(true);
+        doc.fillColor('#334155').fontSize(12).text('Nu există alimentări pentru perioada selectată.', marginX, 80, {
+          width: pageW,
+          align: 'center',
+        });
+        return;
       }
 
-      // Row
-      const rowY = tableTop + 26;
-      doc.rect(45, rowY, pageW, 30).fillAndStroke('#ffffff', '#cbd5e1');
-      setFont(false);
-      doc.fillColor('#0f172a').fontSize(10);
-      doc.text(fmtDateTimeRo(t.data), cols[0].x + 6, rowY + 9, { width: cols[0].w - 12 });
-      setFont(true);
-      doc.text(t.numarAuto || 'N/A', cols[1].x + 6, rowY + 9, { width: cols[1].w - 12 });
-      setFont(false);
-      doc.text(payload.tipCombustibil || 'Motorină', cols[2].x + 6, rowY + 9, { width: cols[2].w - 12 });
-      doc.text('Litru', cols[3].x + 6, rowY + 9, { width: cols[3].w - 12, align: 'center' });
-      setFont(true);
-      doc.fillColor('#1d4ed8').text(`${fmtNum(t.cantitate, 2)} L`, cols[4].x + 6, rowY + 9, {
-        width: cols[4].w - 12,
-        align: 'right',
+      payload.transactions.forEach((t, idx) => {
+        const slot = idx % 2; // 0 = top half of A4, 1 = bottom half of A4
+        const pageNum = Math.floor(idx / 2) + 1;
+
+        if (idx > 0 && slot === 0) {
+          doc.addPage();
+        }
+
+        // Draw crisp dashed cut-line across middle of A4 page when placing the 2nd voucher on the page
+        if (slot === 1) {
+          doc.save();
+          doc
+            .moveTo(22, halfH)
+            .lineTo(doc.page.width - 22, halfH)
+            .dash(4, { space: 4 })
+            .lineWidth(0.7)
+            .strokeColor('#94a3b8')
+            .stroke();
+          doc.undash();
+          doc.restore();
+        }
+
+        const originY = slotOrigins[slot];
+        const compName = t.companieNume || 'NECUNOSCUT';
+        const seria = t.codProdus || '---';
+        const nrAnexa = String(idx + 1).padStart(3, '0');
+        const innerX = marginX + 12;
+        const innerW = pageW - 24;
+
+        // Outer voucher frame
+        doc
+          .roundedRect(marginX, originY, pageW, voucherH, 4)
+          .lineWidth(0.75)
+          .strokeColor('#cbd5e1')
+          .stroke();
+
+        // 1. Company Header Box
+        doc
+          .rect(innerX, originY + 12, innerW, 56)
+          .fillAndStroke('#f8fafc', '#cbd5e1');
+
+        setFont(true);
+        doc.fillColor('#0f172a').fontSize(12).text(compName, innerX + 10, originY + 19, {
+          width: innerW - 145,
+          lineBreak: false,
+          ellipsis: true,
+        });
+        setFont(false);
+        doc.fillColor('#475569').fontSize(8.5);
+        doc.text(`CUI: ${t.companieCui || '—'}   |   Gestiune: ${payload.gestiuneNume}`, innerX + 10, originY + 36, {
+          width: innerW - 145,
+          lineBreak: false,
+          ellipsis: true,
+        });
+        doc.text(`Adresa: ${t.companieAdresa || '—'}`, innerX + 10, originY + 50, {
+          width: innerW - 145,
+          lineBreak: false,
+          ellipsis: true,
+        });
+
+        setFont(true);
+        doc.fillColor('#1e293b').fontSize(9).text(`Data: ${fmtDateRo(t.data)}`, innerX, originY + 20, {
+          width: innerW - 10,
+          align: 'right',
+          lineBreak: false,
+        });
+        setFont(false);
+        doc.fillColor('#64748b').fontSize(8.5).text(`Ora: ${fmtDateTimeRo(t.data).slice(11)}`, innerX, originY + 35, {
+          width: innerW - 10,
+          align: 'right',
+          lineBreak: false,
+        });
+        setFont(true);
+        doc.fillColor('#1d4ed8').fontSize(8.5).text(`Anexa #${nrAnexa}`, innerX, originY + 50, {
+          width: innerW - 10,
+          align: 'right',
+          lineBreak: false,
+        });
+
+        // 2. Title & Reference
+        setFont(true);
+        doc.fillColor('#0f172a').fontSize(13.5).text('ANEXĂ BON DE CONSUM COMBUSTIBIL', innerX, originY + 82, {
+          width: innerW,
+          align: 'center',
+          lineBreak: false,
+        });
+        setFont(false);
+        doc.fillColor('#334155').fontSize(9).text(
+          `Seria: ${seria}   |   Număr Anexă: ${nrAnexa}   |   Atașat la Bon Consum: ${payload.bonNumber || '—'}`,
+          innerX,
+          originY + 101,
+          { width: innerW, align: 'center', lineBreak: false },
+        );
+
+        // 3. Fueling Details Table
+        const tableTop = originY + 124;
+        const cols = [
+          { label: 'Data / Ora', x: innerX, w: 105, align: 'left' },
+          { label: 'Vehicul / Utilaj', x: innerX + 105, w: 140, align: 'left' },
+          { label: 'Produs', x: innerX + 245, w: 112, align: 'left' },
+          { label: 'U.M.', x: innerX + 357, w: 48, align: 'center' },
+          { label: 'Cantitate', x: innerX + 405, w: innerW - 405, align: 'right' },
+        ];
+
+        doc.rect(innerX, tableTop, innerW, 24).fill('#1e293b');
+        setFont(true);
+        doc.fillColor('#ffffff').fontSize(9);
+        for (const c of cols) {
+          doc.text(c.label, c.x + 6, tableTop + 7, { width: c.w - 12, align: c.align as any, lineBreak: false });
+        }
+
+        const rowY = tableTop + 24;
+        doc.rect(innerX, rowY, innerW, 28).fillAndStroke('#ffffff', '#cbd5e1');
+        setFont(false);
+        doc.fillColor('#0f172a').fontSize(9.5);
+        doc.text(fmtDateTimeRo(t.data), cols[0].x + 6, rowY + 8, { width: cols[0].w - 12, lineBreak: false });
+        setFont(true);
+        doc.text(t.numarAuto || 'N/A', cols[1].x + 6, rowY + 8, {
+          width: cols[1].w - 12,
+          lineBreak: false,
+          ellipsis: true,
+        });
+        setFont(false);
+        doc.text(payload.tipCombustibil || 'Motorină', cols[2].x + 6, rowY + 8, {
+          width: cols[2].w - 12,
+          lineBreak: false,
+          ellipsis: true,
+        });
+        doc.text('Litru', cols[3].x + 6, rowY + 8, { width: cols[3].w - 12, align: 'center', lineBreak: false });
+        setFont(true);
+        doc.fillColor('#1d4ed8').text(`${fmtNum(t.cantitate, 2)} L`, cols[4].x + 6, rowY + 8, {
+          width: cols[4].w - 12,
+          align: 'right',
+          lineBreak: false,
+        });
+
+        // Summary line below table
+        setFont(false);
+        doc.fillColor('#475569').fontSize(8.5).text(
+          `Preț unitar: 0,00 RON   |   Valoare: 0,00 RON   |   Total cantitate eliberată: ${fmtNum(t.cantitate, 2)} L`,
+          innerX,
+          rowY + 38,
+          { width: innerW, align: 'right', lineBreak: false },
+        );
+
+        // 4. Signatures
+        const sigY = originY + 244;
+        setFont(true);
+        doc.fillColor('#334155').fontSize(9);
+        doc.text('Semnătură Gestionar:', innerX + 12, sigY, { lineBreak: false });
+        doc.text('Semnătură Șofer / Primitor:', innerX + innerW - 195, sigY, { lineBreak: false });
+
+        setFont(false);
+        doc.fillColor('#64748b').fontSize(9);
+        doc.text('..................................................', innerX + 12, sigY + 32, { lineBreak: false });
+        doc.text('..................................................', innerX + innerW - 195, sigY + 32, { lineBreak: false });
+
+        // 5. Voucher Footer
+        doc.fillColor('#94a3b8').fontSize(7.5).text(
+          `FleetCMD Combustibil  •  Gestiune ${payload.gestiuneNume}  •  Anexa ${idx + 1} / ${payload.transactions.length}  •  Pagina ${pageNum} / ${totalPages}`,
+          innerX,
+          originY + voucherH - 18,
+          { width: innerW, align: 'center', lineBreak: false },
+        );
       });
-
-      // Signatures
-      const sigY = rowY + 75;
-      setFont(false);
-      doc.fillColor('#334155').fontSize(10);
-      doc.text('Semnătură Gestionar:', 55, sigY);
-      doc.text('..........................................', 55, sigY + 26);
-
-      doc.text('Semnătură Șofer / Primitor:', 330, sigY);
-      doc.text('..........................................', 330, sigY + 26);
-
-      // Footer
-      doc.fillColor('#94a3b8').fontSize(8).text(
-        `Preț unitar: 0,00 RON | Valoare: 0,00 RON  •  FleetCMD Combustibil  •  Pagina ${idx + 1} / ${payload.transactions.length}`,
-        45,
-        doc.page.height - 50,
-        { width: pageW, align: 'center' },
-      );
-    });
-  });
+    },
+  );
 }
 
 export interface MonthlyReportPayload {

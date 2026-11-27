@@ -149,7 +149,7 @@ export default function CombustibilRapoarteTab({ gestiune, companies, initialCom
         <form onSubmit={handleGenerateBonuri} className="p-5 flex-1 flex flex-col justify-between space-y-4 text-xs">
           <div className="space-y-4">
             <p className="text-center text-sage-600">
-              Selectați perioada și firma pentru a genera bonurile individuale de alimentare în format PDF ({gestiune.nume}).
+              Selectați perioada și firma pentru a genera bonurile individuale de alimentare în format PDF ({gestiune.nume} — 2 anexe / pagină A4).
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
