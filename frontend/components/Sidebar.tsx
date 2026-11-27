@@ -73,7 +73,7 @@ export default function Sidebar() {
       ],
     },
     { name: 'Anvelope', href: '/anvelope', icon: CircleDot },
-    { name: 'Uleiuri', href: '/fluide', icon: Droplets },
+    { name: 'Uleiuri & Filtre', href: '/fluide', icon: Droplets },
     { name: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
     { name: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
   ];

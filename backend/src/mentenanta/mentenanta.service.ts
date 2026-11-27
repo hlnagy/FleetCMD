@@ -5,6 +5,7 @@ import { StocuriGarantiiService } from '../stocuri-garantii/stocuri-garantii.ser
 import { isTireItem } from '../common/tire.utils';
 import {
   isActualFluidItem,
+  isConsumablePieceNorm,
   mapFluidCategoryReport,
   computeElementFluidLiters,
   detectTipLichidFromText,
@@ -137,15 +138,24 @@ export class MentenantaService {
     });
 
     fluide.forEach(f => {
+      const isPiece = isConsumablePieceNorm(f.tipLichid) || f.tipOperatiune === 'SCHIMB_FILTRU';
+      const isSchimb = String(f.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+      const tipPretty = f.tipLichid.replace(/_/g, ' ');
       servicii.push({
         id: `FL-${f.id}`,
-        tip: f.tipOperatiune === 'SCHIMB_ULEI' ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
-        titlu: f.tipOperatiune === 'SCHIMB_ULEI' ? `Schimb Complet Ulei (${f.tipLichid.replace(/_/g, ' ')})` : `Completare/Dopare Ulei (${f.tipLichid.replace(/_/g, ' ')})`,
+        tip: isPiece ? 'SCHIMB_FILTRU' : isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
+        titlu: isPiece
+          ? `Schimb Filtru / Consumabil (${tipPretty})`
+          : isSchimb
+          ? `Schimb Complet Ulei (${tipPretty})`
+          : `Completare/Dopare Ulei (${tipPretty})`,
         mecanic: f.mecanic,
         vehicul: f.vehicul ? `${f.vehicul.numarIntern} (${f.vehicul.numarInmatriculare})` : '-',
         data: f.dataCompletare,
         stare: 'FINALIZAT',
-        detalii: `${f.cantitateLitri} Litri (${f.marcaUlei || 'Standard'}). Contor: ${f.valoareContor}`,
+        detalii: isPiece
+          ? `${f.cantitateLitri} buc (${f.marcaUlei || 'Standard'}). Contor: ${f.valoareContor}`
+          : `${f.cantitateLitri} Litri (${f.marcaUlei || 'Standard'}). Contor: ${f.valoareContor}`,
         costTotal: f.costTotal,
       });
     });
@@ -2582,11 +2592,47 @@ export class MentenantaService {
       });
     });
 
-    // C. Prelucrare Completări / Schimburi Fluide directe (excludem intrările deja numărate din ComenziLucru!)
+    // C. Prelucrare Completări / Schimburi directe (excludem intrările deja numărate din ComenziLucru!)
     completari.forEach((f) => {
       if (f.comandaLucruId) return;
       const cost = Number(f.costTotal || (f.cantitateLitri * f.pretPerLitru) || 0);
-      const litri = Number(f.cantitateLitri || 0);
+      const qty = Number(f.cantitateLitri || 0);
+      const lKey = getLunaKey(new Date(f.dataCompletare));
+      if (!evolutieMap[lKey]) {
+        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
+      }
+
+      // Schimburile directe de filtre / consumabile la bucată se contabilizează la Piese (nu în litrii de fluide!)
+      if (isConsumablePieceNorm(f.tipLichid) || f.tipOperatiune === 'SCHIMB_FILTRU') {
+        totalPiese += cost;
+        evolutieMap[lKey].piese += cost;
+        evolutieMap[lKey].total += cost;
+        if (vehiculeMap[f.vehiculId]) {
+          vehiculeMap[f.vehiculId].costPiese += cost;
+          vehiculeMap[f.vehiculId].totalCost += cost;
+        }
+        pieseConsumate.push({
+          id: f.id,
+          comandaLucruId: null,
+          numarComanda: 'Direct (Fluide & Filtre)',
+          data: f.dataCompletare,
+          vehicul: f.vehicul,
+          pilonCost: 'PIESA_STOC',
+          descriere: f.articolStoc?.denumire || f.marcaUlei || f.tipLichid.replace(/_/g, ' '),
+          cantitate: qty,
+          pretUnitar: f.pretPerLitru,
+          costTotal: Number(cost.toFixed(2)),
+          provenienta: 'Înregistrare Directă (Uleiuri & Filtre)',
+          articolStocId: f.articolStocId,
+          articolDenumire: f.articolStoc?.denumire || null,
+          articolCod: f.articolStoc?.codArticol || null,
+          furnizor: null,
+          numarFactura: null,
+        });
+        return;
+      }
+
+      const litri = qty;
       const isCsere = f.tipOperatiune && f.tipOperatiune.toUpperCase().includes('SCHIMB');
 
       totalFluide += cost;
@@ -2613,10 +2659,6 @@ export class MentenantaService {
         }
       }
 
-      const lKey = getLunaKey(new Date(f.dataCompletare));
-      if (!evolutieMap[lKey]) {
-        evolutieMap[lKey] = { luna: lKey, piese: 0, manopera: 0, anvelope: 0, fluide: 0, total: 0 };
-      }
       evolutieMap[lKey].fluide += cost;
       evolutieMap[lKey].total += cost;
 

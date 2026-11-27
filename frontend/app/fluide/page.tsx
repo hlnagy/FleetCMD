@@ -7,7 +7,7 @@ import {
   Droplets, Plus, ShieldAlert, AlertTriangle, RefreshCw, ShoppingCart, Clock, Calendar,
   CheckCircle2, X, Filter, Sliders, ArrowUpRight, Search, Layers, Database, Truck, ChevronDown, ChevronUp, Check, Wrench, ShieldCheck, Activity, FileText,
   Edit3, Trash2, DollarSign, TrendingDown, Gauge, Car, Info, Sparkles, Tractor, CircleDot, Bike, Cog, Link2,
-  LayoutGrid, LayoutList, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown
+  LayoutGrid, LayoutList, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, Wind
 } from 'lucide-react';
 import VehicleSelector from '@/components/VehicleSelector';
 import SearchableCombobox, { ComboboxOption } from '@/components/SearchableCombobox';
@@ -20,8 +20,10 @@ import {
   buildSubcatTipMap,
   buildTipLichidLabelMap,
   getAccentClasses,
+  getNormUnitMeasure,
   getTipFluidLabel,
   isArticolMatchingTipLichid,
+  isConsumablePieceNorm,
   normalizeTipuriFluideList,
   resolveEffectiveTipLichid,
 } from '@/lib/fluids';
@@ -61,6 +63,7 @@ export default function FluidePage() {
   const [selectedVehiculId, setSelectedVehiculId] = useState('');
   const [activeTab, setActiveTab] = useState<'flota' | 'stocuri' | 'istoric' | 'config' | 'anomalii'>('flota');
   const [stocUleiuri, setStocUleiuri] = useState<any[]>([]);
+  const [stocConsumabile, setStocConsumabile] = useState<any[]>([]);
   const [flotaFluide, setFlotaFluide] = useState<any[]>([]);
   const [statusSchimburi, setStatusSchimburi] = useState<any[]>([]);
   const [alerte, setAlerte] = useState<any[]>([]);
@@ -93,11 +96,15 @@ export default function FluidePage() {
 
   // Categorii & Depozite Fluide + Tipuri Fluide Dinamice
   const [categoriiFluide, setCategoriiFluide] = useState<any[]>([]);
+  const [toateCategoriileStoc, setToateCategoriileStoc] = useState<any[]>([]);
   const [tipuriFluide, setTipuriFluide] = useState<TipFluidDef[]>(FALLBACK_TIPURI_FLUIDE);
   const [depoziteList, setDepoziteList] = useState<any[]>([]);
 
   const tipLichidLabels = useMemo(() => buildTipLichidLabelMap(tipuriFluide), [tipuriFluide]);
-  const subcatTipMap = useMemo(() => buildSubcatTipMap(categoriiFluide), [categoriiFluide]);
+  const subcatTipMap = useMemo(
+    () => buildSubcatTipMap(toateCategoriileStoc.length > 0 ? toateCategoriileStoc : categoriiFluide),
+    [toateCategoriileStoc, categoriiFluide],
+  );
 
   // Filtre Tab Stocuri Fluide
   const [searchStoc, setSearchStoc] = useState('');
@@ -186,16 +193,24 @@ export default function FluidePage() {
   const [faraDeducereStoc, setFaraDeducereStoc] = useState<boolean>(false);
   const [isSubmittingIesire, setIsSubmittingIesire] = useState<boolean>(false);
 
-  // Filtrare automată a articolelor din stoc după Tip Fluid / Lubrifiant selectat
+  const isIesirePiece = useMemo(() => isConsumablePieceNorm(iesireTipLichid), [iesireTipLichid]);
+
+  // Sursa activă de stoc pentru modalul de intervenție (filtre/consumabile vs fluide/uleiuri)
+  const stocSursaModal = useMemo(
+    () => (isIesirePiece ? stocConsumabile : stocUleiuri),
+    [isIesirePiece, stocConsumabile, stocUleiuri],
+  );
+
+  // Filtrare automată a articolelor din stoc după Tip Normă selectat
   const articoleStocFiltrate = useMemo(() => {
-    if (arataToateFluidele) return stocUleiuri;
-    return stocUleiuri.filter((art) => isArticolMatchingTipLichid(art, iesireTipLichid, subcatTipMap));
-  }, [stocUleiuri, iesireTipLichid, arataToateFluidele, subcatTipMap]);
+    if (arataToateFluidele) return stocSursaModal;
+    return stocSursaModal.filter((art) => isArticolMatchingTipLichid(art, iesireTipLichid, subcatTipMap));
+  }, [stocSursaModal, iesireTipLichid, arataToateFluidele, subcatTipMap]);
 
   // Actualizare automată a selecției când se schimbă categoria sau lista filtrată
   useEffect(() => {
     if (showCompletareModal) {
-      const selectedValidInAll = stocUleiuri.some((a) => a.id === selectedArticolStocId);
+      const selectedValidInAll = stocSursaModal.some((a) => a.id === selectedArticolStocId);
       if (articoleStocFiltrate.length > 0) {
         const exists = articoleStocFiltrate.some((a) => a.id === selectedArticolStocId);
         if (!exists) {
@@ -207,7 +222,7 @@ export default function FluidePage() {
         setIesireMarca('');
       }
     }
-  }, [iesireTipLichid, articoleStocFiltrate, showCompletareModal, arataToateFluidele, stocUleiuri, selectedArticolStocId]);
+  }, [iesireTipLichid, articoleStocFiltrate, showCompletareModal, arataToateFluidele, stocSursaModal, selectedArticolStocId]);
 
   // Stare Formular Configurare Intervale pe Categorii (Reguli mTH, KM, Luni)
   const [categoriiNormeList, setCategoriiNormeList] = useState<any[]>([]);
@@ -321,7 +336,17 @@ export default function FluidePage() {
       const resStoc = await fetch(`${API_BASE_URL}/stocuri-garantii/stocuri`);
       if (resStoc.ok) {
         const dataStoc = await resStoc.json();
+        const consumableStoc = dataStoc.filter((s: any) => {
+          const cat = (s.categorie || '').toLowerCase();
+          const den = (s.denumire || '').toLowerCase();
+          const sub = (s.subcategorie || '').toLowerCase();
+          if (s.tipLichid && isConsumablePieceNorm(s.tipLichid)) return true;
+          return cat.includes('filtr') || den.includes('filtr') || sub.includes('filtr');
+        });
+        setStocConsumabile(consumableStoc);
+
         const lubeStoc = dataStoc.filter((s: any) => {
+          if (s.tipLichid && isConsumablePieceNorm(s.tipLichid)) return false;
           const cat = (s.categorie || '').toLowerCase();
           const den = (s.denumire || '').toLowerCase();
           const sub = (s.subcategorie || '').toLowerCase();
@@ -364,14 +389,15 @@ export default function FluidePage() {
       if (resAlert.ok) {
         const rawAlerts = await resAlert.json();
         const lubeAlerts = rawAlerts.filter((a: any) => {
+          // Normele configurate în acest modul (uleiuri, fluide & filtre monitorizate) se afișează întotdeauna
+          if (a.categorieAlert === 'SCURGERI_ULEI' || a.categorieAlert === 'SCHIMB_ULEI') {
+            return true;
+          }
           const titlu = (a.titlu || '').toLowerCase();
           const mesaj = (a.mesaj || '').toLowerCase();
-          // Exclude filter-related alerts — they belong in the Filtre section, not Fluide
-          const isFilterAlert = titlu.includes('filtru') || titlu.includes('filter');
-          if (isFilterAlert) return false;
+          const isLegacyFilterRule = titlu.includes('filtru') || titlu.includes('filter');
+          if (isLegacyFilterRule) return false;
           return (
-            a.categorieAlert === 'SCURGERI_ULEI' ||
-            a.categorieAlert === 'SCHIMB_ULEI' ||
             titlu.includes('ulei') ||
             titlu.includes('fluid') ||
             titlu.includes('lichid') ||
@@ -381,7 +407,7 @@ export default function FluidePage() {
         setAlerte(lubeAlerts);
       }
 
-      // Fetch Categorii Fluide
+      // Fetch Categorii Fluide + toate categoriile (pentru mapare subcategorii filtre -> norme)
       const resCat = await fetch(`${API_BASE_URL}/stocuri-garantii/categorii`);
       if (resCat.ok) {
         const catData = await resCat.json();
@@ -389,6 +415,7 @@ export default function FluidePage() {
           ...(Array.isArray(catData.categoriiImplicite) ? catData.categoriiImplicite : []),
           ...(Array.isArray(catData.categoriiCustom) ? catData.categoriiCustom : []),
         ];
+        setToateCategoriileStoc(allCats);
         const fluidsOnly = allCats.filter((c: any) =>
           c.esteFluid === true ||
           /lubrifian|ulei|fluid|antigel|adblue|racire|lichid|vaselin/i.test(c.nume || '')
@@ -896,7 +923,11 @@ export default function FluidePage() {
       setIesireContor(cMeta.contor);
     }
 
-    setIesireOperatiune(opts.tipOperatiune || 'COMPLETARE_ULEI');
+    const isTargetPiece = isConsumablePieceNorm(targetTip);
+    setIesireOperatiune(
+      isTargetPiece ? 'SCHIMB_FILTRU' : (opts.tipOperatiune || 'COMPLETARE_ULEI'),
+    );
+    setIesireCantitate(isTargetPiece ? 1 : 5);
     setIesireData(new Date().toISOString().split('T')[0]);
     setIesireObservatii('');
     setFaraDeducereStoc(false);
@@ -914,17 +945,18 @@ export default function FluidePage() {
     }
 
     const selectedArt = selectedArticolStocId
-      ? stocUleiuri.find((s: any) => s.id === selectedArticolStocId)
+      ? [...stocUleiuri, ...stocConsumabile].find((s: any) => s.id === selectedArticolStocId)
       : null;
+    const qtyUnit = getNormUnitMeasure(iesireTipLichid, selectedArt?.unitateMasura);
 
     if (!faraDeducereStoc) {
       if (!selectedArt) {
-        alert('Selectați un articol din stoc sau bifați opțiunea "Fără deducere din depozit" dacă fluidul nu este în stoc.');
+        alert('Selectați un articol din stoc sau bifați opțiunea "Fără deducere din depozit" dacă produsul nu este în stoc.');
         return;
       }
       if (Number(selectedArt.stocCurent || 0) < cant) {
         alert(
-          `Stoc insuficient pentru "${selectedArt.denumire}"!\nDisponibil: ${selectedArt.stocCurent} ${selectedArt.unitateMasura || 'L'}, solicitat: ${cant} L.`
+          `Stoc insuficient pentru "${selectedArt.denumire}"!\nDisponibil: ${selectedArt.stocCurent} ${selectedArt.unitateMasura || qtyUnit}, solicitat: ${cant} ${qtyUnit}.`
         );
         return;
       }
@@ -938,7 +970,7 @@ export default function FluidePage() {
         body: JSON.stringify({
           vehiculId: selectedVehiculId,
           tipLichid: iesireTipLichid,
-          tipOperatiune: iesireOperatiune,
+          tipOperatiune: isIesirePiece ? 'SCHIMB_FILTRU' : iesireOperatiune,
           articolStocId: !faraDeducereStoc && selectedArticolStocId ? selectedArticolStocId : undefined,
           faraDeducereStoc,
           marcaUlei: iesireMarca,
@@ -969,7 +1001,7 @@ export default function FluidePage() {
         alert(`Eroare la salvare (${res.status}): ${parsedMsg || 'Verificați datele introduse'}`);
       }
     } catch (e) {
-      alert('Eroare la procesarea cererii de completare ulei.');
+      alert('Eroare la procesarea cererii de înregistrare.');
     } finally {
       setIsSubmittingIesire(false);
     }
@@ -977,11 +1009,12 @@ export default function FluidePage() {
 
   const handleStergeCompletare = async (rec: any) => {
     const tipLabel = tipLichidLabels[rec.tipLichid] || rec.tipLichid;
+    const recUm = getNormUnitMeasure(rec.tipLichid, rec.articolStoc?.unitateMasura);
     const confirmed = await showConfirm(
-      'Anulare & Ștergere Intervenție Fluid',
-      `Doriți să ștergeți înregistrarea (${rec.cantitateLitri} L ${tipLabel}) pentru ${rec.vehicul?.numarIntern || 'vehicul'}?\n\n${
+      'Anulare & Ștergere Intervenție',
+      `Doriți să ștergeți înregistrarea (${rec.cantitateLitri} ${recUm} ${tipLabel}) pentru ${rec.vehicul?.numarIntern || 'vehicul'}?\n\n${
         rec.articolStocId
-          ? `Cantitatea de ${rec.cantitateLitri} L va fi restituită în stocul articolului "${rec.articolStoc?.denumire || ''}".`
+          ? `Cantitatea de ${rec.cantitateLitri} ${recUm} va fi restituită în stocul articolului "${rec.articolStoc?.denumire || ''}".`
           : 'Această înregistrare va fi eliminată din istoric.'
       }`,
       'Da, șterge',
@@ -1543,13 +1576,19 @@ export default function FluidePage() {
     let schimburi = 0;
     let completari = 0;
     let volumTotal = 0;
+    let pieseBuc = 0;
     for (const c of istoricCompletariFiltrat) {
       const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+      const isPiece = isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU';
       if (isSchimb) schimburi++;
       else completari++;
-      volumTotal += Number(c.cantitateLitri || 0);
+      if (isPiece) {
+        pieseBuc += Number(c.cantitateLitri || 0);
+      } else {
+        volumTotal += Number(c.cantitateLitri || 0);
+      }
     }
-    return { schimburi, completari, volumTotal };
+    return { schimburi, completari, volumTotal, pieseBuc };
   }, [istoricCompletariFiltrat]);
 
   const hasIstoricFilters =
@@ -1620,7 +1659,7 @@ export default function FluidePage() {
             <div className="p-2 rounded-xl bg-sapphire-100 text-sapphire-700">
               <Droplets className="w-6 h-6" />
             </div>
-            <span>Lubrifianți</span>
+            <span>Uleiuri, Fluide &amp; Filtre</span>
           </h1>
         </div>
 
@@ -1650,7 +1689,7 @@ export default function FluidePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-terracotta-700 font-extrabold text-xs uppercase tracking-wider">
               <ShieldAlert className="w-5 h-5 text-terracotta-600 animate-bounce" />
-              <span>Alerte Active Schimb Ulei & Fluide ({alerte.length} active):</span>
+              <span>Alerte Active Norme — Uleiuri, Fluide &amp; Filtre ({alerte.length} active):</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -1708,7 +1747,12 @@ export default function FluidePage() {
                         handleOpenCompletare({
                           vehiculId: a.vehiculId,
                           tipLichid: a.tipLichid,
-                          tipOperatiune: a.categorieAlert === 'SCHIMB_ULEI' ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
+                          tipOperatiune:
+                            isConsumablePieceNorm(a.tipLichid)
+                              ? 'SCHIMB_FILTRU'
+                              : a.categorieAlert === 'SCHIMB_ULEI'
+                              ? 'SCHIMB_ULEI'
+                              : 'COMPLETARE_ULEI',
                         })
                       }
                       className="px-2.5 py-1 rounded-lg bg-sapphire-500 hover:bg-sapphire-600 text-white text-[11px] font-bold shadow-xs transition flex items-center space-x-1"
@@ -1960,7 +2004,7 @@ export default function FluidePage() {
                           : 'text-sage-600 hover:text-sapphire-900'
                       }`}
                     >
-                      Toate Uleiurile
+                      Toate Normele
                     </button>
                   </div>
                 )}
@@ -1987,7 +2031,7 @@ export default function FluidePage() {
               </div>
             </div>
 
-            {/* Rând Căutare + Selector Fluid & Contor */}
+            {/* Rând Căutare + Selector Normă & Contor */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 pt-2 border-t border-morning-200 items-center text-xs">
               <div className="md:col-span-2 relative">
                 <Search className="w-3.5 h-3.5 text-sage-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1995,7 +2039,7 @@ export default function FluidePage() {
                   type="text"
                   value={searchFlota}
                   onChange={(e) => setSearchFlota(e.target.value)}
-                  placeholder="Caută utilaj, înmatriculare, marcă, categorie sau ulei..."
+                  placeholder="Caută utilaj, înmatriculare, marcă, categorie, ulei sau filtru..."
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl pl-9 pr-7 py-2 text-xs text-sapphire-900 font-bold focus:bg-white transition"
                 />
                 {searchFlota && (
@@ -2015,7 +2059,7 @@ export default function FluidePage() {
                 onChange={(e) => setFilterFlotaTip(e.target.value)}
                 className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2 text-xs font-bold text-sapphire-900 cursor-pointer"
               >
-                <option value="TOATE">Fluid: Toate Tipurile ({tipuriFluide.length})</option>
+                <option value="TOATE">Normă: Toate Tipurile ({tipuriFluide.length})</option>
                 {tipuriFluide.map((tf) => (
                   <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
@@ -2174,7 +2218,7 @@ export default function FluidePage() {
                     <tr className="bg-morning-100 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
                       {([
                         { key: 'utilaj', label: 'Utilaj / Categorie', extraClass: '' },
-                        { key: 'tip', label: 'Tip Fluid', extraClass: '' },
+                        { key: 'tip', label: 'Fluid / Consumabil', extraClass: '' },
                         { key: 'ultimulSchimb', label: 'Ultimul Schimb & Contor', extraClass: '' },
                         { key: 'progres', label: 'Progres Interval & Rămas', extraClass: 'min-w-[230px]' },
                       ] as const).map((col) => {
@@ -2225,8 +2269,13 @@ export default function FluidePage() {
                         const unit = f.unitateMasura || 'KM';
                         const isOver = Boolean(f.esteDepasit);
                         const isWarn = !isOver && Boolean(f.esteInPragAvertizare);
+                        const isPieceNorm = Boolean(f.isConsumablePiece) || isConsumablePieceNorm(f.tipLichid);
                         const tipLabel = tipLichidLabels[f.tipLichid] || f.tipLichid?.replace(/_/g, ' ');
-                        const opDefault = String(f.tipLichid || '').includes('ANTIGEL') ? 'SCHIMB_ANTIGEL' : 'SCHIMB_ULEI';
+                        const opDefault = isPieceNorm
+                          ? 'SCHIMB_FILTRU'
+                          : String(f.tipLichid || '').includes('ANTIGEL')
+                          ? 'SCHIMB_ANTIGEL'
+                          : 'SCHIMB_ULEI';
                         const opTopUp = String(f.tipLichid || '').includes('ANTIGEL') ? 'COMPLETARE_ANTIGEL' : 'COMPLETARE_ULEI';
                         const catColor = getCategoryColor(f.vehiculCategorie);
                         const showPlate =
@@ -2396,19 +2445,21 @@ export default function FluidePage() {
                                 >
                                   Schimb
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleOpenCompletare({
-                                      vehiculId: f.vehiculId,
-                                      tipLichid: f.tipLichid,
-                                      tipOperatiune: opTopUp,
-                                    })
-                                  }
-                                  className="px-2.5 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 font-bold text-[11px] transition cursor-pointer"
-                                >
-                                  + Completare
-                                </button>
+                                {!isPieceNorm && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleOpenCompletare({
+                                        vehiculId: f.vehiculId,
+                                        tipLichid: f.tipLichid,
+                                        tipOperatiune: opTopUp,
+                                      })
+                                    }
+                                    className="px-2.5 py-1.5 rounded-lg bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 font-bold text-[11px] transition cursor-pointer"
+                                  >
+                                    + Completare
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -2432,10 +2483,10 @@ export default function FluidePage() {
             <div>
               <h3 className="text-base font-extrabold text-sapphire-900 flex items-center space-x-2">
                 <Clock className="w-5 h-5 text-sapphire-600" />
-                <span>Jurnal Completări &amp; Schimburi Fluide ({istoricCompletariFiltrat.length} / {istoricCompletari.length})</span>
+                <span>Jurnal Intervenții — Fluide &amp; Filtre ({istoricCompletariFiltrat.length} / {istoricCompletari.length})</span>
               </h3>
               <p className="text-xs text-sage-600 font-medium mt-0.5">
-                Evidența cronologică a schimburilor și completărilor (inclusiv intervențiile sincronizate automat din Comenzi de Lucru).
+                Evidența cronologică a schimburilor de ulei/filtre și completărilor (inclusiv intervențiile sincronizate automat din Comenzi de Lucru).
               </p>
             </div>
             <button
@@ -2487,9 +2538,14 @@ export default function FluidePage() {
               <div className="text-lg font-black text-amber-800 font-mono mt-0.5">{istoricKpi.completari}</div>
             </button>
             <div className="p-3 rounded-xl border bg-morning-50 border-morning-200 text-left">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-sage-600">Volum Filtrat</div>
-              <div className="text-lg font-black text-sapphire-900 font-mono mt-0.5">
-                {istoricKpi.volumTotal.toLocaleString('ro-RO', { maximumFractionDigits: 1 })} L
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sage-600">Volum Fluide / Piese</div>
+              <div className="text-lg font-black text-sapphire-900 font-mono mt-0.5 flex flex-wrap items-baseline gap-x-2">
+                <span>{istoricKpi.volumTotal.toLocaleString('ro-RO', { maximumFractionDigits: 1 })} L</span>
+                {istoricKpi.pieseBuc > 0 && (
+                  <span className="text-xs font-extrabold text-indigo-700 dark:text-indigo-300">
+                    · {istoricKpi.pieseBuc.toLocaleString('ro-RO', { maximumFractionDigits: 1 })} buc
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -2503,7 +2559,7 @@ export default function FluidePage() {
                   type="text"
                   value={searchIstoric}
                   onChange={(e) => { setSearchIstoric(e.target.value); setIstoricPage(1); }}
-                  placeholder="Caută vehicul, ulei/antigel, observații, mecanic, CL-XXXXX..."
+                  placeholder="Caută vehicul, ulei, filtru, observații, mecanic, CL-XXXXX..."
                   className="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-morning-300 text-sapphire-900 font-medium focus:outline-none focus:border-sapphire-500"
                 />
               </div>
@@ -2524,7 +2580,7 @@ export default function FluidePage() {
                 onChange={(e) => { setFilterIstoricTip(e.target.value); setIstoricPage(1); }}
                 className="px-3 py-2 bg-white rounded-xl border border-morning-300 font-bold text-sapphire-900"
               >
-                <option value="TOATE">Fluid: Toate Tipurile</option>
+                <option value="TOATE">Normă: Toate Tipurile</option>
                 {tipuriFluide.map((tf) => (
                   <option key={tf.cod} value={tf.cod}>{tf.nume}</option>
                 ))}
@@ -2591,10 +2647,10 @@ export default function FluidePage() {
                 <tr className="bg-morning-100 border-b border-morning-200 text-sage-700 font-extrabold uppercase tracking-wider text-[10px]">
                   <th className="p-3">Dată</th>
                   <th className="p-3">Utilaj</th>
-                  <th className="p-3">Operațiune &amp; Tip Fluid</th>
+                  <th className="p-3">Operațiune &amp; Normă</th>
                   <th className="p-3">Articol / Sortiment</th>
                   <th className="p-3">Observații</th>
-                  <th className="p-3 text-right">Volum</th>
+                  <th className="p-3 text-right">Cantitate</th>
                   <th className="p-3 text-right">Cost FIFO</th>
                   <th className="p-3 text-right">Contor</th>
                   <th className="p-3">Mecanic &amp; Sursă</th>
@@ -2605,12 +2661,14 @@ export default function FluidePage() {
                 {istoricPaginat.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-8 text-center text-sage-600 italic">
-                      Nu există intervenții de fluide înregistrate conform filtrelor.
+                      Nu există intervenții înregistrate conform filtrelor.
                     </td>
                   </tr>
                 ) : (
                   istoricPaginat.map((c: any) => {
-                    const isSchimb = String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+                    const isPieceRow = isConsumablePieceNorm(c.tipLichid) || c.tipOperatiune === 'SCHIMB_FILTRU';
+                    const isSchimb = isPieceRow || String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB');
+                    const qtyUm = getNormUnitMeasure(c.tipLichid, c.articolStoc?.unitateMasura);
                     const unit = c.unitateContor || c.vehicul?.tipMasurare || 'KM';
                     return (
                       <tr key={c.id} className="hover:bg-morning-50 transition">
@@ -2624,11 +2682,13 @@ export default function FluidePage() {
                         <td className="p-3 space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                              isSchimb
+                              isPieceRow
+                                ? 'bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:border-indigo-700'
+                                : isSchimb
                                 ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                                 : 'bg-amber-100 text-amber-800 border-amber-200'
                             }`}>
-                              {isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE'}
+                              {isPieceRow ? 'SCHIMB FILTRU' : isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE'}
                             </span>
                             {c.alertaScurgereGenerata && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-roseash-100 text-terracotta-700 border border-roseash-300">
@@ -2651,14 +2711,14 @@ export default function FluidePage() {
                           )}
                         </td>
                         <td className="p-3 text-right font-mono font-black text-sapphire-900 whitespace-nowrap">
-                          {Number(c.cantitateLitri || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} L
+                          {Number(c.cantitateLitri || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })} {qtyUm}
                         </td>
                         <td className="p-3 text-right font-mono whitespace-nowrap">
                           <div className="font-extrabold text-sapphire-900">
                             {Number(c.costTotal || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON
                           </div>
                           <div className="text-[10px] text-sage-600">
-                            {Number(c.pretPerLitru || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/L
+                            {Number(c.pretPerLitru || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON/{qtyUm}
                           </div>
                         </td>
                         <td className="p-3 text-right font-mono whitespace-nowrap">
@@ -2675,7 +2735,7 @@ export default function FluidePage() {
                               <span>{c.comandaNumar}</span>
                             </a>
                           ) : (
-                            <span className="text-[10px] text-sage-600">Meniu Fluide (Direct)</span>
+                            <span className="text-[10px] text-sage-600">Înregistrare Directă</span>
                           )}
                         </td>
                         <td className="p-3 text-right whitespace-nowrap">
@@ -3287,7 +3347,7 @@ export default function FluidePage() {
                   className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Tip Lubrifiant Nou</span>
+                  <span>Tip Normă Nouă</span>
                 </button>
 
                 <button
@@ -3306,11 +3366,11 @@ export default function FluidePage() {
                 {selectedCatObj && !arataToateNormeleCategoriilor && (
                   <button
                     type="button"
-                    onClick={() => handleOpenModalNorma(selectedCatObj.nume, 'ULEI_MOTOR')}
+                    onClick={() => handleOpenModalNorma(selectedCatObj.nume, tipuriFluide[0]?.cod || 'ULEI_MOTOR_15W40')}
                     className="px-4 py-2.5 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1.5 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>+ Configurează Normă Nouă</span>
+                    <span>Configurează Normă Nouă</span>
                   </button>
                 )}
               </div>
@@ -3501,7 +3561,7 @@ export default function FluidePage() {
                         <tr>
                           <th className="p-3">Categorie Utilaj</th>
                           <th className="p-3">Contor</th>
-                          <th className="p-3">Tip Lubrifiant / Fluid</th>
+                          <th className="p-3">Fluid / Filtru (Normă)</th>
                           <th className="p-3 font-mono">Interval Normat</th>
                           <th className="p-3 font-mono">Marjă Avertizare</th>
                           <th className="p-3">Utilaje Afectate</th>
@@ -3748,7 +3808,11 @@ export default function FluidePage() {
                                       isCustom ? accentCls.iconBg : 'bg-morning-200 text-sage-500'
                                     }`}
                                   >
-                                    <Droplets className="w-4 h-4" />
+                                    {isConsumablePieceNorm(fluid.cod) ? (
+                                      <Wind className="w-4 h-4" />
+                                    ) : (
+                                      <Droplets className="w-4 h-4" />
+                                    )}
                                   </div>
                                   <div className="min-w-0">
                                     <h4 className={`font-extrabold text-sm truncate ${isCustom ? 'text-sapphire-900' : 'text-sage-700'}`}>
@@ -3906,10 +3970,10 @@ export default function FluidePage() {
             <div>
               <h2 className="text-base font-bold text-sapphire-900 flex items-center space-x-2">
                 <ShieldAlert className="w-5 h-5 text-terracotta-500" />
-                <span>Centralizator Alerte Mentenanță & Scurgeri Ulei</span>
+                <span>Centralizator Alerte Norme (Fluide &amp; Filtre) &amp; Scurgeri</span>
               </h2>
               <p className="text-xs text-sage-600 font-medium">
-                Algoritmul monitorizează depășirile de intervale și completările anormale de ulei pe termen scurt
+                Algoritmul monitorizează depășirile de intervale pentru uleiuri, fluide, filtre și completările anormale pe termen scurt
               </p>
             </div>
           </div>
@@ -3944,7 +4008,12 @@ export default function FluidePage() {
                         handleOpenCompletare({
                           vehiculId: a.vehiculId,
                           tipLichid: a.tipLichid,
-                          tipOperatiune: a.categorieAlert === 'SCHIMB_ULEI' ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI',
+                          tipOperatiune:
+                            isConsumablePieceNorm(a.tipLichid)
+                              ? 'SCHIMB_FILTRU'
+                              : a.categorieAlert === 'SCHIMB_ULEI'
+                              ? 'SCHIMB_ULEI'
+                              : 'COMPLETARE_ULEI',
                         })
                       }
                       className="px-4 py-2 rounded-xl bg-sapphire-500 hover:bg-sapphire-600 text-white text-xs font-bold shadow-md shadow-sapphire-500/20 transition flex items-center space-x-1"
@@ -3967,11 +4036,17 @@ export default function FluidePage() {
             <div className="flex items-center justify-between border-b border-morning-200 pb-3">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 rounded-xl bg-sapphire-100 text-sapphire-700">
-                  <Droplets className="w-5 h-5" />
+                  {isIesirePiece ? <Wind className="w-5 h-5" /> : <Droplets className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-sapphire-900">Înregistrare Intervenție Fluid</h3>
-                  <p className="text-[11px] text-sage-600 font-medium">Completare nivel sau schimb complet — scădere automată din stoc</p>
+                  <h3 className="text-base font-extrabold text-sapphire-900">
+                    {isIesirePiece ? 'Înregistrare Schimb Filtru / Consumabil' : 'Înregistrare Intervenție Fluid'}
+                  </h3>
+                  <p className="text-[11px] text-sage-600 font-medium">
+                    {isIesirePiece
+                      ? 'Înlocuire piesă din stoc (buc) & resetare automată normă'
+                      : 'Completare nivel sau schimb complet — scădere automată din stoc'}
+                  </p>
                 </div>
               </div>
               <button
@@ -4086,22 +4161,38 @@ export default function FluidePage() {
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">Tip Operațiune:</label>
                   <select
-                    value={iesireOperatiune}
+                    value={isIesirePiece ? 'SCHIMB_FILTRU' : iesireOperatiune}
                     onChange={(e) => setIesireOperatiune(e.target.value)}
-                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
+                    disabled={isIesirePiece}
+                    className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold disabled:opacity-80"
                   >
-                    <option value="COMPLETARE_ULEI">Completare Nivel (Top-up)</option>
-                    <option value="SCHIMB_ULEI">Schimb Complet (Înlocuire &amp; Resetare Contor)</option>
+                    {isIesirePiece ? (
+                      <option value="SCHIMB_FILTRU">Înlocuire / Schimb Complet (&amp; Resetare Contor)</option>
+                    ) : (
+                      <>
+                        <option value="COMPLETARE_ULEI">Completare Nivel (Top-up)</option>
+                        <option value="SCHIMB_ULEI">Schimb Complet (Înlocuire &amp; Resetare Contor)</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Tip Fluid / Lubrifiant:</label>
+                  <label className="text-sage-700 block mb-1 font-bold">Normă (Fluid / Filtru):</label>
                   <select
                     value={iesireTipLichid}
                     onChange={(e) => {
-                      setIesireTipLichid(e.target.value);
+                      const nextTip = e.target.value;
+                      const nextIsPiece = isConsumablePieceNorm(nextTip);
+                      setIesireTipLichid(nextTip);
                       setArataToateFluidele(false);
+                      if (nextIsPiece) {
+                        setIesireOperatiune('SCHIMB_FILTRU');
+                        setIesireCantitate(1);
+                      } else if (iesireOperatiune === 'SCHIMB_FILTRU') {
+                        setIesireOperatiune('SCHIMB_ULEI');
+                        setIesireCantitate(5);
+                      }
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                   >
@@ -4113,7 +4204,9 @@ export default function FluidePage() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-sage-700 font-bold">Articol Fluid / Ulei din Stoc:</label>
+                    <label className="text-sage-700 font-bold">
+                      {isIesirePiece ? 'Articol Filtru / Piesă din Stoc:' : 'Articol Fluid / Ulei din Stoc:'}
+                    </label>
                     {articoleStocFiltrate.length > 0 && !arataToateFluidele && !faraDeducereStoc && (
                       <span className="text-[10px] text-sapphire-700 font-bold bg-sapphire-100 px-1.5 py-0.5 rounded">
                         {articoleStocFiltrate.length} {articoleStocFiltrate.length === 1 ? 'articol' : 'articole'}
@@ -4125,27 +4218,30 @@ export default function FluidePage() {
                     value={selectedArticolStocId}
                     onChange={(e) => {
                       setSelectedArticolStocId(e.target.value);
-                      const item = stocUleiuri.find((s: any) => s.id === e.target.value);
+                      const item = stocSursaModal.find((s: any) => s.id === e.target.value);
                       if (item) setIesireMarca(item.marcaUlei || item.denumire);
                     }}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-semibold disabled:opacity-45"
                   >
                     {articoleStocFiltrate.length === 0 ? (
                       <option value="">
-                        Niciun articol disponibil în stoc pentru această categorie
+                        Niciun articol disponibil în stoc pentru această normă
                       </option>
                     ) : (
-                      articoleStocFiltrate.map((s: any) => (
-                        <option key={s.id} value={s.id}>
-                          {s.denumire} {s.depozit?.nume ? `[${s.depozit.nume}]` : ''} • Stoc: {s.stocCurent} {s.unitateMasura || 'L'} • {s.pretUnitar} RON/{s.unitateMasura || 'L'}
-                        </option>
-                      ))
+                      articoleStocFiltrate.map((s: any) => {
+                        const rowUm = s.unitateMasura || (isIesirePiece ? 'buc' : 'L');
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {s.denumire} {s.depozit?.nume ? `[${s.depozit.nume}]` : ''} • Stoc: {s.stocCurent} {rowUm} • {s.pretUnitar} RON/{rowUm}
+                          </option>
+                        );
+                      })
                     )}
                   </select>
 
                   {articoleStocFiltrate.length === 0 && !faraDeducereStoc && (
                     <div className="mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-center justify-between gap-2">
-                      <span>Nu există în stoc fluide pentru <strong>{tipLichidLabels[iesireTipLichid] || iesireTipLichid}</strong>.</span>
+                      <span>Nu există în stoc articole asociate pentru <strong>{tipLichidLabels[iesireTipLichid] || iesireTipLichid}</strong>.</span>
                       <button
                         type="button"
                         onClick={() => setArataToateFluidele(true)}
@@ -4163,7 +4259,7 @@ export default function FluidePage() {
                         onClick={() => setArataToateFluidele(false)}
                         className="text-[11px] text-sapphire-600 underline hover:text-sapphire-800"
                       >
-                        ← Filtrează strict după {tipLichidLabels[iesireTipLichid] || 'categoria selectată'}
+                        ← Filtrează strict după {tipLichidLabels[iesireTipLichid] || 'norma selectată'}
                       </button>
                     </div>
                   )}
@@ -4180,18 +4276,20 @@ export default function FluidePage() {
                 </div>
 
                 <div>
-                  <label className="text-sage-700 block mb-1 font-bold">Cantitate (Litri): *</label>
+                  <label className="text-sage-700 block mb-1 font-bold">
+                    {isIesirePiece ? 'Cantitate (buc): *' : 'Cantitate (Litri): *'}
+                  </label>
                   <input
                     type="number"
-                    min="0.5"
-                    step="0.5"
+                    min={isIesirePiece ? '1' : '0.5'}
+                    step={isIesirePiece ? '1' : '0.5'}
                     required
                     value={iesireCantitate}
                     onChange={(e) => setIesireCantitate(Number(e.target.value))}
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                   />
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {[1, 2, 5, 10, 20, 30].map((v) => (
+                    {(isIesirePiece ? [1, 2, 3, 4] : [1, 2, 5, 10, 20, 30]).map((v) => (
                       <button
                         key={v}
                         type="button"
@@ -4202,7 +4300,7 @@ export default function FluidePage() {
                             : 'bg-morning-100 hover:bg-morning-200 text-sapphire-900 border-morning-300'
                         }`}
                       >
-                        {v} L
+                        {v} {isIesirePiece ? 'buc' : 'L'}
                       </button>
                     ))}
                   </div>
@@ -4771,7 +4869,7 @@ export default function FluidePage() {
                       <span>•</span>
                       <span>({cat?.totalVehicule || 0} utilaje)</span>
                       <span>•</span>
-                      <span>Fluid: <strong className="text-sapphire-900">{fluidLabel}</strong></span>
+                      <span>Normă: <strong className="text-sapphire-900">{fluidLabel}</strong></span>
                     </p>
                   </div>
                 </div>
@@ -4786,10 +4884,10 @@ export default function FluidePage() {
 
               {/* Corp Formular Scrollabil */}
               <form onSubmit={handleSaveModalNorma} className="space-y-4 overflow-y-auto pr-1 flex-1">
-                {/* Selector Tip Fluid */}
+                {/* Selector Tip Normă */}
                 <div>
                   <label className="text-xs font-bold text-sapphire-900 block mb-1.5">
-                    Selectează Tipul de Lubrifiant / Fluid:
+                    Selectează Tipul de Fluid / Filtru / Consumabil:
                   </label>
                   <select
                     value={modalNormaTipLichid}
@@ -5008,7 +5106,7 @@ export default function FluidePage() {
                 <div className="p-4 bg-white rounded-xl border border-morning-200 space-y-3">
                   <h4 className="text-xs font-bold text-sapphire-900 flex items-center space-x-1.5">
                     <Calendar className="w-4 h-4 text-sapphire-600" />
-                    <span>{isModeLuni ? 'Interval Calendaristic Principal (Luni)' : 'Interval Calendaristic Opțional (Timp de Îmbătrânire Ulei)'}</span>
+                    <span>{isModeLuni ? 'Interval Calendaristic Principal (Luni)' : 'Interval Calendaristic Opțional (Limită Timp)'}</span>
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -5263,10 +5361,10 @@ export default function FluidePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-sapphire-900">
-                    {editingTipFluid ? `Editare Tip Lubrifiant (${editingTipFluid.cod})` : 'Tip Lubrifiant / Fluid Nou'}
+                    {editingTipFluid ? `Editare Tip Normă (${editingTipFluid.cod})` : 'Tip Fluid / Filtru / Consumabil Nou'}
                   </h3>
                   <p className="text-[11px] text-sage-600 font-medium">
-                    Disponibil imediat atât la configurarea normelor pe utilaje, cât și la recepția în stoc.
+                    Disponibil imediat la configurarea normelor pe utilaje, la recepția în stoc și sincronizat automat din Devizele de Lucru.
                   </p>
                 </div>
               </div>
@@ -5281,12 +5379,12 @@ export default function FluidePage() {
 
             <form onSubmit={handleSaveTipFluid} className="space-y-3.5 text-xs">
               <div>
-                <label className="text-sage-700 block mb-1 font-bold">Denumire Tip Lubrifiant: *</label>
+                <label className="text-sage-700 block mb-1 font-bold">Denumire Fluid / Filtru / Consumabil: *</label>
                 <input
                   required
                   value={tipFluidForm.nume}
                   onChange={(e) => setTipFluidForm({ ...tipFluidForm, nume: e.target.value })}
-                  placeholder="ex: Ulei Reductor Liebherr, Ulei Retarder ZF, Vaselină Centralizată"
+                  placeholder="ex: Filtru Aer, Filtru Combustibil, Ulei Reductor Liebherr, Vaselină"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-bold"
                 />
               </div>
@@ -5297,7 +5395,7 @@ export default function FluidePage() {
                   <input
                     value={tipFluidForm.cod}
                     onChange={(e) => setTipFluidForm({ ...tipFluidForm, cod: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') })}
-                    placeholder="ex: ULEI_REDUCTOR_LIEBHERR"
+                    placeholder="ex: FILTRU_AER, ULEI_REDUCTOR_LIEBHERR"
                     className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900 font-mono font-bold"
                   />
                 </div>
@@ -5308,7 +5406,7 @@ export default function FluidePage() {
                 <input
                   value={tipFluidForm.descriere}
                   onChange={(e) => setTipFluidForm({ ...tipFluidForm, descriere: e.target.value })}
-                  placeholder="ex: Ulei sintetic 75W-90 pentru reductoare finale și punți grele"
+                  placeholder="ex: Filtru aer motor / Ulei sintetic 75W-90 pentru reductoare finale"
                   className="w-full bg-morning-100 border border-morning-200 rounded-xl p-2.5 text-sapphire-900"
                 />
               </div>
@@ -5347,7 +5445,7 @@ export default function FluidePage() {
                   disabled={isSavingTipFluid}
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm disabled:opacity-50 cursor-pointer"
                 >
-                  {isSavingTipFluid ? 'Se salvează...' : (editingTipFluid ? 'Salvează Tipul' : 'Creează Tip Lubrifiant')}
+                  {isSavingTipFluid ? 'Se salvează...' : (editingTipFluid ? 'Salvează Tipul' : 'Creează Tip Normă')}
                 </button>
               </div>
             </form>

@@ -18,7 +18,7 @@ import {
   FALLBACK_TIPURI_FLUIDE,
   TipFluidDef,
   getTipFluidLabel,
-  isFluidCategoryOrItem,
+  isNormTrackableCategoryOrItem,
   normalizeTipuriFluideList,
 } from '@/lib/fluids';
 import { isTireCategoryName, isTireItem } from '@/lib/tires';
@@ -3848,7 +3848,7 @@ function StocuriGarantiiContent() {
                       setCategorie(e.target.value);
                       setSubcategorie('');
                       const catObj = categoriiPiese.find((c: any) => c.nume === e.target.value);
-                      if (!isFluidCategoryOrItem(e.target.value, catObj?.esteFluid)) {
+                      if (!isNormTrackableCategoryOrItem(e.target.value, catObj?.esteFluid)) {
                         setArticolTipLichid('');
                       }
                     }}
@@ -3894,7 +3894,7 @@ function StocuriGarantiiContent() {
                 </div>
               </div>
 
-              {isFluidCategoryOrItem(
+              {isNormTrackableCategoryOrItem(
                 categorie,
                 categorii.find((c: any) => c.nume === categorie)?.esteFluid,
                 articolTipLichid,
@@ -3903,7 +3903,7 @@ function StocuriGarantiiContent() {
               ) && (
                 <div className="p-2.5 bg-sapphire-50/70 border border-sapphire-200 rounded-xl">
                   <label className="text-sapphire-900 block mb-1 font-bold">
-                    Tip Lubrifiant / Normă Întreținere:
+                    Normă Întreținere Asociată (Fluid / Filtru):
                   </label>
                   <select
                     value={articolTipLichid}
@@ -3987,13 +3987,13 @@ function StocuriGarantiiContent() {
                 />
               </div>
 
-              {isFluidCategoryOrItem(
+              {isNormTrackableCategoryOrItem(
                 targetCatForSubcat,
                 categorii.find((c: any) => c.nume === targetCatForSubcat)?.esteFluid,
               ) && (
                 <div>
                   <label className="text-sage-700 block mb-1 font-bold">
-                    Tip Lubrifiant / Normă Asociată (opțional):
+                    Normă Întreținere Asociată (Fluid / Filtru — opțional):
                   </label>
                   <select
                     value={subcatTipLichidNou}
@@ -4060,7 +4060,7 @@ function StocuriGarantiiContent() {
                   }),
               })}
 
-              {isFluidCategoryOrItem(
+              {isNormTrackableCategoryOrItem(
                 editingArticol.categorie,
                 categorii.find((c: any) => c.nume === editingArticol.categorie)?.esteFluid,
                 editingArticol.tipLichid,
@@ -4070,7 +4070,7 @@ function StocuriGarantiiContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl">
                   <div>
                     <label className="text-sapphire-900 block mb-1 font-bold">
-                      Tip Lubrifiant / Normă Întreținere:
+                      Normă Întreținere (Fluid / Filtru):
                     </label>
                     <select
                       value={editingArticol.tipLichid || ''}

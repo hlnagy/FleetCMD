@@ -142,7 +142,7 @@ export default function TabBar() {
                     { title: 'Actualizare KM', href: '/import-km', icon: Gauge },
                     { title: 'Ore Funcționare', href: '/ore-functionare', icon: Timer },
                     { title: 'Planificator Revizii', href: '/mentenanta', icon: Clock },
-                    { title: 'Uleiuri', href: '/fluide', icon: Droplets },
+                    { title: 'Uleiuri & Filtre', href: '/fluide', icon: Droplets },
                     { title: 'Alerte Active', href: '/alerte', icon: ShieldAlert },
                     { title: 'Rapoarte Flotă', href: '/rapoarte', icon: BarChart3 },
                     { title: 'Setări', href: '/setari', icon: Settings },

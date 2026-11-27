@@ -6,6 +6,8 @@ import {
   DEFAULT_TIPURI_FLUIDE,
   TIP_LICHID_LABELS,
   getEffectiveMthCounter,
+  getNormUnitMeasure,
+  isConsumablePieceNorm,
   isDualMthVehicle,
   isMthTipMasurare,
   resolveFluidRuleCounterConfig,
@@ -443,16 +445,23 @@ export class AnomaliiService {
       }
 
       const matchingLogs = completariList.filter((c) => c.tipLichid === cfg.tipLichid);
+      const isPiece = isConsumablePieceNorm(cfg.tipLichid);
       const ultimaCompletare = matchingLogs[0] || null;
-      const totalLitriCompletati = Number(
-        matchingLogs
-          .filter((c) => !String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB'))
-          .reduce((sum, c) => sum + Number(c.cantitateLitri || 0), 0)
-          .toFixed(1),
-      );
+      const totalSchimburiInregistrate = matchingLogs.filter((c) =>
+        String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB'),
+      ).length;
+      const totalLitriCompletati = isPiece
+        ? 0
+        : Number(
+            matchingLogs
+              .filter((c) => !String(c.tipOperatiune || '').toUpperCase().includes('SCHIMB'))
+              .reduce((sum, c) => sum + Number(c.cantitateLitri || 0), 0)
+              .toFixed(1),
+          );
 
       return {
         ...cfg,
+        isConsumablePiece: isPiece,
         ultimulSchimbEstimat: Boolean(cfg.ultimulSchimbEstimat),
         trackingMode,
         unitateMasura,
@@ -470,6 +479,7 @@ export class AnomaliiService {
         ultimaCompletareData: ultimaCompletare?.dataCompletare || null,
         ultimaCompletareLitri: ultimaCompletare?.cantitateLitri || null,
         totalLitriCompletati,
+        totalSchimburiInregistrate,
       };
     });
   }
@@ -537,8 +547,16 @@ export class AnomaliiService {
       }
     }
 
-    const isSchimb = String(data.tipOperatiune || '').toUpperCase().includes('SCHIMB');
-    const sursaOp = isSchimb ? 'SCHIMB_ULEI' : 'COMPLETARE_ULEI';
+    const isPieceNorm = isConsumablePieceNorm(data.tipLichid);
+    const resolvedTipOperatiune = isPieceNorm
+      ? 'SCHIMB_FILTRU'
+      : data.tipOperatiune;
+    const isSchimb = isPieceNorm || String(resolvedTipOperatiune || '').toUpperCase().includes('SCHIMB');
+    const sursaOp = isPieceNorm
+      ? 'SCHIMB_FILTRU'
+      : isSchimb
+      ? 'SCHIMB_ULEI'
+      : 'COMPLETARE_ULEI';
 
     const txResult = await this.prisma.$transaction(
       async (tx) => {
@@ -550,7 +568,7 @@ export class AnomaliiService {
         if (!data.faraDeducereStoc && data.articolStocId && String(data.articolStocId).trim() !== '') {
           articolUlei = await tx.articolStoc.findUnique({ where: { id: data.articolStocId } });
           if (!articolUlei) {
-            throw new NotFoundException('Articolul de fluid selectat nu a fost găsit în depozit.');
+            throw new NotFoundException('Articolul selectat nu a fost găsit în depozit.');
           }
 
           // Verificăm inclusiv stocul rezervat în comenzi de lucru deschise (IN_LUCRU / DEVALIDAT)
@@ -558,14 +576,14 @@ export class AnomaliiService {
           const reservedQty = Number(reservedMap.get(articolUlei.id) || 0);
           const stocFizic = Number(articolUlei.stocCurent || 0);
           const disponibil = Number(Math.max(0, stocFizic - reservedQty).toFixed(4));
+          const um = getNormUnitMeasure(data.tipLichid, articolUlei.unitateMasura);
           if (cantitate > disponibil + 1e-6) {
-            const um = articolUlei.unitateMasura || 'L';
             const rezervatInfo =
               reservedQty > 0
                 ? ` (stoc fizic: ${stocFizic} ${um}, rezervat în comenzi deschise: ${reservedQty} ${um})`
                 : '';
             throw new BadRequestException(
-              `Stoc insuficient pentru "${articolUlei.denumire}": disponibil ${disponibil} ${um}${rezervatInfo}, solicitat ${cantitate} L.`,
+              `Stoc insuficient pentru "${articolUlei.denumire}": disponibil ${disponibil} ${um}${rezervatInfo}, solicitat ${cantitate} ${um}.`,
             );
           }
 
@@ -574,6 +592,8 @@ export class AnomaliiService {
           costTotal = fifoResult.costTotal;
           pretPerLitru = fifoResult.pretUnitarMediu;
         }
+
+        const qtyUnit = getNormUnitMeasure(data.tipLichid, articolUlei?.unitateMasura);
 
         if (inputContor > 0) {
           await tx.istoricContorVehicul.create({
@@ -584,7 +604,7 @@ export class AnomaliiService {
               dataInregistrare: dataOp,
               sursa: sursaOp,
               operator: data.mecanic,
-              observatii: `Înregistrat la ${data.tipOperatiune} (${unitLabel}): ${cantitate}L ${data.tipLichid} (${data.marcaUlei || articolUlei?.denumire || ''})`,
+              observatii: `Înregistrat la ${resolvedTipOperatiune} (${unitLabel}): ${cantitate} ${qtyUnit} ${data.tipLichid} (${data.marcaUlei || articolUlei?.denumire || ''})`,
             },
           });
 
@@ -621,7 +641,7 @@ export class AnomaliiService {
                     dataInregistrare: dataOp,
                     sursa: 'CUPLARE_CAP_TRACTOR',
                     operator: 'Sistem Cuplare Dinamică',
-                    observatii: `Rulaj acumulat automat la ${data.tipOperatiune} Cap Tractor ${vehicul.numarIntern}: +${delta} KM`,
+                    observatii: `Rulaj acumulat automat la ${resolvedTipOperatiune} Cap Tractor ${vehicul.numarIntern}: +${delta} KM`,
                   },
                 });
               }
@@ -639,7 +659,7 @@ export class AnomaliiService {
             vehiculId: vehicul.id,
             articolStocId: articolUlei ? articolUlei.id : null,
             tipLichid: data.tipLichid,
-            tipOperatiune: data.tipOperatiune,
+            tipOperatiune: resolvedTipOperatiune,
             marcaUlei: data.marcaUlei || (articolUlei ? (articolUlei.marcaUlei || articolUlei.denumire) : 'Standard'),
             cantitateLitri: cantitate,
             pretPerLitru,
@@ -649,7 +669,7 @@ export class AnomaliiService {
             dataCompletare: dataOp,
             mecanic: data.mecanic || 'Atelier',
             observatii: data.observatii,
-            stareAlerta: 'NOUA',
+            stareAlerta: isPieceNorm ? 'REZOLVATA' : 'NOUA',
           },
         });
 
@@ -677,15 +697,15 @@ export class AnomaliiService {
           });
         }
 
-        return { completare, articolUlei, fifoResult, pretPerLitru, costTotal };
+        return { completare, articolUlei, fifoResult, pretPerLitru, costTotal, qtyUnit };
       },
       { timeout: 20000 },
     );
 
-    const { completare, articolUlei, fifoResult, pretPerLitru, costTotal } = txResult;
+    const { completare, articolUlei, fifoResult, pretPerLitru, costTotal, qtyUnit } = txResult;
 
     let verificareScurgere = null;
-    if (!isSchimb) {
+    if (!isSchimb && !isPieceNorm) {
       verificareScurgere = await this.verificaAnomalieScurgere(vehicul.id, data.tipLichid, useMthCounter);
       if (verificareScurgere.esteAnomalie) {
         await this.prisma.completareLichid.update({
@@ -697,11 +717,11 @@ export class AnomaliiService {
 
     const labelsMap = await this.getTipFluidLabelsMap();
     const tipLabel = labelsMap[data.tipLichid] || data.tipLichid;
-    const operatiuneNume = isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE';
+    const operatiuneNume = isPieceNorm ? 'SCHIMB FILTRU / CONSUMABIL' : isSchimb ? 'SCHIMB COMPLET' : 'COMPLETARE';
     return {
       mesaj: isSchimb
-        ? `${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${tipLabel} a fost RESETAT la ${effectiveContor} ${unitLabel}.${articolUlei ? ` (Consumat FIFO: ${cantitate}L din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/L, Cost total: ${costTotal} RON)` : ''}`
-        : `Completare ${cantitate}L ${tipLabel} înregistrată.${articolUlei ? ` Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/L) · Stoc dedus din ${articolUlei.denumire}` : ''}`,
+        ? `${operatiuneNume} ÎNREGISTRAT! Contorul pentru ${tipLabel} a fost RESETAT la ${effectiveContor} ${unitLabel}.${articolUlei ? ` (Consumat FIFO: ${cantitate} ${qtyUnit} din ${articolUlei.denumire}, Preț FIFO: ${pretPerLitru} RON/${qtyUnit}, Cost total: ${costTotal} RON)` : ''}`
+        : `Completare ${cantitate} ${qtyUnit} ${tipLabel} înregistrată.${articolUlei ? ` Cost FIFO: ${costTotal} RON (${pretPerLitru} RON/${qtyUnit}) · Stoc dedus din ${articolUlei.denumire}` : ''}`,
       completare,
       anomalie: verificareScurgere,
       fifoResult,
@@ -942,8 +962,8 @@ export class AnomaliiService {
 
     const isMthRule = Boolean(data.intervalMth && Number(data.intervalMth) > 0);
     for (const v of vehicule) {
-      const initialBaseline = isMthRule && isDualMthVehicle(v)
-        ? Number(v.oreFunctionareCurent || 0)
+      const initialBaseline = isMthRule
+        ? getEffectiveMthCounter(v)
         : Number(v.valoareContorCurent || 0);
       await this.prisma.configurareUleiVehicul.upsert({
         where: { vehiculId_tipLichid: { vehiculId: v.id, tipLichid: data.tipLichid } },
@@ -2385,11 +2405,12 @@ export class AnomaliiService {
       for (const st of statuses) {
         if (!st.esteDepasit && !st.esteInPragAvertizare) continue;
         const labelLichid = tipLabelsMap[st.tipLichid] || st.tipLichid.replace(/_/g, ' ');
+        const isPiece = isConsumablePieceNorm(st.tipLichid);
         listaAlerte.push({
           id: `ulei-${v.id}-${st.tipLichid}`,
           dbId: `${v.id}::${st.tipLichid}`,
           categorieAlert: 'SCHIMB_ULEI',
-          categorieText: 'Schimb Ulei / Fluid',
+          categorieText: isPiece ? 'Schimb Filtru / Consumabil' : 'Schimb Ulei / Fluid',
           titlu: `Schimb ${labelLichid} — ${v.numarIntern}`,
           tipLichid: st.tipLichid,
           vehiculId: v.id,

@@ -375,6 +375,40 @@ export function buildSubcatTipMap(categorii: any[]): Record<string, string> {
   return map;
 }
 
+const CONSUMABLE_PIECE_NORM_PATTERN =
+  /(?:^|_)(FILTR[A-Z0-9]*|FILTER|CUREA|CURELE|BUJIE|BUJII|PLACUT[AE]|SABOT|DISC|BEC|STERGATOR|BATERIE|ACUMULATOR)(?:_|$)/i;
+
+function stripDiacritics(input: string): string {
+  return String(input || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Returnează true pentru norme de tip filtru/consumabil la bucată (ex: FILTRU_AER, FILTRU_ULEI),
+ * distincte de fluidele/lubrifianții măsurați în litri.
+ */
+export function isConsumablePieceNorm(tipLichid?: string | null): boolean {
+  const code = String(tipLichid || '').trim().toUpperCase();
+  if (!code) return false;
+  return CONSUMABLE_PIECE_NORM_PATTERN.test(code);
+}
+
+/**
+ * Returnează unitatea de măsură potrivită (buc pentru filtre/consumabile, L pentru fluide).
+ */
+export function getNormUnitMeasure(
+  tipLichid?: string | null,
+  articolUm?: string | null,
+): string {
+  if (isConsumablePieceNorm(tipLichid)) {
+    const cleanUm = String(articolUm || '').trim();
+    if (cleanUm && !/^(l|litri|litru)$/i.test(cleanUm)) return cleanUm;
+    return 'buc';
+  }
+  return 'L';
+}
+
 export function isFluidCategoryOrItem(
   catName?: string | null,
   esteFluidFlag?: boolean,
@@ -382,6 +416,7 @@ export function isFluidCategoryOrItem(
   um?: string | null,
   descriere?: string | null,
 ): boolean {
+  if (tipLichid && isConsumablePieceNorm(tipLichid)) return false;
   if (tipLichid && String(tipLichid).trim() !== '') return true;
   if (esteFluidFlag) return true;
   const cat = String(catName || '').toLowerCase();
@@ -395,8 +430,44 @@ export function isFluidCategoryOrItem(
   return /\b(ulei|antigel|adblue|hlp|hvlp|10w40|15w40|5w30|5w40|80w90|75w90|atf|vaselina)\b/i.test(desc);
 }
 
+/**
+ * Returnează true pentru articole/categorii eligibile pentru asocierea unei Norme Periodice
+ * (atât fluide/lubrifianți, cât și filtre / consumabile monitorizate prin intervale).
+ */
+export function isNormTrackableCategoryOrItem(
+  catName?: string | null,
+  esteFluidFlag?: boolean,
+  tipLichid?: string | null,
+  um?: string | null,
+  descriere?: string | null,
+): boolean {
+  if (tipLichid && String(tipLichid).trim() !== '') return true;
+  if (isFluidCategoryOrItem(catName, esteFluidFlag, tipLichid, um, descriere)) return true;
+  const cat = stripDiacritics(catName || '').toLowerCase();
+  const desc = stripDiacritics(descriere || '').toLowerCase();
+  if (/\bfiltr/i.test(cat)) return true;
+  if (/\b(filtru|filtre|filter)\b/i.test(desc)) return true;
+  return false;
+}
+
 export function detectTipLichidFromStockText(item: any): string {
-  const txt = `${item?.subcategorie || ''} ${item?.denumire || ''} ${item?.categorie || ''} ${item?.marcaUlei || ''}`.toLowerCase();
+  const desc = stripDiacritics(item?.denumire || '').toLowerCase();
+  const sub = stripDiacritics(item?.subcategorie || '').toLowerCase();
+  const cat = stripDiacritics(item?.categorie || '').toLowerCase();
+  const txt = `${sub} ${desc} ${cat} ${stripDiacritics(item?.marcaUlei || '').toLowerCase()}`;
+
+  // Filtre & consumabile (nu fac fallback la ULEI_MOTOR_15W40)
+  if (/\bfiltr/i.test(cat) || /\b(filtru|filtre|filter)\b/i.test(desc)) {
+    if (
+      (/\bfiltr[uueia]*\s+(?:de\s+)?aer\b|\bair\s+filter\b/i.test(desc) ||
+        (/\bfiltr/i.test(cat) && /\baer\b/i.test(sub))) &&
+      !/\b(polen|cabina|habitaclu|uscator|perna|perne|aerisitor|aeroterma|bucsa|radiator)\b/i.test(desc)
+    ) {
+      return 'FILTRU_AER';
+    }
+    return '';
+  }
+
   if (/adblue|uree/i.test(txt)) return 'ADBLUE';
   if (/antigel|coolant|racire|g12|g11/i.test(txt)) {
     return /g11|albastru|blue/i.test(txt) ? 'ANTIGEL_G11' : 'ANTIGEL_G12';
@@ -435,7 +506,8 @@ export function resolveEffectiveTipLichid(
       return { cod: subTip, source: 'SUBCATEGORIE' };
     }
   }
-  return { cod: detectTipLichidFromStockText(item), source: 'AUTO' };
+  const detected = detectTipLichidFromStockText(item);
+  return detected ? { cod: detected, source: 'AUTO' } : { cod: null, source: null };
 }
 
 export function isArticolMatchingTipLichid(
@@ -444,23 +516,55 @@ export function isArticolMatchingTipLichid(
   subcatTipMap?: Record<string, string>,
 ): boolean {
   if (!item) return false;
-  const sub = (item.subcategorie || '').toLowerCase();
-  const den = (item.denumire || '').toLowerCase();
-  const cat = (item.categorie || '').toLowerCase();
-  const marca = (item.marcaUlei || '').toLowerCase();
+  const sub = stripDiacritics(item.subcategorie || '').toLowerCase();
+  const den = stripDiacritics(item.denumire || '').toLowerCase();
+  const cat = stripDiacritics(item.categorie || '').toLowerCase();
+  const marca = stripDiacritics(item.marcaUlei || '').toLowerCase();
   const combined = `${sub} ${den} ${cat} ${marca}`;
 
   if (/spuma|curatitor|spray|degresant/i.test(combined)) {
     return false;
   }
 
+  const targetIsPiece = isConsumablePieceNorm(tipLichid);
+
   // 1. Asociere explicită pe ArticolStoc sau SubcategorieStoc are prioritate absolută!
   const resolved = resolveEffectiveTipLichid(item, subcatTipMap);
-  if (resolved.source === 'ARTICOL' || resolved.source === 'SUBCATEGORIE') {
+  if (resolved.source === 'ARTICOL') {
+    return resolved.cod === tipLichid;
+  }
+  if (resolved.source === 'SUBCATEGORIE') {
+    if (targetIsPiece && /\b(aerisitor|perna|perne|bucsa|radiator|aeroterma)\b/i.test(den)) {
+      return false;
+    }
     return resolved.cod === tipLichid;
   }
 
-  // 2. Fallback bazat pe cuvinte cheie pentru articole fără legătură explicită
+  // 2. Norme de tip consumabil / filtru (la bucată)
+  if (targetIsPiece) {
+    const normUp = String(tipLichid || '').toUpperCase();
+    if (normUp === 'FILTRU_AER' || normUp.startsWith('FILTRU_AER_')) {
+      if (/\b(polen|cabina|habitaclu|uscator|perna|perne|aerisitor|aeroterma|bucsa|radiator)\b/i.test(den)) {
+        return false;
+      }
+      return (
+        /\bfiltr[uueia]*\s+(?:de\s+)?aer\b|\bair\s+filter\b/i.test(den) ||
+        (/\bfiltr/i.test(cat) && /\baer\b/i.test(sub))
+      );
+    }
+    const tokens = normUp
+      .toLowerCase()
+      .split('_')
+      .filter((t) => t.length >= 3);
+    return tokens.length > 0 && tokens.every((tk) => combined.includes(tk));
+  }
+
+  // Pentru norme de fluide, excludem filtrele
+  if (/\bfiltr/i.test(cat) || /\b(filtru|filter)\b/i.test(den)) {
+    return false;
+  }
+
+  // 3. Fallback bazat pe cuvinte cheie pentru articole fluide fără legătură explicită
   switch (tipLichid) {
     case 'ULEI_MOTOR_15W40':
       return (

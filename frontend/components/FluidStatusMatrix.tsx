@@ -15,11 +15,12 @@ import {
   Info,
   Layers,
   Plus,
+  Wind,
   Wrench,
   X,
 } from 'lucide-react';
 import { getCategoryColor } from '@/lib/categoryColors';
-import { TipFluidDef } from '@/lib/fluids';
+import { TipFluidDef, isConsumablePieceNorm } from '@/lib/fluids';
 
 export interface FlotaFluidRow {
   vehiculId: string;
@@ -56,6 +57,8 @@ export interface FlotaFluidRow {
   esteInPragAvertizare?: boolean;
   motivAvertisment?: string | null;
   totalLitriCompletati?: number | null;
+  isConsumablePiece?: boolean;
+  totalSchimburiInregistrate?: number | null;
 }
 
 export interface FluidMatrixActionOpts {
@@ -112,6 +115,7 @@ const FUNCTIONAL_SLOTS: { key: string; title: string; subtitle: string }[] = [
   { key: 'SLOT_CUTIE', title: 'Cutie / Transmisie', subtitle: 'Cutii viteze & powershift' },
   { key: 'SLOT_AXE_DIF', title: 'Axe / Dif. / Grupuri', subtitle: 'Diferențiale, punți, grupuri' },
   { key: 'SLOT_ROTIRE_UNGERE', title: 'Rotire / Ungere', subtitle: 'Reductoare rotire & concasor' },
+  { key: 'SLOT_FILTRE', title: 'Filtre & Consumabile', subtitle: 'Filtru aer / ulei / comb.' },
   { key: 'SLOT_ALTELE', title: 'Alte Fluide', subtitle: 'Antigel / AdBlue / Extra' },
 ];
 
@@ -135,6 +139,12 @@ const SHORT_OIL_TAGS: Record<string, string> = {
   ANTIGEL_G12: 'ANTIGEL G12+',
   ANTIGEL_G11: 'ANTIGEL G11',
   ADBLUE: 'ADBLUE',
+  FILTRU_AER: 'FILTRU AER',
+  FILTRU_ULEI: 'FILTRU ULEI',
+  FILTRU_COMBUSTIBIL: 'FILTRU COMB.',
+  FILTRU_HIDRAULIC: 'FILTRU HIDR.',
+  FILTRU_POLEN: 'FILTRU POLEN',
+  FILTRU_USCATOR: 'FILTRU USC.',
 };
 
 const naturalCompare = (a?: string | null, b?: string | null) =>
@@ -149,6 +159,7 @@ export function getShortOilTag(tipLichid: string, tipLichidLabels: Record<string
 
 function resolveFunctionalSlotKey(tipLichid: string, vehicleNormCodes: Set<string>): string {
   const code = String(tipLichid || '').toUpperCase();
+  if (isConsumablePieceNorm(code)) return 'SLOT_FILTRE';
   if (code.includes('MOTOR')) return 'SLOT_MOTOR';
   if (code.includes('HIDRAULIC')) return 'SLOT_HIDRAULIC';
   if (code === 'ULEI_CUTIE_DIF_80W90_GL5') {
@@ -858,11 +869,13 @@ export default function FluidStatusMatrix({
                             onOpenCompletare({
                               vehiculId: v.vehiculId,
                               tipLichid: primaryNormForBaseline?.tipLichid,
-                              tipOperatiune: 'SCHIMB_ULEI',
+                              tipOperatiune: isConsumablePieceNorm(primaryNormForBaseline?.tipLichid)
+                                ? 'SCHIMB_FILTRU'
+                                : 'SCHIMB_ULEI',
                             })
                           }
                           className="px-2 py-1.5 text-sapphire-600 hover:bg-morning-100 rounded-lg text-[11px] font-bold inline-flex items-center space-x-1 transition cursor-pointer"
-                          title={`Înregistrează schimb sau completare pentru ${v.numarIntern}`}
+                          title={`Înregistrează schimb sau intervenție pentru ${v.numarIntern}`}
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Schimb</span>
@@ -923,7 +936,12 @@ export default function FluidStatusMatrix({
           !isCalendar && inspectedRow.intervalPrincipal
             ? Number(inspectedRow.ultimulSchimbContor || 0) + Number(inspectedRow.intervalPrincipal)
             : null;
-        const opDefault = String(inspectedRow.tipLichid || '').includes('ANTIGEL') ? 'SCHIMB_ANTIGEL' : 'SCHIMB_ULEI';
+        const isPiece = Boolean(inspectedRow.isConsumablePiece) || isConsumablePieceNorm(inspectedRow.tipLichid);
+        const opDefault = isPiece
+          ? 'SCHIMB_FILTRU'
+          : String(inspectedRow.tipLichid || '').includes('ANTIGEL')
+          ? 'SCHIMB_ANTIGEL'
+          : 'SCHIMB_ULEI';
         const opTopUp = String(inspectedRow.tipLichid || '').includes('ANTIGEL') ? 'COMPLETARE_ANTIGEL' : 'COMPLETARE_ULEI';
 
         return (
@@ -955,8 +973,17 @@ export default function FluidStatusMatrix({
                     )}
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Droplets className="w-4 h-4 text-sapphire-600 shrink-0" />
+                    {isPiece ? (
+                      <Wind className="w-4 h-4 text-sapphire-600 shrink-0" />
+                    ) : (
+                      <Droplets className="w-4 h-4 text-sapphire-600 shrink-0" />
+                    )}
                     <span className="text-sm font-extrabold text-sapphire-900 truncate">{oilLabel}</span>
+                    {isPiece && (
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 dark:bg-indigo-900/40 dark:text-indigo-200 dark:border-indigo-700 text-[9px] font-extrabold uppercase shrink-0">
+                        Consumabil / buc
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1131,15 +1158,19 @@ export default function FluidStatusMatrix({
 
                 <div className="p-3 rounded-xl bg-morning-100 border border-morning-200 space-y-0.5">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-sage-600">
-                    Completări (Top-up)
+                    {isPiece ? 'Înlocuiri Înregistrate' : 'Completări (Top-up)'}
                   </span>
                   <p className="font-mono font-black text-sapphire-900 text-sm tabular-nums">
-                    {Number(inspectedRow.totalLitriCompletati || 0) > 0
+                    {isPiece
+                      ? `${Number(inspectedRow.totalSchimburiInregistrate || 0)} schimburi`
+                      : Number(inspectedRow.totalLitriCompletati || 0) > 0
                       ? `+${inspectedRow.totalLitriCompletati} L`
                       : '0 L'}
                   </p>
                   <p className="text-[10px] text-sage-600">
-                    {Number(inspectedRow.totalLitriCompletati || 0) > 0
+                    {isPiece
+                      ? 'Se resetează automat din Devize'
+                      : Number(inspectedRow.totalLitriCompletati || 0) > 0
                       ? 'Adăugați de la ultimul schimb'
                       : 'Fără completări intermediare'}
                   </p>
@@ -1162,22 +1193,24 @@ export default function FluidStatusMatrix({
                 </button>
 
                 <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = inspectedRow;
-                      setInspectedRow(null);
-                      onOpenCompletare({
-                        vehiculId: target.vehiculId,
-                        tipLichid: target.tipLichid,
-                        tipOperatiune: opTopUp,
-                      });
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold inline-flex items-center space-x-1.5 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-sapphire-600" />
-                    <span>Completare</span>
-                  </button>
+                  {!isPiece && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = inspectedRow;
+                        setInspectedRow(null);
+                        onOpenCompletare({
+                          vehiculId: target.vehiculId,
+                          tipLichid: target.tipLichid,
+                          tipOperatiune: opTopUp,
+                        });
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-morning-100 hover:bg-morning-200 border border-morning-300 text-sapphire-900 text-xs font-bold inline-flex items-center space-x-1.5 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-sapphire-600" />
+                      <span>Completare</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

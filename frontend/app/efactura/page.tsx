@@ -21,7 +21,7 @@ import {
   FALLBACK_TIPURI_FLUIDE,
   TipFluidDef,
   detectTipLichidFromStockText,
-  isFluidCategoryOrItem,
+  isNormTrackableCategoryOrItem,
   normalizeTipuriFluideList,
 } from '@/lib/fluids';
 import { isTireItem } from '@/lib/tires';
@@ -1713,7 +1713,7 @@ function EFacturaContent() {
     const finalSubName = matchedStock?.subcategorie || resCat.subcategorie;
     const matchedCatObj = categoriiStoc.find((c: any) => c.nume === finalCatName);
     const matchedSubObj = (matchedCatObj?.subcategorii || []).find((sc: any) => sc.nume === finalSubName);
-    const initIsFluid = isFluidCategoryOrItem(
+    const initIsTrackable = isNormTrackableCategoryOrItem(
       finalCatName,
       matchedCatObj?.esteFluid,
       matchedStock?.tipLichid || matchedSubObj?.tipLichid,
@@ -1723,7 +1723,7 @@ function EFacturaContent() {
     const initTip =
       matchedStock?.tipLichid ||
       matchedSubObj?.tipLichid ||
-      (initIsFluid
+      (initIsTrackable
         ? detectTipLichidFromStockText({
             denumire: item.descrierePiesa,
             categorie: finalCatName,
@@ -2084,7 +2084,7 @@ function EFacturaContent() {
     ) {
       availableSubcats.unshift({ id: `alte-piese-opt-${mode}`, nume: 'Alte piese' });
     }
-    const showFluidTipPicker = isFluidCategoryOrItem(
+    const showFluidTipPicker = isNormTrackableCategoryOrItem(
       currentCat,
       currentCatObj?.esteFluid,
       currentTip,
@@ -2188,7 +2188,7 @@ function EFacturaContent() {
                 } else {
                   setSubcat('');
                 }
-                if (!isFluidCategoryOrItem(val, catObj?.esteFluid, '', importingItem?.unitateMasura, importingItem?.descrierePiesa)) {
+                if (!isNormTrackableCategoryOrItem(val, catObj?.esteFluid, '', importingItem?.unitateMasura, importingItem?.descrierePiesa)) {
                   setTip('');
                 } else if (!currentTip) {
                   setTip(
@@ -2313,7 +2313,7 @@ function EFacturaContent() {
           <div className={isDirect ? 'sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 bg-sapphire-50/70 border border-sapphire-200 rounded-xl' : 'grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-sapphire-50/70 border border-sapphire-200 rounded-xl'}>
             <div className={isDirect ? 'sm:col-span-2' : ''}>
               <label className="text-sapphire-900 font-bold text-xs block mb-1">
-                Tip Lubrifiant / Normă Întreținere:
+                Normă Întreținere (Fluid / Filtru):
               </label>
               <select
                 value={currentTip}

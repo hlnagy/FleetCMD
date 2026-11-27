@@ -16,7 +16,7 @@ const CAT_CONFIG: Record<string, { label: string; bg: string; text: string; bord
   STOC_CRITIC:          { label: 'Stoc Critic',        bg: 'bg-purple-100',   text: 'text-purple-800',     border: 'border-purple-300',   dot: 'bg-purple-500' },
   DOCUMENTE_FLOTA:      { label: 'Documente Flotă',    bg: 'bg-emerald-100',  text: 'text-emerald-800',    border: 'border-emerald-300',  dot: 'bg-emerald-500' },
   LICENTE_CUSTOM:       { label: 'Licențe & Atestate', bg: 'bg-amber-100',    text: 'text-amber-800',      border: 'border-amber-300',    dot: 'bg-amber-500' },
-  SCHIMB_ULEI:          { label: 'Schimb Ulei / Fluid', bg: 'bg-amber-100',   text: 'text-amber-800',      border: 'border-amber-300',    dot: 'bg-amber-500' },
+  SCHIMB_ULEI:          { label: 'Norme Fluide & Filtre', bg: 'bg-amber-100', text: 'text-amber-800',    border: 'border-amber-300',    dot: 'bg-amber-500' },
   SCURGERI_ULEI:        { label: 'Scurgeri Ulei',      bg: 'bg-roseash-100',  text: 'text-terracotta-800', border: 'border-roseash-300',  dot: 'bg-terracotta-500' },
 };
 

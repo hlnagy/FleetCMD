@@ -297,6 +297,214 @@ const POSITIVE_FLUID_PATTERN =
 const FLUID_CATEGORY_PATTERN =
   /\b(lubrifian|ulei|fluid|antigel|adblue|racire|vaselin|lichid\s+spalare)\b/i;
 
+const CONSUMABLE_PIECE_NORM_PATTERN =
+  /(?:^|_)(FILTR[A-Z0-9]*|FILTER|CUREA|CURELE|BUJIE|BUJII|PLACUT[AE]|SABOT|DISC|BEC|STERGATOR|BATERIE|ACUMULATOR)(?:_|$)/i;
+
+/**
+ * Returnează true dacă un cod de normă (TipFluid.cod) reprezintă un consumabil la bucată
+ * (ex: FILTRU_AER, FILTRU_ULEI, FILTRU_COMBUSTIBIL, FILTRU_HIDRAULIC, CUREA_TRANSMISIE)
+ * și NU un lichid/lubrifiant măsurat în litri.
+ */
+export function isConsumablePieceNorm(tipLichid?: string | null): boolean {
+  const code = String(tipLichid || '').trim().toUpperCase();
+  if (!code) return false;
+  return CONSUMABLE_PIECE_NORM_PATTERN.test(code);
+}
+
+/**
+ * Unitatea de măsură standard pentru afișare & cost unitar în funcție de tipul normei.
+ */
+export function getNormUnitMeasure(
+  tipLichid?: string | null,
+  articolUm?: string | null,
+): string {
+  if (isConsumablePieceNorm(tipLichid)) {
+    const cleanUm = String(articolUm || '').trim();
+    if (cleanUm && !/^(l|litri|litru)$/i.test(cleanUm)) {
+      return cleanUm;
+    }
+    return 'buc';
+  }
+  return 'L';
+}
+
+interface ConsumableNormMatcher {
+  normTest: (normCode: string) => boolean;
+  excludeDesc: RegExp;
+  matchDesc: RegExp;
+  matchSubcat?: (cat: string, sub: string) => boolean;
+}
+
+const CONSUMABLE_NORM_MATCHERS: ConsumableNormMatcher[] = [
+  {
+    // Filtru de aer motor (exclude polen/cabină, uscător aer, perne aer, aerisitoare, aeroterme, bucșe)
+    normTest: (c) => c === 'FILTRU_AER' || /^FILTRU_AER(?:_|$)/.test(c),
+    excludeDesc:
+      /\b(polen|cabina|habitaclu|uscator|perna|perne|aerisitor|aeroterma|bucsa|bucse|radiator|compresor|supapa|furtun|senzor|robinet)\b/i,
+    matchDesc:
+      /\b(?:filtr[uueia]*\s+(?:de\s+)?aer|air\s+filter|cartus\s+filtr[u]?\s+aer)\b/i,
+    matchSubcat: (cat, sub) =>
+      /\bfiltr/i.test(cat) &&
+      /\b(?:filtr[uueia]*\s+)?aer\b/i.test(sub) &&
+      !/polen|cabina|habitaclu|perna|uscator/i.test(sub),
+  },
+  {
+    // Filtru ulei motor (exclude filtre hidraulice / transmisie / combustibil / aer)
+    normTest: (c) => c === 'FILTRU_ULEI' || /^FILTRU_ULEI(?:_MOTOR)?$/.test(c),
+    excludeDesc:
+      /\b(hidraulic|cutie|transmis|servo|aer|combustibil|motorina|polen|cabina|uscator|separator|senzor|capac|garnitur|cheie)\b/i,
+    matchDesc: /\b(?:filtr[uueia]*\s+(?:de\s+)?ulei|oil\s+filter)\b/i,
+    matchSubcat: (cat, sub) =>
+      /\bfiltr/i.test(cat) && /\bulei\b/i.test(sub) && !/hidraulic/i.test(sub),
+  },
+  {
+    // Filtru combustibil / motorină
+    normTest: (c) => /^FILTRU_(?:COMBUSTIBIL|MOTORINA|CARBURANT)/.test(c),
+    excludeDesc: /\b(ulei|aer|hidraulic|polen|cabina|uscator|servo|senzor|pompa)\b/i,
+    matchDesc:
+      /\b(?:filtr[uueia]*\s+(?:de\s+)?(?:combustibil|motorina|benzina|carburant)|fuel\s+filter)\b/i,
+    matchSubcat: (cat, sub) =>
+      /\bfiltr/i.test(cat) && /\b(?:combustibil|motorina|carburant)\b/i.test(sub),
+  },
+  {
+    // Filtru hidraulic
+    normTest: (c) => /^FILTRU_HIDRAULIC/.test(c),
+    excludeDesc: /\b(aer|combustibil|motorina|polen|cabina|uscator|pompa|furtun|senzor)\b/i,
+    matchDesc:
+      /\b(?:filtr[uueia]*\s+(?:de\s+)?(?:ulei\s+)?hidraulic|hydraulic\s+filter)\b/i,
+    matchSubcat: (cat, sub) => /\bfiltr/i.test(cat) && /\bhidraulic/i.test(sub),
+  },
+  {
+    // Filtru polen / cabină / habitaclu
+    normTest: (c) => /^FILTRU_(?:POLEN|CABINA|HABITACLU)/.test(c),
+    excludeDesc: /\b(ulei|combustibil|motorina|hidraulic|uscator|perna|aerisitor)\b/i,
+    matchDesc:
+      /\b(?:filtr[uueia]*\s+(?:de\s+)?(?:polen|cabina|habitaclu|aer\s+cabina|aer\s+habitaclu)|cabin\s+(?:air\s+)?filter)\b/i,
+    matchSubcat: (cat, sub) =>
+      /\bfiltr/i.test(cat) && /\b(?:polen|cabina|habitaclu)\b/i.test(sub),
+  },
+  {
+    // Filtru uscător aer (sistem pneumatic frânare)
+    normTest: (c) => /^FILTRU_USCATOR/.test(c),
+    excludeDesc: /\b(ulei|combustibil|hidraulic|polen|cabina)\b/i,
+    matchDesc:
+      /\b(?:filtr[uueia]*\s+uscator|air\s+dryer\s+(?:filter|cartridge)|cartus\s+uscator)\b/i,
+    matchSubcat: (cat, sub) => /\bfiltr/i.test(cat) && /\buscator\b/i.test(sub),
+  },
+  {
+    // Filtru separator apă / combustibil
+    normTest: (c) => /^FILTRU_SEPARATOR/.test(c),
+    excludeDesc: /\b(ulei|aer|polen|cabina|hidraulic)\b/i,
+    matchDesc: /\b(?:filtr[uueia]*\s+separator|water\s+separator)\b/i,
+    matchSubcat: (cat, sub) => /\bfiltr/i.test(cat) && /\bseparator\b/i.test(sub),
+  },
+  {
+    // Filtru servodirecție
+    normTest: (c) => /^FILTRU_SERVO/.test(c),
+    excludeDesc: /\b(aer|combustibil|motorina|polen|cabina)\b/i,
+    matchDesc: /\bfiltr[uueia]*\s+(?:de\s+)?servo/i,
+    matchSubcat: (cat, sub) => /\bfiltr/i.test(cat) && /\bservo/i.test(sub),
+  },
+];
+
+function stripDiacritics(input: string): string {
+  return String(input || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Verifică dacă o linie de piesă (descriere/categorie/subcategorie) corespunde unui cod de normă de tip consumabil/filtru.
+ */
+export function matchesConsumableNorm(
+  normCode: string,
+  descriere?: string | null,
+  categorie?: string | null,
+  subcategorie?: string | null,
+): boolean {
+  const code = String(normCode || '').trim().toUpperCase();
+  if (!isConsumablePieceNorm(code)) return false;
+
+  const desc = stripDiacritics(descriere || '').trim();
+  const cat = stripDiacritics(categorie || '').trim();
+  const sub = stripDiacritics(subcategorie || '').trim();
+
+  const matcher = CONSUMABLE_NORM_MATCHERS.find((m) => m.normTest(code));
+  if (matcher) {
+    if (desc && matcher.excludeDesc.test(desc)) return false;
+    if (desc && matcher.matchDesc.test(desc)) return true;
+    if (matcher.matchSubcat && matcher.matchSubcat(cat, sub)) {
+      // Dacă descrierea nu conține cuvinte excluse și are măcar referință de filtru/piesă validă (nu aerisitor/etc.)
+      return !desc || !/\b(ulei\s+motor|antigel|adblue|vaselina)\b/i.test(desc);
+    }
+    return false;
+  }
+
+  // Fallback generic pentru norme custom de consumabile (ex: FILTRU_TRANSMISIE, CUREA_ALTERNATOR):
+  // Toate cuvintele semnificative din cod trebuie să apară în descriere + categorie + subcategorie.
+  const tokens = code
+    .toLowerCase()
+    .split('_')
+    .filter((t) => t.length >= 3);
+  if (tokens.length === 0) return false;
+  const combined = `${desc} ${sub} ${cat}`.toLowerCase();
+  return tokens.every((tk) => combined.includes(tk));
+}
+
+/**
+ * Detectează dacă un element dintr-o Comandă de Lucru corespunde unei norme de tip consumabil/filtru
+ * ACTIVĂ pe vehiculul respectiv (strict activă în ConfigurareUleiVehicul sau ConfigurareUleiCategorie).
+ */
+export function detectTrackedConsumableTip(
+  el: {
+    descriere?: string | null;
+    categorie?: string | null;
+    subcategorie?: string | null;
+    tipLichid?: string | null;
+    articolStoc?: {
+      categorie?: string | null;
+      subcategorie?: string | null;
+      tipLichid?: string | null;
+      denumire?: string | null;
+    } | null;
+  },
+  activeConsumableNormCodes: Set<string>,
+  mappedSubcatTip?: string | null,
+): string | null {
+  if (!activeConsumableNormCodes || activeConsumableNormCodes.size === 0) {
+    return null;
+  }
+
+  const desc = el.descriere || el.articolStoc?.denumire || '';
+  const cat = el.categorie || el.articolStoc?.categorie || '';
+  const sub = el.subcategorie || el.articolStoc?.subcategorie || '';
+
+  // 1. Asociere directă pe element sau pe ArticolStoc — prioritate maximă
+  const directExplicit = String(el.tipLichid || el.articolStoc?.tipLichid || '').trim().toUpperCase();
+  if (directExplicit && isConsumablePieceNorm(directExplicit) && activeConsumableNormCodes.has(directExplicit)) {
+    return directExplicit;
+  }
+
+  // 2. Asociere pe SubcategorieStoc — validată împotriva articolelor încadrate greșit (ex: aerisitor în "filtre aer")
+  const subExplicit = String(mappedSubcatTip || '').trim().toUpperCase();
+  if (subExplicit && isConsumablePieceNorm(subExplicit) && activeConsumableNormCodes.has(subExplicit)) {
+    const matcher = CONSUMABLE_NORM_MATCHERS.find((m) => m.normTest(subExplicit));
+    const cleanDesc = stripDiacritics(desc);
+    if (!matcher || !cleanDesc || !matcher.excludeDesc.test(cleanDesc)) {
+      return subExplicit;
+    }
+  }
+
+  // 3. Detecție inteligentă din descriere / categorie / subcategorie DOAR pentru normele active ale vehiculului
+  for (const normCode of activeConsumableNormCodes) {
+    if (matchesConsumableNorm(normCode, desc, cat, sub)) {
+      return normCode;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Verifică strict dacă un articol sau element de deviz reprezintă un fluid/lubrifiant real
  * (exclude piese conexe precum filtre de ulei, senzori nivel ulei, pompe, furtunuri, taxe mediu, vopsele sau becuri).
@@ -310,6 +518,11 @@ export function isActualFluidItem(
   const desc = String(descriere || '').trim();
   const cat = String(categorie || '').trim();
   const sub = String(subcategorie || '').trim();
+
+  // Normele de tip filtru/consumabil la bucată nu sunt fluide lichide (nu intră în totalul de litri)
+  if (explicitTipLichid && isConsumablePieceNorm(explicitTipLichid)) {
+    return false;
+  }
 
   if (desc && NON_FLUID_PATTERN.test(desc)) {
     return false;
@@ -438,10 +651,52 @@ export function computeElementFluidLiters(
   return Number((cant * packPerUnit).toFixed(2));
 }
 
+async function recalculateVehicleNormBaselineFromHistory(
+  prisma: any,
+  vehiculId: string,
+  tipLichid: string,
+) {
+  const latestSchimb = await prisma.completareLichid.findFirst({
+    where: {
+      vehiculId,
+      tipLichid,
+      tipOperatiune: { contains: 'SCHIMB' },
+    },
+    orderBy: [{ dataCompletare: 'desc' }, { valoareContor: 'desc' }],
+  });
+
+  if (latestSchimb) {
+    await prisma.configurareUleiVehicul.updateMany({
+      where: { vehiculId, tipLichid },
+      data: {
+        ultimulSchimbContor: latestSchimb.valoareContor,
+        ultimulSchimbData: latestSchimb.dataCompletare,
+        ultimulSchimbEstimat: false,
+      },
+    });
+  }
+}
+
 export async function removeFluidCompletariForComanda(prisma: any, comandaId: string) {
+  const existingSchimburi = await prisma.completareLichid.findMany({
+    where: {
+      comandaLucruId: comandaId,
+      tipOperatiune: { contains: 'SCHIMB' },
+    },
+    select: { vehiculId: true, tipLichid: true },
+  });
+
   await prisma.completareLichid.deleteMany({
     where: { comandaLucruId: comandaId },
   });
+
+  const affectedKeys = new Set<string>();
+  for (const row of existingSchimburi) {
+    const key = `${row.vehiculId}::${row.tipLichid}`;
+    if (affectedKeys.has(key)) continue;
+    affectedKeys.add(key);
+    await recalculateVehicleNormBaselineFromHistory(prisma, row.vehiculId, row.tipLichid);
+  }
 }
 
 export async function syncFluidCompletariForComanda(
@@ -459,18 +714,48 @@ export async function syncFluidCompletariForComanda(
 
   if (!comanda) return { synced: 0 };
 
+  const previousSchimburi = await prisma.completareLichid.findMany({
+    where: {
+      comandaLucruId: comandaId,
+      tipOperatiune: { contains: 'SCHIMB' },
+    },
+    select: { vehiculId: true, tipLichid: true },
+  });
+
   await prisma.completareLichid.deleteMany({
     where: { comandaLucruId: comandaId },
   });
 
   if (comanda.stare !== 'FINALIZAT') {
+    const affectedKeys = new Set<string>();
+    for (const row of previousSchimburi) {
+      const key = `${row.vehiculId}::${row.tipLichid}`;
+      if (affectedKeys.has(key)) continue;
+      affectedKeys.add(key);
+      await recalculateVehicleNormBaselineFromHistory(prisma, row.vehiculId, row.tipLichid);
+    }
     return { synced: 0 };
   }
 
-  const subcatsWithTip = await prisma.subcategorieStoc.findMany({
-    where: { tipLichid: { not: null } },
-    include: { categorieStoc: { select: { nume: true } } },
-  });
+  const [subcatsWithTip, vehNorms, catNorms] = await Promise.all([
+    prisma.subcategorieStoc.findMany({
+      where: { tipLichid: { not: null } },
+      include: { categorieStoc: { select: { nume: true } } },
+    }),
+    prisma.configurareUleiVehicul.findMany({ where: { vehiculId: comanda.vehiculId } }),
+    comanda.vehicul?.categorieEnum
+      ? prisma.configurareUleiCategorie.findMany({ where: { categorieEnum: comanda.vehicul.categorieEnum } })
+      : Promise.resolve([]),
+  ]);
+
+  // Setul normelor active de tip consumabil/filtru (la bucată) pentru acest vehicul / categorie
+  const activeConsumableNormCodes = new Set<string>();
+  for (const n of [...vehNorms, ...catNorms]) {
+    const cod = String(n?.tipLichid || '').trim().toUpperCase();
+    if (cod && isConsumablePieceNorm(cod)) {
+      activeConsumableNormCodes.add(cod);
+    }
+  }
 
   const findMappedSubcatTip = (el: any): string | null => {
     const subName = String(el.subcategorie || el.articolStoc?.subcategorie || '').trim().toLowerCase();
@@ -486,26 +771,70 @@ export async function syncFluidCompletariForComanda(
     return subOnly?.tipLichid || null;
   };
 
-  const fluidElements = (comanda.elementeComanda || []).filter(
-    (el: any) => {
-      if (
-        el.pilonCost === 'MANOPERA_INTERNA' ||
-        el.pilonCost === 'PRESTATIE_EXTERNA' ||
-        Number(el.costTotal || 0) < 0
-      ) {
-        return false;
-      }
-      const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || findMappedSubcatTip(el);
-      return isActualFluidItem(
+  interface TrackedOrderElement {
+    el: any;
+    kind: 'FLUID' | 'CONSUMABLE';
+    detectedTip: string;
+  }
+
+  const defaultMotor =
+    String(comanda.vehicul?.categorieEnum || '').toUpperCase() === 'AUTOTURISM'
+      ? 'ULEI_MOTOR_TURISME'
+      : 'ULEI_MOTOR_15W40';
+
+  const trackedElements: TrackedOrderElement[] = [];
+  for (const el of comanda.elementeComanda || []) {
+    if (
+      el.pilonCost === 'MANOPERA_INTERNA' ||
+      el.pilonCost === 'PRESTATIE_EXTERNA' ||
+      Number(el.costTotal || 0) < 0 ||
+      Number(el.cantitate || 0) <= 0
+    ) {
+      continue;
+    }
+
+    const mappedSubcatTip = findMappedSubcatTip(el);
+    const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || mappedSubcatTip;
+
+    // 1. Verificăm întâi dacă elementul corespunde unei norme de consumabil/filtru ACTIVĂ pe acest vehicul
+    const matchedConsumableTip = detectTrackedConsumableTip(
+      el,
+      activeConsumableNormCodes,
+      mappedSubcatTip,
+    );
+    if (matchedConsumableTip) {
+      trackedElements.push({ el, kind: 'CONSUMABLE', detectedTip: matchedConsumableTip });
+      continue;
+    }
+
+    // 2. Verificăm dacă este fluid/lubrifiant real (ulei, antigel, AdBlue, hidraulic etc.)
+    if (
+      isActualFluidItem(
         el.descriere,
         el.categorie || el.articolStoc?.categorie,
         el.subcategorie || el.articolStoc?.subcategorie,
         explicitTip,
+      )
+    ) {
+      const tipLichid = detectTipLichidFromText(
+        el.descriere,
+        el.categorie || el.articolStoc?.categorie,
+        el.subcategorie || el.articolStoc?.subcategorie,
+        defaultMotor,
+        explicitTip,
       );
-    },
-  );
+      trackedElements.push({ el, kind: 'FLUID', detectedTip: tipLichid });
+    }
+  }
 
-  if (fluidElements.length === 0) {
+  if (trackedElements.length === 0) {
+    const affectedKeys = new Set<string>();
+    for (const row of previousSchimburi) {
+      const key = `${row.vehiculId}::${row.tipLichid}`;
+      if (affectedKeys.has(key)) continue;
+      affectedKeys.add(key);
+      await recalculateVehicleNormBaselineFromHistory(prisma, row.vehiculId, row.tipLichid);
+    }
     return { synced: 0 };
   }
 
@@ -516,71 +845,65 @@ export async function syncFluidCompletariForComanda(
 
   const opDate = comanda.dataFinalizare || comanda.dataDeschidere || new Date();
   const isMth = isMthTipMasurare(comanda.vehicul?.tipMasurare);
-
-  const [vehNorms, catNorms] = await Promise.all([
-    prisma.configurareUleiVehicul.findMany({ where: { vehiculId: comanda.vehiculId } }),
-    comanda.vehicul?.categorieEnum
-      ? prisma.configurareUleiCategorie.findMany({ where: { categorieEnum: comanda.vehicul.categorieEnum } })
-      : Promise.resolve([]),
-  ]);
+  const fluidOnlyCount = trackedElements.filter((t) => t.kind === 'FLUID').length;
+  const touchedSchimbTips = new Set<string>();
 
   let synced = 0;
-  for (const el of fluidElements) {
-    const explicitTip = el.tipLichid || el.articolStoc?.tipLichid || findMappedSubcatTip(el);
-    const defaultMotor = String(comanda.vehicul?.categorieEnum || '').toUpperCase() === 'AUTOTURISM'
-      ? 'ULEI_MOTOR_TURISME'
-      : 'ULEI_MOTOR_15W40';
-    const tipLichid = detectTipLichidFromText(
-      el.descriere,
-      el.categorie || el.articolStoc?.categorie,
-      el.subcategorie || el.articolStoc?.subcategorie,
-      defaultMotor,
-      explicitTip,
-    );
-
+  for (const { el, kind, detectedTip: tipLichid } of trackedElements) {
     const matchingVehNorm = vehNorms.find((n: any) => n.tipLichid === tipLichid);
     const matchingCatNorm = catNorms.find((n: any) => n.tipLichid === tipLichid);
     const ruleCfg = matchingVehNorm || matchingCatNorm || {};
     const counterMeta = resolveFluidRuleCounterConfig(comanda.vehicul, ruleCfg);
     const useMthCounter = counterMeta.trackingMode === 'MTH';
 
+    // Pentru reguli mTH pe vehicule cu contor principal KM (ex: CAP_TRACTOR dual-mTH), folosim oreFunctionareCurent
+    // astfel încât kilometrajul (ex: 615.920 KM) să nu corupă contorul de ore (ex: 1.716 mTH).
     const effectiveContor =
-      useMthCounter && isDualMthVehicle(comanda.vehicul)
-        ? Number(comanda.vehicul?.oreFunctionareCurent || 0)
+      useMthCounter && !isMth
+        ? getEffectiveMthCounter(comanda.vehicul)
         : Number(comanda.valoareContorLaExecutie || 0) > 0
         ? Number(comanda.valoareContorLaExecutie)
         : Number(comanda.vehicul?.valoareContorCurent || 0);
-    const unitateContor = useMthCounter ? 'MTH' : (isMth ? 'MTH' : 'KM');
+    const unitateContor = useMthCounter ? 'MTH' : isMth ? 'MTH' : 'KM';
 
-    const textCombined = `${el.descriere || ''} ${el.observatiiIntern || ''}`.toLowerCase();
-    const explicitOp = overrides?.tipOperatiuneFluid;
-    const isTopUp =
-      explicitOp
+    let tipOperatiune: string;
+    let quantityValue: number;
+
+    if (kind === 'CONSUMABLE') {
+      // Filtrele / consumabilele la bucată reprezintă întotdeauna o înlocuire completă (resetare normă)
+      tipOperatiune = 'SCHIMB_FILTRU';
+      quantityValue = Math.max(0.01, Number(Number(el.cantitate || 1).toFixed(2)));
+    } else {
+      const textCombined = `${el.descriere || ''} ${el.observatiiIntern || ''}`.toLowerCase();
+      const explicitOp = overrides?.tipOperatiuneFluid;
+      const isTopUp = explicitOp
         ? explicitOp.toUpperCase().includes('COMPLETARE')
         : /completare|top[- ]?up/i.test(textCombined) && !/schimb|revizie/i.test(textCombined);
 
-    const tipOperatiune = tipLichid.startsWith('ANTIGEL')
-      ? isTopUp
-        ? 'COMPLETARE_ANTIGEL'
-        : 'SCHIMB_ANTIGEL'
-      : isTopUp
-      ? 'COMPLETARE_ULEI'
-      : 'SCHIMB_ULEI';
+      tipOperatiune = tipLichid.startsWith('ANTIGEL')
+        ? isTopUp
+          ? 'COMPLETARE_ANTIGEL'
+          : 'SCHIMB_ANTIGEL'
+        : isTopUp
+        ? 'COMPLETARE_ULEI'
+        : 'SCHIMB_ULEI';
 
-    const matchedEf = efactItems.find(
-      (it: any) =>
-        el.descriere &&
-        it.descrierePiesa &&
-        el.descriere.toLowerCase().includes(it.descrierePiesa.toLowerCase()),
-    );
+      const matchedEf = efactItems.find(
+        (it: any) =>
+          el.descriere &&
+          it.descrierePiesa &&
+          el.descriere.toLowerCase().includes(it.descrierePiesa.toLowerCase()),
+      );
 
-    const liters =
-      overrides?.cantitateLitriReala && overrides.cantitateLitriReala > 0 && fluidElements.length === 1
-        ? Number(overrides.cantitateLitriReala)
-        : computeElementFluidLiters(el, matchedEf?.pretUnitar);
+      quantityValue =
+        overrides?.cantitateLitriReala && overrides.cantitateLitriReala > 0 && fluidOnlyCount === 1
+          ? Number(overrides.cantitateLitriReala)
+          : computeElementFluidLiters(el, matchedEf?.pretUnitar);
+    }
 
     const costTotal = Number(el.costTotal || Number(el.cantitate || 1) * Number(el.pretUnitar || 0));
-    const pretPerLitru = liters > 0 ? Number((costTotal / liters).toFixed(2)) : Number(el.pretUnitar || 0);
+    const pretUnitarFinal =
+      quantityValue > 0 ? Number((costTotal / quantityValue).toFixed(2)) : Number(el.pretUnitar || 0);
 
     await prisma.completareLichid.create({
       data: {
@@ -589,8 +912,8 @@ export async function syncFluidCompletariForComanda(
         tipLichid,
         tipOperatiune,
         marcaUlei: el.articolStoc?.marcaUlei || el.descriere,
-        cantitateLitri: liters,
-        pretPerLitru,
+        cantitateLitri: quantityValue,
+        pretPerLitru: pretUnitarFinal,
         costTotal,
         valoareContor: effectiveContor,
         unitateContor,
@@ -604,18 +927,30 @@ export async function syncFluidCompletariForComanda(
     });
 
     if (tipOperatiune.includes('SCHIMB')) {
+      touchedSchimbTips.add(tipLichid);
+      const latestReal = await prisma.completareLichid.findFirst({
+        where: {
+          vehiculId: comanda.vehiculId,
+          tipLichid,
+          tipOperatiune: { contains: 'SCHIMB' },
+        },
+        orderBy: [{ dataCompletare: 'desc' }, { valoareContor: 'desc' }],
+      });
+      const resetContor = latestReal ? latestReal.valoareContor : effectiveContor;
+      const resetDate = latestReal ? latestReal.dataCompletare : opDate;
+
       await prisma.configurareUleiVehicul.upsert({
         where: { vehiculId_tipLichid: { vehiculId: comanda.vehiculId, tipLichid } },
         update: {
-          ultimulSchimbContor: effectiveContor,
-          ultimulSchimbData: opDate,
+          ultimulSchimbContor: resetContor,
+          ultimulSchimbData: resetDate,
           ultimulSchimbEstimat: false,
         },
         create: {
           vehiculId: comanda.vehiculId,
           tipLichid,
-          ultimulSchimbContor: effectiveContor,
-          ultimulSchimbData: opDate,
+          ultimulSchimbContor: resetContor,
+          ultimulSchimbData: resetDate,
           ultimulSchimbEstimat: false,
           intervalMth: matchingCatNorm?.intervalMth ?? (useMthCounter ? 500 : null),
           intervalKm: matchingCatNorm?.intervalKm ?? (!useMthCounter ? 15000 : null),
@@ -628,6 +963,13 @@ export async function syncFluidCompletariForComanda(
     }
 
     synced++;
+  }
+
+  // Dacă un tip care fusese anterior sincronizat pe această comandă a fost eliminat la re-editare, recalculăm baza
+  for (const prev of previousSchimburi) {
+    if (!touchedSchimbTips.has(prev.tipLichid)) {
+      await recalculateVehicleNormBaselineFromHistory(prisma, prev.vehiculId, prev.tipLichid);
+    }
   }
 
   return { synced };

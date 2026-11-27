@@ -68,7 +68,7 @@ export default function TopNavigation() {
         { name: 'Comenzi', href: '/comenzi', icon: ClipboardList, desc: 'Jurnal atelier: probleme, piese de comandat & sarcini' },
         { name: 'Planificator Revizii', href: '/mentenanta', icon: Clock, desc: 'Intervale revizii km/ore, revizii recurente' },
         { name: 'Anvelope', href: '/anvelope', icon: CircleDot, desc: 'Poziționare anvelope pe axe utilaje' },
-        { name: 'Uleiuri', href: '/fluide', icon: Droplets, desc: 'Monitorizare consum ulei, schimb vs completare' },
+        { name: 'Uleiuri & Filtre', href: '/fluide', icon: Droplets, desc: 'Monitorizare norme uleiuri, fluide & filtre' },
       ],
     },
     {
